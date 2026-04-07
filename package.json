@@ -1,0 +1,32 @@
+{
+  "name": "happy-circles",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "preinstall": "node ./scripts/enforce-package-manager.mjs",
+    "build": "pnpm -r build",
+    "start": "pnpm dev:mobile",
+    "start:clear": "pnpm dev:mobile:clear",
+    "dev:mobile": "pnpm --dir apps/mobile run start",
+    "dev:mobile:clear": "pnpm --dir apps/mobile run start:clear",
+    "lint": "pnpm exec eslint .",
+    "format": "pnpm exec prettier --write .",
+    "test": "pnpm exec vitest run",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "~19.1.10",
+    "@typescript-eslint/eslint-plugin": "^8.22.0",
+    "@typescript-eslint/parser": "^8.22.0",
+    "eslint": "^9.19.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.58.0",
+    "vitest": "^2.1.8"
+  }
+}
