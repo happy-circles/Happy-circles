@@ -4,6 +4,7 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
+      "@happy-circles/application": ["../../packages/application/src/queries/index.ts"],
       "@/*": ["./src/*"],
       "@happy-circles/shared": ["../../packages/shared/src/index.ts"]
     }

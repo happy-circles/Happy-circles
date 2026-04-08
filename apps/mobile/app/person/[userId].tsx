@@ -1,17 +1,17 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { SettlementDetailScreen } from '@/features/settlements/settlement-detail-screen';
+import { PersonDetailScreen } from '@/features/people/person-detail-screen';
 import { theme } from '@/lib/theme';
 
-export default function SettlementDetailRoute() {
-  const params = useLocalSearchParams<{ id?: string }>();
-  const proposalId = typeof params.id === 'string' ? params.id : '';
+export default function PersonDetailRoute() {
+  const params = useLocalSearchParams<{ userId?: string }>();
+  const userId = typeof params.userId === 'string' ? params.userId : '';
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Cierre sugerido',
+          title: 'Persona',
           headerBackTitle: '',
           headerShadowVisible: false,
           headerStyle: { backgroundColor: theme.colors.background },
@@ -19,7 +19,7 @@ export default function SettlementDetailRoute() {
           headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
         }}
       />
-      <SettlementDetailScreen proposalId={proposalId} />
+      <PersonDetailScreen userId={userId} />
     </>
   );
 }

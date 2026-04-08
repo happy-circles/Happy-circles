@@ -1,61 +1,54 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-export interface ListCardProps extends PropsWithChildren {
+export interface SectionBlockProps extends PropsWithChildren {
   readonly title: string;
   readonly subtitle?: string;
-  readonly trailing?: string;
+  readonly action?: ReactNode;
 }
 
-export function ListCard({ title, subtitle, trailing, children }: ListCardProps) {
+export function SectionBlock({ title, subtitle, action, children }: SectionBlockProps) {
   return (
-    <View style={styles.card}>
+    <View style={styles.section}>
       <View style={styles.header}>
         <View style={styles.textWrap}>
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-        {trailing ? <Text style={styles.trailing}>{trailing}</Text> : null}
+        {action}
       </View>
-      {children}
+      <View style={styles.content}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
+  section: {
     gap: theme.spacing.sm,
-    padding: theme.spacing.md,
   },
   header: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
   textWrap: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   title: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: theme.typography.title3,
     fontWeight: '700',
   },
   subtitle: {
     color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
-  trailing: {
-    color: theme.colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
+  content: {
+    gap: theme.spacing.sm,
   },
 });

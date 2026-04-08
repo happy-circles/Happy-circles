@@ -7,9 +7,21 @@ const config: ExpoConfig = {
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
-  plugins: ['expo-router', 'expo-asset', 'expo-sqlite'],
+  plugins: [
+    'expo-router',
+    'expo-asset',
+    'expo-sqlite',
+    'expo-secure-store',
+    'expo-local-authentication',
+    'expo-notifications',
+  ],
   experiments: {
     typedRoutes: true,
+  },
+  ios: {
+    infoPlist: {
+      NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
+    },
   },
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',

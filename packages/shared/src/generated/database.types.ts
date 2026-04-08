@@ -41,6 +41,7 @@ export interface Database {
       financial_requests: {
         Row: {
           id: string;
+          relationship_id: string;
           request_type: string;
           status: string;
           creator_user_id: string;
@@ -53,6 +54,7 @@ export interface Database {
           parent_request_id: string | null;
           target_ledger_transaction_id: string | null;
           created_at: string;
+          updated_at: string;
           resolved_at: string | null;
         };
       };
@@ -71,6 +73,7 @@ export interface Database {
           id: string;
           transaction_type: string;
           source_type: string;
+          currency_code: string;
           origin_request_id: string | null;
           origin_settlement_proposal_id: string | null;
           reverses_transaction_id: string | null;
@@ -111,6 +114,7 @@ export interface Database {
           graph_snapshot: Json;
           movements_json: Json;
           created_at: string;
+          updated_at: string;
           executed_at: string | null;
         };
       };
@@ -178,6 +182,43 @@ export interface Database {
           net_balance_minor: number;
           total_i_owe_minor: number;
           total_owed_to_me_minor: number;
+        };
+      };
+      v_open_debts: {
+        Row: {
+          relationship_id: string;
+          user_low_id: string;
+          user_high_id: string;
+          debtor_user_id: string;
+          creditor_user_id: string;
+          amount_minor: number;
+          currency_code: string;
+        };
+      };
+      v_relationship_history: {
+        Row: {
+          relationship_id: string;
+          item_id: string;
+          item_kind: string;
+          status: string;
+          subtype: string;
+          creator_user_id: string | null;
+          responder_user_id: string | null;
+          debtor_user_id: string | null;
+          creditor_user_id: string | null;
+          amount_minor: number;
+          description: string | null;
+          happened_at: string;
+        };
+      };
+      v_inbox_items: {
+        Row: {
+          owner_user_id: string;
+          item_id: string;
+          item_kind: string;
+          subtype: string;
+          status: string;
+          created_at: string;
         };
       };
     };
