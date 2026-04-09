@@ -26,7 +26,7 @@ export const mockPeople: readonly PersonCardDto[] = [
     direction: 'i_owe',
     netAmountMinor: 45000,
     pendingCount: 1,
-    lastActivityLabel: 'Te envio un request hoy',
+    lastActivityLabel: 'Te envio una propuesta hoy',
   },
   {
     userId: '00000000-0000-0000-0000-0000000000d4',
@@ -34,7 +34,7 @@ export const mockPeople: readonly PersonCardDto[] = [
     direction: 'owes_me',
     netAmountMinor: 117000,
     pendingCount: 0,
-    lastActivityLabel: 'Pago parcial ayer',
+    lastActivityLabel: 'Salida parcial ayer',
   },
 ];
 
@@ -69,7 +69,7 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
         kind: 'request',
         tone: 'positive',
         title: 'Mercado confirmado',
-        subtitle: 'Acepto el request principal.',
+        subtitle: 'Acepto la propuesta principal.',
         amountMinor: 120000,
         status: 'accepted',
         sourceType: 'user',
@@ -106,14 +106,14 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
     netAmountMinor: 45000,
     pendingCount: 1,
     headline: 'Tu le debes a Mateo',
-    supportText: 'Falta responder un request.',
+    supportText: 'Falta responder una propuesta.',
     timeline: [
       {
         id: 'mateo-1',
         kind: 'request',
         tone: 'negative',
         title: 'Transporte por confirmar',
-        subtitle: 'Mateo envio el request y espera tu aprobacion.',
+        subtitle: 'Mateo envio la propuesta y espera tu aprobacion.',
         amountMinor: 45000,
         status: 'pending',
         sourceType: 'user',
@@ -123,8 +123,8 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
         id: 'mateo-2',
         kind: 'payment',
         tone: 'positive',
-        title: 'Pago manual registrado',
-        subtitle: 'Abonaste una parte del saldo la semana pasada.',
+        title: 'Salida registrada',
+        subtitle: 'Redujiste una parte del saldo la semana pasada.',
         amountMinor: 15000,
         status: 'posted',
         sourceType: 'user',
@@ -145,7 +145,7 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
         id: 'camila-1',
         kind: 'payment',
         tone: 'positive',
-        title: 'Pago parcial recibido',
+        title: 'Entrada parcial recibida',
         subtitle: 'Redujo el saldo pendiente ayer.',
         amountMinor: 30000,
         status: 'posted',
@@ -177,7 +177,7 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
       {
         id: 'activity-request-1',
         kind: 'financial_request',
-        title: 'Mateo te envio una deuda',
+        title: 'Mateo te envio una salida propuesta',
         subtitle: 'COP 45.000 por transporte compartido.',
         status: 'requires_you',
         href: '/activity',
@@ -203,7 +203,7 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
       {
         id: 'history-1',
         kind: 'accepted_request',
-        title: 'Laura acepto un request',
+        title: 'Laura acepto una propuesta',
         subtitle: 'Mercado del fin de semana.',
         status: 'accepted',
         href: '/person/00000000-0000-0000-0000-0000000000b2',
@@ -213,8 +213,8 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
       {
         id: 'history-2',
         kind: 'manual_payment',
-        title: 'Camila registro un pago',
-        subtitle: 'Abono parcial al saldo abierto.',
+        title: 'Camila registro una entrada',
+        subtitle: 'Reduccion parcial al saldo abierto.',
         status: 'posted',
         href: '/person/00000000-0000-0000-0000-0000000000d4',
         amountMinor: 30000,
@@ -224,7 +224,7 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
         id: 'history-3',
         kind: 'system_note',
         title: 'Cierre de ciclo del sistema: Mateo -> Laura',
-        subtitle: 'Sistema | Mateo -> Laura | Reduce deuda neta dentro del circulo.',
+        subtitle: 'Sistema | Mateo -> Laura | Ajusta saldo neto dentro del circulo.',
         status: 'info',
         href: '/settlements/settlement-1',
         amountMinor: 0,
@@ -241,9 +241,9 @@ export const mockSettlement = {
   participants: ['Tu', 'Laura', 'Mateo'],
   participantStatuses: ['Tu: pending', 'Laura: pending', 'Mateo: pending'],
   impactLines: [
-    'Reduce la deuda neta Laura -> Tu en COP 20.000',
-    'Reduce la deuda neta Tu -> Mateo en COP 20.000',
-    'Reduce la deuda neta Mateo -> Laura en COP 20.000',
+    'Ajusta el saldo neto Laura -> Tu en COP 20.000',
+    'Ajusta el saldo neto Tu -> Mateo en COP 20.000',
+    'Ajusta el saldo neto Mateo -> Laura en COP 20.000',
   ],
   movements: [
     'Laura -> Tu: COP 20.000',
@@ -259,8 +259,8 @@ export const mockSettlement = {
 export const mockAudit = [
   {
     id: 'audit-1',
-    title: 'Financial request accepted',
-    subtitle: 'Laura acepto el movimiento de mercado.',
+        title: 'Propuesta aceptada',
+        subtitle: 'Laura acepto el movimiento de mercado.',
   },
   {
     id: 'audit-2',

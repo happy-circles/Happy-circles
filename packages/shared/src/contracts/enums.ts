@@ -2,23 +2,27 @@ export const CURRENCY_CODE = 'COP' as const;
 
 export type CurrencyCode = typeof CURRENCY_CODE;
 
-export const REQUEST_TYPES = ['debt', 'manual_settlement', 'reversal'] as const;
+export const REQUEST_TYPES = [
+  'balance_increase',
+  'balance_decrease',
+  'transaction_reversal',
+] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
 
 export const REQUEST_STATUSES = [
   'pending',
   'accepted',
   'rejected',
-  'countered',
+  'amended',
   'canceled',
   'expired',
 ] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 export const TRANSACTION_TYPES = [
-  'debt_acceptance',
-  'manual_settlement_acceptance',
-  'reversal_acceptance',
+  'balance_increase_acceptance',
+  'balance_decrease_acceptance',
+  'transaction_reversal_acceptance',
   'cycle_settlement',
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
@@ -64,7 +68,7 @@ export const AUDIT_EVENT_NAMES = [
   'relationship_accepted',
   'financial_request_created',
   'financial_request_rejected',
-  'financial_request_countered',
+  'financial_request_amended',
   'financial_request_accepted',
   'settlement_proposed',
   'settlement_approved',

@@ -51,6 +51,84 @@ interface ActivityHistoryCase {
   }[];
 }
 
+type ActivityDirection = 'i_owe' | 'owes_me' | 'neutral';
+
+function historyDirectionFromItem(item: ActivityItemDto): ActivityDirection {
+  if (item.status === 'rejected') {
+    return 'neutral';
+  }
+
+  if (item.kind === 'system_note') {
+    return 'neutral';
+  }
+
+  if (item.kind === 'manual_payment') {
+    const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
+    const counterpartyName = item.counterpartyLabel?.trim();
+
+    if (counterpartyName && from === counterpartyName) {
+      return 'owes_me';
+    }
+
+    if (counterpartyName && to === counterpartyName) {
+      return 'i_owe';
+    }
+  }
+
+  if (item.tone === 'positive') {
+    return 'owes_me';
+  }
+
+  if (item.tone === 'negative') {
+    return 'i_owe';
+  }
+
+  return 'neutral';
+}
+
+function historyImpactTone(item: ActivityItemDto): 'positive' | 'negative' | 'neutral' {
+  if (item.kind === 'system_note') {
+    return 'neutral';
+  }
+
+  const direction = historyDirectionFromItem(item);
+
+  if (direction === 'owes_me') {
+    return 'positive';
+  }
+
+  if (direction === 'i_owe') {
+    return 'negative';
+  }
+
+  return 'neutral';
+}
+
+function historyImpactLabel(item: ActivityItemDto): string | null {
+  if (item.status === 'rejected') {
+    return 'No cambio el saldo';
+  }
+
+  if (!item.counterpartyLabel || typeof item.amountMinor !== 'number' || item.amountMinor <= 0) {
+    return null;
+  }
+
+  if (item.kind === 'system_note') {
+    return `Cierre de ciclo por ${formatCop(item.amountMinor)}`;
+  }
+
+  const direction = historyDirectionFromItem(item);
+  if (direction === 'neutral') {
+    return null;
+  }
+
+  const amountLabel = formatCop(item.amountMinor);
+  const isProposal = item.status === 'pending' || item.status === 'amended';
+  const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
+
+  return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
+}
+
 function activityHistoryCaseKey(
   item: Pick<ActivityItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
 ): string {
@@ -86,6 +164,10 @@ function humanStatusLabel(status: string): string {
     return 'Aceptada';
   }
 
+  if (status === 'amended') {
+    return 'Nuevo monto';
+  }
+
   if (status === 'rejected') {
     return 'Rechazada';
   }
@@ -99,7 +181,7 @@ function humanStatusLabel(status: string): string {
 
 function compactHistoryLabel(item: ActivityItemDto): string {
   if (item.kind === 'manual_payment') {
-    return 'Pago registrado';
+    return 'Movimiento registrado';
   }
 
   if (item.kind === 'system_note') {
@@ -110,8 +192,8 @@ function compactHistoryLabel(item: ActivityItemDto): string {
     return 'Registrado';
   }
 
-  if (item.title.toLocaleLowerCase('es-CO').includes('contraoferta')) {
-    return item.status === 'accepted' ? 'Contraoferta aceptada' : 'Contraoferta';
+  if (item.status === 'amended') {
+    return 'Monto actualizado';
   }
 
   if (item.status === 'accepted') {
@@ -181,35 +263,16 @@ function historyCardTitle(itemCase: ActivityHistoryCase): string {
   return compactHistoryLabel(itemCase.latest);
 }
 
-function historyCardSecondaryLine(itemCase: ActivityHistoryCase): string | null {
+function historyCardImpactLine(itemCase: ActivityHistoryCase): string | null {
   if (itemCase.isSettlementCycle) {
-    if (itemCase.counterparties.length === 0) {
-      return null;
-    }
-
-    const visibleBreakdown = itemCase.counterparties
-      .slice(0, 2)
-      .map((item) => `${item.label} ${formatCop(item.amountMinor)}`)
-      .join(' y ');
-
-    return itemCase.counterparties.length > 2
-      ? `${visibleBreakdown} y ${itemCase.counterparties.length - 2} mas`
-      : visibleBreakdown;
+    return 'Cierre de ciclo aplicado';
   }
 
-  return itemCase.latest.counterpartyLabel ? `Con ${itemCase.latest.counterpartyLabel}` : null;
+  return historyImpactLabel(itemCase.latest);
 }
 
 function historyCaseMeta(itemCase: ActivityHistoryCase): string {
-  const pieces = itemCase.isSettlementCycle
-    ? [itemCase.latest.happenedAtLabel]
-    : [compactHistoryLabel(itemCase.latest), itemCase.latest.happenedAtLabel];
-
-  return pieces.filter(Boolean).join(' | ');
-}
-
-function shouldShowHistoryCaseAmount(itemCase: ActivityHistoryCase): boolean {
-  return !itemCase.isSettlementCycle && typeof itemCase.latest.amountMinor === 'number' && itemCase.latest.amountMinor > 0;
+  return itemCase.latest.happenedAtLabel ?? '';
 }
 
 function friendlyHistoryLine(item: ActivityItemDto): string {
@@ -218,12 +281,12 @@ function friendlyHistoryLine(item: ActivityItemDto): string {
   }
 
   if (item.kind === 'manual_payment') {
-    return 'Se registro el pago';
+    return 'Se registro el movimiento';
   }
 
-  if (item.title.endsWith(' envio una contraoferta')) {
-    const actor = item.title.replace(' envio una contraoferta', '');
-    return actor === 'Tu' ? 'Tu hiciste una contraoferta' : `${actor} hizo una contraoferta`;
+  if (item.title.endsWith(' propuso un nuevo monto')) {
+    const actor = item.title.replace(' propuso un nuevo monto', '');
+    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
   }
 
   if (item.title.startsWith('Tu creo ')) {
@@ -285,7 +348,7 @@ function readNestedProposalId(value: unknown, key: string): string | null {
 }
 
 function toneForStatus(status: string): 'primary' | 'success' | 'warning' | 'neutral' {
-  if (status === 'requires_you' || status === 'pending') {
+  if (status === 'requires_you' || status === 'pending' || status === 'amended') {
     return 'warning';
   }
 
@@ -350,6 +413,7 @@ export function ActivityScreen() {
             tone: step.tone,
             originRequestId: step.originRequestId,
             originSettlementProposalId: step.originSettlementProposalId,
+            flowLabel: step.flowLabel,
             counterpartyLabel: person.displayName,
           }),
         ),
@@ -466,13 +530,13 @@ export function ActivityScreen() {
           const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
           setMessage(
             autoCycleStatus === 'pending_approvals'
-              ? 'Request aceptado. Tambien quedo un cierre de ciclo listo para revisar.'
-              : 'Request aceptado.',
+              ? 'Propuesta aceptada. Tambien quedo un cierre de ciclo listo para revisar.'
+              : 'Propuesta aceptada.',
           );
           showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
         } else {
           await rejectRequest.mutateAsync(itemId);
-          setMessage('Request rechazado.');
+          setMessage('Propuesta no aceptada.');
         }
         return;
       }
@@ -490,7 +554,7 @@ export function ActivityScreen() {
           );
         } else {
           await rejectSettlement.mutateAsync(itemId);
-          setMessage('Cierre rechazado.');
+          setMessage('Cierre no aprobado.');
         }
         return;
       }
@@ -596,8 +660,8 @@ export function ActivityScreen() {
             const isExpanded = expandedHistoryCaseIds.includes(itemCase.id);
             const latest = itemCase.latest;
             const caseMeta = historyCaseMeta(itemCase);
-            const caseSecondaryLine = historyCardSecondaryLine(itemCase);
-            const caseAmount = shouldShowHistoryCaseAmount(itemCase) ? latest.amountMinor ?? 0 : null;
+            const caseImpact = historyCardImpactLine(itemCase);
+            const caseTone = itemCase.isSettlementCycle ? 'neutral' : historyImpactTone(latest);
 
             return (
               <SurfaceCard
@@ -605,33 +669,28 @@ export function ActivityScreen() {
                 padding="lg"
                 style={[
                   styles.historyCard,
-                  latest.tone === 'positive' ? styles.historyCardPositive : null,
-                  latest.tone === 'negative' ? styles.historyCardNegative : null,
+                  caseTone === 'positive' ? styles.historyCardPositive : null,
+                  caseTone === 'negative' ? styles.historyCardNegative : null,
                 ]}
               >
                 <View style={styles.historyHeader}>
                   <View style={styles.historyTextWrap}>
                     <Text style={styles.historyTitle}>{historyCardTitle(itemCase)}</Text>
-                    {caseSecondaryLine ? (
-                      <Text style={itemCase.isSettlementCycle ? styles.historyBreakdown : styles.historyCounterparty}>
-                        {caseSecondaryLine}
+                    {caseImpact ? (
+                      <Text
+                        style={[
+                          itemCase.isSettlementCycle ? styles.historyBreakdown : styles.historyImpact,
+                          caseTone === 'positive' ? styles.amountPositive : null,
+                          caseTone === 'negative' ? styles.amountNegative : null,
+                        ]}
+                      >
+                        {caseImpact}
                       </Text>
                     ) : null}
                     {caseMeta ? <Text style={styles.historyMeta}>{caseMeta}</Text> : null}
                   </View>
                   <View style={styles.historyTrailing}>
                     <StatusChip label={humanStatusLabel(latest.status)} tone={toneForStatus(latest.status)} />
-                    {caseAmount ? (
-                      <Text
-                        style={[
-                          styles.historyAmount,
-                          latest.tone === 'positive' ? styles.amountPositive : null,
-                          latest.tone === 'negative' ? styles.amountNegative : null,
-                        ]}
-                      >
-                        {formatCop(caseAmount)}
-                      </Text>
-                    ) : null}
                   </View>
                 </View>
 
@@ -647,39 +706,55 @@ export function ActivityScreen() {
 
                 {isExpanded ? (
                   <View style={styles.historySteps}>
-                    {itemCase.steps.map((step, index) => (
-                      <View key={step.id} style={styles.historyStepRow}>
-                        <View style={styles.historyStepRail}>
-                          <View
-                            style={[
-                              styles.historyStepMarker,
-                              step.tone === 'positive' ? styles.historyStepMarkerPositive : null,
-                              step.tone === 'negative' ? styles.historyStepMarkerNegative : null,
-                            ]}
-                          />
-                          {index < itemCase.steps.length - 1 ? <View style={styles.historyStepLine} /> : null}
-                        </View>
-                        <View style={styles.historyStepBody}>
-                          <View style={styles.historyStepTop}>
-                            <Text style={styles.historyStepTitle}>{friendlyHistoryLine(step)}</Text>
-                            {typeof step.amountMinor === 'number' && step.amountMinor > 0 ? (
+                    {itemCase.steps.map((step, index) => {
+                      const stepTone = historyImpactTone(step);
+                      const stepImpact = historyImpactLabel(step);
+
+                      return (
+                        <View key={step.id} style={styles.historyStepRow}>
+                          <View style={styles.historyStepRail}>
+                            <View
+                              style={[
+                                styles.historyStepMarker,
+                                stepTone === 'positive' ? styles.historyStepMarkerPositive : null,
+                                stepTone === 'negative' ? styles.historyStepMarkerNegative : null,
+                              ]}
+                            />
+                            {index < itemCase.steps.length - 1 ? <View style={styles.historyStepLine} /> : null}
+                          </View>
+                          <View style={styles.historyStepBody}>
+                            <View style={styles.historyStepTop}>
+                              <Text style={styles.historyStepTitle}>{friendlyHistoryLine(step)}</Text>
+                              {typeof step.amountMinor === 'number' && step.amountMinor > 0 ? (
+                                <Text
+                                  style={[
+                                    styles.historyStepAmount,
+                                    stepTone === 'positive' ? styles.amountPositive : null,
+                                    stepTone === 'negative' ? styles.amountNegative : null,
+                                  ]}
+                                >
+                                  {formatCop(step.amountMinor)}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {stepImpact ? (
                               <Text
                                 style={[
-                                  styles.historyStepAmount,
-                                  step.tone === 'positive' ? styles.amountPositive : null,
-                                  step.tone === 'negative' ? styles.amountNegative : null,
+                                  styles.historyStepImpact,
+                                  stepTone === 'positive' ? styles.amountPositive : null,
+                                  stepTone === 'negative' ? styles.amountNegative : null,
                                 ]}
                               >
-                                {formatCop(step.amountMinor)}
+                                {stepImpact}
                               </Text>
                             ) : null}
+                            {step.happenedAtLabel ? (
+                              <Text style={styles.historyStepMeta}>{step.happenedAtLabel}</Text>
+                            ) : null}
                           </View>
-                          {step.happenedAtLabel ? (
-                            <Text style={styles.historyStepMeta}>{step.happenedAtLabel}</Text>
-                          ) : null}
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 ) : null}
               </SurfaceCard>
@@ -742,7 +817,7 @@ export function ActivityScreen() {
                       </View>
                       <View style={styles.actionSlot}>
                         <PrimaryAction
-                          label={busyKey === `${item.id}:reject` ? 'Rechazando...' : 'Rechazar'}
+                          label={busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aceptar'}
                           onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')}
                           variant="ghost"
                         />
@@ -760,7 +835,7 @@ export function ActivityScreen() {
                       </View>
                       <View style={styles.actionSlot}>
                         <PrimaryAction
-                          label={busyKey === `${item.id}:reject` ? 'Rechazando...' : 'Rechazar'}
+                          label={busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
                           onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')}
                           variant="ghost"
                         />
@@ -889,11 +964,10 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  historyCounterparty: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
+  historyImpact: {
+    fontSize: theme.typography.footnote,
     fontWeight: '700',
-    textTransform: 'uppercase',
+    lineHeight: 20,
   },
   historyBreakdown: {
     color: theme.colors.textMuted,
@@ -903,11 +977,6 @@ const styles = StyleSheet.create({
   historyTrailing: {
     alignItems: 'flex-end',
     gap: theme.spacing.sm,
-  },
-  historyAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
   },
   amountPositive: {
     color: theme.colors.success,
@@ -984,6 +1053,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
     paddingRight: theme.spacing.sm,
+  },
+  historyStepImpact: {
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   historyStepMeta: {
     color: theme.colors.textMuted,

@@ -29,7 +29,7 @@ export const participantDecisionSchema = z.enum(PARTICIPANT_DECISIONS);
 export const auditEntityTypeSchema = z.enum(AUDIT_ENTITY_TYPES);
 export const auditEventNameSchema = z.enum(AUDIT_EVENT_NAMES);
 
-export const createDebtRequestSchema = z.object({
+export const createBalanceRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   responderUserId: uuidSchema,
   debtorUserId: uuidSchema,
@@ -37,9 +37,10 @@ export const createDebtRequestSchema = z.object({
   amountMinor: moneyMinorSchema,
   description: z.string().trim().min(1).max(240),
   currencyCode: z.literal(CURRENCY_CODE).default(CURRENCY_CODE),
+  requestKind: requestTypeSchema,
 });
 
-export const counterofferFinancialRequestSchema = z.object({
+export const amendFinancialRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   requestId: uuidSchema,
   amountMinor: moneyMinorSchema,

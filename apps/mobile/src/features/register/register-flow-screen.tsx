@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { TextInput, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
@@ -16,31 +16,57 @@ import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 type Direction = 'i_owe' | 'owes_me';
-type RequestType = 'debt' | 'manual_settlement';
+type RequestKind = 'balance_increase' | 'balance_decrease';
 
 const DIRECTION_OPTIONS = [
-  { label: 'Debes', value: 'i_owe' },
-  { label: 'Te deben', value: 'owes_me' },
-] as const;
-
-const REQUEST_TYPE_OPTIONS = [
-  { label: 'Deuda', value: 'debt' },
-  { label: 'Pago', value: 'manual_settlement' },
+  { label: 'Entrada', value: 'owes_me' },
+  { label: 'Salida', value: 'i_owe' },
 ] as const;
 
 const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
 const DESCRIPTION_SUGGESTIONS = ['Comida', 'Mercado', 'Transporte', 'Salida'] as const;
 
+function buildDraftPreview(input: {
+  readonly amountMinor: number;
+  readonly counterpartyName: string;
+  readonly direction: Direction;
+  readonly requestKind: RequestKind;
+}): { readonly detail: string; readonly title: string; readonly tone: Direction } {
+  const amountLabel = formatCop(input.amountMinor);
+  const flowLabel = input.direction === 'owes_me' ? 'entrada' : 'salida';
+  const detail =
+    input.requestKind === 'balance_decrease'
+      ? `Reducira el saldo abierto con ${input.counterpartyName} cuando la otra persona lo acepte.`
+      : `Quedara pendiente hasta que ${input.counterpartyName} la acepte.`;
+
+  return {
+    title: `Vas a registrar una ${flowLabel} de ${amountLabel}`,
+    detail,
+    tone: input.direction,
+  };
+}
+
 export function RegisterFlowScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    personId?: string;
+    requestKind?: string;
+    direction?: string;
+  }>();
   const { userId } = useSession();
   const snapshotQuery = useAppSnapshot();
   const createRequest = useCreateRequestMutation();
 
+  const contextualRequestKind: RequestKind =
+    params.requestKind === 'balance_decrease' ? 'balance_decrease' : 'balance_increase';
+  const contextualPersonId = typeof params.personId === 'string' ? params.personId : '';
+  const contextualDirection: Direction | null =
+    params.direction === 'i_owe' || params.direction === 'owes_me' ? params.direction : null;
+  const isReductionMode = contextualRequestKind === 'balance_decrease';
+
   const [query, setQuery] = useState('');
-  const [personId, setPersonId] = useState('');
-  const [direction, setDirection] = useState<Direction>('i_owe');
-  const [requestType, setRequestType] = useState<RequestType>('debt');
+  const [personId, setPersonId] = useState(contextualPersonId);
+  const [direction, setDirection] = useState<Direction>(contextualDirection ?? 'owes_me');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -60,6 +86,25 @@ export function RegisterFlowScreen() {
   const selectedPerson = allPeople.find((person) => person.userId === personId) ?? null;
   const amountMinor = Math.max(Number.parseInt(amount || '0', 10) * 100, 0);
   const normalizedQuery = query.trim();
+  const draftPreview =
+    selectedPerson && amountMinor > 0
+      ? buildDraftPreview({
+          amountMinor,
+          counterpartyName: selectedPerson.displayName,
+          direction,
+          requestKind: contextualRequestKind,
+        })
+      : null;
+
+  const screenTitle =
+    isReductionMode && contextualDirection
+      ? contextualDirection === 'owes_me'
+        ? 'Registrar entrada'
+        : 'Registrar salida'
+      : 'Nuevo movimiento';
+  const screenSubtitle = isReductionMode
+    ? 'Este flujo reduce un saldo abierto. Solo confirmas monto y concepto.'
+    : 'Registra solo lo esencial: persona, direccion, monto y concepto.';
 
   function openInviteFlow(suggestedName?: string) {
     router.push({
@@ -68,7 +113,6 @@ export function RegisterFlowScreen() {
         inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
         amountMinor: amountMinor > 0 ? String(amountMinor) : undefined,
         direction,
-        requestType,
         description: description.trim().length > 0 ? description.trim() : undefined,
       },
     });
@@ -90,7 +134,7 @@ export function RegisterFlowScreen() {
 
     try {
       await createRequest.mutateAsync({
-        requestType,
+        requestKind: contextualRequestKind,
         responderUserId: personId,
         debtorUserId,
         creditorUserId,
@@ -98,11 +142,7 @@ export function RegisterFlowScreen() {
         description: description.trim(),
       });
 
-      setMessage(
-        `${requestType === 'debt' ? 'Movimiento de deuda' : 'Pago manual'} enviado a ${
-          selectedPerson?.displayName ?? 'la otra persona'
-        }.`,
-      );
+      setMessage(`Propuesta enviada a ${selectedPerson?.displayName ?? 'la otra persona'}.`);
       setAmount('');
       setDescription('');
     } catch (error) {
@@ -112,7 +152,7 @@ export function RegisterFlowScreen() {
 
   return (
     <ScreenShell
-      eyebrow="Movimiento"
+      eyebrow={isReductionMode ? 'Saldo abierto' : 'Movimiento'}
       footer={
         <View style={styles.footer}>
           <View style={styles.footerAction}>
@@ -122,19 +162,23 @@ export function RegisterFlowScreen() {
             <PrimaryAction
               label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
               onPress={createRequest.isPending ? undefined : () => void handleSave()}
-              subtitle="Deja listo el contexto"
+              subtitle={isReductionMode ? 'Reducir este saldo' : 'Crear propuesta'}
             />
           </View>
         </View>
       }
       largeTitle={false}
-      subtitle="Registra solo lo esencial: persona, tipo, monto y concepto."
-      title="Nuevo movimiento"
+      subtitle={screenSubtitle}
+      title={screenTitle}
     >
       <SurfaceCard padding="lg" variant="accent">
-        <Text style={styles.cardTitle}>Un solo paso, sin friccion</Text>
+        <Text style={styles.cardTitle}>
+          {isReductionMode ? 'Movimiento contextual' : 'Registro global'}
+        </Text>
         <Text style={styles.helper}>
-          Si la persona no existe todavia en tu red, te llevamos directo a invitarla sin perder monto ni concepto.
+          {isReductionMode
+            ? 'Vienes desde una relacion concreta, asi que este formulario solo reduce el saldo actual.'
+            : 'Aqui solo creas nuevas entradas o salidas. Las reducciones de saldo salen desde cada relacion.'}
         </Text>
       </SurfaceCard>
 
@@ -159,45 +203,60 @@ export function RegisterFlowScreen() {
             description="Primero invita a alguien por WhatsApp. Cuando esa persona este en tu red, podras registrar movimientos aqui."
             title="Todavia no tienes relaciones activas"
           />
-          <PrimaryAction
-            label="Invitar persona"
-            onPress={() => openInviteFlow()}
-            subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
-          />
+          {!isReductionMode ? (
+            <PrimaryAction
+              label="Invitar persona"
+              onPress={() => openInviteFlow()}
+              subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
+            />
+          ) : null}
         </View>
       ) : null}
 
       {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0 ? (
         <>
           <SurfaceCard padding="lg">
-            <FieldBlock hint="Busca y toca una opcion." label="Persona">
-              <TextInput
-                onChangeText={setQuery}
-                placeholder="Buscar por nombre"
-                placeholderTextColor={theme.colors.muted}
-                style={styles.input}
-                value={query}
-              />
-              <View style={styles.choiceRow}>
-                {people.slice(0, 8).map((person) => (
-                  <ChoiceChip
-                    key={person.userId}
-                    label={person.displayName}
-                    onPress={() => setPersonId(person.userId)}
-                    selected={person.userId === personId}
-                  />
-                ))}
-              </View>
-            </FieldBlock>
+            {isReductionMode ? (
+              selectedPerson ? (
+                <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
+                  <Text style={styles.selectedLabel}>Relacion seleccionada</Text>
+                  <Text style={styles.selectedName}>{selectedPerson.displayName}</Text>
+                </SurfaceCard>
+              ) : (
+                <Text style={styles.helper}>
+                  No pudimos encontrar la relacion que intenta reducirse. Vuelve desde la tarjeta de la persona.
+                </Text>
+              )
+            ) : (
+              <FieldBlock hint="Busca y toca una opcion." label="Persona">
+                <TextInput
+                  onChangeText={setQuery}
+                  placeholder="Buscar por nombre"
+                  placeholderTextColor={theme.colors.muted}
+                  style={styles.input}
+                  value={query}
+                />
+                <View style={styles.choiceRow}>
+                  {people.slice(0, 8).map((person) => (
+                    <ChoiceChip
+                      key={person.userId}
+                      label={person.displayName}
+                      onPress={() => setPersonId(person.userId)}
+                      selected={person.userId === personId}
+                    />
+                  ))}
+                </View>
+              </FieldBlock>
+            )}
 
-            {selectedPerson ? (
+            {!isReductionMode && selectedPerson ? (
               <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
                 <Text style={styles.selectedLabel}>Seleccionaste a</Text>
                 <Text style={styles.selectedName}>{selectedPerson.displayName}</Text>
               </SurfaceCard>
             ) : null}
 
-            {normalizedQuery.length > 0 && people.length === 0 ? (
+            {!isReductionMode && normalizedQuery.length > 0 && people.length === 0 ? (
               <SurfaceCard padding="md" variant="accent">
                 <Text style={styles.cardTitle}>No encontramos a esa persona en tu red</Text>
                 <Text style={styles.helper}>
@@ -213,12 +272,24 @@ export function RegisterFlowScreen() {
           </SurfaceCard>
 
           <SurfaceCard padding="lg">
-            <FieldBlock label="Que estas registrando">
-              <SegmentedControl options={REQUEST_TYPE_OPTIONS} onChange={setRequestType} value={requestType} />
-            </FieldBlock>
-
-            <FieldBlock label="Direccion">
-              <SegmentedControl options={DIRECTION_OPTIONS} onChange={setDirection} value={direction} />
+            <FieldBlock
+              hint={isReductionMode ? 'La relacion ya define si esta reduccion es entrada o salida.' : undefined}
+              label="Direccion"
+            >
+              {isReductionMode ? (
+                <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
+                  <Text style={styles.selectedLabel}>Direccion fija</Text>
+                  <Text style={styles.selectedName}>
+                    {direction === 'owes_me' ? 'Entrada' : 'Salida'}
+                  </Text>
+                </SurfaceCard>
+              ) : (
+                <SegmentedControl
+                  options={DIRECTION_OPTIONS}
+                  onChange={setDirection}
+                  value={direction}
+                />
+              )}
             </FieldBlock>
 
             <FieldBlock label="Monto">
@@ -263,6 +334,28 @@ export function RegisterFlowScreen() {
                 value={description}
               />
             </FieldBlock>
+
+            {draftPreview ? (
+              <SurfaceCard
+                padding="md"
+                style={[
+                  styles.previewCard,
+                  draftPreview.tone === 'owes_me' ? styles.previewCardPositive : styles.previewCardNegative,
+                ]}
+                variant="muted"
+              >
+                <Text style={styles.previewEyebrow}>Asi se va a leer</Text>
+                <Text
+                  style={[
+                    styles.previewTitle,
+                    draftPreview.tone === 'owes_me' ? styles.previewTitlePositive : styles.previewTitleNegative,
+                  ]}
+                >
+                  {draftPreview.title}
+                </Text>
+                <Text style={styles.helper}>{draftPreview.detail}</Text>
+              </SurfaceCard>
+            ) : null}
           </SurfaceCard>
         </>
       ) : null}
@@ -329,5 +422,33 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
+  },
+  previewCard: {
+    gap: theme.spacing.xs,
+  },
+  previewCardPositive: {
+    borderLeftColor: theme.colors.success,
+    borderLeftWidth: 3,
+  },
+  previewCardNegative: {
+    borderLeftColor: theme.colors.warning,
+    borderLeftWidth: 3,
+  },
+  previewEyebrow: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  previewTitle: {
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  previewTitlePositive: {
+    color: theme.colors.success,
+  },
+  previewTitleNegative: {
+    color: theme.colors.warning,
   },
 });

@@ -13,7 +13,7 @@ import { Money } from '../money/money';
 
 export interface FinancialRequest {
   readonly id: RequestId;
-  readonly requestType: RequestType;
+  readonly requestKind: RequestType;
   readonly status: RequestStatus;
   readonly creatorUserId: UserId;
   readonly responderUserId: UserId;
@@ -27,7 +27,7 @@ export interface FinancialRequest {
 
 export interface CreateFinancialRequestParams {
   readonly id: RequestId;
-  readonly requestType: RequestType;
+  readonly requestKind: RequestType;
   readonly creatorUserId: UserId;
   readonly responderUserId: UserId;
   readonly debtorUserId: UserId;
@@ -61,7 +61,7 @@ export function createFinancialRequest(params: CreateFinancialRequestParams): Fi
 
   return {
     id: params.id,
-    requestType: params.requestType,
+    requestKind: params.requestKind,
     status: 'pending',
     creatorUserId: params.creatorUserId,
     responderUserId: params.responderUserId,
@@ -86,21 +86,21 @@ export function rejectFinancialRequest(request: FinancialRequest): FinancialRequ
   return { ...request, status: 'rejected' };
 }
 
-export function counterFinancialRequest(
+export function amendFinancialRequest(
   request: FinancialRequest,
   nextRequest: FinancialRequest,
-): { closedRequest: FinancialRequest; counterRequest: FinancialRequest } {
+): { closedRequest: FinancialRequest; amendedRequest: FinancialRequest } {
   assertPending(request);
   if (nextRequest.parentRequestId !== request.id) {
     throw new DomainError(
-      'request.invalid_counter_parent',
-      'The counteroffer must reference the original request.',
+      'request.invalid_amendment_parent',
+      'The amendment must reference the original request.',
     );
   }
 
   return {
-    closedRequest: { ...request, status: 'countered' },
-    counterRequest: nextRequest,
+    closedRequest: { ...request, status: 'amended' },
+    amendedRequest: nextRequest,
   };
 }
 

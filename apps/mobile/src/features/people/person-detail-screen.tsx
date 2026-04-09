@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { PersonTimelineItemDto } from '@happy-circles/application';
 
@@ -14,8 +15,8 @@ import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import {
   useAcceptFinancialRequestMutation,
+  useAmendFinancialRequestMutation,
   useAppSnapshot,
-  useCounterofferFinancialRequestMutation,
   useRejectFinancialRequestMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
@@ -26,19 +27,23 @@ function compactHistoryLabel(step: PersonTimelineItemDto): string {
   }
 
   if (step.kind === 'payment') {
-    return 'Pago registrado';
+    return 'Movimiento registrado';
   }
 
   if (step.status === 'posted') {
     return 'Registrado';
   }
 
-  if (step.title.toLocaleLowerCase('es-CO').includes('contraoferta')) {
-    return step.status === 'accepted' ? 'Contraoferta aceptada' : 'Contraoferta';
+  if (step.status === 'amended') {
+    return 'Monto actualizado';
   }
 
   if (step.status === 'accepted') {
     return 'Aceptada';
+  }
+
+  if (step.status === 'amended') {
+    return 'Monto actualizado';
   }
 
   if (step.status === 'rejected') {
@@ -54,16 +59,16 @@ function friendlyHistoryStepLabel(step: PersonTimelineItemDto): string {
   }
 
   if (step.kind === 'payment') {
-    return 'Se registro el pago';
+    return 'Se registro el movimiento';
   }
 
   if (step.status === 'posted') {
     return 'Se registro';
   }
 
-  if (step.title.endsWith(' envio una contraoferta')) {
-    const actor = step.title.replace(' envio una contraoferta', '');
-    return actor === 'Tu' ? 'Tu hiciste una contraoferta' : `${actor} hizo una contraoferta`;
+  if (step.title.endsWith(' propuso un nuevo monto')) {
+    const actor = step.title.replace(' propuso un nuevo monto', '');
+    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
   }
 
   if (step.title.startsWith('Tu creo ')) {
@@ -131,8 +136,8 @@ function historyStatusLabel(status: string): string {
     return 'Pendiente';
   }
 
-  if (status === 'countered') {
-    return 'Contraoferta';
+  if (status === 'amended') {
+    return 'Nuevo monto';
   }
 
   if (status === 'accepted') {
@@ -151,7 +156,7 @@ function historyStatusLabel(status: string): string {
 }
 
 function historyStatusTone(status: string): 'primary' | 'success' | 'warning' | 'neutral' {
-  if (status === 'pending' || status === 'countered') {
+  if (status === 'pending' || status === 'amended') {
     return 'warning';
   }
 
@@ -177,6 +182,92 @@ interface HistoryCase {
   readonly steps: readonly PersonTimelineItemDto[];
 }
 
+type HistoryDirection = 'i_owe' | 'owes_me' | 'neutral';
+
+function historyDirectionFromStep(
+  step: PersonTimelineItemDto,
+  counterpartyName: string,
+): HistoryDirection {
+  if (step.status === 'rejected') {
+    return 'neutral';
+  }
+
+  if (step.kind === 'settlement') {
+    return 'neutral';
+  }
+
+  if (step.kind === 'payment') {
+    const [from, to] = (step.flowLabel ?? '').split('->').map((part) => part.trim());
+
+    if (from === counterpartyName) {
+      return 'owes_me';
+    }
+
+    if (to === counterpartyName) {
+      return 'i_owe';
+    }
+  }
+
+  if (step.tone === 'positive') {
+    return 'owes_me';
+  }
+
+  if (step.tone === 'negative') {
+    return 'i_owe';
+  }
+
+  return 'neutral';
+}
+
+function historyImpactTone(
+  step: PersonTimelineItemDto,
+  counterpartyName: string,
+): 'positive' | 'negative' | 'neutral' {
+  if (step.kind === 'settlement') {
+    return 'neutral';
+  }
+
+  const direction = historyDirectionFromStep(step, counterpartyName);
+
+  if (direction === 'owes_me') {
+    return 'positive';
+  }
+
+  if (direction === 'i_owe') {
+    return 'negative';
+  }
+
+  return 'neutral';
+}
+
+function historyImpactLabel(
+  step: PersonTimelineItemDto,
+  counterpartyName: string,
+): string | null {
+  if (step.status === 'rejected') {
+    return 'No cambio el saldo';
+  }
+
+  if (step.amountMinor <= 0) {
+    return null;
+  }
+
+  if (step.kind === 'settlement') {
+    return `Cierre de ciclo por ${formatCop(step.amountMinor)}`;
+  }
+
+  const direction = historyDirectionFromStep(step, counterpartyName);
+  if (direction === 'neutral') {
+    return null;
+  }
+
+  const amountLabel = formatCop(step.amountMinor);
+  const isProposal = step.kind === 'request' && (step.status === 'pending' || step.status === 'amended');
+  const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
+
+  return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
+}
+
 function historyCaseKey(item: Pick<PersonTimelineItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>): string {
   if (item.originSettlementProposalId) {
     return `settlement:${item.originSettlementProposalId}`;
@@ -190,32 +281,33 @@ function historyCaseKey(item: Pick<PersonTimelineItemDto, 'id' | 'originRequestI
 }
 
 export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
+  const router = useRouter();
   const snapshotQuery = useAppSnapshot();
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
-  const counterofferRequest = useCounterofferFinancialRequestMutation();
+  const amendRequest = useAmendFinancialRequestMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [showCounteroffer, setShowCounteroffer] = useState(false);
-  const [counterofferAmount, setCounterofferAmount] = useState('');
-  const [counterofferDescription, setCounterofferDescription] = useState('');
+  const [showAmendment, setShowAmendment] = useState(false);
+  const [amendmentAmount, setAmendmentAmount] = useState('');
+  const [amendmentDescription, setAmendmentDescription] = useState('');
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!person?.pendingRequest) {
-      setShowCounteroffer(false);
-      setCounterofferAmount('');
-      setCounterofferDescription('');
+      setShowAmendment(false);
+      setAmendmentAmount('');
+      setAmendmentDescription('');
       return;
     }
 
-    setShowCounteroffer(false);
-    setCounterofferAmount(String(Math.max(1, Math.round(person.pendingRequest.amountMinor / 100))));
-    setCounterofferDescription(person.pendingRequest.description);
+    setShowAmendment(false);
+    setAmendmentAmount(String(Math.max(1, Math.round(person.pendingRequest.amountMinor / 100))));
+    setAmendmentDescription(person.pendingRequest.description);
   }, [person?.pendingRequest?.id]);
 
-  const counterofferAmountMinor = Math.max(Number.parseInt(counterofferAmount || '0', 10) * 100, 0);
+  const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
   const historyCases = useMemo<HistoryCase[]>(() => {
     if (!person) {
       return [];
@@ -254,10 +346,10 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
     try {
       if (action === 'accept') {
         await acceptRequest.mutateAsync(person.pendingRequest.id);
-        setMessage('Request aceptado.');
+        setMessage('Propuesta aceptada.');
       } else {
         await rejectRequest.mutateAsync(person.pendingRequest.id);
-        setMessage('Request rechazado.');
+        setMessage('Propuesta no aceptada.');
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
@@ -266,29 +358,29 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
     }
   }
 
-  async function handleCounteroffer() {
+  async function handleAmendment() {
     if (!person?.pendingRequest) {
       return;
     }
 
-    if (counterofferAmountMinor <= 0 || counterofferDescription.trim().length === 0) {
-      setMessage('Define un monto valido y escribe un concepto para la contraoferta.');
+    if (amendmentAmountMinor <= 0 || amendmentDescription.trim().length === 0) {
+      setMessage('Define un monto valido y escribe un concepto para proponer otro monto.');
       return;
     }
 
-    setBusyKey('counteroffer');
+    setBusyKey('amendment');
     setMessage(null);
 
     try {
-      await counterofferRequest.mutateAsync({
+      await amendRequest.mutateAsync({
         requestId: person.pendingRequest.id,
-        amountMinor: counterofferAmountMinor,
-        description: counterofferDescription.trim(),
+        amountMinor: amendmentAmountMinor,
+        description: amendmentDescription.trim(),
       });
-      setShowCounteroffer(false);
-      setMessage('Contraoferta enviada.');
+      setShowAmendment(false);
+      setMessage('Nuevo monto enviado.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo enviar la contraoferta.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
     } finally {
       setBusyKey(null);
     }
@@ -330,9 +422,24 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   return (
     <ScreenShell
       footer={
-        <View style={styles.footerActions}>
-          <PrimaryAction href="/register" label="Registrar movimiento" subtitle="Actualizar este saldo" />
-        </View>
+        person.netAmountMinor === 0 ? undefined : (
+          <View style={styles.footerActions}>
+            <PrimaryAction
+              label={person.direction === 'owes_me' ? 'Registrar entrada' : 'Registrar salida'}
+              onPress={() =>
+                router.push({
+                  pathname: '/register',
+                  params: {
+                    personId: person.userId,
+                    requestKind: 'balance_decrease',
+                    direction: person.direction,
+                  },
+                })
+              }
+              subtitle="Reducir este saldo"
+            />
+          </View>
+        )
       }
       headerVariant="plain"
       largeTitle={false}
@@ -384,52 +491,52 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
                 </View>
                 <View style={styles.actionSlot}>
                   <PrimaryAction
-                    label={busyKey === 'reject' ? 'Rechazando...' : 'Rechazar'}
+                    label={busyKey === 'reject' ? 'Enviando...' : 'No aceptar'}
                     onPress={busyKey ? undefined : () => void handlePendingAction('reject')}
                     variant="ghost"
                   />
                 </View>
                 <View style={styles.actionSlot}>
                   <PrimaryAction
-                    label={showCounteroffer ? 'Ocultar contraoferta' : 'Contraofertar'}
-                    onPress={busyKey ? undefined : () => setShowCounteroffer((current) => !current)}
+                    label={showAmendment ? 'Ocultar cambio' : 'Cambiar monto'}
+                    onPress={busyKey ? undefined : () => setShowAmendment((current) => !current)}
                     variant="secondary"
                   />
                 </View>
               </View>
 
-              {showCounteroffer ? (
-                <SurfaceCard padding="md" style={styles.counterofferCard} variant="default">
+              {showAmendment ? (
+                <SurfaceCard padding="md" style={styles.amendmentCard} variant="default">
                   <FieldBlock hint="Escribe el valor en pesos." label="Monto">
                     <TextInput
                       keyboardType="number-pad"
-                      onChangeText={setCounterofferAmount}
+                      onChangeText={setAmendmentAmount}
                       placeholder="45000"
                       placeholderTextColor={theme.colors.muted}
                       style={styles.input}
-                      value={counterofferAmount}
+                      value={amendmentAmount}
                     />
-                    {counterofferAmountMinor > 0 ? (
-                      <Text style={styles.amountPreview}>{formatCop(counterofferAmountMinor)}</Text>
+                    {amendmentAmountMinor > 0 ? (
+                      <Text style={styles.amountPreview}>{formatCop(amendmentAmountMinor)}</Text>
                     ) : null}
                   </FieldBlock>
 
                   <FieldBlock hint="Ajusta el concepto antes de enviarlo." label="Concepto">
                     <TextInput
                       multiline
-                      onChangeText={setCounterofferDescription}
-                      placeholder="Explica la contraoferta"
+                      onChangeText={setAmendmentDescription}
+                      placeholder="Explica el nuevo monto"
                       placeholderTextColor={theme.colors.muted}
                       style={[styles.input, styles.textarea]}
-                      value={counterofferDescription}
+                      value={amendmentDescription}
                     />
                   </FieldBlock>
 
                   <View style={styles.actionRow}>
                     <View style={styles.actionSlot}>
                       <PrimaryAction
-                        label={busyKey === 'counteroffer' ? 'Enviando...' : 'Enviar contraoferta'}
-                        onPress={busyKey ? undefined : () => void handleCounteroffer()}
+                        label={busyKey === 'amendment' ? 'Enviando...' : 'Enviar nuevo monto'}
+                        onPress={busyKey ? undefined : () => void handleAmendment()}
                       />
                     </View>
                   </View>
@@ -438,7 +545,7 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
             </>
           ) : (
             <Text style={styles.pendingHelper}>
-              Ya enviaste este request. Cuando {person.displayName} responda, veras el resultado aqui.
+              Ya enviaste esta propuesta. Cuando {person.displayName} responda, veras el resultado aqui.
             </Text>
           )}
         </SurfaceCard>
@@ -447,17 +554,16 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
       <SectionBlock title="Historial">
         {historyCases.length === 0 ? (
           <EmptyState
-            description="Cuando haya requests o movimientos confirmados con esta persona, apareceran aqui."
+            description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
             title="Sin movimientos todavia"
           />
         ) : (
           historyCases.map((itemCase) => {
             const isExpanded = expandedCaseIds.includes(itemCase.id);
             const latest = itemCase.latest;
-            const earliest = itemCase.earliest;
-            const caseMeta = [compactHistoryLabel(latest), latest.happenedAtLabel]
-              .filter(Boolean)
-              .join(' | ');
+            const caseMeta = latest.happenedAtLabel ?? null;
+            const caseImpact = historyImpactLabel(latest, person.displayName);
+            const caseTone = historyImpactTone(latest, person.displayName);
 
             return (
               <SurfaceCard
@@ -465,28 +571,28 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
                 padding="lg"
                 style={[
                   styles.caseCard,
-                  latest.tone === 'positive' ? styles.caseCardPositive : null,
-                  latest.tone === 'negative' ? styles.caseCardNegative : null,
+                  caseTone === 'positive' ? styles.caseCardPositive : null,
+                  caseTone === 'negative' ? styles.caseCardNegative : null,
                 ]}
               >
                 <View style={styles.caseHeader}>
                   <View style={styles.caseText}>
                     <Text style={styles.caseTitle}>{historyCaseTitle(itemCase)}</Text>
+                    {caseImpact ? (
+                      <Text
+                        style={[
+                          styles.caseImpact,
+                          caseTone === 'positive' ? styles.positive : null,
+                          caseTone === 'negative' ? styles.negative : null,
+                        ]}
+                      >
+                        {caseImpact}
+                      </Text>
+                    ) : null}
                     {caseMeta ? <Text style={styles.caseSummary}>{caseMeta}</Text> : null}
                   </View>
                   <View style={styles.caseMeta}>
                     <StatusChip label={historyStatusLabel(latest.status)} tone={historyStatusTone(latest.status)} />
-                    {latest.amountMinor > 0 ? (
-                      <Text
-                        style={[
-                          styles.caseAmount,
-                          latest.tone === 'positive' ? styles.positive : null,
-                          latest.tone === 'negative' ? styles.negative : null,
-                        ]}
-                      >
-                        {formatCop(latest.amountMinor)}
-                      </Text>
-                    ) : null}
                   </View>
                 </View>
 
@@ -502,37 +608,53 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
 
                 {isExpanded ? (
                   <View style={styles.caseSteps}>
-                    {itemCase.steps.map((step, index) => (
-                      <View key={step.id} style={styles.stepRow}>
-                        <View style={styles.stepRail}>
-                          <View
-                            style={[
-                              styles.stepMarker,
-                              step.tone === 'positive' ? styles.stepMarkerPositive : null,
-                              step.tone === 'negative' ? styles.stepMarkerNegative : null,
-                            ]}
-                          />
-                          {index < itemCase.steps.length - 1 ? <View style={styles.stepLine} /> : null}
-                        </View>
-                        <View style={styles.stepBody}>
-                          <View style={styles.stepTop}>
-                            <Text style={styles.stepTitle}>{friendlyHistoryStepLabel(step)}</Text>
-                            {step.amountMinor > 0 ? (
+                    {itemCase.steps.map((step, index) => {
+                      const stepImpact = historyImpactLabel(step, person.displayName);
+                      const stepTone = historyImpactTone(step, person.displayName);
+
+                      return (
+                        <View key={step.id} style={styles.stepRow}>
+                          <View style={styles.stepRail}>
+                            <View
+                              style={[
+                                styles.stepMarker,
+                                stepTone === 'positive' ? styles.stepMarkerPositive : null,
+                                stepTone === 'negative' ? styles.stepMarkerNegative : null,
+                              ]}
+                            />
+                            {index < itemCase.steps.length - 1 ? <View style={styles.stepLine} /> : null}
+                          </View>
+                          <View style={styles.stepBody}>
+                            <View style={styles.stepTop}>
+                              <Text style={styles.stepTitle}>{friendlyHistoryStepLabel(step)}</Text>
+                              {step.amountMinor > 0 ? (
+                                <Text
+                                  style={[
+                                    styles.stepAmount,
+                                    stepTone === 'positive' ? styles.positive : null,
+                                    stepTone === 'negative' ? styles.negative : null,
+                                  ]}
+                                >
+                                  {formatCop(step.amountMinor)}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {stepImpact ? (
                               <Text
                                 style={[
-                                  styles.stepAmount,
-                                  step.tone === 'positive' ? styles.positive : null,
-                                  step.tone === 'negative' ? styles.negative : null,
+                                  styles.stepImpact,
+                                  stepTone === 'positive' ? styles.positive : null,
+                                  stepTone === 'negative' ? styles.negative : null,
                                 ]}
                               >
-                                {formatCop(step.amountMinor)}
+                                {stepImpact}
                               </Text>
                             ) : null}
+                            {step.happenedAtLabel ? <Text style={styles.stepMeta}>{step.happenedAtLabel}</Text> : null}
                           </View>
-                          {step.happenedAtLabel ? <Text style={styles.stepMeta}>{step.happenedAtLabel}</Text> : null}
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 ) : null}
               </SurfaceCard>
@@ -603,7 +725,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 140,
   },
-  counterofferCard: {
+  amendmentCard: {
     gap: theme.spacing.md,
   },
   input: {
@@ -658,15 +780,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 24,
   },
+  caseImpact: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
   caseSummary: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
-  },
-  caseAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
   },
   caseFooter: {
     alignItems: 'center',
@@ -736,8 +858,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     fontWeight: '700',
     lineHeight: 18,
-    paddingRight: theme.spacing.sm,
     flex: 1,
+    paddingRight: theme.spacing.sm,
+  },
+  stepImpact: {
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   stepMeta: {
     color: theme.colors.textMuted,

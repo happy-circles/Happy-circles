@@ -14,10 +14,10 @@ const USER_A = '00000000-0000-0000-0000-0000000000a1' as UserId;
 const USER_B = '00000000-0000-0000-0000-0000000000b2' as UserId;
 
 describe('Ledger', () => {
-  it('builds balanced entries for an accepted debt request', () => {
+  it('builds balanced entries for an accepted balance increase request', () => {
     const request = createFinancialRequest({
       id: '00000000-0000-0000-0000-0000000000c3' as RequestId,
-      requestType: 'debt',
+      requestKind: 'balance_increase',
       creatorUserId: USER_A,
       responderUserId: USER_B,
       debtorUserId: USER_A,

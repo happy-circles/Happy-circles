@@ -111,10 +111,10 @@ select public.ensure_relationship_accounts('10000000-0000-0000-0000-0000000000b2
 select public.ensure_relationship_accounts('10000000-0000-0000-0000-0000000000c3');
 select public.ensure_relationship_accounts('10000000-0000-0000-0000-0000000000d4');
 
-select public.create_financial_request(
+select public.create_balance_request(
   '00000000-0000-0000-0000-0000000000a1',
   'seed-a-b-request',
-  'debt',
+  'balance_increase',
   '00000000-0000-0000-0000-0000000000b2',
   '00000000-0000-0000-0000-0000000000a1',
   '00000000-0000-0000-0000-0000000000b2',
@@ -130,10 +130,10 @@ select public.accept_financial_request(
   (select id from public.financial_requests where description = 'Mercado Ana -> Bruno')
 );
 
-select public.create_financial_request(
+select public.create_balance_request(
   '00000000-0000-0000-0000-0000000000b2',
   'seed-b-c-request',
-  'debt',
+  'balance_increase',
   '00000000-0000-0000-0000-0000000000c3',
   '00000000-0000-0000-0000-0000000000b2',
   '00000000-0000-0000-0000-0000000000c3',
@@ -149,10 +149,10 @@ select public.accept_financial_request(
   (select id from public.financial_requests where description = 'Viaje Bruno -> Carla')
 );
 
-select public.create_financial_request(
+select public.create_balance_request(
   '00000000-0000-0000-0000-0000000000c3',
   'seed-c-d-request',
-  'debt',
+  'balance_increase',
   '00000000-0000-0000-0000-0000000000d4',
   '00000000-0000-0000-0000-0000000000c3',
   '00000000-0000-0000-0000-0000000000d4',
@@ -168,10 +168,10 @@ select public.accept_financial_request(
   (select id from public.financial_requests where description = 'Cena Carla -> Diego')
 );
 
-select public.create_financial_request(
+select public.create_balance_request(
   '00000000-0000-0000-0000-0000000000d4',
   'seed-d-a-request',
-  'debt',
+  'balance_increase',
   '00000000-0000-0000-0000-0000000000a1',
   '00000000-0000-0000-0000-0000000000d4',
   '00000000-0000-0000-0000-0000000000a1',

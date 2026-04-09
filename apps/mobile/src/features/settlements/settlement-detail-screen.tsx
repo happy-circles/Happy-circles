@@ -166,7 +166,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       <SurfaceCard padding="lg" variant="accent">
         <Text style={styles.heroTitle}>Revisa el cierre sugerido antes de confirmarlo.</Text>
         <Text style={styles.heroBody}>
-          El sistema detecto este circulo sobre deuda neta derivada del ledger. Aqui ves cuanto baja y entre quienes.
+          El sistema detecto este circulo sobre saldo neto derivado del ledger. Aqui ves cuanto baja y entre quienes.
         </Text>
       </SurfaceCard>
 

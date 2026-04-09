@@ -98,7 +98,7 @@ export function DashboardScreen() {
         action={
           <Link href="/invite" asChild>
             <Pressable style={({ pressed }) => [styles.peopleAction, pressed ? styles.quickActionPressed : null]}>
-              <Ionicons color={theme.colors.textMuted} name="person-add-outline" size={18} />
+              <Ionicons color={theme.colors.primary} name="person-add-outline" size={18} />
             </Pressable>
           </Link>
         }
@@ -224,10 +224,13 @@ const styles = StyleSheet.create({
   },
   peopleAction: {
     alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
-    height: 32,
+    borderWidth: 1,
+    height: 38,
     justifyContent: 'center',
-    width: 32,
+    width: 38,
   },
   searchInput: {
     backgroundColor: theme.colors.surfaceMuted,

@@ -36,6 +36,7 @@ export interface ActivityItemDto {
   readonly happenedAt?: string;
   readonly happenedAtLabel?: string;
   readonly tone?: 'positive' | 'negative' | 'neutral';
+  readonly flowLabel?: string;
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
   readonly counterpartyLabel?: string;
@@ -76,7 +77,7 @@ export interface PersonTimelineItemDto {
 
 export interface PersonPendingRequestDto {
   readonly id: string;
-  readonly requestType: 'debt' | 'manual_settlement' | 'reversal';
+  readonly requestKind: 'balance_increase' | 'balance_decrease' | 'transaction_reversal';
   readonly responseState: 'requires_you' | 'waiting_other_side';
   readonly title: string;
   readonly description: string;

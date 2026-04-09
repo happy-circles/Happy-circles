@@ -8,17 +8,12 @@ Deno.serve((request) =>
       throw new Error('Invalid amountMinor');
     }
 
-    const { data, error } = await client.rpc('create_financial_request', {
+    const { data, error } = await client.rpc('amend_financial_request', {
       p_actor_user_id: actorUserId,
       p_idempotency_key: requireString(body.idempotencyKey, 'idempotencyKey'),
-      p_request_type: 'manual_settlement',
-      p_responder_user_id: requireString(body.responderUserId, 'responderUserId'),
-      p_debtor_user_id: requireString(body.debtorUserId, 'debtorUserId'),
-      p_creditor_user_id: requireString(body.creditorUserId, 'creditorUserId'),
+      p_request_id: requireString(body.requestId, 'requestId'),
       p_amount_minor: amountMinor,
       p_description: requireString(body.description, 'description'),
-      p_parent_request_id: null,
-      p_target_ledger_transaction_id: null,
     });
 
     if (error) {

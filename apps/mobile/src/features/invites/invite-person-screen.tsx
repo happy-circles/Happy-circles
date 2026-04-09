@@ -46,16 +46,19 @@ function buildWhatsAppInviteMessage(input: {
   const prefix = inviteeName.trim().length > 0 ? `Hola ${inviteeName.trim()},` : 'Hola,';
 
   if (input.amountMinor && input.amountMinor > 0 && input.direction) {
-    const relationText = input.direction === 'i_owe' ? 'te debo' : 'me debes';
+    const movementText =
+      input.direction === 'i_owe'
+        ? `una salida de ${formatCop(input.amountMinor)}`
+        : `una entrada de ${formatCop(input.amountMinor)}`;
     const descriptionText =
       input.description && input.description.trim().length > 0
         ? ` por ${input.description.trim()}`
         : '';
 
-    return `${prefix} se que ${relationText} ${formatCop(input.amountMinor)}${descriptionText}. Para llevarlo facil y sin mensajes perdidos, usemos Happy Circles. Registrate con este mismo numero para que la solicitud te aparezca dentro de la app.`;
+    return `${prefix} quiero registrar ${movementText}${descriptionText} en Happy Circles. Registrate con este mismo numero para que la propuesta te aparezca dentro de la app.`;
   }
 
-  return `${prefix} te invito a Happy Circles para llevar cuentas pendientes y pagos entre amigos sin enredos. Registrate con este mismo numero para que la invitacion te aparezca dentro de la app.`;
+  return `${prefix} te invito a Happy Circles para llevar saldos y movimientos entre amigos sin enredos. Registrate con este mismo numero para que la invitacion te aparezca dentro de la app.`;
 }
 
 export function InvitePersonScreen() {
@@ -176,7 +179,7 @@ export function InvitePersonScreen() {
         <SurfaceCard padding="lg" variant="accent">
           <Text style={styles.cardTitle}>Esta invitacion nace desde un movimiento</Text>
           <Text style={styles.helper}>
-            {transactionDirection === 'i_owe' ? 'Le debes' : 'Te debe'} {formatCop(transactionAmountMinor)}
+            {transactionDirection === 'i_owe' ? 'Salida de' : 'Entrada de'} {formatCop(transactionAmountMinor)}
             {transactionDescription && transactionDescription.trim().length > 0
               ? ` por ${transactionDescription.trim()}`
               : ''}

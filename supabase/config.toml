@@ -27,10 +27,10 @@ verify_jwt = false
 [functions.approve-cycle-settlement]
 verify_jwt = false
 
-[functions.counteroffer-financial-request]
+[functions.amend-financial-request]
 verify_jwt = false
 
-[functions.create-debt-request]
+[functions.create-balance-request]
 verify_jwt = false
 
 [functions.create-relationship-invite]
@@ -45,10 +45,7 @@ verify_jwt = false
 [functions.propose-cycle-settlement]
 verify_jwt = false
 
-[functions.propose-manual-settlement]
-verify_jwt = false
-
-[functions.propose-reversal-request]
+[functions.propose-transaction-reversal]
 verify_jwt = false
 
 [functions.reject-cycle-settlement]

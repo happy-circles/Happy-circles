@@ -50,16 +50,23 @@ export function buildAcceptedRequestTransaction(
   request: FinancialRequest,
   accounts: LedgerAccountsByPair,
 ): LedgerTransaction {
+  if (request.requestKind === 'transaction_reversal') {
+    throw new DomainError(
+      'ledger.reversal_requires_original_transaction',
+      'Use buildReversalTransaction for transaction reversals.',
+    );
+  }
+
   const entries =
-    request.requestType === 'debt'
-      ? buildDebtAcceptanceEntries(request.amount.amountMinor, accounts)
-      : buildDebtReductionEntries(request.amount.amountMinor, accounts);
+    request.requestKind === 'balance_increase'
+      ? buildBalanceIncreaseAcceptanceEntries(request.amount.amountMinor, accounts)
+      : buildBalanceDecreaseAcceptanceEntries(request.amount.amountMinor, accounts);
 
   assertBalanced(entries);
 
   return {
     id: transactionId,
-    transactionType: mapRequestTypeToTransactionType(request.requestType),
+    transactionType: mapRequestKindToTransactionType(request.requestKind),
     sourceType: 'user',
     description: request.description,
     originRequestId: request.id,
@@ -80,7 +87,7 @@ export function buildReversalTransaction(
 
   return {
     id: transactionId,
-    transactionType: 'reversal_acceptance',
+    transactionType: 'transaction_reversal_acceptance',
     sourceType: 'user',
     description: `Reversal of ${original.id}`,
     reversesTransactionId: original.id,
@@ -106,7 +113,7 @@ export function assertCopCurrency(currencyCode: CurrencyCode): void {
   }
 }
 
-function buildDebtAcceptanceEntries(
+function buildBalanceIncreaseAcceptanceEntries(
   amountMinor: number,
   accounts: LedgerAccountsByPair,
 ): readonly LedgerEntry[] {
@@ -126,7 +133,7 @@ function buildDebtAcceptanceEntries(
   ];
 }
 
-function buildDebtReductionEntries(
+function buildBalanceDecreaseAcceptanceEntries(
   amountMinor: number,
   accounts: LedgerAccountsByPair,
 ): readonly LedgerEntry[] {
@@ -146,14 +153,14 @@ function buildDebtReductionEntries(
   ];
 }
 
-function mapRequestTypeToTransactionType(requestType: RequestType): TransactionType {
-  switch (requestType) {
-    case 'debt':
-      return 'debt_acceptance';
-    case 'manual_settlement':
-      return 'manual_settlement_acceptance';
-    case 'reversal':
-      return 'reversal_acceptance';
+function mapRequestKindToTransactionType(requestKind: RequestType): TransactionType {
+  switch (requestKind) {
+    case 'balance_increase':
+      return 'balance_increase_acceptance';
+    case 'balance_decrease':
+      return 'balance_decrease_acceptance';
+    case 'transaction_reversal':
+      return 'transaction_reversal_acceptance';
     default: {
       throw new DomainError('ledger.unsupported_request_type', 'Unsupported request type.');
     }

@@ -11,9 +11,9 @@ import type {
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import {
-  createDebtRequestSchema,
+  amendFinancialRequestSchema,
+  createBalanceRequestSchema,
   createContactInviteSchema,
-  counterofferFinancialRequestSchema,
   cycleSettlementDecisionSchema,
   cycleSettlementExecutionSchema,
   relationshipInviteDecisionSchema,
@@ -138,7 +138,7 @@ export interface AppSnapshot {
 }
 
 interface CreateRequestInput {
-  readonly requestType: 'debt' | 'manual_settlement';
+  readonly requestKind: 'balance_increase' | 'balance_decrease';
   readonly responderUserId: string;
   readonly debtorUserId: string;
   readonly creditorUserId: string;
@@ -263,24 +263,40 @@ function sortPeople(left: PersonCardDto, right: PersonCardDto): number {
   return left.displayName.localeCompare(right.displayName, 'es-CO');
 }
 
+function requestDirectionForUser(
+  request: Pick<FinancialRequestRow, 'creditor_user_id' | 'debtor_user_id'>,
+  currentUserId: string,
+): 'i_owe' | 'owes_me' {
+  return request.creditor_user_id === currentUserId ? 'owes_me' : 'i_owe';
+}
+
+function buildPendingRequestImpactTitle(input: {
+  readonly request: FinancialRequestRow;
+  readonly currentUserId: string;
+}): string {
+  const { request, currentUserId } = input;
+  const direction = requestDirectionForUser(request, currentUserId);
+
+  return direction === 'owes_me' ? 'Entrada propuesta' : 'Salida propuesta';
+}
+
 function formatPendingRequestTitle(
+  request: FinancialRequestRow,
+  currentUserId: string,
+  names: Map<string, string>,
+): string {
+  return buildPendingRequestImpactTitle({
+    request,
+    currentUserId,
+  });
+}
+
+function formatPendingRequestSubtitle(
   request: FinancialRequestRow,
   names: Map<string, string>,
 ): string {
-  const creatorName = names.get(request.creator_user_id) ?? 'Tu contraparte';
-  if (request.request_type === 'manual_settlement') {
-    return `${creatorName} te propuso un pago manual`;
-  }
-
-  if (request.request_type === 'reversal') {
-    return `${creatorName} te propuso una reversa`;
-  }
-
-  return `${creatorName} te envio una deuda`;
-}
-
-function formatPendingRequestSubtitle(request: FinancialRequestRow): string {
-  return `${formatCop(request.amount_minor)} | ${request.description ?? 'Sin descripcion'} | ${formatRelativeLabel(request.created_at)}`;
+  const creatorName = names.get(request.creator_user_id) ?? 'Persona';
+  return [creatorName, request.description ?? 'Sin descripcion', formatRelativeLabel(request.created_at)].join(' | ');
 }
 
 function buildPersonPendingRequest(input: {
@@ -291,29 +307,19 @@ function buildPersonPendingRequest(input: {
 }): PersonPendingRequestDto {
   const { request, currentUserId, counterpartyName, names } = input;
   const createdByCurrentUser = request.creator_user_id === currentUserId;
-  const requestType: PersonPendingRequestDto['requestType'] =
-    request.request_type === 'manual_settlement' || request.request_type === 'reversal'
+  const requestKind: PersonPendingRequestDto['requestKind'] =
+    request.request_type === 'balance_decrease' || request.request_type === 'transaction_reversal'
       ? request.request_type
-      : 'debt';
-
-  let title = `${counterpartyName} te envio una deuda`;
-  if (requestType === 'manual_settlement') {
-    title = createdByCurrentUser
-      ? `Le propusiste un pago a ${counterpartyName}`
-      : `${counterpartyName} te propuso un pago`;
-  } else if (requestType === 'reversal') {
-    title = createdByCurrentUser
-      ? `Le enviaste una contraoferta a ${counterpartyName}`
-      : `${counterpartyName} hizo una contraoferta`;
-  } else if (createdByCurrentUser) {
-    title = `Le enviaste una deuda a ${counterpartyName}`;
-  }
+      : 'balance_increase';
 
   return {
     id: request.id,
-    requestType,
+    requestKind,
     responseState: request.responder_user_id === currentUserId ? 'requires_you' : 'waiting_other_side',
-    title,
+    title: buildPendingRequestImpactTitle({
+      request,
+      currentUserId,
+    }),
     description: request.description ?? 'Sin descripcion',
     amountMinor: request.amount_minor,
     createdAtLabel: formatRelativeLabel(request.created_at),
@@ -394,18 +400,18 @@ function buildRequestCreatedTitle(
   );
 
   if (request.parent_request_id) {
-    return `${creator} envio una contraoferta`;
+    return `${creator} propuso un nuevo monto`;
   }
 
-  if (request.request_type === 'manual_settlement') {
-    return `${creator} creo una propuesta de pago`;
+  if (request.request_type === 'balance_decrease') {
+    return `${creator} propuso una salida`;
   }
 
-  if (request.request_type === 'reversal') {
-    return `${creator} envio una contraoferta`;
+  if (request.request_type === 'transaction_reversal') {
+    return `${creator} propuso ajustar el movimiento`;
   }
 
-  return `${creator} creo la solicitud`;
+  return `${creator} propuso una entrada`;
 }
 
 function buildRequestResolutionTitle(
@@ -423,31 +429,31 @@ function buildRequestResolutionTitle(
   );
 
   if (request.status === 'accepted') {
-    if (request.parent_request_id || request.request_type === 'reversal') {
-      return `${responder} acepto la contraoferta`;
+    if (request.parent_request_id) {
+      return `${responder} acepto el nuevo monto`;
     }
 
-    if (request.request_type === 'manual_settlement') {
-      return `${responder} acepto el pago`;
+    if (request.request_type === 'transaction_reversal') {
+      return `${responder} acepto el ajuste`;
     }
 
-    return `${responder} acepto la solicitud`;
+    return `${responder} acepto la propuesta`;
   }
 
   if (request.status === 'rejected') {
-    if (request.parent_request_id || request.request_type === 'reversal') {
-      return `${responder} rechazo la contraoferta`;
+    if (request.parent_request_id) {
+      return `${responder} no acepto el nuevo monto`;
     }
 
-    if (request.request_type === 'manual_settlement') {
-      return `${responder} rechazo la propuesta`;
+    if (request.request_type === 'transaction_reversal') {
+      return `${responder} no acepto el ajuste`;
     }
 
-    return `${responder} rechazo la solicitud`;
+    return `${responder} no acepto la propuesta`;
   }
 
-  if (request.status === 'countered') {
-    return `${responder} envio una contraoferta`;
+  if (request.status === 'amended') {
+    return `${responder} propuso un nuevo monto`;
   }
 
   return null;
@@ -458,7 +464,7 @@ function requestToneForStatus(
   currentUserId: string,
   status: FinancialRequestRow['status'],
 ): PersonTimelineItemDto['tone'] {
-  if (status === 'rejected' || status === 'countered') {
+  if (status === 'rejected' || status === 'amended') {
     return 'neutral';
   }
 
@@ -533,13 +539,13 @@ function buildPersonTimeline(input: {
       input.names,
     );
     const resolutionAt = request.resolved_at ?? request.updated_at;
-    const shouldAddCounteredFallback =
-      request.status === 'countered' && !requestIdsWithChildren.has(request.id);
+    const shouldAddAmendedFallback =
+      request.status === 'amended' && !requestIdsWithChildren.has(request.id);
 
     if (
       resolutionTitle &&
       resolutionAt &&
-      (request.status === 'accepted' || request.status === 'rejected' || shouldAddCounteredFallback)
+      (request.status === 'accepted' || request.status === 'rejected' || shouldAddAmendedFallback)
     ) {
       drafts.push({
         id: `${request.id}:${request.status}`,
@@ -696,14 +702,14 @@ function buildPendingSettlementItems(
     );
     const others = participantNames.filter((name) => name !== 'Tu');
     const titleBase =
-      others.length > 0 ? `Cierre con ${others.join(', ')}` : 'Cierre pendiente en tu circulo';
+      others.length > 0 ? `Ajustaria saldos con ${others.join(', ')}` : 'Ajustaria saldos en tu circulo';
 
     pendingProposalIds.add(proposal.id);
     items.push({
       id: proposal.id,
       kind: 'settlement_proposal',
-      title: `${titleBase} espera tu aprobacion`,
-      subtitle: `Cierre de ciclo detectado automaticamente | ${formatRelativeLabel(proposal.created_at)}`,
+      title: 'Cierre de ciclo propuesto',
+      subtitle: `${titleBase} | ${formatRelativeLabel(proposal.created_at)}`,
       status: 'pending_approvals',
       ctaLabel: 'Revisar',
       href: `/settlements/${proposal.id}`,
@@ -725,7 +731,7 @@ function buildPendingSettlementItems(
     );
     const others = participantNames.filter((name) => name !== 'Tu');
     const titleBase =
-      others.length > 0 ? `Cierre con ${others.join(', ')}` : 'Cierre pendiente en tu circulo';
+      others.length > 0 ? `Ajustaria saldos con ${others.join(', ')}` : 'Ajustaria saldos en tu circulo';
 
     if (proposal.status === 'pending_approvals' && actorParticipant?.decision === 'approved') {
       const approvalsPending = participants.filter(
@@ -735,8 +741,8 @@ function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: `${titleBase} sigue esperando a otros`,
-        subtitle: `Ya aprobaste | faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}`,
+        title: 'Cierre de ciclo esperando a otros',
+        subtitle: `${titleBase} | faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}`,
         status: 'pending_approvals',
         ctaLabel: 'Revisar',
         href: `/settlements/${proposal.id}`,
@@ -748,8 +754,8 @@ function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: `${titleBase} listo para ejecutar`,
-        subtitle: `Todos aprobaron | ${formatRelativeLabel(proposal.created_at)}`,
+        title: 'Cierre de ciclo listo',
+        subtitle: `${titleBase} | ya puedes ejecutarlo`,
         status: 'approved',
         ctaLabel: 'Ejecutar',
         href: `/settlements/${proposal.id}`,
@@ -857,11 +863,7 @@ function historyToneForRow(
     return 'neutral';
   }
 
-  if (row.item_kind === 'ledger_transaction' && row.subtype === 'manual_settlement_acceptance') {
-    return 'positive';
-  }
-
-  if (row.status === 'rejected' || row.status === 'countered') {
+  if (row.status === 'rejected' || row.status === 'amended') {
     return 'neutral';
   }
 
@@ -909,7 +911,7 @@ function historyKindForActivity(row: RelationshipHistoryRow): ActivityItemDto['k
     return row.status === 'accepted' ? 'accepted_request' : 'financial_request';
   }
 
-  if (row.subtype === 'manual_settlement_acceptance') {
+  if (row.subtype === 'balance_decrease_acceptance') {
     return 'manual_payment';
   }
 
@@ -921,7 +923,7 @@ function historyKindForTimeline(row: RelationshipHistoryRow): PersonTimelineItem
     return 'request';
   }
 
-  if (row.subtype === 'manual_settlement_acceptance') {
+  if (row.subtype === 'balance_decrease_acceptance') {
     return 'payment';
   }
 
@@ -941,40 +943,32 @@ function buildHistoryTitle(
 
   if (row.item_kind === 'financial_request') {
     if (row.status === 'pending') {
-      return `Request pendiente con ${counterpartyName}`;
+      return `Propuesta pendiente con ${counterpartyName}`;
     }
 
     if (row.status === 'accepted') {
-      return row.subtype === 'manual_settlement'
-        ? `Pago manual confirmado con ${counterpartyName}`
-        : `Deuda con ${counterpartyName} confirmada`;
+      return `Propuesta aceptada con ${counterpartyName}`;
     }
 
-    if (row.status === 'countered') {
-      return `${counterpartyName} hizo una contraoferta`;
+    if (row.status === 'amended') {
+      return `${counterpartyName} propuso un nuevo monto`;
     }
 
     if (row.status === 'rejected') {
-      return `${counterpartyName} rechazo el request`;
+      return `${counterpartyName} no acepto la propuesta`;
     }
 
-    return `Request con ${counterpartyName}`;
+    return `Propuesta con ${counterpartyName}`;
   }
 
-  if (row.subtype === 'manual_settlement_acceptance') {
+  if (
+    row.subtype === 'balance_decrease_acceptance' ||
+    row.subtype === 'balance_increase_acceptance' ||
+    row.subtype === 'transaction_reversal_acceptance'
+  ) {
     return movementFlow
-      ? `Pago manual confirmado: ${movementFlow}`
-      : `Pago manual con ${counterpartyName}`;
-  }
-
-  if (row.subtype === 'debt_acceptance') {
-    return movementFlow
-      ? `Deuda confirmada: ${movementFlow}`
-      : `Deuda confirmada con ${counterpartyName}`;
-  }
-
-  if (row.subtype === 'reversal_acceptance') {
-    return movementFlow ? `Reversa confirmada: ${movementFlow}` : `Reversa con ${counterpartyName}`;
+      ? `Movimiento registrado: ${movementFlow}`
+      : `Movimiento registrado con ${counterpartyName}`;
   }
 
   if (row.subtype === 'cycle_settlement') {
@@ -1040,50 +1034,54 @@ function buildTimelineStepTitle(
 
   if (row.item_kind === 'financial_request') {
     if (row.status === 'pending') {
-      if (row.subtype === 'manual_settlement') {
-        return `${creator} creo una propuesta de pago`;
+      if (row.subtype === 'balance_decrease') {
+        return `${creator} propuso una salida`;
       }
 
-      if (row.subtype === 'reversal') {
-        return `${creator} envio una contraoferta`;
+      if (row.subtype === 'transaction_reversal') {
+        return `${creator} propuso ajustar el movimiento`;
       }
 
-      return `${creator} creo la solicitud`;
+      return `${creator} propuso una entrada`;
     }
 
     if (row.status === 'accepted') {
-      if (row.subtype === 'manual_settlement') {
-        return `${responder} acepto el pago`;
+      if (row.subtype === 'transaction_reversal') {
+        return `${responder} acepto el ajuste`;
       }
 
-      if (row.subtype === 'reversal') {
-        return `${responder} acepto la contraoferta`;
+      if (row.subtype === 'balance_decrease' || row.subtype === 'balance_increase') {
+        return `${responder} acepto la propuesta`;
       }
 
-      return `${responder} acepto la solicitud`;
+      return `${responder} acepto el ajuste`;
     }
 
-    if (row.status === 'countered') {
-      return `${responder} envio una contraoferta`;
+    if (row.status === 'amended') {
+      return `${responder} propuso un nuevo monto`;
     }
 
     if (row.status === 'rejected') {
-      return `${responder} rechazo la solicitud`;
+      return `${responder} no acepto la propuesta`;
     }
   }
 
-  if (row.subtype === 'manual_settlement_acceptance') {
-    return sourceTypeForRow(row) === 'system' ? 'Sistema confirmo el pago' : `${creator} registro el pago`;
-  }
-
-  if (row.subtype === 'debt_acceptance') {
-    return sourceTypeForRow(row) === 'system' ? 'Sistema confirmo la deuda' : `${creator} confirmo la deuda`;
-  }
-
-  if (row.subtype === 'reversal_acceptance') {
+  if (row.subtype === 'balance_decrease_acceptance') {
     return sourceTypeForRow(row) === 'system'
-      ? 'Sistema aplico la contraoferta'
-      : `${creator} aplico la contraoferta`;
+      ? 'Sistema registro la salida'
+      : `${creator} registro la salida`;
+  }
+
+  if (row.subtype === 'balance_increase_acceptance') {
+    return sourceTypeForRow(row) === 'system'
+      ? 'Sistema registro la entrada'
+      : `${creator} registro la entrada`;
+  }
+
+  if (row.subtype === 'transaction_reversal_acceptance') {
+    return sourceTypeForRow(row) === 'system'
+      ? 'Sistema aplico el ajuste'
+      : `${creator} aplico el ajuste`;
   }
 
   if (row.subtype === 'cycle_settlement') {
@@ -1102,15 +1100,7 @@ function buildCycleSettlementImpactLabel(
     return null;
   }
 
-  if (row.creditor_user_id === currentUserId) {
-    return `Reduce lo que debias a ${counterpartyName}`;
-  }
-
-  if (row.debtor_user_id === currentUserId) {
-    return `Reduce lo que ${counterpartyName} te debia`;
-  }
-
-  return 'Reduce deuda neta dentro del circulo';
+  return `Ajuste neto con ${counterpartyName}`;
 }
 
 function buildHistorySubtitle(
@@ -1152,7 +1142,7 @@ function buildSettlementDetail(
   const impactLines = parseSettlementMovements(proposal.movements_json).map((movement) => {
     const debtor = names.get(movement.debtor_user_id) ?? 'Deudor';
     const creditor = names.get(movement.creditor_user_id) ?? 'Acreedor';
-    return `Reduce la deuda neta ${debtor} -> ${creditor} en ${formatCop(movement.amount_minor)}`;
+    return `Ajusta el saldo neto ${debtor} -> ${creditor} en ${formatCop(movement.amount_minor)}`;
   });
   const participantStatuses = participants.map((participant) => {
     const name = names.get(participant.participant_user_id) ?? 'Persona';
@@ -1259,7 +1249,7 @@ function buildLiveSnapshot(input: {
       const latestHistory = timeline[0];
       const lastActivityLabel =
         latestRequest && (!latestHistory || latestRequest.created_at >= latestHistory.happened_at)
-          ? `Request pendiente ${formatRelativeLabel(latestRequest.created_at)}`
+          ? `Propuesta pendiente ${formatRelativeLabel(latestRequest.created_at)}`
           : latestHistory
             ? `Ultimo movimiento ${formatRelativeLabel(latestHistory.happened_at)}`
             : 'Sin movimientos todavia';
@@ -1336,8 +1326,8 @@ function buildLiveSnapshot(input: {
       (request): ActionableItem => ({
         id: request.id,
         kind: 'financial_request',
-        title: formatPendingRequestTitle(request, nameByUserId),
-        subtitle: formatPendingRequestSubtitle(request),
+        title: formatPendingRequestTitle(request, input.currentUserId, nameByUserId),
+        subtitle: formatPendingRequestSubtitle(request, nameByUserId),
         status: 'requires_you',
         ctaLabel: 'Responder',
         href: '/activity',
@@ -1765,18 +1755,17 @@ export function useRejectRelationshipInviteMutation() {
 export function useCreateRequestMutation() {
   return useMutation({
     mutationFn: async (input: CreateRequestInput) => {
-      const payload = createDebtRequestSchema.parse({
-        idempotencyKey: createIdempotencyKey(`mobile_${input.requestType}`),
+      const payload = createBalanceRequestSchema.parse({
+        idempotencyKey: createIdempotencyKey(`mobile_${input.requestKind}`),
         responderUserId: input.responderUserId,
         debtorUserId: input.debtorUserId,
         creditorUserId: input.creditorUserId,
         amountMinor: input.amountMinor,
         description: input.description,
+        requestKind: input.requestKind,
       });
 
-      return input.requestType === 'manual_settlement'
-        ? invokeSupabaseFunction('propose-manual-settlement', payload)
-        : invokeSupabaseFunction('create-debt-request', payload);
+      return invokeSupabaseFunction('create-balance-request', payload);
     },
     onSuccess: async () => {
       await invalidateAppSnapshot();
@@ -1812,21 +1801,21 @@ export function useRejectFinancialRequestMutation() {
   });
 }
 
-export function useCounterofferFinancialRequestMutation() {
+export function useAmendFinancialRequestMutation() {
   return useMutation({
     mutationFn: async (input: {
       readonly requestId: string;
       readonly amountMinor: number;
       readonly description: string;
     }) => {
-      const payload = counterofferFinancialRequestSchema.parse({
-        idempotencyKey: createIdempotencyKey('counteroffer_request'),
+      const payload = amendFinancialRequestSchema.parse({
+        idempotencyKey: createIdempotencyKey('amend_request'),
         requestId: input.requestId,
         amountMinor: input.amountMinor,
         description: input.description,
       });
 
-      return invokeSupabaseFunction('counteroffer-financial-request', payload);
+      return invokeSupabaseFunction('amend-financial-request', payload);
     },
     onSuccess: invalidateAppSnapshot,
   });
