@@ -14,6 +14,26 @@ export interface Database {
           id: string;
           email: string;
           display_name: string;
+          phone_country_iso2: string | null;
+          phone_country_calling_code: string | null;
+          phone_national_number: string | null;
+          phone_e164: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      contact_invites: {
+        Row: {
+          id: string;
+          inviter_user_id: string;
+          invitee_name: string;
+          invitee_phone_country_iso2: string;
+          invitee_phone_country_calling_code: string;
+          invitee_phone_national_number: string;
+          invitee_phone_e164: string;
+          status: string;
+          claimed_by_user_id: string | null;
+          relationship_invite_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -202,12 +222,15 @@ export interface Database {
           item_kind: string;
           status: string;
           subtype: string;
+          source_type: string;
           creator_user_id: string | null;
           responder_user_id: string | null;
           debtor_user_id: string | null;
           creditor_user_id: string | null;
           amount_minor: number;
           description: string | null;
+          origin_request_id: string | null;
+          origin_settlement_proposal_id: string | null;
           happened_at: string;
         };
       };

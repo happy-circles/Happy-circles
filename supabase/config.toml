@@ -18,5 +18,44 @@ port = 54323
 enabled = true
 site_url = "http://localhost:8081"
 
-[functions]
-verify_jwt = true
+[functions.accept-financial-request]
+verify_jwt = false
+
+[functions.accept-relationship-invite]
+verify_jwt = false
+
+[functions.approve-cycle-settlement]
+verify_jwt = false
+
+[functions.counteroffer-financial-request]
+verify_jwt = false
+
+[functions.create-debt-request]
+verify_jwt = false
+
+[functions.create-relationship-invite]
+verify_jwt = false
+
+[functions.create-whatsapp-invite]
+verify_jwt = false
+
+[functions.execute-approved-cycle-settlement]
+verify_jwt = false
+
+[functions.propose-cycle-settlement]
+verify_jwt = false
+
+[functions.propose-manual-settlement]
+verify_jwt = false
+
+[functions.propose-reversal-request]
+verify_jwt = false
+
+[functions.reject-cycle-settlement]
+verify_jwt = false
+
+[functions.reject-financial-request]
+verify_jwt = false
+
+[functions.reject-relationship-invite]
+verify_jwt = false

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,7 @@ export function PrimaryAction({
 }: PrimaryActionProps) {
   const content = (
     <Pressable
+      onPress={onPress}
       style={({ pressed }) => [
         styles.base,
         variant === 'primary' ? styles.primary : null,
@@ -28,27 +30,35 @@ export function PrimaryAction({
         variant === 'ghost' ? styles.ghost : null,
         pressed ? styles.pressed : null,
       ]}
-      onPress={onPress}
     >
-      <Text
-        style={[
-          styles.label,
-          variant === 'primary' ? styles.primaryText : null,
-          variant !== 'primary' ? styles.secondaryText : null,
-        ]}
-      >
-        {label}
-      </Text>
-      {subtitle ? (
+      <View style={styles.copy}>
         <Text
           style={[
-            styles.subtitle,
-            variant === 'primary' ? styles.primarySubtext : null,
-            variant !== 'primary' ? styles.secondarySubtext : null,
+            styles.label,
+            variant === 'primary' ? styles.primaryText : null,
+            variant !== 'primary' ? styles.secondaryText : null,
           ]}
         >
-          {subtitle}
+          {label}
         </Text>
+        {subtitle ? (
+          <Text
+            style={[
+              styles.subtitle,
+              variant === 'primary' ? styles.primarySubtext : null,
+              variant !== 'primary' ? styles.secondarySubtext : null,
+            ]}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {variant !== 'ghost' ? (
+        <Ionicons
+          color={variant === 'primary' ? theme.colors.white : theme.colors.text}
+          name="arrow-forward"
+          size={18}
+        />
       ) : null}
     </Pressable>
   );
@@ -68,14 +78,19 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     borderRadius: theme.radius.medium,
-    gap: 2,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
     minHeight: 56,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+    width: '100%',
   },
   primary: {
     backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryStrong,
+    borderWidth: 1,
+    ...theme.shadow.card,
   },
   secondary: {
     backgroundColor: theme.colors.surface,
@@ -83,18 +98,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   ghost: {
-    backgroundColor: theme.colors.primarySoft,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
+  },
+  copy: {
+    flex: 1,
+    gap: 2,
   },
   label: {
     fontSize: theme.typography.body,
     fontWeight: '700',
+    lineHeight: 20,
   },
   subtitle: {
     fontSize: theme.typography.caption,
-    textAlign: 'center',
+    lineHeight: 16,
   },
   primaryText: {
     color: theme.colors.white,

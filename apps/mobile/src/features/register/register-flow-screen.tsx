@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextInput, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
+import { FieldBlock } from '@/components/field-block';
+import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SegmentedControl } from '@/components/segmented-control';
+import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
@@ -21,12 +25,15 @@ const DIRECTION_OPTIONS = [
 
 const REQUEST_TYPE_OPTIONS = [
   { label: 'Deuda', value: 'debt' },
-  { label: 'Pago manual', value: 'manual_settlement' },
+  { label: 'Pago', value: 'manual_settlement' },
 ] as const;
+
+const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
+const DESCRIPTION_SUGGESTIONS = ['Comida', 'Mercado', 'Transporte', 'Salida'] as const;
 
 export function RegisterFlowScreen() {
   const router = useRouter();
-  const { authMode, userId } = useSession();
+  const { userId } = useSession();
   const snapshotQuery = useAppSnapshot();
   const createRequest = useCreateRequestMutation();
 
@@ -52,24 +59,29 @@ export function RegisterFlowScreen() {
 
   const selectedPerson = allPeople.find((person) => person.userId === personId) ?? null;
   const amountMinor = Math.max(Number.parseInt(amount || '0', 10) * 100, 0);
+  const normalizedQuery = query.trim();
+
+  function openInviteFlow(suggestedName?: string) {
+    router.push({
+      pathname: '/invite',
+      params: {
+        inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
+        amountMinor: amountMinor > 0 ? String(amountMinor) : undefined,
+        direction,
+        requestType,
+        description: description.trim().length > 0 ? description.trim() : undefined,
+      },
+    });
+  }
 
   async function handleSave() {
     if (!personId || amountMinor <= 0 || description.trim().length === 0) {
-      setMessage('Completa persona, monto y descripcion para guardar.');
-      return;
-    }
-
-    if (authMode === 'demo') {
-      setMessage(
-        `${direction === 'i_owe' ? 'Debes' : 'Te deben'} ${formatCop(amountMinor)} con ${
-          selectedPerson?.displayName ?? 'esta persona'
-        }.`,
-      );
+      setMessage('Elige una persona, define un monto y selecciona o escribe un concepto.');
       return;
     }
 
     if (!userId) {
-      setMessage('Tu sesion aun no esta lista. Vuelve a intentarlo.');
+      setMessage('Tu sesion aun no esta lista. Intenta otra vez en unos segundos.');
       return;
     }
 
@@ -87,8 +99,8 @@ export function RegisterFlowScreen() {
       });
 
       setMessage(
-        `${requestType === 'debt' ? 'Request de deuda' : 'Pago manual'} enviado a ${
-          selectedPerson?.displayName ?? 'la contraparte'
+        `${requestType === 'debt' ? 'Movimiento de deuda' : 'Pago manual'} enviado a ${
+          selectedPerson?.displayName ?? 'la otra persona'
         }.`,
       );
       setAmount('');
@@ -100,102 +112,160 @@ export function RegisterFlowScreen() {
 
   return (
     <ScreenShell
+      eyebrow="Movimiento"
       footer={
         <View style={styles.footer}>
-          <PrimaryAction
-            label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
-            onPress={createRequest.isPending ? undefined : () => void handleSave()}
-          />
+          <View style={styles.footerAction}>
+            <PrimaryAction label="Cerrar" onPress={() => router.dismiss()} variant="ghost" />
+          </View>
+          <View style={styles.footerAction}>
+            <PrimaryAction
+              label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
+              onPress={createRequest.isPending ? undefined : () => void handleSave()}
+              subtitle="Deja listo el contexto"
+            />
+          </View>
         </View>
       }
       largeTitle={false}
-      subtitle="Registra un movimiento real en una sola vista."
-      title="Registrar"
+      subtitle="Registra solo lo esencial: persona, tipo, monto y concepto."
+      title="Nuevo movimiento"
     >
-      {message ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{message}</Text>
-        </View>
-      ) : null}
+      <SurfaceCard padding="lg" variant="accent">
+        <Text style={styles.cardTitle}>Un solo paso, sin friccion</Text>
+        <Text style={styles.helper}>
+          Si la persona no existe todavia en tu red, te llevamos directo a invitarla sin perder monto ni concepto.
+        </Text>
+      </SurfaceCard>
+
+      {message ? <MessageBanner message={message} /> : null}
 
       {snapshotQuery.isLoading ? (
-        <View style={styles.card}>
-          <Text style={styles.label}>Cargando relaciones activas...</Text>
-        </View>
+        <SurfaceCard>
+          <Text style={styles.helper}>Cargando relaciones activas...</Text>
+        </SurfaceCard>
       ) : null}
 
       {snapshotQuery.error ? (
-        <View style={styles.card}>
-          <Text style={styles.label}>No pudimos cargar tus relaciones.</Text>
+        <SurfaceCard>
+          <Text style={styles.cardTitle}>No pudimos cargar tus relaciones.</Text>
           <Text style={styles.helper}>{snapshotQuery.error.message}</Text>
-        </View>
+        </SurfaceCard>
       ) : null}
 
       {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length === 0 ? (
-        <EmptyState
-          title="No tienes relaciones activas"
-          description="Para registrar una deuda o un pago manual primero necesitas una relacion activa en el backend."
-        />
-      ) : null}
-
-      {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0 ? (
-        <View style={styles.card}>
-          <Text style={styles.label}>Buscar persona</Text>
-          <TextInput
-            onChangeText={setQuery}
-            placeholder="Nombre de la persona"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.input}
-            value={query}
+        <View style={styles.stack}>
+          <EmptyState
+            description="Primero invita a alguien por WhatsApp. Cuando esa persona este en tu red, podras registrar movimientos aqui."
+            title="Todavia no tienes relaciones activas"
           />
-
-          <View style={styles.peopleList}>
-            {people.slice(0, 8).map((person) => {
-              const selected = person.userId === personId;
-              return (
-                <Pressable
-                  key={person.userId}
-                  onPress={() => setPersonId(person.userId)}
-                  style={[styles.personOption, selected ? styles.personOptionSelected : null]}
-                >
-                  <Text style={[styles.personOptionText, selected ? styles.personOptionTextSelected : null]}>
-                    {person.displayName}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Tipo</Text>
-          <SegmentedControl options={REQUEST_TYPE_OPTIONS} onChange={setRequestType} value={requestType} />
-
-          <Text style={styles.label}>Direccion</Text>
-          <SegmentedControl options={DIRECTION_OPTIONS} onChange={setDirection} value={direction} />
-
-          <Text style={styles.label}>Monto</Text>
-          <TextInput
-            keyboardType="number-pad"
-            onChangeText={setAmount}
-            placeholder="45000"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.input}
-            value={amount}
-          />
-          {amountMinor > 0 ? <Text style={styles.preview}>{formatCop(amountMinor)}</Text> : null}
-
-          <Text style={styles.label}>Descripcion</Text>
-          <TextInput
-            multiline
-            onChangeText={setDescription}
-            placeholder="Ej. cena, mercado, transporte"
-            placeholderTextColor={theme.colors.muted}
-            style={[styles.input, styles.textarea]}
-            value={description}
+          <PrimaryAction
+            label="Invitar persona"
+            onPress={() => openInviteFlow()}
+            subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
           />
         </View>
       ) : null}
 
-      <PrimaryAction label="Cerrar" onPress={() => router.dismiss()} variant="secondary" />
+      {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0 ? (
+        <>
+          <SurfaceCard padding="lg">
+            <FieldBlock hint="Busca y toca una opcion." label="Persona">
+              <TextInput
+                onChangeText={setQuery}
+                placeholder="Buscar por nombre"
+                placeholderTextColor={theme.colors.muted}
+                style={styles.input}
+                value={query}
+              />
+              <View style={styles.choiceRow}>
+                {people.slice(0, 8).map((person) => (
+                  <ChoiceChip
+                    key={person.userId}
+                    label={person.displayName}
+                    onPress={() => setPersonId(person.userId)}
+                    selected={person.userId === personId}
+                  />
+                ))}
+              </View>
+            </FieldBlock>
+
+            {selectedPerson ? (
+              <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
+                <Text style={styles.selectedLabel}>Seleccionaste a</Text>
+                <Text style={styles.selectedName}>{selectedPerson.displayName}</Text>
+              </SurfaceCard>
+            ) : null}
+
+            {normalizedQuery.length > 0 && people.length === 0 ? (
+              <SurfaceCard padding="md" variant="accent">
+                <Text style={styles.cardTitle}>No encontramos a esa persona en tu red</Text>
+                <Text style={styles.helper}>
+                  Si es alguien nuevo, invita por WhatsApp y conserva el contexto del monto para el primer mensaje.
+                </Text>
+                <PrimaryAction
+                  label="Invitar por WhatsApp"
+                  onPress={() => openInviteFlow(normalizedQuery)}
+                  variant="secondary"
+                />
+              </SurfaceCard>
+            ) : null}
+          </SurfaceCard>
+
+          <SurfaceCard padding="lg">
+            <FieldBlock label="Que estas registrando">
+              <SegmentedControl options={REQUEST_TYPE_OPTIONS} onChange={setRequestType} value={requestType} />
+            </FieldBlock>
+
+            <FieldBlock label="Direccion">
+              <SegmentedControl options={DIRECTION_OPTIONS} onChange={setDirection} value={direction} />
+            </FieldBlock>
+
+            <FieldBlock label="Monto">
+              <TextInput
+                keyboardType="number-pad"
+                onChangeText={setAmount}
+                placeholder="45000"
+                placeholderTextColor={theme.colors.muted}
+                style={styles.input}
+                value={amount}
+              />
+              <View style={styles.choiceRow}>
+                {AMOUNT_SUGGESTIONS.map((value) => (
+                  <ChoiceChip
+                    key={value}
+                    label={formatCop(value * 100)}
+                    onPress={() => setAmount(String(value))}
+                    selected={amount === String(value)}
+                  />
+                ))}
+              </View>
+              {amountMinor > 0 ? <Text style={styles.amountPreview}>{formatCop(amountMinor)}</Text> : null}
+            </FieldBlock>
+
+            <FieldBlock hint="Puedes tocar una sugerencia y ajustarla si hace falta." label="Concepto">
+              <View style={styles.choiceRow}>
+                {DESCRIPTION_SUGGESTIONS.map((item) => (
+                  <ChoiceChip
+                    key={item}
+                    label={item}
+                    onPress={() => setDescription(item)}
+                    selected={description.trim().toLocaleLowerCase('es-CO') === item.toLocaleLowerCase('es-CO')}
+                  />
+                ))}
+              </View>
+              <TextInput
+                multiline
+                onChangeText={setDescription}
+                placeholder="Ej. cena, mercado, transporte"
+                placeholderTextColor={theme.colors.muted}
+                style={[styles.input, styles.textarea]}
+                value={description}
+              />
+            </FieldBlock>
+          </SurfaceCard>
+        </>
+      ) : null}
     </ScreenShell>
   );
 }
@@ -203,74 +273,61 @@ export function RegisterFlowScreen() {
 const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
-  banner: {
-    backgroundColor: theme.colors.primarySoft,
+  footerAction: {
+    flex: 1,
+  },
+  stack: {
+    gap: theme.spacing.sm,
+  },
+  input: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    minHeight: 52,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  bannerText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+  textarea: {
+    minHeight: 96,
+    paddingTop: theme.spacing.sm,
+    textAlignVertical: 'top',
   },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.large,
-    borderWidth: 1,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-  },
-  label: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+  choiceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
   },
   helper: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  input: {
-    backgroundColor: theme.colors.background,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
+  cardTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.body,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  textarea: {
-    minHeight: 88,
-    paddingTop: theme.spacing.sm,
-    textAlignVertical: 'top',
-  },
-  peopleList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-  },
-  personOption: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
-  personOptionSelected: {
-    backgroundColor: theme.colors.primarySoft,
-  },
-  personOptionText: {
-    color: theme.colors.text,
-  },
-  personOptionTextSelected: {
-    color: theme.colors.primary,
+    fontSize: theme.typography.callout,
     fontWeight: '700',
   },
-  preview: {
+  selectedPerson: {
+    gap: 2,
+  },
+  selectedLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  selectedName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+  },
+  amountPreview: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
+    fontWeight: '700',
   },
 });

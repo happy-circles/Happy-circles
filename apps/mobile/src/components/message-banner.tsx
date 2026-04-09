@@ -2,16 +2,18 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-export interface StatusChipProps {
-  readonly label: string;
-  readonly tone?: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+type MessageBannerTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+
+export interface MessageBannerProps {
+  readonly message: string;
+  readonly tone?: MessageBannerTone;
 }
 
-export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
+export function MessageBanner({ message, tone = 'primary' }: MessageBannerProps) {
   return (
     <View
       style={[
-        styles.chip,
+        styles.base,
         tone === 'primary' ? styles.primary : null,
         tone === 'success' ? styles.success : null,
         tone === 'warning' ? styles.warning : null,
@@ -19,9 +21,19 @@ export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
         tone === 'neutral' ? styles.neutral : null,
       ]}
     >
+      <View
+        style={[
+          styles.sideBar,
+          tone === 'primary' ? styles.primaryBar : null,
+          tone === 'success' ? styles.successBar : null,
+          tone === 'warning' ? styles.warningBar : null,
+          tone === 'danger' ? styles.dangerBar : null,
+          tone === 'neutral' ? styles.neutralBar : null,
+        ]}
+      />
       <Text
         style={[
-          styles.label,
+          styles.text,
           tone === 'primary' ? styles.primaryText : null,
           tone === 'success' ? styles.successText : null,
           tone === 'warning' ? styles.warningText : null,
@@ -29,22 +41,33 @@ export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
           tone === 'neutral' ? styles.neutralText : null,
         ]}
       >
-        {label}
+        {message}
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: {
-    alignSelf: 'flex-start',
-    borderRadius: theme.radius.small,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 8,
+  base: {
+    borderRadius: theme.radius.medium,
+    overflow: 'hidden',
+    paddingBottom: theme.spacing.sm,
+    paddingLeft: theme.spacing.lg,
+    paddingRight: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    position: 'relative',
   },
-  label: {
-    fontSize: theme.typography.caption,
+  sideBar: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    width: 5,
+  },
+  text: {
+    fontSize: theme.typography.footnote,
     fontWeight: '700',
+    lineHeight: 18,
   },
   primary: {
     backgroundColor: theme.colors.primarySoft,
@@ -60,6 +83,21 @@ const styles = StyleSheet.create({
   },
   neutral: {
     backgroundColor: theme.colors.surfaceSoft,
+  },
+  primaryBar: {
+    backgroundColor: theme.colors.primary,
+  },
+  successBar: {
+    backgroundColor: theme.colors.success,
+  },
+  warningBar: {
+    backgroundColor: theme.colors.warning,
+  },
+  dangerBar: {
+    backgroundColor: theme.colors.danger,
+  },
+  neutralBar: {
+    backgroundColor: theme.colors.textMuted,
   },
   primaryText: {
     color: theme.colors.primary,

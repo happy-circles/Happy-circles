@@ -25,8 +25,8 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             key={option.value}
-            style={[styles.segment, selected ? styles.segmentSelected : null]}
             onPress={() => onChange(option.value)}
+            style={[styles.segment, selected ? styles.segmentSelected : null]}
           >
             <Text style={[styles.label, selected ? styles.labelSelected : null]}>{option.label}</Text>
           </Pressable>
@@ -39,16 +39,18 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
     flexDirection: 'row',
     padding: 4,
   },
   segment: {
     alignItems: 'center',
-    borderRadius: theme.radius.pill,
+    borderRadius: theme.radius.medium,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 36,
+    minHeight: 40,
     paddingHorizontal: theme.spacing.sm,
   },
   segmentSelected: {

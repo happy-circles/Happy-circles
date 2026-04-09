@@ -186,6 +186,37 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create or replace function public.append_audit_event(
+  p_actor_user_id uuid,
+  p_entity_type text,
+  p_entity_id uuid,
+  p_event_name text,
+  p_request_id uuid,
+  p_metadata_json jsonb default '{}'::jsonb
+)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.audit_events (
+    actor_user_id,
+    entity_type,
+    entity_id,
+    event_name,
+    request_id,
+    metadata_json
+  )
+  values (
+    p_actor_user_id,
+    p_entity_type,
+    p_entity_id,
+    p_event_name,
+    p_request_id,
+    coalesce(p_metadata_json, '{}'::jsonb)
+  );
+$$;
+
 create trigger set_user_profiles_updated_at
 before update on public.user_profiles
 for each row execute function public.tg_set_updated_at();

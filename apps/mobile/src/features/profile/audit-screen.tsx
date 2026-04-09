@@ -1,9 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { EmptyState } from '@/components/empty-state';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { StatusChip } from '@/components/status-chip';
+import { SurfaceCard } from '@/components/surface-card';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 
@@ -13,11 +14,7 @@ export function ProfileAuditScreen() {
 
   if (snapshotQuery.isLoading) {
     return (
-      <ScreenShell
-        largeTitle={false}
-        title="Auditoria"
-        subtitle="Cargando eventos recientes del sistema."
-      >
+      <ScreenShell eyebrow="Auditoria" largeTitle={false} subtitle="Cargando eventos recientes del sistema." title="Auditoria">
         <Text style={styles.supportText}>Leyendo auditoria visible para esta cuenta.</Text>
       </ScreenShell>
     );
@@ -25,11 +22,7 @@ export function ProfileAuditScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell
-        largeTitle={false}
-        title="Auditoria"
-        subtitle="No pudimos cargar los eventos."
-      >
+      <ScreenShell eyebrow="Auditoria" largeTitle={false} subtitle="No pudimos cargar los eventos." title="Auditoria">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -37,25 +30,31 @@ export function ProfileAuditScreen() {
 
   return (
     <ScreenShell
+      eyebrow="Auditoria"
       largeTitle={false}
-      title="Auditoria"
       subtitle="Vista tecnica para revisar eventos y trazabilidad del sistema."
+      title="Auditoria"
     >
+      <SurfaceCard padding="lg" variant="accent">
+        <Text style={styles.summaryTitle}>Linea de tiempo tecnica del sistema.</Text>
+        <Text style={styles.summaryBody}>
+          Aqui solo ves eventos avanzados, fuera del flujo principal de la app.
+        </Text>
+      </SurfaceCard>
+
       <SectionBlock title="Eventos recientes" subtitle="La capa avanzada vive fuera de tabs.">
         {events.length === 0 ? (
           <EmptyState
-            title="Sin eventos visibles"
             description="Cuando esta cuenta genere o afecte eventos auditables, apareceran aqui."
+            title="Sin eventos visibles"
           />
         ) : (
           events.map((event) => (
-            <View key={event.id} style={styles.card}>
-              <View style={styles.header}>
-                <Text style={styles.title}>{event.title}</Text>
-                <StatusChip label="log" tone="neutral" />
-              </View>
+            <SurfaceCard key={event.id} padding="md">
+              <Text style={styles.title}>{event.title}</Text>
+              <StatusChip label="log" tone="neutral" />
               <Text style={styles.subtitle}>{event.subtitle}</Text>
-            </View>
+            </SurfaceCard>
           ))
         )}
       </SectionBlock>
@@ -69,18 +68,15 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.large,
-    borderWidth: 1,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.md,
+  summaryTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  summaryBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
   title: {
     color: theme.colors.text,

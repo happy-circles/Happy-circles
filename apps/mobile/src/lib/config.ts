@@ -15,5 +15,3 @@ export const appConfig = {
     process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
     '',
 };
-
-export const useMockData = !appConfig.supabaseUrl || !appConfig.supabaseAnonKey;

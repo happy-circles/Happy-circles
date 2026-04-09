@@ -1,6 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import type { PersonCardDto } from '@happy-circles/application';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -8,40 +8,64 @@ import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 
 import { StatusChip } from './status-chip';
+import { SurfaceCard } from './surface-card';
 
 export interface PersonRowProps {
   readonly person: PersonCardDto;
 }
 
+function buildLastUpdateLabel(value: string): string {
+  if (value.trim().length === 0) {
+    return 'Ultima actualizacion reciente';
+  }
+
+  const relativeMatch = value.match(/(hace .+|hoy|ayer)$/i);
+  if (relativeMatch) {
+    return `Ultima actualizacion ${relativeMatch[1]}`;
+  }
+
+  if (value.toLocaleLowerCase('es-CO') === 'sin movimientos todavia') {
+    return value;
+  }
+
+  return `Ultima actualizacion: ${value}`;
+}
+
 export function PersonRow({ person }: PersonRowProps) {
-  const amountTone = person.direction === 'owes_me' ? styles.positive : styles.negative;
-  const amountLabel = person.direction === 'owes_me' ? 'Te deben' : 'Debes';
+  const isSettled = person.direction === 'settled' || person.netAmountMinor === 0;
+  const amountTone = isSettled ? styles.neutral : person.direction === 'owes_me' ? styles.positive : styles.negative;
+  const amountLabel = isSettled ? 'Sin saldo' : person.direction === 'owes_me' ? 'Te deben' : 'Debes';
+  const lastUpdateLabel = buildLastUpdateLabel(person.lastActivityLabel);
 
   return (
     <Link href={`/person/${person.userId}` as Href} asChild>
-      <Pressable style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
-        <View style={styles.leading}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarLabel}>{person.displayName.slice(0, 1)}</Text>
-          </View>
-          <View style={styles.textWrap}>
-            <View style={styles.titleRow}>
-              <Text style={styles.name}>{person.displayName}</Text>
-              {person.pendingCount > 0 ? (
-                <StatusChip
-                  label={`${person.pendingCount}`}
-                  tone="warning"
-                />
-              ) : null}
+      <Pressable style={({ pressed }) => [pressed ? styles.pressed : null]}>
+        <SurfaceCard padding="md" style={styles.card} variant="default">
+          <View style={styles.leading}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarLabel}>{person.displayName.slice(0, 1)}</Text>
             </View>
-            <Text style={styles.meta}>{person.lastActivityLabel}</Text>
+            <View style={styles.textWrap}>
+              <View style={styles.titleRow}>
+                <Text style={styles.name}>{person.displayName}</Text>
+                {person.pendingCount > 0 ? (
+                  <StatusChip
+                    label={`${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`}
+                    tone="warning"
+                  />
+                ) : null}
+              </View>
+              <Text style={styles.meta}>{lastUpdateLabel}</Text>
+            </View>
           </View>
-        </View>
-        <View style={styles.trailing}>
-          <Text style={styles.amountLabel}>{amountLabel}</Text>
-          <Text style={[styles.amount, amountTone]}>{formatCop(person.netAmountMinor)}</Text>
-          <Ionicons color={theme.colors.muted} name="chevron-forward" size={18} />
-        </View>
+          <View style={styles.trailing}>
+            <Text style={styles.amountLabel}>{amountLabel}</Text>
+            <View style={styles.amountRow}>
+              <Text style={[styles.amount, amountTone]}>{formatCop(person.netAmountMinor)}</Text>
+              <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
+            </View>
+          </View>
+        </SurfaceCard>
       </Pressable>
     </Link>
   );
@@ -50,14 +74,9 @@ export function PersonRow({ person }: PersonRowProps) {
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.large,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
-    padding: theme.spacing.md,
   },
   pressed: {
     opacity: 0.92,
@@ -71,10 +90,10 @@ const styles = StyleSheet.create({
   avatar: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    height: 40,
+    borderRadius: theme.radius.small,
+    height: 42,
     justifyContent: 'center',
-    width: 40,
+    width: 42,
   },
   avatarLabel: {
     color: theme.colors.text,
@@ -83,7 +102,7 @@ const styles = StyleSheet.create({
   },
   textWrap: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   titleRow: {
     alignItems: 'center',
@@ -97,12 +116,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   meta: {
-    color: theme.colors.muted,
+    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
   trailing: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 4,
+  },
+  amountRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
   },
   amountLabel: {
     color: theme.colors.textMuted,
@@ -118,5 +143,8 @@ const styles = StyleSheet.create({
   },
   negative: {
     color: theme.colors.warning,
+  },
+  neutral: {
+    color: theme.colors.text,
   },
 });

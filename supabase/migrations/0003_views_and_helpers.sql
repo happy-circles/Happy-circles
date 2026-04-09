@@ -200,7 +200,7 @@ as $$
     order by debtor_user_id, creditor_user_id, amount_minor
   )
   select encode(
-    digest(
+    extensions.digest(
       coalesce(string_agg(debtor_user_id || '|' || creditor_user_id || '|' || amount_minor, ';'), ''),
       'sha256'
     ),
@@ -273,12 +273,12 @@ from (
     lt.description,
     lt.created_by_user_id,
     lt.created_at,
-    max(case when la.account_kind = 'payable' then la.owner_user_id end) as debtor_user_id,
-    max(case when la.account_kind = 'receivable' then la.owner_user_id end) as creditor_user_id,
+    (min(la.owner_user_id::text) filter (where la.account_kind = 'payable'))::uuid as debtor_user_id,
+    (min(la.owner_user_id::text) filter (where la.account_kind = 'receivable'))::uuid as creditor_user_id,
     max(le.amount_minor) as amount_minor,
-    min(least(la.owner_user_id, la.counterparty_user_id)) as user_low_id,
-    min(greatest(la.owner_user_id, la.counterparty_user_id)) as user_high_id,
-    max(lt.origin_request_id) as origin_request_id
+    (min(least(la.owner_user_id, la.counterparty_user_id)::text))::uuid as user_low_id,
+    (min(greatest(la.owner_user_id, la.counterparty_user_id)::text))::uuid as user_high_id,
+    (min(lt.origin_request_id::text))::uuid as origin_request_id
   from public.ledger_transactions lt
   join public.ledger_entries le on le.ledger_transaction_id = lt.id
   join public.ledger_accounts la on la.id = le.ledger_account_id

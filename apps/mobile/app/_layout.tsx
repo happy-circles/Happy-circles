@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
@@ -6,7 +6,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { Href } from 'expo-router';
 
 import { PrimaryAction } from '@/components/primary-action';
-import { configureNotifications, addNotificationResponseListener } from '@/lib/notifications';
+import { SurfaceCard } from '@/components/surface-card';
+import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
@@ -39,14 +40,55 @@ function NotificationBridge() {
 function SessionOverlay() {
   const { biometricLabel, email, isLocked, signOut, status, unlock } = useSession();
   const [message, setMessage] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const autoUnlockTriggeredRef = useRef(false);
+
+  const attemptUnlock = useCallback(
+    async (automatic: boolean) => {
+      if (isAuthenticating) {
+        return;
+      }
+
+      setIsAuthenticating(true);
+      setMessage(null);
+
+      const authenticated = await unlock();
+      if (!authenticated) {
+        setMessage(
+          automatic
+            ? `No se pudo validar ${biometricLabel}. Intenta otra vez o cierra sesion.`
+            : `No se pudo validar ${biometricLabel}.`,
+        );
+      }
+
+      setIsAuthenticating(false);
+    },
+    [biometricLabel, isAuthenticating, unlock],
+  );
+
+  useEffect(() => {
+    if (!isLocked) {
+      autoUnlockTriggeredRef.current = false;
+      setMessage(null);
+      setIsAuthenticating(false);
+      return;
+    }
+
+    if (status === 'loading' || autoUnlockTriggeredRef.current) {
+      return;
+    }
+
+    autoUnlockTriggeredRef.current = true;
+    void attemptUnlock(true);
+  }, [attemptUnlock, isLocked, status]);
 
   if (status === 'loading') {
     return (
       <View style={styles.overlay}>
-        <View style={styles.lockCard}>
+        <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
           <Text style={styles.lockTitle}>Cargando Happy Circles</Text>
           <Text style={styles.lockSubtitle}>Preparando sesion y ajustes locales.</Text>
-        </View>
+        </SurfaceCard>
       </View>
     );
   }
@@ -57,24 +99,19 @@ function SessionOverlay() {
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.lockCard}>
-        <Text style={styles.lockTitle}>App bloqueada</Text>
+      <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
+        <Text style={styles.lockTitle}>{isAuthenticating ? `Verificando ${biometricLabel}` : 'App bloqueada'}</Text>
         <Text style={styles.lockSubtitle}>
-          {email ?? 'Tu sesion'} requiere {biometricLabel} para volver a entrar.
+          {email ?? 'Tu sesion'} requiere {biometricLabel} para entrar sin volver a escribir tu clave.
         </Text>
         {message ? <Text style={styles.lockMessage}>{message}</Text> : null}
         <PrimaryAction
-          label={`Desbloquear con ${biometricLabel}`}
-          onPress={() => {
-            void unlock().then((result) => {
-              if (!result) {
-                setMessage('No se pudo validar la biometria. Intenta otra vez o cierra sesion.');
-              }
-            });
-          }}
+          label={isAuthenticating ? `Validando ${biometricLabel}...` : `Entrar con ${biometricLabel}`}
+          subtitle="Si la validacion sale bien, entraras de una vez."
+          onPress={isAuthenticating ? undefined : () => void attemptUnlock(false)}
         />
         <PrimaryAction label="Cerrar sesion" onPress={() => void signOut()} variant="secondary" />
-      </View>
+      </SurfaceCard>
     </View>
   );
 }
@@ -86,14 +123,18 @@ function RootNavigator() {
       <NotificationBridge />
       <Stack
         screenOptions={{
+          animationMatchesGesture: true,
+          contentStyle: {
+            backgroundColor: theme.colors.background,
+          },
+          fullScreenGestureEnabled: true,
+          gestureDirection: 'horizontal',
+          gestureEnabled: true,
           headerShown: false,
           headerStyle: {
             backgroundColor: theme.colors.background,
           },
           headerTintColor: theme.colors.text,
-          contentStyle: {
-            backgroundColor: theme.colors.background,
-          },
         }}
       />
       <SessionOverlay />
@@ -122,13 +163,8 @@ const styles = StyleSheet.create({
     top: 0,
   },
   lockCard: {
-    backgroundColor: theme.colors.elevated,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xlarge,
-    borderWidth: 1,
     gap: theme.spacing.sm,
     maxWidth: 420,
-    padding: theme.spacing.lg,
     width: '100%',
     ...theme.shadow.floating,
   },

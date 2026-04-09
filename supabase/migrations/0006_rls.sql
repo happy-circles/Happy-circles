@@ -63,7 +63,7 @@ using (
     select 1
     from public.ledger_entries le
     join public.ledger_accounts la on la.id = le.ledger_account_id
-    where le.ledger_transaction_id = id
+    where le.ledger_transaction_id = ledger_transactions.id
       and (la.owner_user_id = auth.uid() or la.counterparty_user_id = auth.uid())
   )
 );
@@ -98,7 +98,7 @@ using (
   exists (
     select 1
     from public.settlement_proposal_participants spp
-    where spp.settlement_proposal_id = id
+    where spp.settlement_proposal_id = settlement_proposals.id
       and spp.participant_user_id = auth.uid()
   )
 );

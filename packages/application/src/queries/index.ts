@@ -8,14 +8,14 @@ export interface PersonCardDto {
   readonly userId: string;
   readonly displayName: string;
   readonly netAmountMinor: number;
-  readonly direction: 'i_owe' | 'owes_me';
+  readonly direction: 'i_owe' | 'owes_me' | 'settled';
   readonly pendingCount: number;
   readonly lastActivityLabel: string;
 }
 
 export interface PendingActionDto {
   readonly id: string;
-  readonly kind: 'financial_request' | 'settlement_proposal' | 'reminder';
+  readonly kind: 'financial_request' | 'settlement_proposal' | 'relationship_invite' | 'reminder';
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
@@ -31,9 +31,18 @@ export interface ActivityItemDto {
   readonly status: string;
   readonly href?: string;
   readonly amountMinor?: number;
+  readonly sourceType?: 'user' | 'system';
+  readonly detail?: string;
+  readonly happenedAt?: string;
+  readonly happenedAtLabel?: string;
+  readonly tone?: 'positive' | 'negative' | 'neutral';
+  readonly originRequestId?: string | null;
+  readonly originSettlementProposalId?: string | null;
+  readonly counterpartyLabel?: string;
   readonly kind:
     | 'financial_request'
     | 'settlement_proposal'
+    | 'relationship_invite'
     | 'accepted_request'
     | 'manual_payment'
     | 'system_note';
@@ -55,16 +64,36 @@ export interface PersonTimelineItemDto {
   readonly tone: 'positive' | 'negative' | 'neutral';
   readonly kind: 'request' | 'payment' | 'settlement' | 'system';
   readonly status: string;
+  readonly sourceType: 'user' | 'system';
+  readonly sourceLabel: string;
+  readonly originRequestId?: string | null;
+  readonly originSettlementProposalId?: string | null;
+  readonly flowLabel?: string;
+  readonly detail?: string;
+  readonly happenedAt?: string;
+  readonly happenedAtLabel?: string;
+}
+
+export interface PersonPendingRequestDto {
+  readonly id: string;
+  readonly requestType: 'debt' | 'manual_settlement' | 'reversal';
+  readonly responseState: 'requires_you' | 'waiting_other_side';
+  readonly title: string;
+  readonly description: string;
+  readonly amountMinor: number;
+  readonly createdAtLabel: string;
+  readonly createdByLabel: string;
 }
 
 export interface PersonDetailDto {
   readonly userId: string;
   readonly displayName: string;
-  readonly direction: 'i_owe' | 'owes_me';
+  readonly direction: 'i_owe' | 'owes_me' | 'settled';
   readonly netAmountMinor: number;
   readonly pendingCount: number;
   readonly headline: string;
   readonly supportText?: string;
+  readonly pendingRequest?: PersonPendingRequestDto;
   readonly timeline: readonly PersonTimelineItemDto[];
 }
 

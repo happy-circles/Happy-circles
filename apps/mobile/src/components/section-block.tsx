@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   header: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
@@ -42,6 +42,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.title3,
     fontWeight: '700',
+    letterSpacing: -0.2,
   },
   subtitle: {
     color: theme.colors.textMuted,

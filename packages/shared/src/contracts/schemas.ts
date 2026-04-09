@@ -56,6 +56,42 @@ export const relationshipInviteSchema = z.object({
   inviteeUserId: uuidSchema,
 });
 
+export const relationshipInviteDecisionSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
+});
+
+export const emailPasswordSignInSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(8).max(72),
+});
+
+export const registrationSchema = emailPasswordSignInSchema
+  .extend({
+    fullName: z.string().trim().min(3).max(120),
+    confirmPassword: z.string().min(8).max(72),
+    phoneCountryIso2: z.string().trim().length(2),
+    phoneCountryCallingCode: z.string().trim().min(2).max(6),
+    phoneNationalNumber: z.string().trim().min(6).max(20),
+  })
+  .superRefine((value, context) => {
+    if (value.password !== value.confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Las claves no coinciden.',
+        path: ['confirmPassword'],
+      });
+    }
+  });
+
+export const createContactInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteeName: z.string().trim().min(2).max(120),
+  phoneCountryIso2: z.string().trim().length(2),
+  phoneCountryCallingCode: z.string().trim().min(2).max(6),
+  phoneNationalNumber: z.string().trim().min(6).max(20),
+});
+
 export const cycleSettlementProposalSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   maxCycles: z.number().int().positive().max(25).default(5),

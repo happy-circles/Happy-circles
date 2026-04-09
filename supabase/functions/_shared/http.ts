@@ -73,6 +73,13 @@ export async function handleRpc(
     return jsonResponse(200, response);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    return jsonResponse(400, { error: message });
+    const normalized = message.trim().toLocaleLowerCase('en-US');
+    const status =
+      normalized.includes('missing authorization header') ||
+      normalized.includes('unauthorized') ||
+      normalized.includes('invalid jwt')
+        ? 401
+        : 400;
+    return jsonResponse(status, { error: message });
   }
 }

@@ -1,3 +1,4 @@
+import { proposeAutomaticCycleSettlement } from '../_shared/cycle.ts';
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
 
 Deno.serve((request) =>
@@ -13,6 +14,23 @@ Deno.serve((request) =>
       throw error;
     }
 
-    return data;
+    const proposalId = requireString(body.proposalId, 'proposalId');
+    const nextCycleProposal = await proposeAutomaticCycleSettlement(
+      client,
+      actorUserId,
+      `auto_cycle_after_execution_${proposalId}`,
+    );
+
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      return {
+        ...data,
+        nextAutoCycleProposal: nextCycleProposal,
+      };
+    }
+
+    return {
+      result: data,
+      nextAutoCycleProposal: nextCycleProposal,
+    };
   }),
 );

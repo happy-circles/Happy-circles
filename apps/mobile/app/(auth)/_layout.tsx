@@ -13,5 +13,15 @@ export default function AuthLayout() {
     return <Redirect href="/home" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack
+      screenOptions={{
+        animationMatchesGesture: true,
+        fullScreenGestureEnabled: true,
+        gestureDirection: 'horizontal',
+        gestureEnabled: true,
+        headerShown: false,
+      }}
+    />
+  );
 }

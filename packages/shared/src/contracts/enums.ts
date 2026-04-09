@@ -45,6 +45,9 @@ export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export const PARTICIPANT_DECISIONS = ['pending', 'approved', 'rejected'] as const;
 export type ParticipantDecision = (typeof PARTICIPANT_DECISIONS)[number];
 
+export const CONTACT_INVITE_STATUSES = ['pending', 'matched', 'canceled'] as const;
+export type ContactInviteStatus = (typeof CONTACT_INVITE_STATUSES)[number];
+
 export const AUDIT_ENTITY_TYPES = [
   'relationship_invite',
   'relationship',
@@ -57,6 +60,7 @@ export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 export const AUDIT_EVENT_NAMES = [
   'relationship_invited',
+  'relationship_invite_rejected',
   'relationship_accepted',
   'financial_request_created',
   'financial_request_rejected',

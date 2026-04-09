@@ -4,6 +4,7 @@ import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 
 import { StatusChip } from './status-chip';
+import { SurfaceCard } from './surface-card';
 
 export interface MoneyHeroProps {
   readonly label: string;
@@ -30,14 +31,11 @@ export function MoneyHero({
   const isPositive = tone === 'positive';
 
   return (
-    <View style={styles.card}>
+    <SurfaceCard style={styles.card} variant="elevated" padding="lg">
       <View style={styles.header}>
         <Text style={styles.label}>{label}</Text>
         {badgeLabel ? (
-          <StatusChip
-            label={badgeLabel}
-            tone={isNegative ? 'warning' : isPositive ? 'success' : 'primary'}
-          />
+          <StatusChip label={badgeLabel} tone={isNegative ? 'warning' : isPositive ? 'success' : 'primary'} />
         ) : null}
       </View>
       <Text style={[styles.amount, isNegative ? styles.negative : null, isPositive ? styles.positive : null]}>
@@ -47,7 +45,7 @@ export function MoneyHero({
       {secondaryMetrics?.length ? (
         <View style={styles.metricsRow}>
           {secondaryMetrics.map((metric) => (
-            <View key={metric.label} style={styles.metricCard}>
+            <SurfaceCard key={metric.label} style={styles.metricCard} variant="muted" padding="sm">
               <Text style={styles.metricLabel}>{metric.label}</Text>
               <Text
                 style={[
@@ -58,23 +56,17 @@ export function MoneyHero({
               >
                 {formatCop(metric.amountMinor)}
               </Text>
-            </View>
+            </SurfaceCard>
           ))}
         </View>
       ) : null}
-    </View>
+    </SurfaceCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.elevated,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xlarge,
-    borderWidth: 1,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.lg,
-    ...theme.shadow.card,
+    gap: theme.spacing.sm,
   },
   header: {
     alignItems: 'center',
@@ -84,34 +76,31 @@ const styles = StyleSheet.create({
   },
   label: {
     color: theme.colors.textMuted,
-    flex: 1,
-    fontSize: theme.typography.callout,
-    fontWeight: '600',
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   amount: {
     color: theme.colors.text,
-    fontSize: 38,
+    fontSize: 40,
     fontWeight: '800',
-    lineHeight: 44,
+    letterSpacing: -1.2,
+    lineHeight: 46,
   },
   caption: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   metricsRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
   },
   metricCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
     flex: 1,
-    gap: 4,
-    padding: theme.spacing.sm,
+    gap: 6,
   },
   metricLabel: {
     color: theme.colors.textMuted,

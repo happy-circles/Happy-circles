@@ -1,3 +1,13 @@
+with demo_users as (
+  select *
+  from (
+    values
+      ('00000000-0000-0000-0000-0000000000a1'::uuid, 'ana@example.com', 'Ana'),
+      ('00000000-0000-0000-0000-0000000000b2'::uuid, 'bruno@example.com', 'Bruno'),
+      ('00000000-0000-0000-0000-0000000000c3'::uuid, 'carla@example.com', 'Carla'),
+      ('00000000-0000-0000-0000-0000000000d4'::uuid, 'diego@example.com', 'Diego')
+  ) as seed_user(id, email, display_name)
+)
 insert into auth.users (
   instance_id,
   id,
@@ -15,76 +25,74 @@ insert into auth.users (
   email_change_token_new,
   recovery_token
 )
-values
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '00000000-0000-0000-0000-0000000000a1',
-    'authenticated',
-    'authenticated',
-    'ana@example.com',
-    '$2a$10$7EqJtq98hPqEX7fNZaFWoO5HnVn9Yx8RJWb1x1o1t4bmPqhGV8eGa',
-    timezone('utc', now()),
-    '{"provider":"email","providers":["email"]}',
-    '{"display_name":"Ana"}',
-    timezone('utc', now()),
-    timezone('utc', now()),
-    '',
-    '',
-    '',
-    ''
+select
+  '00000000-0000-0000-0000-000000000000',
+  demo_users.id,
+  'authenticated',
+  'authenticated',
+  demo_users.email,
+  extensions.crypt('Circles1234', extensions.gen_salt('bf')),
+  timezone('utc', now()),
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  jsonb_build_object('display_name', demo_users.display_name),
+  timezone('utc', now()),
+  timezone('utc', now()),
+  '',
+  '',
+  '',
+  ''
+from demo_users
+on conflict (id) do update
+set email = excluded.email,
+    encrypted_password = excluded.encrypted_password,
+    email_confirmed_at = excluded.email_confirmed_at,
+    raw_app_meta_data = excluded.raw_app_meta_data,
+    raw_user_meta_data = excluded.raw_user_meta_data,
+    updated_at = excluded.updated_at;
+
+with demo_users as (
+  select *
+  from (
+    values
+      ('00000000-0000-0000-0000-0000000000a1'::uuid, 'ana@example.com'),
+      ('00000000-0000-0000-0000-0000000000b2'::uuid, 'bruno@example.com'),
+      ('00000000-0000-0000-0000-0000000000c3'::uuid, 'carla@example.com'),
+      ('00000000-0000-0000-0000-0000000000d4'::uuid, 'diego@example.com')
+  ) as seed_identity(id, email)
+)
+insert into auth.identities (
+  provider_id,
+  user_id,
+  identity_data,
+  provider,
+  last_sign_in_at,
+  created_at,
+  updated_at,
+  id
+)
+select
+  demo_users.id::text,
+  demo_users.id,
+  jsonb_build_object(
+    'sub',
+    demo_users.id::text,
+    'email',
+    demo_users.email,
+    'email_verified',
+    true
   ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '00000000-0000-0000-0000-0000000000b2',
-    'authenticated',
-    'authenticated',
-    'bruno@example.com',
-    '$2a$10$7EqJtq98hPqEX7fNZaFWoO5HnVn9Yx8RJWb1x1o1t4bmPqhGV8eGa',
-    timezone('utc', now()),
-    '{"provider":"email","providers":["email"]}',
-    '{"display_name":"Bruno"}',
-    timezone('utc', now()),
-    timezone('utc', now()),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '00000000-0000-0000-0000-0000000000c3',
-    'authenticated',
-    'authenticated',
-    'carla@example.com',
-    '$2a$10$7EqJtq98hPqEX7fNZaFWoO5HnVn9Yx8RJWb1x1o1t4bmPqhGV8eGa',
-    timezone('utc', now()),
-    '{"provider":"email","providers":["email"]}',
-    '{"display_name":"Carla"}',
-    timezone('utc', now()),
-    timezone('utc', now()),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '00000000-0000-0000-0000-0000000000d4',
-    'authenticated',
-    'authenticated',
-    'diego@example.com',
-    '$2a$10$7EqJtq98hPqEX7fNZaFWoO5HnVn9Yx8RJWb1x1o1t4bmPqhGV8eGa',
-    timezone('utc', now()),
-    '{"provider":"email","providers":["email"]}',
-    '{"display_name":"Diego"}',
-    timezone('utc', now()),
-    timezone('utc', now()),
-    '',
-    '',
-    '',
-    ''
-  )
-on conflict (id) do nothing;
+  'email',
+  timezone('utc', now()),
+  timezone('utc', now()),
+  timezone('utc', now()),
+  gen_random_uuid()
+from demo_users
+where not exists (
+  select 1
+  from auth.identities
+  where user_id = demo_users.id
+    and provider = 'email'
+);
 
 insert into public.app_settings (key, value_json)
 values ('currency', '{"code":"COP"}'::jsonb)
