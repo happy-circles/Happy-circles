@@ -23,6 +23,21 @@ export interface Database {
           updated_at: string;
         };
       };
+      trusted_devices: {
+        Row: {
+          id: string;
+          user_id: string;
+          device_id: string;
+          platform: string;
+          device_name: string | null;
+          app_version: string | null;
+          trust_state: string;
+          trusted_at: string | null;
+          last_seen_at: string;
+          created_at: string;
+          revoked_at: string | null;
+        };
+      };
       contact_invites: {
         Row: {
           id: string;

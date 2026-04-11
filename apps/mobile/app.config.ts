@@ -9,6 +9,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'light',
   plugins: [
     'expo-router',
+    'expo-dev-client',
     'expo-asset',
     'expo-sqlite',
     'expo-secure-store',
@@ -26,10 +27,14 @@ const config: ExpoConfig = {
     typedRoutes: true,
   },
   ios: {
+    bundleIdentifier: 'com.happycircles.app',
     usesAppleSignIn: true,
     infoPlist: {
       NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
     },
+  },
+  android: {
+    package: 'com.happycircles.app',
   },
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',

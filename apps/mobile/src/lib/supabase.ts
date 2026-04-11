@@ -1,14 +1,17 @@
-import 'expo-sqlite/localStorage/install';
 import 'react-native-url-polyfill/auto';
 
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 import type { Database } from '@happy-circles/shared';
 
 import { appConfig } from './config';
+import { authStorageAdapter } from './storage';
 
 const authStorage =
-  typeof globalThis.localStorage === 'undefined' ? undefined : globalThis.localStorage;
+  Platform.OS === 'web' && typeof globalThis.localStorage !== 'undefined'
+    ? globalThis.localStorage
+    : authStorageAdapter;
 
 export const supabase =
   appConfig.supabaseUrl && appConfig.supabaseAnonKey
@@ -18,6 +21,7 @@ export const supabase =
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false,
+          flowType: 'pkce',
         },
       })
     : null;

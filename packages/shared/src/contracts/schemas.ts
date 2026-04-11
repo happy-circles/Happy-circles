@@ -85,6 +85,28 @@ export const registrationSchema = emailPasswordSignInSchema
     }
   });
 
+export const completeProfileSchema = z.object({
+  fullName: z.string().trim().min(3).max(120),
+  phoneCountryIso2: z.string().trim().length(2),
+  phoneCountryCallingCode: z.string().trim().min(2).max(6),
+  phoneNationalNumber: z.string().trim().min(6).max(20),
+});
+
+export const attachEmailPasswordSchema = z
+  .object({
+    password: z.string().min(8).max(72),
+    confirmPassword: z.string().min(8).max(72),
+  })
+  .superRefine((value, context) => {
+    if (value.password !== value.confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Las claves no coinciden.',
+        path: ['confirmPassword'],
+      });
+    }
+  });
+
 export const createContactInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteeName: z.string().trim().min(2).max(120),

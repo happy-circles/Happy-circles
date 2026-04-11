@@ -16,6 +16,7 @@ The core outcome is debt-circle closure. Users negotiate bilateral debts, confir
 - `packages/shared`: DTOs, Zod schemas, and generated database types.
 - `supabase`: SQL migrations, Edge Functions, and seed/test fixtures.
 - `docs/adr`: architectural decision records.
+- `docs/authentication-roadmap.md`: auth state, pending setup, and identity strategy.
 
 ## Financial design
 

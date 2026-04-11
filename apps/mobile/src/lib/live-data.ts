@@ -1805,6 +1805,25 @@ async function invalidateAppSnapshot() {
   });
 }
 
+function useSensitiveMutationGuard() {
+  const { deviceTrustState, profileCompletionState, stepUpAuth } = useSession();
+
+  return async (actionLabel: string) => {
+    if (profileCompletionState !== 'complete') {
+      throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
+    }
+
+    if (deviceTrustState !== 'trusted') {
+      throw new Error('Este dispositivo aun no es confiable. Validalo primero desde Perfil.');
+    }
+
+    const authenticated = await stepUpAuth();
+    if (!authenticated) {
+      throw new Error(`No se pudo validar tu identidad para ${actionLabel}.`);
+    }
+  };
+}
+
 export function useAppSnapshot() {
   const { userId } = useSession();
 
@@ -1935,8 +1954,12 @@ export function useRejectRelationshipInviteMutation() {
 }
 
 export function useCreateRequestMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (input: CreateRequestInput) => {
+      await guardSensitiveAction('crear el movimiento');
+
       const payload = createBalanceRequestSchema.parse({
         idempotencyKey: createIdempotencyKey('mobile_balance_increase'),
         responderUserId: input.responderUserId,
@@ -1956,8 +1979,12 @@ export function useCreateRequestMutation() {
 }
 
 export function useAcceptFinancialRequestMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (requestId: string) => {
+      await guardSensitiveAction('aceptar la solicitud');
+
       const payload = requestDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('accept_request'),
         requestId,
@@ -1970,8 +1997,12 @@ export function useAcceptFinancialRequestMutation() {
 }
 
 export function useRejectFinancialRequestMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (requestId: string) => {
+      await guardSensitiveAction('rechazar la solicitud');
+
       const payload = requestDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('reject_request'),
         requestId,
@@ -1984,12 +2015,16 @@ export function useRejectFinancialRequestMutation() {
 }
 
 export function useAmendFinancialRequestMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (input: {
       readonly requestId: string;
       readonly amountMinor: number;
       readonly description: string;
     }) => {
+      await guardSensitiveAction('proponer un nuevo monto');
+
       const payload = amendFinancialRequestSchema.parse({
         idempotencyKey: createIdempotencyKey('amend_request'),
         requestId: input.requestId,
@@ -2004,8 +2039,12 @@ export function useAmendFinancialRequestMutation() {
 }
 
 export function useApproveSettlementMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (proposalId: string) => {
+      await guardSensitiveAction('aprobar el cierre');
+
       const payload = cycleSettlementDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('approve_settlement'),
         proposalId,
@@ -2018,8 +2057,12 @@ export function useApproveSettlementMutation() {
 }
 
 export function useRejectSettlementMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (proposalId: string) => {
+      await guardSensitiveAction('rechazar el cierre');
+
       const payload = cycleSettlementDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('reject_settlement'),
         proposalId,
@@ -2032,8 +2075,12 @@ export function useRejectSettlementMutation() {
 }
 
 export function useExecuteSettlementMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
+
   return useMutation({
     mutationFn: async (proposalId: string) => {
+      await guardSensitiveAction('ejecutar el cierre');
+
       const payload = cycleSettlementExecutionSchema.parse({
         idempotencyKey: createIdempotencyKey('execute_settlement'),
         proposalId,

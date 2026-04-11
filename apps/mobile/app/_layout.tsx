@@ -117,7 +117,7 @@ function SessionOverlay() {
 }
 
 function SessionRouteGuard() {
-  const { status } = useSession();
+  const { profileCompletionState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
   const router = useRouter();
   const segments = useSegments();
@@ -127,7 +127,16 @@ function SessionRouteGuard() {
       return;
     }
 
-    const inAuthGroup = segments[0] === '(auth)';
+    const currentRootSegment = String(segments[0] ?? '');
+    const inAuthGroup = currentRootSegment === '(auth)';
+    const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
+    const isBasicReadableRoute =
+      isCompleteProfileRoute ||
+      currentRootSegment === '(tabs)' ||
+      currentRootSegment === 'activity' ||
+      currentRootSegment === 'profile' ||
+      currentRootSegment === 'person' ||
+      currentRootSegment === 'settlements';
 
     if (status === 'signed_out') {
       if (!inAuthGroup) {
@@ -136,10 +145,22 @@ function SessionRouteGuard() {
       return;
     }
 
-    if (inAuthGroup) {
-      router.replace('/home');
+    if (profileCompletionState === 'incomplete' && !isBasicReadableRoute) {
+      router.replace('/complete-profile' as Href);
+      return;
     }
-  }, [rootNavigationState?.key, router, segments, status]);
+
+    if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
+      router.replace('/home');
+      return;
+    }
+
+    if (inAuthGroup) {
+      router.replace(
+        (profileCompletionState === 'incomplete' ? '/complete-profile' : '/home') as Href,
+      );
+    }
+  }, [profileCompletionState, rootNavigationState?.key, router, segments, status]);
 
   return null;
 }

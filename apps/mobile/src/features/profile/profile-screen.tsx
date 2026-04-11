@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'expo-router';
+import type { Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { MessageBanner } from '@/components/message-banner';
+import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { useAppSnapshot, useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import {
@@ -15,16 +18,46 @@ import {
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
+function formatDeviceTitle(deviceId: string, currentDeviceId: string | null, platform: string) {
+  const base = platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android' : 'Web';
+  return deviceId === currentDeviceId ? `${base} actual` : base;
+}
+
+function formatDeviceStateLabel(trustState: string) {
+  if (trustState === 'trusted') {
+    return 'Confiable';
+  }
+
+  if (trustState === 'revoked') {
+    return 'Revocado';
+  }
+
+  return 'Pendiente';
+}
+
 export function ProfileScreen() {
   const {
+    appleSignInAvailable,
+    attachEmailPassword,
     biometricAvailable,
     biometricLabel,
     biometricsEnabled,
+    currentDeviceId,
+    deviceTrustState,
     email,
+    isTrustedDevice,
+    linkedMethods,
     notificationsEnabled,
+    profile,
+    profileCompletionState,
+    revokeTrustedDevice,
     setBiometricsEnabled,
     setNotificationsEnabled,
     signOut,
+    linkApple,
+    linkGoogle,
+    trustCurrentDevice,
+    trustedDevices,
   } = useSession();
   const snapshotQuery = useAppSnapshot();
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
@@ -32,13 +65,47 @@ export function ProfileScreen() {
   const avatarMutation = useUpdateProfileAvatarMutation();
 
   const [message, setMessage] = useState<string | null>(null);
-  const accountLabel = currentUserProfile?.displayName ?? email ?? 'Sin sesion';
-  const accountEmail = currentUserProfile?.email ?? email ?? 'Sin correo';
+  const [attachPassword, setAttachPassword] = useState('');
+  const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
+  const [trustPassword, setTrustPassword] = useState('');
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  const accountLabel = currentUserProfile?.displayName ?? profile?.display_name ?? email ?? 'Sin sesion';
+  const accountEmail = currentUserProfile?.email ?? profile?.email ?? email ?? 'Sin correo';
   const reminderSummary = snapshotQuery.isLoading
     ? 'Calculando...'
     : pendingCount > 0
       ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} hoy`
       : 'Sin pendientes';
+  const phoneLabel = profile?.phone_e164 ?? 'Falta completar';
+  const primaryReauthLabel = useMemo(() => {
+    if (linkedMethods.hasEmailPassword) {
+      return 'Validar con clave';
+    }
+
+    if (linkedMethods.hasGoogle) {
+      return 'Validar con Google';
+    }
+
+    if (linkedMethods.hasApple) {
+      return 'Validar con Apple';
+    }
+
+    return 'Validar dispositivo';
+  }, [linkedMethods.hasApple, linkedMethods.hasEmailPassword, linkedMethods.hasGoogle]);
+
+  async function runAction(actionKey: string, action: () => Promise<string>) {
+    setBusyAction(actionKey);
+    setMessage(null);
+
+    try {
+      const result = await action();
+      setMessage(result);
+      return result;
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   async function handleBiometrics(nextValue: boolean) {
     const result = await setBiometricsEnabled(nextValue);
@@ -141,7 +208,9 @@ export function ProfileScreen() {
             onPress={() => void handleTakeAvatarPhoto()}
             style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.rowPressed : null]}
           >
-            <Text style={styles.changePhotoLabel}>{avatarMutation.isPending ? 'Subiendo...' : 'Tomar foto'}</Text>
+            <Text style={styles.changePhotoLabel}>
+              {avatarMutation.isPending ? 'Subiendo...' : 'Tomar foto'}
+            </Text>
           </Pressable>
           <Pressable
             disabled={avatarMutation.isPending}
@@ -154,8 +223,24 @@ export function ProfileScreen() {
         <Text style={styles.accountEyebrow}>Cuenta</Text>
         <Text style={styles.accountValue}>{accountLabel}</Text>
         {accountEmail !== accountLabel ? <Text style={styles.accountMeta}>{accountEmail}</Text> : null}
+        <Text style={styles.accountMeta}>Celular: {phoneLabel}</Text>
       </View>
+
       {message ? <MessageBanner message={message} /> : null}
+
+      {profileCompletionState === 'incomplete' ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Perfil minimo pendiente</Text>
+          <Text style={styles.panelBody}>
+            Antes de mover dinero necesitamos nombre usable y celular unico.
+          </Text>
+          <Link href={'/complete-profile' as Href} asChild>
+            <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
+              <Text style={styles.inlineButtonText}>Completar ahora</Text>
+            </Pressable>
+          </Link>
+        </View>
+      ) : null}
 
       <View style={styles.list}>
         <View style={styles.listRow}>
@@ -193,10 +278,186 @@ export function ProfileScreen() {
             value={notificationsEnabled}
           />
         </View>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Metodos de acceso</Text>
+
+        <View style={styles.methodRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Correo y clave</Text>
+            <Text style={styles.rowSubtitle}>
+              {linkedMethods.hasEmailPassword ? 'Listo para entrar en cualquier dispositivo.' : 'Aun no agregas una clave.'}
+            </Text>
+          </View>
+        </View>
+        {!linkedMethods.hasEmailPassword ? (
+          <View style={styles.stack}>
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setAttachPassword}
+              placeholder="Nueva clave"
+              placeholderTextColor={theme.colors.muted}
+              secureTextEntry
+              style={styles.input}
+              value={attachPassword}
+            />
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setAttachPasswordConfirm}
+              placeholder="Confirmar clave"
+              placeholderTextColor={theme.colors.muted}
+              secureTextEntry
+              style={styles.input}
+              value={attachPasswordConfirm}
+            />
+            <PrimaryAction
+              compact
+              label={busyAction === 'attach-password' ? 'Guardando...' : 'Agregar clave'}
+              onPress={
+                busyAction
+                  ? undefined
+                  : () =>
+                      void runAction('attach-password', async () =>
+                        attachEmailPassword({
+                          password: attachPassword,
+                          confirmPassword: attachPasswordConfirm,
+                        }),
+                      )
+              }
+            />
+          </View>
+        ) : null}
 
         <View style={styles.separator} />
 
-        <Pressable onPress={() => void signOut()} style={({ pressed }) => [styles.listRow, pressed ? styles.rowPressed : null]}>
+        <View style={styles.methodRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Google</Text>
+            <Text style={styles.rowSubtitle}>
+              {linkedMethods.hasGoogle ? 'Vinculado' : 'Disponible para acceso rapido'}
+            </Text>
+          </View>
+          {!linkedMethods.hasGoogle ? (
+            <Pressable
+              onPress={() => void runAction('link-google', linkGoogle)}
+              style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
+            >
+              <Text style={styles.inlineButtonText}>
+                {busyAction === 'link-google' ? 'Abriendo...' : 'Vincular'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {appleSignInAvailable ? (
+          <>
+            <View style={styles.separator} />
+            <View style={styles.methodRow}>
+              <View style={styles.textWrap}>
+                <Text style={styles.rowTitle}>Apple</Text>
+                <Text style={styles.rowSubtitle}>
+                  {linkedMethods.hasApple ? 'Vinculado' : 'Disponible en iPhone'}
+                </Text>
+              </View>
+              {!linkedMethods.hasApple ? (
+                <Pressable
+                  onPress={() => void runAction('link-apple', linkApple)}
+                  style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
+                >
+                  <Text style={styles.inlineButtonText}>
+                    {busyAction === 'link-apple' ? 'Abriendo...' : 'Vincular'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </>
+        ) : null}
+
+        <View style={styles.separator} />
+
+        <View style={styles.methodRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Celular</Text>
+            <Text style={styles.rowSubtitle}>{phoneLabel}</Text>
+          </View>
+          <Link href={'/complete-profile' as Href} asChild>
+            <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
+              <Text style={styles.inlineButtonText}>{profile?.phone_e164 ? 'Editar' : 'Completar'}</Text>
+            </Pressable>
+          </Link>
+        </View>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Dispositivos</Text>
+        <Text style={styles.panelBody}>
+          Estado actual: {isTrustedDevice ? 'confiable' : formatDeviceStateLabel(deviceTrustState)}.
+        </Text>
+
+        {!isTrustedDevice ? (
+          <View style={styles.stack}>
+            {linkedMethods.hasEmailPassword ? (
+              <TextInput
+                autoCapitalize="none"
+                onChangeText={setTrustPassword}
+                placeholder="Tu clave actual"
+                placeholderTextColor={theme.colors.muted}
+                secureTextEntry
+                style={styles.input}
+                value={trustPassword}
+              />
+            ) : null}
+            <PrimaryAction
+              compact
+              label={busyAction === 'trust-device' ? 'Validando...' : primaryReauthLabel}
+              onPress={
+                busyAction
+                  ? undefined
+                  : () =>
+                      void runAction('trust-device', async () =>
+                        trustCurrentDevice({
+                          password: trustPassword,
+                        }),
+                      )
+              }
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.stack}>
+          {trustedDevices.map((device) => (
+            <View key={device.id} style={styles.deviceRow}>
+              <View style={styles.textWrap}>
+                <Text style={styles.rowTitle}>
+                  {formatDeviceTitle(device.device_id, currentDeviceId, device.platform)}
+                </Text>
+                <Text style={styles.rowSubtitle}>
+                  {formatDeviceStateLabel(device.trust_state)}
+                  {device.app_version ? ` | v${device.app_version}` : ''}
+                </Text>
+              </View>
+              {device.trust_state !== 'revoked' ? (
+                <Pressable
+                  onPress={() => void runAction(`revoke-${device.device_id}`, async () => revokeTrustedDevice(device.device_id))}
+                  style={({ pressed }) => [styles.inlineButtonDanger, pressed ? styles.rowPressed : null]}
+                >
+                  <Text style={styles.inlineButtonDangerText}>
+                    {busyAction === `revoke-${device.device_id}` ? 'Revocando...' : 'Revocar'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.list}>
+        <View style={styles.separator} />
+        <Pressable
+          onPress={() => void signOut()}
+          style={({ pressed }) => [styles.listRow, pressed ? styles.rowPressed : null]}
+        >
           <Text style={styles.signOutLabel}>Cerrar sesion</Text>
         </Pressable>
       </View>
@@ -251,6 +512,24 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
+  panel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.large,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  panelTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+  },
+  panelBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
   list: {
     backgroundColor: 'transparent',
   },
@@ -261,6 +540,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 68,
     paddingVertical: theme.spacing.sm,
+  },
+  methodRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  deviceRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
   },
   rowPressed: {
     opacity: 0.72,
@@ -283,6 +574,46 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
+  },
+  stack: {
+    gap: theme.spacing.sm,
+  },
+  input: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  inlineButton: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  inlineButtonText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  inlineButtonDanger: {
+    backgroundColor: theme.colors.dangerSoft,
+    borderColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  inlineButtonDangerText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
   },
   signOutLabel: {
     color: theme.colors.danger,
