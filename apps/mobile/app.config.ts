@@ -14,11 +14,19 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-local-authentication',
     'expo-notifications',
+    'expo-apple-authentication',
+    [
+      'expo-web-browser',
+      {
+        experimentalLauncherActivity: false,
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,
   },
   ios: {
+    usesAppleSignIn: true,
     infoPlist: {
       NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
     },

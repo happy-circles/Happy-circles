@@ -7,6 +7,7 @@ export interface HomeSummaryDto {
 export interface PersonCardDto {
   readonly userId: string;
   readonly displayName: string;
+  readonly avatarUrl?: string | null;
   readonly netAmountMinor: number;
   readonly direction: 'i_owe' | 'owes_me' | 'settled';
   readonly pendingCount: number;
@@ -46,7 +47,11 @@ export interface ActivityItemDto {
     | 'relationship_invite'
     | 'accepted_request'
     | 'manual_payment'
-    | 'system_note';
+    | 'system_note'
+    | 'request'
+    | 'payment'
+    | 'settlement'
+    | 'system';
 }
 
 export interface ActivitySectionDto {
@@ -77,8 +82,9 @@ export interface PersonTimelineItemDto {
 
 export interface PersonPendingRequestDto {
   readonly id: string;
-  readonly requestKind: 'balance_increase' | 'balance_decrease' | 'transaction_reversal';
+  readonly requestKind: 'balance_increase' | 'transaction_reversal';
   readonly responseState: 'requires_you' | 'waiting_other_side';
+  readonly tone: 'positive' | 'negative';
   readonly title: string;
   readonly description: string;
   readonly amountMinor: number;
@@ -89,11 +95,13 @@ export interface PersonPendingRequestDto {
 export interface PersonDetailDto {
   readonly userId: string;
   readonly displayName: string;
+  readonly avatarUrl?: string | null;
   readonly direction: 'i_owe' | 'owes_me' | 'settled';
   readonly netAmountMinor: number;
   readonly pendingCount: number;
   readonly headline: string;
   readonly supportText?: string;
+  readonly pendingItems: readonly ActivityItemDto[];
   readonly pendingRequest?: PersonPendingRequestDto;
   readonly timeline: readonly PersonTimelineItemDto[];
 }

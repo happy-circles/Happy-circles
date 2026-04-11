@@ -23,7 +23,9 @@ import {
 } from '@happy-circles/shared';
 
 import { useSession } from '@/providers/session-provider';
+import { AVATAR_BUCKET, resolveAvatarUrl } from './avatar';
 import { formatCop } from './data';
+import { buildActivityHistoryItems } from './history-cases';
 import { createIdempotencyKey } from './idempotency';
 import { queryClient } from './query-client';
 import { supabase } from './supabase';
@@ -121,6 +123,9 @@ interface ActionableItem {
   readonly ctaLabel: PendingActionDto['ctaLabel'];
   readonly href: PendingActionDto['href'];
   readonly amountMinor?: PendingActionDto['amountMinor'];
+  readonly counterpartyLabel?: string;
+  readonly tone?: ActivityItemDto['tone'];
+  readonly participantUserIds?: readonly string[];
   readonly createdAt: string;
 }
 
@@ -128,6 +133,11 @@ export interface AppSnapshot {
   readonly dashboard: DashboardDto;
   readonly people: readonly PersonCardDto[];
   readonly peopleById: Readonly<Record<string, PersonDetailDto>>;
+  readonly currentUserProfile: {
+    readonly displayName: string;
+    readonly email: string;
+    readonly avatarUrl: string | null;
+  } | null;
   readonly incomingInvites: readonly RelationshipInviteDto[];
   readonly outgoingInvites: readonly RelationshipInviteDto[];
   readonly whatsappInvites: readonly ContactInviteDto[];
@@ -138,7 +148,6 @@ export interface AppSnapshot {
 }
 
 interface CreateRequestInput {
-  readonly requestKind: 'balance_increase' | 'balance_decrease';
   readonly responderUserId: string;
   readonly debtorUserId: string;
   readonly creditorUserId: string;
@@ -234,6 +243,10 @@ function buildNameByUserId(
   return names;
 }
 
+function buildProfileByUserId(profiles: readonly UserProfileRow[]): Map<string, UserProfileRow> {
+  return new Map(profiles.map((profile) => [profile.id, profile]));
+}
+
 function deriveDirection(
   currentUserId: string,
   edge: OpenDebtRow | undefined,
@@ -248,6 +261,20 @@ function deriveDirection(
 
 function sortByNewest<T extends { readonly createdAt: string }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function actionableItemToActivityItem(item: ActionableItem): ActivityItemDto {
+  return {
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    subtitle: item.subtitle,
+    status: item.status,
+    href: item.href,
+    amountMinor: item.amountMinor,
+    counterpartyLabel: item.counterpartyLabel,
+    tone: item.tone,
+  };
 }
 
 function sortPeople(left: PersonCardDto, right: PersonCardDto): number {
@@ -268,6 +295,21 @@ function requestDirectionForUser(
   currentUserId: string,
 ): 'i_owe' | 'owes_me' {
   return request.creditor_user_id === currentUserId ? 'owes_me' : 'i_owe';
+}
+
+function historyFlowLabelForCurrentUser(
+  row: Pick<RelationshipHistoryRow, 'creditor_user_id' | 'debtor_user_id'>,
+  currentUserId: string,
+): 'entrada' | 'salida' | null {
+  if (row.creditor_user_id === currentUserId) {
+    return 'entrada';
+  }
+
+  if (row.debtor_user_id === currentUserId) {
+    return 'salida';
+  }
+
+  return null;
 }
 
 function buildPendingRequestImpactTitle(input: {
@@ -308,14 +350,13 @@ function buildPersonPendingRequest(input: {
   const { request, currentUserId, counterpartyName, names } = input;
   const createdByCurrentUser = request.creator_user_id === currentUserId;
   const requestKind: PersonPendingRequestDto['requestKind'] =
-    request.request_type === 'balance_decrease' || request.request_type === 'transaction_reversal'
-      ? request.request_type
-      : 'balance_increase';
+    request.request_type === 'transaction_reversal' ? request.request_type : 'balance_increase';
 
   return {
     id: request.id,
     requestKind,
     responseState: request.responder_user_id === currentUserId ? 'requires_you' : 'waiting_other_side',
+    tone: requestDirectionForUser(request, currentUserId) === 'owes_me' ? 'positive' : 'negative',
     title: buildPendingRequestImpactTitle({
       request,
       currentUserId,
@@ -361,6 +402,79 @@ function resolveRootRequestId(
   return currentId;
 }
 
+function normalizeComparableText(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLocaleLowerCase('es-CO');
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function requestTypeFromAcceptanceSubtype(
+  subtype: RelationshipHistoryRow['subtype'],
+): FinancialRequestRow['request_type'] | null {
+  if (subtype === 'balance_increase_acceptance') {
+    return 'balance_increase';
+  }
+
+  if (subtype === 'transaction_reversal_acceptance') {
+    return 'transaction_reversal';
+  }
+
+  return null;
+}
+
+function inferOriginRequestIdFromLedgerRow(input: {
+  readonly row: RelationshipHistoryRow;
+  readonly requests: readonly FinancialRequestRow[];
+  readonly requestsById: ReadonlyMap<string, FinancialRequestRow>;
+}): string | null {
+  const requestType = requestTypeFromAcceptanceSubtype(input.row.subtype);
+  if (!requestType) {
+    return null;
+  }
+
+  const happenedAt = Date.parse(input.row.happened_at);
+  if (Number.isNaN(happenedAt)) {
+    return null;
+  }
+
+  const normalizedDescription = normalizeComparableText(input.row.description);
+  const candidates = input.requests
+    .filter((request) => {
+      if (request.status !== 'accepted' || request.request_type !== requestType) {
+        return false;
+      }
+
+      if (request.amount_minor !== input.row.amount_minor) {
+        return false;
+      }
+
+      if (
+        request.debtor_user_id !== input.row.debtor_user_id ||
+        request.creditor_user_id !== input.row.creditor_user_id
+      ) {
+        return false;
+      }
+
+      const resolvedAt = Date.parse(request.resolved_at ?? request.updated_at ?? request.created_at);
+      if (Number.isNaN(resolvedAt) || Math.abs(resolvedAt - happenedAt) > 60_000) {
+        return false;
+      }
+
+      const requestDescription = normalizeComparableText(request.description);
+      return !normalizedDescription || requestDescription === normalizedDescription;
+    })
+    .sort((left, right) => {
+      const leftResolvedAt = Date.parse(left.resolved_at ?? left.updated_at ?? left.created_at);
+      const rightResolvedAt = Date.parse(right.resolved_at ?? right.updated_at ?? right.created_at);
+      return Math.abs(leftResolvedAt - happenedAt) - Math.abs(rightResolvedAt - happenedAt);
+    });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return resolveRootRequestId(candidates[0].id, input.requestsById);
+}
+
 function buildRequestFlowLabelFromRequest(
   request: FinancialRequestRow,
   currentUserId: string,
@@ -403,15 +517,11 @@ function buildRequestCreatedTitle(
     return `${creator} propuso un nuevo monto`;
   }
 
-  if (request.request_type === 'balance_decrease') {
-    return `${creator} propuso una salida`;
-  }
-
   if (request.request_type === 'transaction_reversal') {
     return `${creator} propuso ajustar el movimiento`;
   }
 
-  return `${creator} propuso una entrada`;
+  return `${creator} propuso una ${requestDirectionForUser(request, currentUserId) === 'owes_me' ? 'entrada' : 'salida'}`;
 }
 
 function buildRequestResolutionTitle(
@@ -572,6 +682,14 @@ function buildPersonTimeline(input: {
       continue;
     }
 
+    const originRequestId = row.origin_request_id
+      ? resolveRootRequestId(row.origin_request_id, requestById)
+      : inferOriginRequestIdFromLedgerRow({
+          row,
+          requests: input.requests,
+          requestsById: requestById,
+        });
+
     drafts.push({
       id: row.item_id,
       title: buildTimelineStepTitle(
@@ -592,9 +710,7 @@ function buildPersonTimeline(input: {
       status: row.status,
       sourceType: sourceTypeForRow(row),
       sourceLabel: sourceTypeForRow(row) === 'system' ? 'Sistema' : 'Usuario',
-      originRequestId: row.origin_request_id
-        ? resolveRootRequestId(row.origin_request_id, requestById)
-        : row.item_id,
+      originRequestId: originRequestId ?? row.item_id,
       originSettlementProposalId: row.origin_settlement_proposal_id ?? undefined,
       flowLabel: buildMovementFlowLabel(row, input.names) ?? undefined,
       detail: row.description ?? undefined,
@@ -713,6 +829,7 @@ function buildPendingSettlementItems(
       status: 'pending_approvals',
       ctaLabel: 'Revisar',
       href: `/settlements/${proposal.id}`,
+      participantUserIds: participants.map((participant) => participant.participant_user_id),
       createdAt: proposal.created_at,
     });
   }
@@ -743,9 +860,10 @@ function buildPendingSettlementItems(
         kind: 'settlement_proposal',
         title: 'Cierre de ciclo esperando a otros',
         subtitle: `${titleBase} | faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}`,
-        status: 'pending_approvals',
+        status: 'waiting_other_side',
         ctaLabel: 'Revisar',
         href: `/settlements/${proposal.id}`,
+        participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
       });
     }
@@ -759,6 +877,7 @@ function buildPendingSettlementItems(
         status: 'approved',
         ctaLabel: 'Ejecutar',
         href: `/settlements/${proposal.id}`,
+        participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
       });
     }
@@ -906,25 +1025,9 @@ function isHistoryRowVisibleToCurrentUser(
   return false;
 }
 
-function historyKindForActivity(row: RelationshipHistoryRow): ActivityItemDto['kind'] {
-  if (row.item_kind === 'financial_request') {
-    return row.status === 'accepted' ? 'accepted_request' : 'financial_request';
-  }
-
-  if (row.subtype === 'balance_decrease_acceptance') {
-    return 'manual_payment';
-  }
-
-  return 'system_note';
-}
-
 function historyKindForTimeline(row: RelationshipHistoryRow): PersonTimelineItemDto['kind'] {
   if (row.item_kind === 'financial_request') {
     return 'request';
-  }
-
-  if (row.subtype === 'balance_decrease_acceptance') {
-    return 'payment';
   }
 
   if (row.subtype === 'cycle_settlement') {
@@ -962,7 +1065,6 @@ function buildHistoryTitle(
   }
 
   if (
-    row.subtype === 'balance_decrease_acceptance' ||
     row.subtype === 'balance_increase_acceptance' ||
     row.subtype === 'transaction_reversal_acceptance'
   ) {
@@ -1034,15 +1136,12 @@ function buildTimelineStepTitle(
 
   if (row.item_kind === 'financial_request') {
     if (row.status === 'pending') {
-      if (row.subtype === 'balance_decrease') {
-        return `${creator} propuso una salida`;
-      }
-
       if (row.subtype === 'transaction_reversal') {
         return `${creator} propuso ajustar el movimiento`;
       }
 
-      return `${creator} propuso una entrada`;
+      const flowLabel = historyFlowLabelForCurrentUser(row, currentUserId) ?? 'entrada';
+      return `${creator} propuso una ${flowLabel}`;
     }
 
     if (row.status === 'accepted') {
@@ -1050,7 +1149,7 @@ function buildTimelineStepTitle(
         return `${responder} acepto el ajuste`;
       }
 
-      if (row.subtype === 'balance_decrease' || row.subtype === 'balance_increase') {
+      if (row.subtype === 'balance_increase') {
         return `${responder} acepto la propuesta`;
       }
 
@@ -1066,16 +1165,11 @@ function buildTimelineStepTitle(
     }
   }
 
-  if (row.subtype === 'balance_decrease_acceptance') {
-    return sourceTypeForRow(row) === 'system'
-      ? 'Sistema registro la salida'
-      : `${creator} registro la salida`;
-  }
-
   if (row.subtype === 'balance_increase_acceptance') {
+    const flowLabel = historyFlowLabelForCurrentUser(row, currentUserId) ?? 'entrada';
     return sourceTypeForRow(row) === 'system'
-      ? 'Sistema registro la entrada'
-      : `${creator} registro la entrada`;
+      ? `Sistema registro la ${flowLabel}`
+      : `${creator} registro la ${flowLabel}`;
   }
 
   if (row.subtype === 'transaction_reversal_acceptance') {
@@ -1209,12 +1303,24 @@ function buildLiveSnapshot(input: {
   readonly auditEvents: readonly AuditEventRow[];
 }): AppSnapshot {
   const nameByUserId = buildNameByUserId(input.profiles, input.currentUserId);
+  const profileByUserId = buildProfileByUserId(input.profiles);
   const relationshipsByCounterpartyId = new Map<string, RelationshipRow>();
+  const counterpartyByRelationshipId = new Map<
+    string,
+    {
+      readonly userId: string;
+      readonly displayName: string;
+    }
+  >();
 
   for (const relationship of input.relationships) {
     const counterpartyUserId = getCounterpartyUserId(relationship, input.currentUserId);
     if (counterpartyUserId) {
       relationshipsByCounterpartyId.set(counterpartyUserId, relationship);
+      counterpartyByRelationshipId.set(relationship.id, {
+        userId: counterpartyUserId,
+        displayName: nameByUserId.get(counterpartyUserId) ?? 'Persona',
+      });
     }
   }
 
@@ -1238,15 +1344,26 @@ function buildLiveSnapshot(input: {
     input.currentUserId,
   );
   const contactInviteItems = buildContactInviteItems(input.contactInvites, nameByUserId);
+  const pendingSettlements = buildPendingSettlementItems(
+    input.settlementProposals,
+    settlementParticipantsByProposalId,
+    nameByUserId,
+    input.currentUserId,
+    input.inboxItems,
+  );
 
   const people = Array.from(relationshipsByCounterpartyId.entries())
     .map(([counterpartyUserId, relationship]): PersonCardDto => {
       const requests = requestsByRelationshipId.get(relationship.id) ?? [];
+      const relatedSettlements = pendingSettlements.filter((item) =>
+        item.participantUserIds?.includes(counterpartyUserId),
+      );
       const latestRequest = requests[0];
       const edge = openDebtsByRelationshipId.get(relationship.id);
       const direction = deriveDirection(input.currentUserId, edge, latestRequest);
       const timeline = historyByRelationshipId.get(relationship.id) ?? [];
       const latestHistory = timeline[0];
+      const pendingCount = requests.filter((row) => row.status === 'pending').length + relatedSettlements.length;
       const lastActivityLabel =
         latestRequest && (!latestHistory || latestRequest.created_at >= latestHistory.happened_at)
           ? `Propuesta pendiente ${formatRelativeLabel(latestRequest.created_at)}`
@@ -1257,9 +1374,13 @@ function buildLiveSnapshot(input: {
       return {
         userId: counterpartyUserId,
         displayName: nameByUserId.get(counterpartyUserId) ?? 'Persona',
+        avatarUrl: resolveAvatarUrl(
+          profileByUserId.get(counterpartyUserId)?.avatar_path,
+          profileByUserId.get(counterpartyUserId)?.updated_at ?? null,
+        ),
         netAmountMinor: edge?.amount_minor ?? 0,
         direction,
-        pendingCount: requests.filter((row) => row.status === 'pending').length,
+        pendingCount,
         lastActivityLabel,
       };
     })
@@ -1270,6 +1391,34 @@ function buildLiveSnapshot(input: {
       const relationship = relationshipsByCounterpartyId.get(person.userId);
       const requests = relationship ? (requestsByRelationshipId.get(relationship.id) ?? []) : [];
       const latestPendingRequest = requests.find((request) => request.status === 'pending');
+      const personPendingRequests = requests
+        .filter((request) => request.status === 'pending')
+        .map((request): ActionableItem => ({
+          id: request.id,
+          kind: 'financial_request',
+          title: formatPendingRequestTitle(request, input.currentUserId, nameByUserId),
+          subtitle: formatPendingRequestSubtitle(request, nameByUserId),
+          status:
+            request.responder_user_id === input.currentUserId
+              ? 'requires_you'
+              : 'waiting_other_side',
+          ctaLabel: 'Responder',
+          href: `/person/${person.userId}`,
+          amountMinor: request.amount_minor,
+          counterpartyLabel: person.displayName,
+          tone:
+            requestDirectionForUser(request, input.currentUserId) === 'owes_me'
+              ? 'positive'
+              : 'negative',
+          createdAt: request.created_at,
+        }));
+      const personPendingSettlements = pendingSettlements.filter((item) =>
+        item.participantUserIds?.includes(person.userId),
+      );
+      const pendingItems = sortByNewest([
+        ...personPendingRequests,
+        ...personPendingSettlements,
+      ]).map(actionableItemToActivityItem);
       const historyRows = relationship ? (historyByRelationshipId.get(relationship.id) ?? []) : [];
       const timeline = buildPersonTimeline({
         requests,
@@ -1305,11 +1454,13 @@ function buildLiveSnapshot(input: {
         {
           userId: person.userId,
           displayName: person.displayName,
+          avatarUrl: person.avatarUrl ?? null,
           direction: person.direction,
           netAmountMinor: person.netAmountMinor,
           pendingCount: person.pendingCount,
           headline,
           supportText,
+          pendingItems,
           pendingRequest,
           timeline,
         },
@@ -1318,31 +1469,30 @@ function buildLiveSnapshot(input: {
   );
 
   const pendingRequests = input.financialRequests
-    .filter(
-      (request) =>
-        request.status === 'pending' && request.responder_user_id === input.currentUserId,
-    )
-    .map(
-      (request): ActionableItem => ({
+    .filter((request) => request.status === 'pending')
+    .map((request): ActionableItem => {
+      const counterparty = counterpartyByRelationshipId.get(request.relationship_id);
+
+      return {
         id: request.id,
         kind: 'financial_request',
         title: formatPendingRequestTitle(request, input.currentUserId, nameByUserId),
         subtitle: formatPendingRequestSubtitle(request, nameByUserId),
-        status: 'requires_you',
+        status:
+          request.responder_user_id === input.currentUserId
+            ? 'requires_you'
+            : 'waiting_other_side',
         ctaLabel: 'Responder',
-        href: '/activity',
+        href: counterparty ? `/person/${counterparty.userId}` : '/activity',
         amountMinor: request.amount_minor,
+        counterpartyLabel: counterparty?.displayName,
+        tone:
+          requestDirectionForUser(request, input.currentUserId) === 'owes_me'
+            ? 'positive'
+            : 'negative',
         createdAt: request.created_at,
-      }),
-    );
-
-  const pendingSettlements = buildPendingSettlementItems(
-    input.settlementProposals,
-    settlementParticipantsByProposalId,
-    nameByUserId,
-    input.currentUserId,
-    input.inboxItems,
-  );
+      };
+    });
 
   const pendingItems = sortByNewest([
     ...pendingRequests,
@@ -1350,38 +1500,7 @@ function buildLiveSnapshot(input: {
     ...inviteState.pendingActivityItems,
   ]);
 
-  const historyItems = history
-    .filter((row) => !(row.item_kind === 'financial_request' && row.status === 'pending'))
-    .map((row): ActivityItemDto => {
-      const relationship = input.relationships.find((item) => item.id === row.relationship_id);
-      const counterpartyUserId = relationship
-        ? getCounterpartyUserId(relationship, input.currentUserId)
-        : null;
-      const counterpartyName = counterpartyUserId
-        ? (nameByUserId.get(counterpartyUserId) ?? 'Persona')
-        : 'Persona';
-
-      return {
-        id: row.item_id,
-        kind: historyKindForActivity(row),
-        title: buildTimelineStepTitle(row, input.currentUserId, counterpartyName, nameByUserId),
-        subtitle: buildHistorySubtitle(row, input.currentUserId, counterpartyName, nameByUserId),
-        status: row.status,
-        href: counterpartyUserId ? `/person/${counterpartyUserId}` : '/activity',
-        amountMinor: row.amount_minor,
-        sourceType: sourceTypeForRow(row),
-        detail: row.description ?? undefined,
-        happenedAt: row.happened_at,
-        happenedAtLabel: formatRelativeLabel(row.happened_at),
-        tone: historyToneForRow(row, input.currentUserId),
-        originRequestId: row.origin_request_id
-          ? resolveRootRequestId(row.origin_request_id, requestById)
-          : row.item_id,
-        originSettlementProposalId: row.origin_settlement_proposal_id ?? undefined,
-        counterpartyLabel: counterpartyName,
-      };
-    })
-    .slice(0, 20);
+  const historyItems = buildActivityHistoryItems(peopleById);
 
   const summary = input.openDebts.reduce(
     (accumulator, debt) => {
@@ -1420,6 +1539,7 @@ function buildLiveSnapshot(input: {
       ),
     ]),
   );
+  const currentUserProfileRow = profileByUserId.get(input.currentUserId);
 
   return {
     dashboard: {
@@ -1441,6 +1561,16 @@ function buildLiveSnapshot(input: {
     },
     people,
     peopleById,
+    currentUserProfile: currentUserProfileRow
+      ? {
+          displayName: currentUserProfileRow.display_name,
+          email: currentUserProfileRow.email,
+          avatarUrl: resolveAvatarUrl(
+            currentUserProfileRow.avatar_path,
+            currentUserProfileRow.updated_at,
+          ),
+        }
+      : null,
     incomingInvites: inviteState.incomingInvites,
     outgoingInvites: inviteState.outgoingInvites,
     whatsappInvites: contactInviteItems,
@@ -1481,7 +1611,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     settlementParticipantsResult,
     auditResult,
   ] = await Promise.all([
-    client.from('user_profiles').select('id, display_name, email, created_at, updated_at'),
+    client.from('user_profiles').select('id, display_name, email, avatar_path, created_at, updated_at'),
     client
       .from('contact_invites')
       .select(
@@ -1699,6 +1829,58 @@ export function useCreateRelationshipInviteMutation() {
   });
 }
 
+export function useUpdateProfileAvatarMutation() {
+  const { userId } = useSession();
+
+  return useMutation({
+    mutationFn: async (input: {
+      readonly uri: string;
+      readonly contentType?: string | null;
+    }) => {
+      if (!userId) {
+        throw new Error('No hay una sesion activa.');
+      }
+
+      const client = assertSupabaseClient();
+      const response = await fetch(input.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const normalizedContentType = input.contentType?.toLocaleLowerCase('en-US') ?? '';
+      const fileExtension =
+        normalizedContentType.includes('png')
+          ? 'png'
+          : normalizedContentType.includes('heic')
+            ? 'heic'
+            : normalizedContentType.includes('webp')
+              ? 'webp'
+              : 'jpg';
+      const avatarPath = `${userId}/${Date.now()}.${fileExtension}`;
+
+      const uploadResult = await client.storage
+        .from(AVATAR_BUCKET)
+        .upload(avatarPath, arrayBuffer, {
+          contentType: input.contentType ?? 'image/jpeg',
+          upsert: false,
+        });
+
+      if (uploadResult.error) {
+        throw new Error(uploadResult.error.message);
+      }
+
+      const updateResult = await client
+        .from('user_profiles')
+        .update({ avatar_path: avatarPath } as never)
+        .eq('id', userId);
+
+      if (updateResult.error) {
+        throw new Error(updateResult.error.message);
+      }
+
+      return avatarPath;
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
 export function useCreateWhatsAppInviteMutation() {
   return useMutation({
     mutationFn: async (input: {
@@ -1756,13 +1938,13 @@ export function useCreateRequestMutation() {
   return useMutation({
     mutationFn: async (input: CreateRequestInput) => {
       const payload = createBalanceRequestSchema.parse({
-        idempotencyKey: createIdempotencyKey(`mobile_${input.requestKind}`),
+        idempotencyKey: createIdempotencyKey('mobile_balance_increase'),
         responderUserId: input.responderUserId,
         debtorUserId: input.debtorUserId,
         creditorUserId: input.creditorUserId,
         amountMinor: input.amountMinor,
         description: input.description,
-        requestKind: input.requestKind,
+        requestKind: 'balance_increase',
       });
 
       return invokeSupabaseFunction('create-balance-request', payload);

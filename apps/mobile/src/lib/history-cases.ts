@@ -1,0 +1,489 @@
+import type { ActivityItemDto, PersonDetailDto, PersonTimelineItemDto } from '@happy-circles/application';
+
+import { formatCop } from './data';
+
+type HistoryStatusTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
+type HistoryDirection = 'i_owe' | 'owes_me' | 'neutral';
+
+export interface HistoryCaseItem {
+  readonly id: string;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly status: string;
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system';
+  readonly amountMinor?: number;
+  readonly tone?: 'positive' | 'negative' | 'neutral';
+  readonly flowLabel?: string;
+  readonly detail?: string;
+  readonly happenedAt?: string;
+  readonly happenedAtLabel?: string;
+  readonly originRequestId?: string | null;
+  readonly originSettlementProposalId?: string | null;
+  readonly counterpartyLabel?: string;
+}
+
+export interface HistoryCase<T extends HistoryCaseItem = HistoryCaseItem> {
+  readonly id: string;
+  readonly latest: T;
+  readonly earliest: T;
+  readonly steps: readonly T[];
+  readonly isCycleSnippet: boolean;
+}
+
+export type ActivityHistoryItem = ActivityItemDto & {
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system';
+};
+
+type ComparableHistoryItem = {
+  readonly id: string;
+  readonly kind: ActivityItemDto['kind'];
+  readonly status: string;
+  readonly happenedAt?: string;
+};
+
+function historyStepPriority(item: Pick<ComparableHistoryItem, 'kind' | 'status'>): number {
+  if (item.kind !== 'request') {
+    return 3;
+  }
+
+  if (item.status === 'pending') {
+    return 1;
+  }
+
+  return 2;
+}
+
+function extractHistoryConcept(detail?: string | null): string | null {
+  if (!detail) {
+    return null;
+  }
+
+  let concept = detail.trim();
+  if (concept.length === 0) {
+    return null;
+  }
+
+  if (concept.toLocaleLowerCase('es-CO') === 'cycle settlement system movement') {
+    return null;
+  }
+
+  concept = concept.replace(/^reset\s+/i, '');
+  concept = concept.replace(/^reversal of\s+/i, '');
+  concept = concept.replace(/\s+\S+\s*->\s*\S+\s*$/i, '');
+  concept = concept.trim();
+
+  return concept.length > 0 ? concept : null;
+}
+
+function formatNaturalList(values: readonly string[]): string {
+  if (values.length === 0) {
+    return '';
+  }
+
+  if (values.length === 1) {
+    return values[0]!;
+  }
+
+  if (values.length === 2) {
+    return `${values[0]} y ${values[1]}`;
+  }
+
+  return `${values[0]}, ${values[1]} y ${values.length - 2} mas`;
+}
+
+function uniqueCounterpartyLabels<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string[] {
+  return [
+    ...new Set(
+      itemCase.steps
+        .map((step) => step.counterpartyLabel?.trim())
+        .filter((label): label is string => Boolean(label)),
+    ),
+  ];
+}
+
+function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): string {
+  if (item.kind === 'settlement') {
+    return 'Cierre de ciclo';
+  }
+
+  if (item.kind === 'payment') {
+    return 'Movimiento registrado';
+  }
+
+  if (item.status === 'posted') {
+    return 'Registrado';
+  }
+
+  if (item.status === 'amended') {
+    return 'Monto actualizado';
+  }
+
+  if (item.status === 'accepted') {
+    return 'Aceptada';
+  }
+
+  if (item.status === 'rejected') {
+    return 'Rechazada';
+  }
+
+  return 'Solicitud';
+}
+
+function historyDirectionFromItem(item: HistoryCaseItem): HistoryDirection {
+  if (item.status === 'rejected') {
+    return 'neutral';
+  }
+
+  if (item.kind === 'settlement') {
+    return 'neutral';
+  }
+
+  if (item.kind === 'payment') {
+    const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
+    const counterpartyName = item.counterpartyLabel?.trim();
+
+    if (counterpartyName && from === counterpartyName) {
+      return 'owes_me';
+    }
+
+    if (counterpartyName && to === counterpartyName) {
+      return 'i_owe';
+    }
+  }
+
+  if (item.tone === 'positive') {
+    return 'owes_me';
+  }
+
+  if (item.tone === 'negative') {
+    return 'i_owe';
+  }
+
+  return 'neutral';
+}
+
+function historyCaseKey(
+  item: Pick<HistoryCaseItem, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
+): string {
+  if (item.originSettlementProposalId) {
+    return `settlement:${item.originSettlementProposalId}`;
+  }
+
+  if (item.originRequestId) {
+    return `request:${item.originRequestId}`;
+  }
+
+  return `event:${item.id}`;
+}
+
+export function isHistoryCaseItem(item: ActivityItemDto): item is ActivityHistoryItem {
+  return (
+    item.kind === 'request' ||
+    item.kind === 'payment' ||
+    item.kind === 'settlement' ||
+    item.kind === 'system'
+  );
+}
+
+export function compareHistoryItems<T extends ComparableHistoryItem>(left: T, right: T): number {
+  const timeDiff = Date.parse(right.happenedAt ?? '') - Date.parse(left.happenedAt ?? '');
+  if (timeDiff !== 0) {
+    return timeDiff;
+  }
+
+  const priorityDiff = historyStepPriority(right) - historyStepPriority(left);
+  if (priorityDiff !== 0) {
+    return priorityDiff;
+  }
+
+  return right.id.localeCompare(left.id);
+}
+
+export function buildHistoryCases<T extends HistoryCaseItem>(items: readonly T[]): HistoryCase<T>[] {
+  const sortedItems = [...items].sort(compareHistoryItems);
+
+  const groups = new Map<string, T[]>();
+  for (const item of sortedItems) {
+    const key = historyCaseKey(item);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .flatMap(([id, groupedItems]): HistoryCase<T>[] => {
+      const completedItems = groupedItems.filter((item) => item.status !== 'pending');
+      if (completedItems.length === 0) {
+        return [];
+      }
+
+      const steps = [...groupedItems].reverse();
+      return [
+        {
+          id,
+          // Keep pending proposals inside the expanded timeline, but anchor the case
+          // on the latest completed event so history does not duplicate inbox items.
+          latest: completedItems[0]!,
+          earliest: steps[0]!,
+          steps,
+          isCycleSnippet: groupedItems.some((item) => item.kind === 'settlement'),
+        },
+      ];
+    })
+    .sort((left, right) => compareHistoryItems(left.latest, right.latest));
+}
+
+export function toHistoryFeedItem(
+  item: PersonTimelineItemDto,
+  counterpartyLabel?: string,
+): HistoryCaseItem {
+  return {
+    id: item.id,
+    title: item.title,
+    subtitle: item.subtitle,
+    status: item.status,
+    kind: item.kind,
+    amountMinor: item.amountMinor,
+    tone: item.tone,
+    flowLabel: item.flowLabel,
+    detail: item.detail,
+    happenedAt: item.happenedAt,
+    happenedAtLabel: item.happenedAtLabel,
+    originRequestId: item.originRequestId,
+    originSettlementProposalId: item.originSettlementProposalId,
+    counterpartyLabel,
+  };
+}
+
+export function buildActivityHistoryItems(
+  peopleById: Readonly<Record<string, PersonDetailDto>>,
+): ActivityItemDto[] {
+  return Object.values(peopleById)
+    .flatMap((person) =>
+      person.timeline.map((item): ActivityItemDto => ({
+        id: item.id,
+        title: item.title,
+        subtitle: item.subtitle,
+        status: item.status,
+        href: `/person/${person.userId}`,
+        amountMinor: item.amountMinor,
+        sourceType: item.sourceType,
+        detail: item.detail,
+        happenedAt: item.happenedAt,
+        happenedAtLabel: item.happenedAtLabel,
+        tone: item.tone,
+        flowLabel: item.flowLabel,
+        originRequestId: item.originRequestId,
+        originSettlementProposalId: item.originSettlementProposalId,
+        counterpartyLabel: person.displayName,
+        kind: item.kind,
+      })),
+    )
+    .sort(compareHistoryItems);
+}
+
+export function historyStatusLabel(status: string): string {
+  if (status === 'requires_you') {
+    return 'Por responder';
+  }
+
+  if (status === 'waiting_other_side') {
+    return 'En espera';
+  }
+
+  if (status === 'pending_approvals') {
+    return 'Pendiente';
+  }
+
+  if (status === 'approved') {
+    return 'Aprobado';
+  }
+
+  if (status === 'pending') {
+    return 'Pendiente';
+  }
+
+  if (status === 'amended') {
+    return 'Nuevo monto';
+  }
+
+  if (status === 'accepted') {
+    return 'Aceptada';
+  }
+
+  if (status === 'rejected') {
+    return 'Rechazada';
+  }
+
+  if (status === 'posted') {
+    return 'Registrado';
+  }
+
+  return status;
+}
+
+export function historyStatusTone(status: string): HistoryStatusTone {
+  if (status === 'requires_you' || status === 'pending' || status === 'amended') {
+    return 'warning';
+  }
+
+  if (status === 'accepted' || status === 'posted') {
+    return 'success';
+  }
+
+  if (status === 'rejected') {
+    return 'danger';
+  }
+
+  if (status === 'pending_approvals' || status === 'approved') {
+    return 'primary';
+  }
+
+  return 'neutral';
+}
+
+export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
+  if (item.kind === 'settlement') {
+    return item.counterpartyLabel ? `Ajuste con ${item.counterpartyLabel}` : 'Ajuste registrado';
+  }
+
+  if (item.kind === 'payment') {
+    return 'Se registro el movimiento';
+  }
+
+  if (item.title.endsWith(' propuso un nuevo monto')) {
+    const actor = item.title.replace(' propuso un nuevo monto', '');
+    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
+  }
+
+  if (item.title.startsWith('Tu creo ')) {
+    return item.title.replace('Tu creo ', 'Tu creaste ');
+  }
+
+  if (item.title.startsWith('Tu acepto ')) {
+    return item.title.replace('Tu acepto ', 'Tu aceptaste ');
+  }
+
+  if (item.title.startsWith('Tu rechazo ')) {
+    return item.title.replace('Tu rechazo ', 'Tu rechazaste ');
+  }
+
+  if (item.title.startsWith('Tu registro ')) {
+    return item.title.replace('Tu registro ', 'Tu registraste ');
+  }
+
+  if (item.title.startsWith('Tu confirmo ')) {
+    return item.title.replace('Tu confirmo ', 'Tu confirmaste ');
+  }
+
+  if (item.title.startsWith('Tu aplico ')) {
+    return item.title.replace('Tu aplico ', 'Tu aplicaste ');
+  }
+
+  return item.title;
+}
+
+export function historyImpactTone(
+  item: HistoryCaseItem,
+): 'positive' | 'negative' | 'neutral' | 'danger' {
+  if (item.status === 'rejected') {
+    return 'danger';
+  }
+
+  if (item.kind === 'settlement') {
+    return 'neutral';
+  }
+
+  const direction = historyDirectionFromItem(item);
+
+  if (direction === 'owes_me') {
+    return 'positive';
+  }
+
+  if (direction === 'i_owe') {
+    return 'negative';
+  }
+
+  return 'neutral';
+}
+
+export function historyImpactLabel(item: HistoryCaseItem): string | null {
+  if (item.status === 'rejected') {
+    return 'No cambio el saldo';
+  }
+
+  if (typeof item.amountMinor !== 'number' || item.amountMinor <= 0) {
+    return null;
+  }
+
+  if (item.kind === 'settlement') {
+    return null;
+  }
+
+  const direction = historyDirectionFromItem(item);
+  if (direction === 'neutral') {
+    return null;
+  }
+
+  const amountLabel = formatCop(item.amountMinor);
+  const isProposal = item.kind === 'request' && (item.status === 'pending' || item.status === 'amended');
+  const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
+
+  return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
+}
+
+export function historyCaseEyebrow<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
+  if (itemCase.isCycleSnippet) {
+    return null;
+  }
+
+  return itemCase.latest.counterpartyLabel ?? null;
+}
+
+export function historyCaseImpactLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
+  if (!itemCase.isCycleSnippet) {
+    return historyImpactLabel(itemCase.latest);
+  }
+
+  const movementCount = itemCase.steps.length;
+  if (movementCount <= 0) {
+    return null;
+  }
+
+  return `${movementCount} ajuste${movementCount === 1 ? '' : 's'} aplicado${movementCount === 1 ? '' : 's'}`;
+}
+
+export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
+  if (itemCase.isCycleSnippet) {
+    return 'Cierre de ciclo';
+  }
+
+  for (const step of itemCase.steps) {
+    const concept = extractHistoryConcept(step.detail);
+    if (concept) {
+      return concept;
+    }
+  }
+
+  return compactHistoryLabel(itemCase.latest);
+}
+
+export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
+  const pieces: string[] = [];
+
+  if (itemCase.isCycleSnippet) {
+    const counterparties = uniqueCounterpartyLabels(itemCase);
+    if (counterparties.length > 0) {
+      pieces.push(`Con ${formatNaturalList(counterparties)}`);
+    }
+  }
+
+  if (itemCase.latest.happenedAtLabel) {
+    pieces.push(itemCase.latest.happenedAtLabel);
+  }
+
+  return pieces.join(' | ');
+}

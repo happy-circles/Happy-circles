@@ -1,5 +1,5 @@
-import { SignInScreen } from '@/features/auth/sign-in-screen';
+import { Redirect } from 'expo-router';
 
 export default function CreateAccountRoute() {
-  return <SignInScreen mode="register" />;
+  return <Redirect href="/sign-in?mode=register" />;
 }

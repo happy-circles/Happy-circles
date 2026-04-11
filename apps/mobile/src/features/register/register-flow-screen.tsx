@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TextInput, StyleSheet, Text, View } from 'react-native';
+import { Pressable, TextInput, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ChoiceChip } from '@/components/choice-chip';
@@ -8,15 +8,12 @@ import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { SegmentedControl } from '@/components/segmented-control';
-import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 type Direction = 'i_owe' | 'owes_me';
-type RequestKind = 'balance_increase' | 'balance_decrease';
 
 const DIRECTION_OPTIONS = [
   { label: 'Entrada', value: 'owes_me' },
@@ -30,18 +27,12 @@ function buildDraftPreview(input: {
   readonly amountMinor: number;
   readonly counterpartyName: string;
   readonly direction: Direction;
-  readonly requestKind: RequestKind;
-}): { readonly detail: string; readonly title: string; readonly tone: Direction } {
+}): { readonly summary: string; readonly tone: Direction } {
   const amountLabel = formatCop(input.amountMinor);
   const flowLabel = input.direction === 'owes_me' ? 'entrada' : 'salida';
-  const detail =
-    input.requestKind === 'balance_decrease'
-      ? `Reducira el saldo abierto con ${input.counterpartyName} cuando la otra persona lo acepte.`
-      : `Quedara pendiente hasta que ${input.counterpartyName} la acepte.`;
 
   return {
-    title: `Vas a registrar una ${flowLabel} de ${amountLabel}`,
-    detail,
+    summary: `Se enviara como ${flowLabel} a ${input.counterpartyName} por ${amountLabel}.`,
     tone: input.direction,
   };
 }
@@ -50,19 +41,15 @@ export function RegisterFlowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     personId?: string;
-    requestKind?: string;
     direction?: string;
   }>();
   const { userId } = useSession();
   const snapshotQuery = useAppSnapshot();
   const createRequest = useCreateRequestMutation();
 
-  const contextualRequestKind: RequestKind =
-    params.requestKind === 'balance_decrease' ? 'balance_decrease' : 'balance_increase';
   const contextualPersonId = typeof params.personId === 'string' ? params.personId : '';
   const contextualDirection: Direction | null =
     params.direction === 'i_owe' || params.direction === 'owes_me' ? params.direction : null;
-  const isReductionMode = contextualRequestKind === 'balance_decrease';
 
   const [query, setQuery] = useState('');
   const [personId, setPersonId] = useState(contextualPersonId);
@@ -92,19 +79,9 @@ export function RegisterFlowScreen() {
           amountMinor,
           counterpartyName: selectedPerson.displayName,
           direction,
-          requestKind: contextualRequestKind,
         })
       : null;
-
-  const screenTitle =
-    isReductionMode && contextualDirection
-      ? contextualDirection === 'owes_me'
-        ? 'Registrar entrada'
-        : 'Registrar salida'
-      : 'Nuevo movimiento';
-  const screenSubtitle = isReductionMode
-    ? 'Este flujo reduce un saldo abierto. Solo confirmas monto y concepto.'
-    : 'Registra solo lo esencial: persona, direccion, monto y concepto.';
+  const canShowForm = !snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0;
 
   function openInviteFlow(suggestedName?: string) {
     router.push({
@@ -134,7 +111,6 @@ export function RegisterFlowScreen() {
 
     try {
       await createRequest.mutateAsync({
-        requestKind: contextualRequestKind,
         responderUserId: personId,
         debtorUserId,
         creditorUserId,
@@ -152,49 +128,26 @@ export function RegisterFlowScreen() {
 
   return (
     <ScreenShell
-      eyebrow={isReductionMode ? 'Saldo abierto' : 'Movimiento'}
       footer={
-        <View style={styles.footer}>
-          <View style={styles.footerAction}>
-            <PrimaryAction label="Cerrar" onPress={() => router.dismiss()} variant="ghost" />
-          </View>
-          <View style={styles.footerAction}>
-            <PrimaryAction
-              label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
-              onPress={createRequest.isPending ? undefined : () => void handleSave()}
-              subtitle={isReductionMode ? 'Reducir este saldo' : 'Crear propuesta'}
-            />
-          </View>
-        </View>
+        canShowForm ? (
+          <PrimaryAction
+            label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
+            onPress={createRequest.isPending ? undefined : () => void handleSave()}
+          />
+        ) : undefined
       }
       largeTitle={false}
-      subtitle={screenSubtitle}
-      title={screenTitle}
+      title="Nuevo movimiento"
     >
-      <SurfaceCard padding="lg" variant="accent">
-        <Text style={styles.cardTitle}>
-          {isReductionMode ? 'Movimiento contextual' : 'Registro global'}
-        </Text>
-        <Text style={styles.helper}>
-          {isReductionMode
-            ? 'Vienes desde una relacion concreta, asi que este formulario solo reduce el saldo actual.'
-            : 'Aqui solo creas nuevas entradas o salidas. Las reducciones de saldo salen desde cada relacion.'}
-        </Text>
-      </SurfaceCard>
-
       {message ? <MessageBanner message={message} /> : null}
 
-      {snapshotQuery.isLoading ? (
-        <SurfaceCard>
-          <Text style={styles.helper}>Cargando relaciones activas...</Text>
-        </SurfaceCard>
-      ) : null}
+      {snapshotQuery.isLoading ? <Text style={styles.helper}>Cargando relaciones activas...</Text> : null}
 
       {snapshotQuery.error ? (
-        <SurfaceCard>
-          <Text style={styles.cardTitle}>No pudimos cargar tus relaciones.</Text>
+        <View style={styles.inlineState}>
+          <Text style={styles.stateTitle}>No pudimos cargar tus relaciones.</Text>
           <Text style={styles.helper}>{snapshotQuery.error.message}</Text>
-        </SurfaceCard>
+        </View>
       ) : null}
 
       {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length === 0 ? (
@@ -203,32 +156,42 @@ export function RegisterFlowScreen() {
             description="Primero invita a alguien por WhatsApp. Cuando esa persona este en tu red, podras registrar movimientos aqui."
             title="Todavia no tienes relaciones activas"
           />
-          {!isReductionMode ? (
-            <PrimaryAction
-              label="Invitar persona"
-              onPress={() => openInviteFlow()}
-              subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
-            />
-          ) : null}
+          <PrimaryAction
+            label="Invitar persona"
+            onPress={() => openInviteFlow()}
+            subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
+          />
         </View>
       ) : null}
 
-      {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0 ? (
-        <>
-          <SurfaceCard padding="lg">
-            {isReductionMode ? (
-              selectedPerson ? (
-                <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
-                  <Text style={styles.selectedLabel}>Relacion seleccionada</Text>
-                  <Text style={styles.selectedName}>{selectedPerson.displayName}</Text>
-                </SurfaceCard>
-              ) : (
-                <Text style={styles.helper}>
-                  No pudimos encontrar la relacion que intenta reducirse. Vuelve desde la tarjeta de la persona.
-                </Text>
-              )
-            ) : (
-              <FieldBlock hint="Busca y toca una opcion." label="Persona">
+      {canShowForm ? (
+        <View style={styles.form}>
+          <View style={styles.section}>
+            <FieldBlock label="Tipo">
+              <View style={styles.typeBar}>
+                {DIRECTION_OPTIONS.map((option) => {
+                  const selected = option.value === direction;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setDirection(option.value)}
+                      style={({ pressed }) => [
+                        styles.typeButton,
+                        selected ? styles.typeButtonActive : null,
+                        pressed ? styles.typeButtonPressed : null,
+                      ]}
+                    >
+                      <Text style={[styles.typeLabel, selected ? styles.typeLabelActive : null]}>{option.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </FieldBlock>
+          </View>
+
+          <View style={styles.section}>
+            <FieldBlock label="Persona">
+              <>
                 <TextInput
                   onChangeText={setQuery}
                   placeholder="Buscar por nombre"
@@ -246,52 +209,20 @@ export function RegisterFlowScreen() {
                     />
                   ))}
                 </View>
-              </FieldBlock>
-            )}
-
-            {!isReductionMode && selectedPerson ? (
-              <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
-                <Text style={styles.selectedLabel}>Seleccionaste a</Text>
-                <Text style={styles.selectedName}>{selectedPerson.displayName}</Text>
-              </SurfaceCard>
-            ) : null}
-
-            {!isReductionMode && normalizedQuery.length > 0 && people.length === 0 ? (
-              <SurfaceCard padding="md" variant="accent">
-                <Text style={styles.cardTitle}>No encontramos a esa persona en tu red</Text>
-                <Text style={styles.helper}>
-                  Si es alguien nuevo, invita por WhatsApp y conserva el contexto del monto para el primer mensaje.
-                </Text>
-                <PrimaryAction
-                  label="Invitar por WhatsApp"
-                  onPress={() => openInviteFlow(normalizedQuery)}
-                  variant="secondary"
-                />
-              </SurfaceCard>
-            ) : null}
-          </SurfaceCard>
-
-          <SurfaceCard padding="lg">
-            <FieldBlock
-              hint={isReductionMode ? 'La relacion ya define si esta reduccion es entrada o salida.' : undefined}
-              label="Direccion"
-            >
-              {isReductionMode ? (
-                <SurfaceCard padding="sm" style={styles.selectedPerson} variant="muted">
-                  <Text style={styles.selectedLabel}>Direccion fija</Text>
-                  <Text style={styles.selectedName}>
-                    {direction === 'owes_me' ? 'Entrada' : 'Salida'}
-                  </Text>
-                </SurfaceCard>
-              ) : (
-                <SegmentedControl
-                  options={DIRECTION_OPTIONS}
-                  onChange={setDirection}
-                  value={direction}
-                />
-              )}
+                {selectedPerson ? <Text style={styles.inlineNote}>Con {selectedPerson.displayName}</Text> : null}
+                {normalizedQuery.length > 0 && people.length === 0 ? (
+                  <View style={styles.inlineInvite}>
+                    <Text style={styles.helper}>No esta en tu red.</Text>
+                    <Pressable onPress={() => openInviteFlow(normalizedQuery)} style={styles.inlineInviteButton}>
+                      <Text style={styles.inlineInviteButtonText}>Invitar</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
             </FieldBlock>
+          </View>
 
+          <View style={styles.section}>
             <FieldBlock label="Monto">
               <TextInput
                 keyboardType="number-pad"
@@ -313,8 +244,10 @@ export function RegisterFlowScreen() {
               </View>
               {amountMinor > 0 ? <Text style={styles.amountPreview}>{formatCop(amountMinor)}</Text> : null}
             </FieldBlock>
+          </View>
 
-            <FieldBlock hint="Puedes tocar una sugerencia y ajustarla si hace falta." label="Concepto">
+          <View style={styles.sectionLast}>
+            <FieldBlock label="Concepto">
               <View style={styles.choiceRow}>
                 {DESCRIPTION_SUGGESTIONS.map((item) => (
                   <ChoiceChip
@@ -333,46 +266,75 @@ export function RegisterFlowScreen() {
                 style={[styles.input, styles.textarea]}
                 value={description}
               />
-            </FieldBlock>
-
-            {draftPreview ? (
-              <SurfaceCard
-                padding="md"
-                style={[
-                  styles.previewCard,
-                  draftPreview.tone === 'owes_me' ? styles.previewCardPositive : styles.previewCardNegative,
-                ]}
-                variant="muted"
-              >
-                <Text style={styles.previewEyebrow}>Asi se va a leer</Text>
+              {draftPreview ? (
                 <Text
                   style={[
-                    styles.previewTitle,
-                    draftPreview.tone === 'owes_me' ? styles.previewTitlePositive : styles.previewTitleNegative,
+                    styles.inlinePreview,
+                    draftPreview.tone === 'owes_me' ? styles.inlinePreviewPositive : styles.inlinePreviewNegative,
                   ]}
                 >
-                  {draftPreview.title}
+                  {draftPreview.summary}
                 </Text>
-                <Text style={styles.helper}>{draftPreview.detail}</Text>
-              </SurfaceCard>
-            ) : null}
-          </SurfaceCard>
-        </>
+              ) : null}
+            </FieldBlock>
+          </View>
+        </View>
       ) : null}
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  footer: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  footerAction: {
-    flex: 1,
-  },
   stack: {
     gap: theme.spacing.sm,
+  },
+  inlineState: {
+    gap: theme.spacing.xs,
+  },
+  stateTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
+  },
+  form: {
+    gap: theme.spacing.sm,
+  },
+  section: {
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+  },
+  sectionLast: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+  },
+  typeBar: {
+    alignItems: 'stretch',
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+  },
+  typeButton: {
+    alignItems: 'center',
+    flex: 1,
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  typeButtonActive: {
+    borderBottomColor: theme.colors.primary,
+    borderBottomWidth: 2,
+  },
+  typeButtonPressed: {
+    opacity: 0.88,
+  },
+  typeLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  typeLabelActive: {
+    color: theme.colors.text,
   },
   input: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -400,55 +362,44 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  cardTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-  },
-  selectedPerson: {
-    gap: 2,
-  },
-  selectedLabel: {
+  inlineNote: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
-  selectedName: {
+  inlineInvite: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  inlineInviteButton: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  inlineInviteButtonText: {
     color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
   },
   amountPreview: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
   },
-  previewCard: {
-    gap: theme.spacing.xs,
-  },
-  previewCardPositive: {
-    borderLeftColor: theme.colors.success,
-    borderLeftWidth: 3,
-  },
-  previewCardNegative: {
-    borderLeftColor: theme.colors.warning,
-    borderLeftWidth: 3,
-  },
-  previewEyebrow: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
+  inlinePreview: {
+    fontSize: theme.typography.footnote,
     fontWeight: '700',
-    textTransform: 'uppercase',
+    lineHeight: 18,
   },
-  previewTitle: {
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  previewTitlePositive: {
+  inlinePreviewPositive: {
     color: theme.colors.success,
   },
-  previewTitleNegative: {
+  inlinePreviewNegative: {
     color: theme.colors.warning,
   },
 });

@@ -10,7 +10,9 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly subtitle?: string;
   readonly eyebrow?: string;
   readonly largeTitle?: boolean;
+  readonly titleAlign?: 'left' | 'center';
   readonly headerVariant?: 'card' | 'plain';
+  readonly headerLeading?: ReactNode;
   readonly headerSlot?: ReactNode;
   readonly footer?: ReactNode;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
@@ -21,7 +23,9 @@ export function ScreenShell({
   subtitle,
   eyebrow,
   largeTitle = true,
+  titleAlign = 'left',
   headerVariant = 'card',
+  headerLeading,
   headerSlot,
   footer,
   children,
@@ -43,7 +47,16 @@ export function ScreenShell({
               </View>
             ) : null}
             <View style={styles.heroHeader}>
-              <Text style={[styles.title, largeTitle ? styles.largeTitle : styles.compactTitle]}>{title}</Text>
+              {headerLeading}
+              <Text
+                style={[
+                  styles.title,
+                  titleAlign === 'center' ? styles.titleCentered : null,
+                  largeTitle ? styles.largeTitle : styles.compactTitle,
+                ]}
+              >
+                {title}
+              </Text>
               {headerSlot}
             </View>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -122,6 +135,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flex: 1,
     fontWeight: '800',
+  },
+  titleCentered: {
+    textAlign: 'center',
   },
   largeTitle: {
     fontSize: theme.typography.largeTitle,

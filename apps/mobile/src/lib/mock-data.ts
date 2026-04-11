@@ -63,6 +63,7 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
     pendingCount: 1,
     headline: 'Laura te debe',
     supportText: 'Saldo activo.',
+    pendingItems: [],
     timeline: [
       {
         id: 'laura-1',
@@ -107,6 +108,7 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
     pendingCount: 1,
     headline: 'Tu le debes a Mateo',
     supportText: 'Falta responder una propuesta.',
+    pendingItems: [],
     timeline: [
       {
         id: 'mateo-1',
@@ -140,6 +142,7 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
     pendingCount: 0,
     headline: 'Camila te debe',
     supportText: 'Sin urgencias.',
+    pendingItems: [],
     timeline: [
       {
         id: 'camila-1',

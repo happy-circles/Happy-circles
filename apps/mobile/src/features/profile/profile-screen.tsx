@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { AppAvatar } from '@/components/app-avatar';
 import { MessageBanner } from '@/components/message-banner';
-import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
-import { StatusChip } from '@/components/status-chip';
-import { SurfaceCard } from '@/components/surface-card';
-import { useAppSnapshot } from '@/lib/live-data';
+import { useAppSnapshot, useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import {
   cancelScheduledReminders,
   getNotificationSupport,
@@ -30,8 +28,17 @@ export function ProfileScreen() {
   } = useSession();
   const snapshotQuery = useAppSnapshot();
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
+  const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
+  const avatarMutation = useUpdateProfileAvatarMutation();
 
   const [message, setMessage] = useState<string | null>(null);
+  const accountLabel = currentUserProfile?.displayName ?? email ?? 'Sin sesion';
+  const accountEmail = currentUserProfile?.email ?? email ?? 'Sin correo';
+  const reminderSummary = snapshotQuery.isLoading
+    ? 'Calculando...'
+    : pendingCount > 0
+      ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} hoy`
+      : 'Sin pendientes';
 
   async function handleBiometrics(nextValue: boolean) {
     const result = await setBiometricsEnabled(nextValue);
@@ -67,102 +74,201 @@ export function ProfileScreen() {
     setMessage('Recordatorios desactivados.');
   }
 
-  return (
-    <ScreenShell eyebrow="Cuenta" subtitle="Tu sesion, seguridad y recordatorios en una sola vista." title="Perfil y ajustes">
-      <SurfaceCard padding="lg" variant="accent">
-        <Text style={styles.summaryTitle}>Todo lo importante de tu cuenta esta controlado desde aqui.</Text>
-        <Text style={styles.summaryBody}>
-          {pendingCount > 0
-            ? `Hoy tienes ${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} activo${pendingCount > 1 ? 's' : ''}.`
-            : 'No tienes pendientes activos en este momento.'}
-        </Text>
-      </SurfaceCard>
+  async function uploadPickedAvatar(result: ImagePicker.ImagePickerResult) {
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
 
+    try {
+      await avatarMutation.mutateAsync({
+        uri: result.assets[0].uri,
+        contentType: result.assets[0].mimeType,
+      });
+      setMessage('Foto de perfil actualizada.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo actualizar la foto.');
+    }
+  }
+
+  async function handlePickAvatar() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setMessage('Necesitas permitir acceso a tus fotos para cambiar la imagen.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    await uploadPickedAvatar(result);
+  }
+
+  async function handleTakeAvatarPhoto() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setMessage('Necesitas permitir acceso a la camara para tomar la foto.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      cameraType: ImagePicker.CameraType.front,
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    await uploadPickedAvatar(result);
+  }
+
+  return (
+    <ScreenShell headerVariant="plain" largeTitle={false} title="Perfil">
+      <View style={styles.accountHeader}>
+        <Pressable
+          disabled={avatarMutation.isPending}
+          onPress={() => void handlePickAvatar()}
+          style={({ pressed }) => [styles.avatarButton, pressed ? styles.rowPressed : null]}
+        >
+          <AppAvatar imageUrl={currentUserProfile?.avatarUrl ?? null} label={accountLabel} size={84} />
+        </Pressable>
+        <View style={styles.avatarActions}>
+          <Pressable
+            disabled={avatarMutation.isPending}
+            onPress={() => void handleTakeAvatarPhoto()}
+            style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.rowPressed : null]}
+          >
+            <Text style={styles.changePhotoLabel}>{avatarMutation.isPending ? 'Subiendo...' : 'Tomar foto'}</Text>
+          </Pressable>
+          <Pressable
+            disabled={avatarMutation.isPending}
+            onPress={() => void handlePickAvatar()}
+            style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.rowPressed : null]}
+          >
+            <Text style={styles.changePhotoLabel}>Elegir foto</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.accountEyebrow}>Cuenta</Text>
+        <Text style={styles.accountValue}>{accountLabel}</Text>
+        {accountEmail !== accountLabel ? <Text style={styles.accountMeta}>{accountEmail}</Text> : null}
+      </View>
       {message ? <MessageBanner message={message} /> : null}
 
-      <SectionBlock title="Cuenta" subtitle="Tu estado actual y la salida segura en un solo bloque.">
-        <SurfaceCard padding="lg">
-          <View style={styles.row}>
-            <View style={styles.textWrap}>
-              <Text style={styles.rowTitle}>{email ?? 'Sin sesion'}</Text>
-              <Text style={styles.rowSubtitle}>Sesion real con correo y clave</Text>
-            </View>
-            <StatusChip label="Activa" tone="primary" />
+      <View style={styles.list}>
+        <View style={styles.listRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Correo</Text>
+            <Text style={styles.rowSubtitle}>{accountEmail}</Text>
           </View>
-          <PrimaryAction label="Cerrar sesion" onPress={() => void signOut()} variant="secondary" />
-        </SurfaceCard>
-      </SectionBlock>
+        </View>
 
-      <SectionBlock title="Seguridad" subtitle="Ingreso rapido con biometria para volver a entrar sin clave.">
-        <SurfaceCard padding="lg">
-          <View style={styles.row}>
-            <View style={styles.textWrap}>
-              <Text style={styles.rowTitle}>Desbloqueo con {biometricLabel}</Text>
-              <Text style={styles.rowSubtitle}>
-                {biometricAvailable
-                  ? `Happy Circles pedira ${biometricLabel} al abrirse y tras 5 minutos en segundo plano.`
-                  : 'No disponible en este dispositivo.'}
-              </Text>
-            </View>
-            <Switch
-              disabled={!biometricAvailable}
-              onValueChange={(nextValue) => void handleBiometrics(nextValue)}
-              trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-              value={biometricsEnabled}
-            />
+        <View style={styles.separator} />
+
+        <View style={styles.listRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Biometria</Text>
+            <Text style={styles.rowSubtitle}>{biometricAvailable ? biometricLabel : 'No disponible'}</Text>
           </View>
-        </SurfaceCard>
-      </SectionBlock>
+          <Switch
+            disabled={!biometricAvailable}
+            onValueChange={(nextValue) => void handleBiometrics(nextValue)}
+            trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
+            value={biometricsEnabled}
+          />
+        </View>
 
-      <SectionBlock title="Recordatorios" subtitle="Solo activamos lo que realmente aporta en movil.">
-        <SurfaceCard padding="lg">
-          <View style={styles.row}>
-            <View style={styles.textWrap}>
-              <Text style={styles.rowTitle}>Pendientes del dia</Text>
-              <Text style={styles.rowSubtitle}>
-                {snapshotQuery.isLoading
-                  ? 'Calculando pendientes...'
-                  : pendingCount > 0
-                    ? `Tienes ${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} activo${pendingCount > 1 ? 's' : ''}.`
-                    : 'No hay pendientes activos ahora mismo.'}
-              </Text>
-            </View>
-            <Switch
-              onValueChange={(nextValue) => void handleNotifications(nextValue)}
-              trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-              value={notificationsEnabled}
-            />
+        <View style={styles.separator} />
+
+        <View style={styles.listRow}>
+          <View style={styles.textWrap}>
+            <Text style={styles.rowTitle}>Recordatorios</Text>
+            <Text style={styles.rowSubtitle}>{reminderSummary}</Text>
           </View>
-        </SurfaceCard>
-      </SectionBlock>
+          <Switch
+            onValueChange={(nextValue) => void handleNotifications(nextValue)}
+            trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
+            value={notificationsEnabled}
+          />
+        </View>
 
-      <SectionBlock title="Avanzado" subtitle="Solo trazabilidad y soporte cuando lo necesitas.">
-        <SurfaceCard padding="lg">
-          <PrimaryAction href="/advanced/audit" label="Abrir auditoria" variant="secondary" />
-          <PrimaryAction href="/activity" label="Ver alertas" variant="ghost" />
-        </SurfaceCard>
-      </SectionBlock>
+        <View style={styles.separator} />
+
+        <Pressable onPress={() => void signOut()} style={({ pressed }) => [styles.listRow, pressed ? styles.rowPressed : null]}>
+          <Text style={styles.signOutLabel}>Cerrar sesion</Text>
+        </Pressable>
+      </View>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  summaryTitle: {
+  accountHeader: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+  },
+  avatarButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  avatarActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  avatarActionChip: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  changePhotoLabel: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  accountEyebrow: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  accountValue: {
     color: theme.colors.text,
     fontSize: theme.typography.title3,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: -0.2,
   },
-  summaryBody: {
+  accountMeta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  row: {
+  list: {
+    backgroundColor: 'transparent',
+  },
+  listRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
+    minHeight: 68,
+    paddingVertical: theme.spacing.sm,
+  },
+  rowPressed: {
+    opacity: 0.72,
+  },
+  separator: {
+    backgroundColor: theme.colors.hairline,
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
   },
   textWrap: {
     flex: 1,
@@ -177,5 +283,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
+  },
+  signOutLabel: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
   },
 });

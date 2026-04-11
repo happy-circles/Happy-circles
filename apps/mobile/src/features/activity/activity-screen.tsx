@@ -1,22 +1,35 @@
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { ActivityItemDto, ActivitySectionDto } from '@happy-circles/application';
+import type { ActivityItemDto } from '@happy-circles/application';
 
 import { EmptyState } from '@/components/empty-state';
+import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { MessageBanner } from '@/components/message-banner';
+import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
+import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { SegmentedControl } from '@/components/segmented-control';
-import { StatusChip } from '@/components/status-chip';
-import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
+import {
+  buildHistoryCases,
+  friendlyHistoryStepLabel,
+  historyCardTitle,
+  historyCaseEyebrow,
+  historyCaseImpactLabel,
+  historyCaseMeta,
+  historyImpactLabel,
+  historyImpactTone,
+  isHistoryCaseItem,
+  historyStatusLabel,
+  historyStatusTone,
+} from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
   useAcceptRelationshipInviteMutation,
+  useAmendFinancialRequestMutation,
   useAppSnapshot,
   useApproveSettlementMutation,
   useExecuteSettlementMutation,
@@ -24,296 +37,59 @@ import {
   useRejectRelationshipInviteMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
-import {
-  getNotificationSupport,
-  requestLocalNotificationPermission,
-  scheduleDeferredReminder,
-} from '@/lib/notifications';
 import { theme } from '@/lib/theme';
 
-const SEGMENTS = [
-  { label: 'Por resolver', value: 'pending' },
-  { label: 'Historial', value: 'history' },
-] as const;
+type AlertLane = 'urgent' | 'resolve' | 'follow_up';
+type ActivitySegmentKey = 'pending' | 'history';
+type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
 
-type SegmentKey = (typeof SEGMENTS)[number]['value'];
-type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute' | 'send';
-
-interface ActivityHistoryCase {
-  readonly id: string;
-  readonly latest: ActivityItemDto;
-  readonly earliest: ActivityItemDto;
-  readonly steps: readonly ActivityItemDto[];
-  readonly isSettlementCycle: boolean;
-  readonly counterparties: readonly {
+interface PendingCardPresentation {
+  readonly eyebrow: string;
+  readonly primaryAction?: {
+    readonly key: PendingActionKey;
     readonly label: string;
-    readonly amountMinor: number;
-  }[];
+  };
+  readonly secondaryAction?: {
+    readonly key: 'reject';
+    readonly label: string;
+  };
 }
 
-type ActivityDirection = 'i_owe' | 'owes_me' | 'neutral';
-
-function historyDirectionFromItem(item: ActivityItemDto): ActivityDirection {
-  if (item.status === 'rejected') {
-    return 'neutral';
-  }
-
-  if (item.kind === 'system_note') {
-    return 'neutral';
-  }
-
-  if (item.kind === 'manual_payment') {
-    const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
-    const counterpartyName = item.counterpartyLabel?.trim();
-
-    if (counterpartyName && from === counterpartyName) {
-      return 'owes_me';
-    }
-
-    if (counterpartyName && to === counterpartyName) {
-      return 'i_owe';
-    }
-  }
-
-  if (item.tone === 'positive') {
-    return 'owes_me';
-  }
-
-  if (item.tone === 'negative') {
-    return 'i_owe';
-  }
-
-  return 'neutral';
+interface PendingSnippetContent {
+  readonly detail?: string;
+  readonly meta?: string;
+  readonly variant: 'default' | 'accent';
 }
 
-function historyImpactTone(item: ActivityItemDto): 'positive' | 'negative' | 'neutral' {
-  if (item.kind === 'system_note') {
-    return 'neutral';
-  }
-
-  const direction = historyDirectionFromItem(item);
-
-  if (direction === 'owes_me') {
-    return 'positive';
-  }
-
-  if (direction === 'i_owe') {
-    return 'negative';
-  }
-
-  return 'neutral';
+interface FinancialRequestPendingContent {
+  readonly createdByLabel: string;
+  readonly detail: string;
+  readonly createdAtLabel: string;
 }
 
-function historyImpactLabel(item: ActivityItemDto): string | null {
-  if (item.status === 'rejected') {
-    return 'No cambio el saldo';
-  }
-
-  if (!item.counterpartyLabel || typeof item.amountMinor !== 'number' || item.amountMinor <= 0) {
-    return null;
-  }
-
-  if (item.kind === 'system_note') {
-    return `Cierre de ciclo por ${formatCop(item.amountMinor)}`;
-  }
-
-  const direction = historyDirectionFromItem(item);
-  if (direction === 'neutral') {
-    return null;
-  }
-
-  const amountLabel = formatCop(item.amountMinor);
-  const isProposal = item.status === 'pending' || item.status === 'amended';
-  const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
-
-  return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
+interface PendingGroup {
+  readonly key: AlertLane;
+  readonly title: string;
+  readonly items: readonly ActivityItemDto[];
 }
 
-function activityHistoryCaseKey(
-  item: Pick<ActivityItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
-): string {
-  if (item.originSettlementProposalId) {
-    return `settlement:${item.originSettlementProposalId}`;
-  }
-
-  if (item.originRequestId) {
-    return `request:${item.originRequestId}`;
-  }
-
-  return `event:${item.id}`;
+function isUrgentAlert(item: ActivityItemDto): boolean {
+  return (
+    item.kind === 'settlement_proposal' &&
+    (item.status === 'pending_approvals' || item.status === 'approved')
+  );
 }
 
-function humanStatusLabel(status: string): string {
-  if (status === 'requires_you') {
-    return 'Por responder';
+function classifyAlertLane(item: ActivityItemDto): AlertLane {
+  if (isUrgentAlert(item)) {
+    return 'urgent';
   }
 
-  if (status === 'waiting_other_side') {
-    return 'En espera';
+  if (item.status === 'requires_you') {
+    return 'resolve';
   }
 
-  if (status === 'pending_approvals') {
-    return 'Pendiente';
-  }
-
-  if (status === 'approved') {
-    return 'Aprobado';
-  }
-
-  if (status === 'accepted') {
-    return 'Aceptada';
-  }
-
-  if (status === 'amended') {
-    return 'Nuevo monto';
-  }
-
-  if (status === 'rejected') {
-    return 'Rechazada';
-  }
-
-  if (status === 'posted') {
-    return 'Registrado';
-  }
-
-  return status;
-}
-
-function compactHistoryLabel(item: ActivityItemDto): string {
-  if (item.kind === 'manual_payment') {
-    return 'Movimiento registrado';
-  }
-
-  if (item.kind === 'system_note') {
-    return 'Cierre de ciclo';
-  }
-
-  if (item.status === 'posted') {
-    return 'Registrado';
-  }
-
-  if (item.status === 'amended') {
-    return 'Monto actualizado';
-  }
-
-  if (item.status === 'accepted') {
-    return 'Aceptada';
-  }
-
-  if (item.status === 'rejected') {
-    return 'Rechazada';
-  }
-
-  return 'Solicitud';
-}
-
-function extractActivityConcept(detail?: string | null): string | null {
-  if (!detail) {
-    return null;
-  }
-
-  let concept = detail.trim();
-  if (concept.length === 0) {
-    return null;
-  }
-
-  if (concept.toLocaleLowerCase('es-CO') === 'cycle settlement system movement') {
-    return null;
-  }
-
-  concept = concept.replace(/^reset\s+/i, '');
-  concept = concept.replace(/^reversal of\s+/i, '');
-  concept = concept.replace(/\s+\S+\s*->\s*\S+\s*$/i, '');
-  concept = concept.trim();
-
-  return concept.length > 0 ? concept : null;
-}
-
-function formatNaturalList(values: readonly string[]): string {
-  if (values.length === 0) {
-    return '';
-  }
-
-  if (values.length === 1) {
-    return values[0]!;
-  }
-
-  if (values.length === 2) {
-    return `${values[0]} y ${values[1]}`;
-  }
-
-  return `${values[0]}, ${values[1]} y ${values.length - 2} mas`;
-}
-
-function historyCardTitle(itemCase: ActivityHistoryCase): string {
-  if (itemCase.isSettlementCycle) {
-    const participantNames = itemCase.counterparties.map((item) => item.label);
-    return participantNames.length > 0
-      ? `Cierre de ciclo con ${formatNaturalList(participantNames)}`
-      : 'Cierre de ciclo';
-  }
-
-  for (const step of itemCase.steps) {
-    const concept = extractActivityConcept(step.detail);
-    if (concept) {
-      return concept;
-    }
-  }
-
-  return compactHistoryLabel(itemCase.latest);
-}
-
-function historyCardImpactLine(itemCase: ActivityHistoryCase): string | null {
-  if (itemCase.isSettlementCycle) {
-    return 'Cierre de ciclo aplicado';
-  }
-
-  return historyImpactLabel(itemCase.latest);
-}
-
-function historyCaseMeta(itemCase: ActivityHistoryCase): string {
-  return itemCase.latest.happenedAtLabel ?? '';
-}
-
-function friendlyHistoryLine(item: ActivityItemDto): string {
-  if (item.kind === 'system_note') {
-    return item.counterpartyLabel ? `Se registro con ${item.counterpartyLabel}` : 'Se registro';
-  }
-
-  if (item.kind === 'manual_payment') {
-    return 'Se registro el movimiento';
-  }
-
-  if (item.title.endsWith(' propuso un nuevo monto')) {
-    const actor = item.title.replace(' propuso un nuevo monto', '');
-    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
-  }
-
-  if (item.title.startsWith('Tu creo ')) {
-    return item.title.replace('Tu creo ', 'Tu creaste ');
-  }
-
-  if (item.title.startsWith('Tu acepto ')) {
-    return item.title.replace('Tu acepto ', 'Tu aceptaste ');
-  }
-
-  if (item.title.startsWith('Tu rechazo ')) {
-    return item.title.replace('Tu rechazo ', 'Tu rechazaste ');
-  }
-
-  if (item.title.startsWith('Tu registro ')) {
-    return item.title.replace('Tu registro ', 'Tu registraste ');
-  }
-
-  if (item.title.startsWith('Tu confirmo ')) {
-    return item.title.replace('Tu confirmo ', 'Tu confirmaste ');
-  }
-
-  if (item.title.startsWith('Tu aplico ')) {
-    return item.title.replace('Tu aplico ', 'Tu aplicaste ');
-  }
-
-  return item.title;
+  return 'follow_up';
 }
 
 function readResultStatus(value: unknown): string | null {
@@ -347,26 +123,192 @@ function readNestedProposalId(value: unknown, key: string): string | null {
   return typeof proposalId === 'string' ? proposalId : null;
 }
 
-function toneForStatus(status: string): 'primary' | 'success' | 'warning' | 'neutral' {
-  if (status === 'requires_you' || status === 'pending' || status === 'amended') {
+function actionLabel(
+  itemId: string,
+  busyKey: string | null,
+  action: PendingActionKey,
+  idleLabel: string,
+  busyLabel: string,
+): string {
+  return busyKey === `${itemId}:${action}` ? busyLabel : idleLabel;
+}
+
+function buildPendingCardPresentation(
+  item: ActivityItemDto,
+  busyKey: string | null,
+): PendingCardPresentation {
+  if (item.kind === 'financial_request' && item.status === 'requires_you') {
+    return {
+      eyebrow: 'Decision inmediata',
+      primaryAction: {
+        key: 'accept',
+        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar', 'Aceptando...'),
+      },
+      secondaryAction: {
+        key: 'reject',
+        label: actionLabel(item.id, busyKey, 'reject', 'No aceptar', 'Enviando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'financial_request' && item.status === 'waiting_other_side') {
+    return {
+      eyebrow: 'Esperando respuesta',
+    };
+  }
+
+  if (item.kind === 'settlement_proposal' && item.status === 'pending_approvals') {
+    return {
+      eyebrow: 'Revision compartida',
+      primaryAction: {
+        key: 'approve',
+        label: actionLabel(item.id, busyKey, 'approve', 'Aprobar cierre', 'Aprobando...'),
+      },
+      secondaryAction: {
+        key: 'reject',
+        label: actionLabel(item.id, busyKey, 'reject', 'No aprobar', 'Enviando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'settlement_proposal' && item.status === 'waiting_other_side') {
+    return {
+      eyebrow: 'Esperando a otros',
+    };
+  }
+
+  if (item.kind === 'settlement_proposal' && item.status === 'approved') {
+    return {
+      eyebrow: 'Listo para cerrar',
+      primaryAction: {
+        key: 'execute',
+        label: actionLabel(item.id, busyKey, 'execute', 'Ejecutar cierre', 'Ejecutando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'relationship_invite' && item.status === 'requires_you') {
+    return {
+      eyebrow: 'Nueva invitacion',
+      primaryAction: {
+        key: 'accept',
+        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar invitacion', 'Aceptando...'),
+      },
+      secondaryAction: {
+        key: 'reject',
+        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Rechazando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'relationship_invite' && item.status === 'waiting_other_side') {
+    return {
+      eyebrow: 'Esperando respuesta',
+    };
+  }
+
+  return {
+    eyebrow: 'Seguimiento',
+  };
+}
+
+function splitSubtitleSegments(value: string): string[] {
+  return value
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function buildPendingSnippetContent(
+  item: ActivityItemDto,
+  lane: AlertLane,
+): PendingSnippetContent {
+  const parts = splitSubtitleSegments(item.subtitle);
+
+  if (item.kind === 'financial_request') {
+    const [creatorLabel, detail, createdAtLabel] = parts;
+    const createdByLabel =
+      creatorLabel === 'Tu' ? 'Creado por ti' : creatorLabel ? `Creado por ${creatorLabel}` : null;
+
+    return {
+      detail: detail ?? item.subtitle,
+      meta: [createdByLabel, createdAtLabel ?? null].filter(Boolean).join(' | '),
+      variant: 'default',
+    };
+  }
+
+  if (item.kind === 'settlement_proposal') {
+    const [detail, meta] = parts;
+    return {
+      detail: detail ?? item.subtitle,
+      meta: meta ?? null,
+      variant: 'default',
+    };
+  }
+
+  if (item.kind === 'relationship_invite') {
+    const [detail, meta] = parts;
+    return {
+      detail: detail ?? item.subtitle,
+      meta: meta ?? null,
+      variant: 'default',
+    };
+  }
+
+  const [detail, meta] = parts;
+  return {
+    detail: detail ?? item.subtitle,
+    meta: meta ?? null,
+    variant: 'default',
+  };
+}
+
+function pendingSnippetTone(
+  item: ActivityItemDto,
+): 'primary' | 'success' | 'warning' | 'neutral' | 'danger' {
+  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
     return 'warning';
   }
 
-  if (status === 'accepted' || status === 'posted') {
-    return 'success';
-  }
-
-  if (status === 'pending_approvals' || status === 'approved') {
+  if (item.status === 'approved') {
     return 'primary';
   }
 
+  if (item.status === 'rejected') {
+    return 'danger';
+  }
+
   return 'neutral';
+}
+
+function pendingDetailHref(
+  item: ActivityItemDto,
+): Parameters<ReturnType<typeof useRouter>['push']>[0] | null {
+  if (!item.href) {
+    return null;
+  }
+
+  return item.href as Parameters<ReturnType<typeof useRouter>['push']>[0];
+}
+
+function buildFinancialRequestPendingContent(
+  item: ActivityItemDto,
+): FinancialRequestPendingContent {
+  const parts = splitSubtitleSegments(item.subtitle);
+  const [createdByLabel, detail, createdAtLabel] = parts;
+
+  return {
+    createdByLabel: createdByLabel ?? 'Persona',
+    detail: detail ?? item.subtitle,
+    createdAtLabel: createdAtLabel ?? '',
+  };
 }
 
 export function ActivityScreen() {
   const router = useRouter();
   const snapshotQuery = useAppSnapshot();
   const acceptRequest = useAcceptFinancialRequestMutation();
+  const amendRequest = useAmendFinancialRequestMutation();
   const acceptInvite = useAcceptRelationshipInviteMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
   const rejectInvite = useRejectRelationshipInviteMutation();
@@ -374,123 +316,76 @@ export function ActivityScreen() {
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
 
-  const [segment, setSegment] = useState<SegmentKey>('pending');
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [expandedHistoryCaseIds, setExpandedHistoryCaseIds] = useState<string[]>([]);
+  const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
+  const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
+  const [amendmentAmount, setAmendmentAmount] = useState('');
+  const [amendmentDescription, setAmendmentDescription] = useState('');
+  const [panelSegment, setPanelSegment] = useState<ActivitySegmentKey>('pending');
 
   const sections = snapshotQuery.data?.activitySections ?? [];
-  const section = useMemo<ActivitySectionDto | undefined>(
-    () => sections.find((item) => item.key === segment),
-    [sections, segment],
+  const pendingSection = useMemo(
+    () => sections.find((item) => item.key === 'pending'),
+    [sections],
   );
-  const historyCases = useMemo<ActivityHistoryCase[]>(() => {
-    const peopleById = snapshotQuery.data?.peopleById;
-    if (!peopleById) {
-      return [];
-    }
+  const historySection = useMemo(
+    () => sections.find((item) => item.key === 'history'),
+    [sections],
+  );
+  const pendingItems = pendingSection?.items ?? [];
+  const historyCases = useMemo(
+    () => buildHistoryCases((historySection?.items ?? []).filter(isHistoryCaseItem)),
+    [historySection?.items],
+  );
+  const urgentItems = useMemo(
+    () => pendingItems.filter((item) => classifyAlertLane(item) === 'urgent'),
+    [pendingItems],
+  );
+  const resolveItems = useMemo(
+    () => pendingItems.filter((item) => classifyAlertLane(item) === 'resolve'),
+    [pendingItems],
+  );
+  const followUpItems = useMemo(
+    () => pendingItems.filter((item) => classifyAlertLane(item) === 'follow_up'),
+    [pendingItems],
+  );
+  const alertCount = pendingItems.length;
+  const pendingGroups = useMemo<PendingGroup[]>(
+    () => {
+      const groups: PendingGroup[] = [];
 
-    const allHistoryItems = Object.values(peopleById)
-      .flatMap((person) =>
-        person.timeline.map(
-          (step): ActivityItemDto => ({
-            id: step.id,
-            kind:
-              step.kind === 'payment'
-                ? 'manual_payment'
-                : step.kind === 'settlement'
-                  ? 'system_note'
-                  : 'financial_request',
-            title: step.title,
-            subtitle: step.subtitle,
-            status: step.status,
-            href: `/person/${person.userId}`,
-            amountMinor: step.amountMinor,
-            sourceType: step.sourceType,
-            detail: step.detail,
-            happenedAt: step.happenedAt,
-            happenedAtLabel: step.happenedAtLabel,
-            tone: step.tone,
-            originRequestId: step.originRequestId,
-            originSettlementProposalId: step.originSettlementProposalId,
-            flowLabel: step.flowLabel,
-            counterpartyLabel: person.displayName,
-          }),
-        ),
-      )
-      .sort((left, right) => {
-        const leftTime = left.happenedAt ? Date.parse(left.happenedAt) : 0;
-        const rightTime = right.happenedAt ? Date.parse(right.happenedAt) : 0;
-        return rightTime - leftTime;
-      });
-
-    const groups = new Map<string, ActivityItemDto[]>();
-    for (const item of allHistoryItems) {
-      const key = activityHistoryCaseKey(item);
-      const existing = groups.get(key);
-      if (existing) {
-        existing.push(item);
-      } else {
-        groups.set(key, [item]);
+      if (urgentItems.length > 0) {
+        groups.push({ key: 'urgent', title: 'Urgentes', items: urgentItems });
       }
-    }
 
-    return Array.from(groups.entries())
-      .map(([id, items]) => {
-        const steps = [...items].reverse();
-        const counterpartyAmounts = new Map<string, number>();
-        for (const item of items) {
-          if (!item.counterpartyLabel) {
-            continue;
-          }
+      if (resolveItems.length > 0) {
+        groups.push({ key: 'resolve', title: 'Por resolver', items: resolveItems });
+      }
 
-          const currentAmount = counterpartyAmounts.get(item.counterpartyLabel) ?? 0;
-          const nextAmount =
-            typeof item.amountMinor === 'number' && item.amountMinor > currentAmount ? item.amountMinor : currentAmount;
-          counterpartyAmounts.set(item.counterpartyLabel, nextAmount);
-        }
+      if (followUpItems.length > 0) {
+        groups.push({ key: 'follow_up', title: 'En seguimiento', items: followUpItems });
+      }
 
-        return {
-          id,
-          latest: items[0],
-          earliest: steps[0],
-          steps,
-          isSettlementCycle: id.startsWith('settlement:'),
-          counterparties: Array.from(counterpartyAmounts.entries()).map(([label, amountMinor]) => ({
-            label,
-            amountMinor,
-          })),
-        };
-      })
-      .sort((left, right) => {
-        const leftTime = left.latest.happenedAt ? Date.parse(left.latest.happenedAt) : 0;
-        const rightTime = right.latest.happenedAt ? Date.parse(right.latest.happenedAt) : 0;
-        return rightTime - leftTime;
-      })
-      .filter((itemCase) => itemCase.latest.status !== 'pending');
-  }, [snapshotQuery.data?.peopleById]);
-  const headerSlot = (
-    <View style={styles.bellButton}>
-      <Ionicons color={theme.colors.text} name="notifications" size={20} />
-    </View>
+      return groups;
+    },
+    [followUpItems, resolveItems, urgentItems],
   );
 
-  async function handleRemindLater(title: string, subtitle: string, href?: string) {
-    const support = getNotificationSupport();
-    if (!support.supported) {
-      setMessage(support.reason ?? 'Notificaciones no disponibles en este entorno.');
-      return;
-    }
+  useEffect(() => {
+    setPanelSegment(alertCount > 0 ? 'pending' : 'history');
+  }, [alertCount]);
 
-    const granted = await requestLocalNotificationPermission();
-    if (!granted) {
-      setMessage('No se pudieron activar notificaciones en este dispositivo.');
-      return;
+  useEffect(() => {
+    if (
+      activeAmendmentItemId &&
+      !pendingItems.some((item) => item.id === activeAmendmentItemId)
+    ) {
+      setActiveAmendmentItemId(null);
+      setAmendmentAmount('');
+      setAmendmentDescription('');
     }
-
-    await scheduleDeferredReminder(title, subtitle, href ?? '/activity');
-    setMessage('Recordatorio programado para mas tarde.');
-  }
+  }, [activeAmendmentItemId, pendingItems]);
 
   function showAutoCyclePrompt(proposalId: string | null, status: string | null) {
     if (status !== 'pending_approvals' && status !== 'approved') {
@@ -517,7 +412,190 @@ export function ActivityScreen() {
     );
   }
 
-  async function handlePendingAction(itemId: string, kind: string, status: string, action: PendingActionKey) {
+  function renderPendingCard(item: ActivityItemDto, lane: AlertLane) {
+    if (item.kind === 'financial_request') {
+      const financialRequestContent = buildFinancialRequestPendingContent(item);
+      const detailHref = pendingDetailHref(item);
+      return (
+        <PendingFinancialRequestCard
+          amendmentAmount={amendmentAmount}
+          amendmentDescription={amendmentDescription}
+          amountMinor={item.amountMinor ?? 0}
+          amountTone={
+            item.tone === 'positive' || item.tone === 'negative'
+              ? item.tone
+              : 'neutral'
+          }
+          busyAccept={busyKey === `${item.id}:accept`}
+          busyAmendment={busyKey === `${item.id}:amendment`}
+          busyReject={busyKey === `${item.id}:reject`}
+          counterpartyName={item.counterpartyLabel ?? 'Persona'}
+          createdAtLabel={financialRequestContent.createdAtLabel}
+          createdByLabel={financialRequestContent.createdByLabel}
+          description={financialRequestContent.detail}
+          key={item.id}
+          onAccept={
+            busyKey
+              ? undefined
+              : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')
+          }
+          onChangeAmendmentAmount={setAmendmentAmount}
+          onChangeAmendmentDescription={setAmendmentDescription}
+          onPress={
+            detailHref
+              ? () => router.push(detailHref)
+              : undefined
+          }
+          onReject={
+            busyKey
+              ? undefined
+              : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')
+          }
+          onSubmitAmendment={
+            busyKey
+              ? undefined
+              : () => void handleAmendment(item.id)
+          }
+          onToggleAmendment={
+            busyKey
+              ? undefined
+              : () => toggleAmendment(item)
+          }
+          responseState={
+            item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'
+          }
+          showAmendment={activeAmendmentItemId === item.id}
+          title={item.title}
+        />
+      );
+    }
+
+    const cardPresentation = buildPendingCardPresentation(item, busyKey);
+    const snippetContent = buildPendingSnippetContent(item, lane);
+    const hasInlineActions = Boolean(cardPresentation.primaryAction || cardPresentation.secondaryAction);
+    const detailHref = pendingDetailHref(item);
+
+    return (
+      <PendingSnippetCard
+        amountLabel={
+          typeof item.amountMinor === 'number' && item.amountMinor > 0
+            ? formatCop(item.amountMinor)
+            : null
+        }
+        detail={snippetContent.detail}
+        eyebrow={cardPresentation.eyebrow}
+        key={item.id}
+        meta={snippetContent.meta}
+        onPress={
+          detailHref
+            ? () => router.push(detailHref)
+            : undefined
+        }
+        statusLabel={historyStatusLabel(item.status)}
+        statusTone={historyStatusTone(item.status)}
+        tone={pendingSnippetTone(item)}
+        title={item.title}
+        variant={snippetContent.variant}
+      >
+        {hasInlineActions ? (
+          <View style={styles.cardActionStack}>
+            {cardPresentation.primaryAction ? (
+              <View style={styles.primaryActionSlot}>
+                <PrimaryAction
+                  compact
+                  label={cardPresentation.primaryAction.label}
+                  onPress={
+                    busyKey
+                      ? undefined
+                      : () =>
+                          void handlePendingAction(
+                            item.id,
+                            item.kind,
+                            item.status,
+                            cardPresentation.primaryAction!.key,
+                          )
+                  }
+                />
+              </View>
+            ) : null}
+
+            {cardPresentation.secondaryAction ? (
+              <Pressable
+                onPress={
+                  busyKey
+                    ? undefined
+                    : () =>
+                        void handlePendingAction(
+                          item.id,
+                          item.kind,
+                          item.status,
+                          cardPresentation.secondaryAction!.key,
+                        )
+                }
+                style={({ pressed }) => [
+                  styles.inlineAction,
+                  styles.inlineActionDanger,
+                  pressed ? styles.inlineActionPressed : null,
+                ]}
+              >
+                <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+                  {cardPresentation.secondaryAction.label}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </PendingSnippetCard>
+    );
+  }
+
+  function toggleAmendment(item: ActivityItemDto) {
+    if (activeAmendmentItemId === item.id) {
+      setActiveAmendmentItemId(null);
+      return;
+    }
+
+    const financialRequestContent = buildFinancialRequestPendingContent(item);
+    setActiveAmendmentItemId(item.id);
+    setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
+    setAmendmentDescription(financialRequestContent.detail);
+  }
+
+  async function handleAmendment(requestId: string) {
+    const amountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
+    const trimmedDescription = amendmentDescription.trim();
+
+    if (amountMinor <= 0 || trimmedDescription.length === 0) {
+      setMessage('Define un monto valido y escribe un concepto para proponer otro monto.');
+      return;
+    }
+
+    setBusyKey(`${requestId}:amendment`);
+    setMessage(null);
+
+    try {
+      await amendRequest.mutateAsync({
+        requestId,
+        amountMinor,
+        description: trimmedDescription,
+      });
+      setActiveAmendmentItemId(null);
+      setAmendmentAmount('');
+      setAmendmentDescription('');
+      setMessage('Nuevo monto enviado.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handlePendingAction(
+    itemId: string,
+    kind: string,
+    status: string,
+    action: PendingActionKey,
+  ) {
     const key = `${itemId}:${action}`;
     setBusyKey(key);
     setMessage(null);
@@ -572,20 +650,13 @@ export function ActivityScreen() {
         return;
       }
 
-      if (kind === 'relationship_invite') {
-        if (status === 'requires_you') {
-          if (action === 'accept') {
-            await acceptInvite.mutateAsync(itemId);
-            setMessage('Invitacion aceptada.');
-          } else {
-            await rejectInvite.mutateAsync(itemId);
-            setMessage('Invitacion rechazada.');
-          }
-          return;
-        }
-
-        if (status === 'waiting_other_side' && action === 'send') {
-          setMessage('Esta invitacion sigue esperando respuesta de la otra persona.');
+      if (kind === 'relationship_invite' && status === 'requires_you') {
+        if (action === 'accept') {
+          await acceptInvite.mutateAsync(itemId);
+          setMessage('Invitacion aceptada.');
+        } else {
+          await rejectInvite.mutateAsync(itemId);
+          setMessage('Invitacion rechazada.');
         }
       }
     } catch (error) {
@@ -596,516 +667,268 @@ export function ActivityScreen() {
   }
 
   function toggleHistoryCase(caseId: string) {
-    setExpandedHistoryCaseIds((current) =>
-      current.includes(caseId) ? current.filter((item) => item !== caseId) : [...current, caseId],
+    setExpandedCaseIds((current) =>
+      current.includes(caseId)
+        ? current.filter((item) => item !== caseId)
+        : [...current, caseId],
     );
   }
 
   if (snapshotQuery.isLoading) {
     return (
-      <ScreenShell eyebrow="Centro de respuestas" headerSlot={headerSlot} subtitle="Cargando alertas e historial." title="Alertas">
-        <Text style={styles.supportText}>Estamos leyendo las acciones reales desde Supabase.</Text>
-      </ScreenShell>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingState}>
+          <Text style={styles.supportText}>Estamos leyendo las acciones reales desde Supabase.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell eyebrow="Centro de respuestas" headerSlot={headerSlot} subtitle="No pudimos cargar la actividad." title="Alertas">
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
-      </ScreenShell>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingState}>
+          <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScreenShell
-      eyebrow="Centro de respuestas"
-      headerSlot={headerSlot}
-      subtitle="Responde, aprueba o ejecuta sin perder contexto."
-      title="Alertas"
-    >
-      <SurfaceCard padding="lg" variant="accent">
-        <View style={styles.summaryHeader}>
-          <Text style={styles.summaryTitle}>
-            {segment === 'pending' ? 'Todo lo que exige una decision tuya.' : 'Trazabilidad reciente de tu circulo.'}
-          </Text>
-          <StatusChip
-            label={
-              segment === 'pending'
-                ? `${section?.items.length ?? 0} activos`
-                : `${historyCases.length} ciclos`
-            }
-            tone={segment === 'pending' ? 'warning' : 'primary'}
-          />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.layout}>
+        <View style={styles.fixedTop}>
+          <View style={styles.heroBlock}>
+            <Text style={styles.heroTitle}>Alertas</Text>
+          </View>
         </View>
-        <Text style={styles.summaryBody}>
-          {section?.description ?? 'Aqui veras las respuestas y el historial de forma simple.'}
-        </Text>
-      </SurfaceCard>
 
-      <SegmentedControl options={SEGMENTS} onChange={setSegment} value={segment} />
-
-      {message ? <MessageBanner message={message} /> : null}
-
-      <SectionBlock subtitle={section?.description} title={section?.title ?? 'Actividad'}>
-        {!section || (segment === 'history' ? historyCases.length === 0 : section.items.length === 0) ? (
-          <EmptyState
-            actionHref="/register"
-            actionLabel="Registrar movimiento"
-            description={section?.emptyMessage ?? 'No hay movimientos para mostrar.'}
-            title="Todo al dia"
-          />
-        ) : segment === 'history' ? (
-          historyCases.map((itemCase) => {
-            const isExpanded = expandedHistoryCaseIds.includes(itemCase.id);
-            const latest = itemCase.latest;
-            const caseMeta = historyCaseMeta(itemCase);
-            const caseImpact = historyCardImpactLine(itemCase);
-            const caseTone = itemCase.isSettlementCycle ? 'neutral' : historyImpactTone(latest);
-
-            return (
-              <SurfaceCard
-                key={itemCase.id}
-                padding="lg"
+        <View style={styles.panelArea}>
+          <View style={styles.tabBar}>
+            <Pressable
+              onPress={() => setPanelSegment('pending')}
+              style={({ pressed }) => [
+                styles.tabButton,
+                panelSegment === 'pending' ? styles.tabButtonActive : null,
+                pressed ? styles.tabButtonPressed : null,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.historyCard,
-                  caseTone === 'positive' ? styles.historyCardPositive : null,
-                  caseTone === 'negative' ? styles.historyCardNegative : null,
+                  styles.tabLabel,
+                  panelSegment === 'pending' ? styles.tabLabelActive : null,
                 ]}
               >
-                <View style={styles.historyHeader}>
-                  <View style={styles.historyTextWrap}>
-                    <Text style={styles.historyTitle}>{historyCardTitle(itemCase)}</Text>
-                    {caseImpact ? (
-                      <Text
-                        style={[
-                          itemCase.isSettlementCycle ? styles.historyBreakdown : styles.historyImpact,
-                          caseTone === 'positive' ? styles.amountPositive : null,
-                          caseTone === 'negative' ? styles.amountNegative : null,
-                        ]}
-                      >
-                        {caseImpact}
-                      </Text>
-                    ) : null}
-                    {caseMeta ? <Text style={styles.historyMeta}>{caseMeta}</Text> : null}
-                  </View>
-                  <View style={styles.historyTrailing}>
-                    <StatusChip label={humanStatusLabel(latest.status)} tone={toneForStatus(latest.status)} />
-                  </View>
-                </View>
+                Pendientes
+              </Text>
+            </Pressable>
+            <View style={styles.tabDivider} />
+            <Pressable
+              onPress={() => setPanelSegment('history')}
+              style={({ pressed }) => [
+                styles.tabButton,
+                panelSegment === 'history' ? styles.tabButtonActive : null,
+                pressed ? styles.tabButtonPressed : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  panelSegment === 'history' ? styles.tabLabelActive : null,
+                ]}
+              >
+                Historial
+              </Text>
+            </Pressable>
+          </View>
 
-                <View style={styles.historyFooter}>
-                  <View />
-                  <Pressable
-                    onPress={() => toggleHistoryCase(itemCase.id)}
-                    style={({ pressed }) => [styles.historyLink, pressed ? styles.historyLinkPressed : null]}
-                  >
-                    <Text style={styles.historyLinkText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
-                  </Pressable>
-                </View>
+          {message ? <MessageBanner message={message} /> : null}
 
-                {isExpanded ? (
-                  <View style={styles.historySteps}>
-                    {itemCase.steps.map((step, index) => {
-                      const stepTone = historyImpactTone(step);
-                      const stepImpact = historyImpactLabel(step);
+          <View style={styles.sheetScrollWrap}>
+            <ScrollView
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {panelSegment === 'pending' ? (
+                alertCount === 0 ? (
+                  <EmptyState
+                    description={
+                      pendingSection?.emptyMessage ??
+                      'Cuando haya algo por responder o seguir, aparecera aqui.'
+                    }
+                    title="Nada pendiente"
+                  />
+                ) : (
+                  pendingGroups.length === 1 ? (
+                    pendingGroups[0]!.items.map((item) =>
+                      renderPendingCard(item, pendingGroups[0]!.key),
+                    )
+                  ) : (
+                    pendingGroups.map((group) => (
+                      <SectionBlock key={group.key} title={group.title}>
+                        {group.items.map((item) => renderPendingCard(item, group.key))}
+                      </SectionBlock>
+                    ))
+                  )
+                )
+              ) : historyCases.length === 0 ? (
+                <EmptyState
+                  description={
+                    historySection?.emptyMessage ??
+                    'Cuando haya actividad registrada, aparecera aqui.'
+                  }
+                  title="Sin historial reciente"
+                />
+              ) : (
+                historyCases.map((itemCase) => {
+                  const isExpanded = expandedCaseIds.includes(itemCase.id);
+                  const latest = itemCase.latest;
+                  const caseMeta = historyCaseMeta(itemCase) || null;
+                  const caseImpact = historyCaseImpactLabel(itemCase);
+                  const caseTone = historyImpactTone(latest) as HistoryCaseTone;
 
-                      return (
-                        <View key={step.id} style={styles.historyStepRow}>
-                          <View style={styles.historyStepRail}>
-                            <View
-                              style={[
-                                styles.historyStepMarker,
-                                stepTone === 'positive' ? styles.historyStepMarkerPositive : null,
-                                stepTone === 'negative' ? styles.historyStepMarkerNegative : null,
-                              ]}
-                            />
-                            {index < itemCase.steps.length - 1 ? <View style={styles.historyStepLine} /> : null}
-                          </View>
-                          <View style={styles.historyStepBody}>
-                            <View style={styles.historyStepTop}>
-                              <Text style={styles.historyStepTitle}>{friendlyHistoryLine(step)}</Text>
-                              {typeof step.amountMinor === 'number' && step.amountMinor > 0 ? (
-                                <Text
-                                  style={[
-                                    styles.historyStepAmount,
-                                    stepTone === 'positive' ? styles.amountPositive : null,
-                                    stepTone === 'negative' ? styles.amountNegative : null,
-                                  ]}
-                                >
-                                  {formatCop(step.amountMinor)}
-                                </Text>
-                              ) : null}
-                            </View>
-                            {stepImpact ? (
-                              <Text
-                                style={[
-                                  styles.historyStepImpact,
-                                  stepTone === 'positive' ? styles.amountPositive : null,
-                                  stepTone === 'negative' ? styles.amountNegative : null,
-                                ]}
-                              >
-                                {stepImpact}
-                              </Text>
-                            ) : null}
-                            {step.happenedAtLabel ? (
-                              <Text style={styles.historyStepMeta}>{step.happenedAtLabel}</Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
-              </SurfaceCard>
-            );
-          })
-        ) : (
-          section.items.map((item) => {
-            const canAcceptOrReject = segment === 'pending' && item.kind === 'financial_request';
-            const canApproveOrReject =
-              segment === 'pending' &&
-              item.kind === 'settlement_proposal' &&
-              item.status === 'pending_approvals';
-            const canRespondInvite =
-              segment === 'pending' &&
-              item.kind === 'relationship_invite' &&
-              item.status === 'requires_you';
-            const canExecute =
-              segment === 'pending' &&
-              item.kind === 'settlement_proposal' &&
-              item.status === 'approved';
-            const canOnlyTrackInvite =
-              segment === 'pending' && item.kind === 'relationship_invite' && item.status === 'waiting_other_side';
-
-            return (
-              <SurfaceCard key={item.id} padding="lg">
-                <View style={styles.header}>
-                  <View style={styles.textWrap}>
-                    <Text style={styles.title}>{item.title}</Text>
-                    <Text style={styles.subtitle}>{item.subtitle}</Text>
-                  </View>
-                  <View style={styles.chips}>
-                    {item.sourceType ? (
-                      <StatusChip
-                        label={item.sourceType === 'system' ? 'Sistema' : 'Usuario'}
-                        tone={item.sourceType === 'system' ? 'primary' : 'neutral'}
-                      />
-                    ) : null}
-                    <StatusChip label={humanStatusLabel(item.status)} tone={toneForStatus(item.status)} />
-                  </View>
-                </View>
-
-                {typeof item.amountMinor === 'number' && item.amountMinor > 0 ? (
-                  <Text style={styles.amount}>{formatCop(item.amountMinor)}</Text>
-                ) : null}
-
-                <View style={styles.actionRow}>
-                  {item.href ? (
-                    <View style={styles.actionSlot}>
-                      <PrimaryAction href={item.href} label="Abrir" variant="secondary" />
-                    </View>
-                  ) : null}
-
-                  {canAcceptOrReject ? (
-                    <>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:accept` ? 'Aceptando...' : 'Aceptar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')}
-                        />
-                      </View>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aceptar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')}
-                          variant="ghost"
-                        />
-                      </View>
-                    </>
-                  ) : null}
-
-                  {canApproveOrReject ? (
-                    <>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'approve')}
-                        />
-                      </View>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')}
-                          variant="ghost"
-                        />
-                      </View>
-                    </>
-                  ) : null}
-
-                  {canExecute ? (
-                    <View style={styles.actionSlot}>
-                      <PrimaryAction
-                        label={busyKey === `${item.id}:execute` ? 'Ejecutando...' : 'Ejecutar'}
-                        onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'execute')}
-                      />
-                    </View>
-                  ) : null}
-
-                  {canRespondInvite ? (
-                    <>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:accept` ? 'Aceptando...' : 'Aceptar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')}
-                        />
-                      </View>
-                      <View style={styles.actionSlot}>
-                        <PrimaryAction
-                          label={busyKey === `${item.id}:reject` ? 'Rechazando...' : 'Rechazar'}
-                          onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')}
-                          variant="ghost"
-                        />
-                      </View>
-                    </>
-                  ) : null}
-
-                  {canOnlyTrackInvite ? (
-                    <View style={styles.actionSlot}>
-                      <PrimaryAction
-                        label={busyKey === `${item.id}:send` ? 'Actualizando...' : 'Esperando respuesta'}
-                        onPress={busyKey ? undefined : () => void handlePendingAction(item.id, item.kind, item.status, 'send')}
-                        variant="ghost"
-                      />
-                    </View>
-                  ) : null}
-                  {segment === 'pending' ? (
-                    <View style={styles.actionSlot}>
-                      <PrimaryAction
-                        label="Recordarme"
-                        onPress={() => void handleRemindLater(item.title, item.subtitle, item.href)}
-                        variant="ghost"
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              </SurfaceCard>
-            );
-          })
-        )}
-      </SectionBlock>
-    </ScreenShell>
+                  return (
+                    <HistoryCaseCard
+                      eyebrow={historyCaseEyebrow(itemCase)}
+                      impact={caseImpact}
+                      isCycleSnippet={itemCase.isCycleSnippet}
+                      isExpanded={isExpanded}
+                      key={itemCase.id}
+                      meta={caseMeta}
+                      onToggle={() => toggleHistoryCase(itemCase.id)}
+                      statusLabel={historyStatusLabel(latest.status)}
+                      statusTone={historyStatusTone(latest.status)}
+                      steps={itemCase.steps.map((step) => ({
+                        id: step.id,
+                        title: friendlyHistoryStepLabel(step),
+                        amountLabel:
+                          typeof step.amountMinor === 'number' && step.amountMinor > 0
+                            ? formatCop(step.amountMinor)
+                            : null,
+                        impact: historyImpactLabel(step),
+                        meta: step.happenedAtLabel ?? null,
+                        tone: historyImpactTone(step) as HistoryCaseTone,
+                      }))}
+                      title={historyCardTitle(itemCase)}
+                      tone={caseTone}
+                    />
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  bellButton: {
+  safeArea: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  layout: {
+    alignSelf: 'center',
+    flex: 1,
+    gap: theme.spacing.sm,
+    maxWidth: 560,
+    paddingBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    width: '100%',
+  },
+  fixedTop: {
+    gap: theme.spacing.xs,
+  },
+  heroBlock: {
+    paddingBottom: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+  },
+  heroTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title1,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  panelArea: {
+    flex: 1,
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+  },
+  tabBar: {
+    alignItems: 'stretch',
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+  },
+  tabButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.small,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
+    flex: 1,
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  tabButtonActive: {
+    borderBottomColor: theme.colors.primary,
+    borderBottomWidth: 2,
+  },
+  tabButtonPressed: {
+    opacity: 0.88,
+  },
+  tabDivider: {
+    backgroundColor: theme.colors.hairline,
+    marginBottom: theme.spacing.sm,
+    width: StyleSheet.hairlineWidth,
+  },
+  tabLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  tabLabelActive: {
+    color: theme.colors.text,
+    fontWeight: '800',
+  },
+  sheetScrollWrap: {
+    flex: 1,
+  },
+  sheetScrollContent: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
   },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  summaryHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+  loadingState: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
   },
-  summaryTitle: {
-    color: theme.colors.text,
-    flex: 1,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    letterSpacing: -0.2,
+  cardActionStack: {
+    gap: theme.spacing.xs,
   },
-  summaryBody: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
+  primaryActionSlot: {
+    width: '100%',
   },
-  historyCard: {
-    gap: theme.spacing.md,
+  inlineAction: {
+    paddingVertical: 4,
   },
-  historyCardPositive: {
-    borderLeftColor: theme.colors.success,
-    borderLeftWidth: 3,
+  inlineActionPressed: {
+    opacity: 0.62,
   },
-  historyCardNegative: {
-    borderLeftColor: theme.colors.warning,
-    borderLeftWidth: 3,
-  },
-  historyHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  historyTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  historyTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  historyMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  historyImpact: {
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  historyBreakdown: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  historyTrailing: {
-    alignItems: 'flex-end',
-    gap: theme.spacing.sm,
-  },
-  amountPositive: {
-    color: theme.colors.success,
-  },
-  amountNegative: {
-    color: theme.colors.warning,
-  },
-  historyFooter: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  historyLink: {
-    borderRadius: theme.radius.medium,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-  },
-  historyLinkPressed: {
-    backgroundColor: theme.colors.surfaceSoft,
-  },
-  historyLinkText: {
+  inlineActionText: {
     color: theme.colors.primary,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
   },
-  historySteps: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+  inlineActionDanger: {
+    backgroundColor: 'transparent',
   },
-  historyStepRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  historyStepRail: {
-    alignItems: 'center',
-    width: 14,
-  },
-  historyStepMarker: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    height: 10,
-    marginTop: 4,
-    width: 10,
-  },
-  historyStepMarkerPositive: {
-    backgroundColor: theme.colors.success,
-  },
-  historyStepMarkerNegative: {
-    backgroundColor: theme.colors.warning,
-  },
-  historyStepLine: {
-    backgroundColor: theme.colors.hairline,
-    flex: 1,
-    marginTop: 4,
-    width: 1,
-  },
-  historyStepBody: {
-    flex: 1,
-    gap: 4,
-  },
-  historyStepTop: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  historyStepTitle: {
-    color: theme.colors.text,
-    flex: 1,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
-    paddingRight: theme.spacing.sm,
-  },
-  historyStepImpact: {
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  historyStepMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-  },
-  historyStepAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
-  header: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  textWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  chips: {
-    alignItems: 'flex-end',
-    gap: theme.spacing.xs,
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  amount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  actionSlot: {
-    flexGrow: 1,
-    minWidth: 130,
+  inlineActionDangerText: {
+    color: theme.colors.danger,
   },
 });

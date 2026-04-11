@@ -9,14 +9,18 @@ import {
   useState,
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Linking from 'expo-linking';
-import { AppState } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { AppState, Platform } from 'react-native';
 import { emailPasswordSignInSchema, registrationSchema } from '@happy-circles/shared';
 
 import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
 import { getBiometricSupport, authenticateWithBiometrics } from '@/lib/security';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 type SessionStatus = 'loading' | 'signed_out' | 'signed_in_unlocked' | 'signed_in_locked';
 type AuthMode = 'supabase';
@@ -53,10 +57,13 @@ interface SessionContextValue {
   readonly notificationsEnabled: boolean;
   readonly biometricLabel: string;
   readonly biometricAvailable: boolean;
+  readonly appleSignInAvailable: boolean;
   readonly isSignedIn: boolean;
   readonly isLocked: boolean;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
+  signInWithGoogle(): Promise<string>;
+  signInWithApple(): Promise<string>;
   signOut(): Promise<void>;
   unlock(): Promise<boolean>;
   lock(): void;
@@ -98,6 +105,34 @@ function extractAuthCallbackTokens(url: string): AuthCallbackTokens | null {
   };
 }
 
+function extractAuthCallbackCode(url: string): string | null {
+  const queryIndex = url.indexOf('?');
+  if (queryIndex === -1) {
+    return null;
+  }
+
+  const query = url.slice(queryIndex + 1).split('#')[0];
+  const params = new URLSearchParams(query);
+  const code = params.get('code');
+
+  return code && code.length > 0 ? code : null;
+}
+
+function generateSecureNonce(length = 32): string {
+  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const randomValues = new Uint8Array(length);
+
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(randomValues);
+  } else {
+    for (let index = 0; index < randomValues.length; index += 1) {
+      randomValues[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join('');
+}
+
 function formatValidationMessage(error: unknown): string {
   if (
     typeof error === 'object' &&
@@ -126,6 +161,26 @@ function formatSupabaseAuthErrorMessage(message: string): string {
   return message;
 }
 
+function buildAppleFullName(
+  fullName: AppleAuthentication.AppleAuthenticationFullName | null | undefined,
+): string | null {
+  if (!fullName) {
+    return null;
+  }
+
+  const normalized = [
+    fullName.givenName?.trim(),
+    fullName.middleName?.trim(),
+    fullName.familyName?.trim(),
+  ].filter((part): part is string => Boolean(part));
+
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  return normalized.join(' ');
+}
+
 export function SessionProvider({ children }: PropsWithChildren) {
   const authMode: AuthMode = 'supabase';
 
@@ -136,6 +191,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('biometria');
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   const backgroundedAtRef = useRef<number | null>(null);
@@ -144,10 +200,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
     let active = true;
 
     async function hydrate() {
-      const [biometricValue, notificationValue, support] = await Promise.all([
+      const [biometricValue, notificationValue, support, appleAvailable] = await Promise.all([
         getStoredItem(BIOMETRICS_KEY),
         getStoredItem(NOTIFICATIONS_KEY),
         getBiometricSupport(),
+        Platform.OS === 'ios' ? AppleAuthentication.isAvailableAsync().catch(() => false) : Promise.resolve(false),
       ]);
 
       if (!active) {
@@ -161,6 +218,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setNotificationsEnabledState(nextNotificationsEnabled);
       setBiometricAvailable(support.available);
       setBiometricLabel(support.label);
+      setAppleSignInAvailable(appleAvailable);
 
       if (!supabase) {
         setUserId(null);
@@ -226,6 +284,20 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const applySessionFromUrl = useCallback(async (url: string | null) => {
     if (!supabase || !url) {
+      return;
+    }
+
+    const authCode = extractAuthCallbackCode(url);
+    if (authCode) {
+      const { error } = await supabase.auth.exchangeCodeForSession(authCode);
+
+      if (error) {
+        console.warn(
+          'Failed to exchange Supabase auth code from auth callback',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+
       return;
     }
 
@@ -362,6 +434,115 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    if (!supabase) {
+      return 'Supabase no esta configurado en esta app.';
+    }
+
+    const redirectTo = Linking.createURL('/sign-in');
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
+
+    if (error) {
+      return formatSupabaseAuthErrorMessage(error.message);
+    }
+
+    if (!data?.url) {
+      return 'No se pudo iniciar Google.';
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+      return 'Inicio con Google cancelado.';
+    }
+
+    if (result.type === 'success') {
+      await applySessionFromUrl(result.url);
+      return 'Sesion iniciada.';
+    }
+
+    return 'No se pudo completar el inicio con Google.';
+  }, [applySessionFromUrl]);
+
+  const signInWithApple = useCallback(async () => {
+    if (Platform.OS !== 'ios') {
+      return 'Apple solo esta disponible en iPhone.';
+    }
+
+    if (!supabase) {
+      return 'Supabase no esta configurado en esta app.';
+    }
+
+    const available = await AppleAuthentication.isAvailableAsync().catch(() => false);
+    if (!available) {
+      return 'Apple no esta disponible en este dispositivo.';
+    }
+
+    try {
+      const nonce = generateSecureNonce();
+      const credential = await AppleAuthentication.signInAsync({
+        nonce,
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        return 'Apple no devolvio un token valido.';
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce,
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      const fullName = buildAppleFullName(credential.fullName);
+      if (fullName) {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: {
+            display_name: fullName,
+            full_name: fullName,
+            given_name: credential.fullName?.givenName?.trim() ?? null,
+            family_name: credential.fullName?.familyName?.trim() ?? null,
+          },
+        });
+
+        if (metadataError) {
+          console.warn(
+            'Failed to persist Apple full name metadata',
+            metadataError instanceof Error ? metadataError.message : String(metadataError),
+          );
+        }
+      }
+
+      return 'Sesion iniciada.';
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { readonly code?: string }).code === 'ERR_REQUEST_CANCELED'
+      ) {
+        return 'Inicio con Apple cancelado.';
+      }
+
+      return formatValidationMessage(error);
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     if (supabase) {
       await supabase.auth.signOut();
@@ -457,10 +638,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
       notificationsEnabled,
       biometricLabel,
       biometricAvailable,
+      appleSignInAvailable,
       isSignedIn: status === 'signed_in_unlocked' || status === 'signed_in_locked',
       isLocked: status === 'signed_in_locked',
       signInWithPassword,
       registerAccount,
+      signInWithGoogle,
+      signInWithApple,
       signOut,
       unlock,
       lock,
@@ -476,8 +660,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
       notificationsEnabled,
       biometricLabel,
       biometricAvailable,
+      appleSignInAvailable,
       signInWithPassword,
       registerAccount,
+      signInWithGoogle,
+      signInWithApple,
       signOut,
       unlock,
       lock,

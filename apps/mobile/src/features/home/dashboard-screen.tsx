@@ -4,10 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { EmptyState } from '@/components/empty-state';
+import { AppAvatar } from '@/components/app-avatar';
 import { PersonRow } from '@/components/person-row';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
@@ -15,6 +15,7 @@ import { theme } from '@/lib/theme';
 export function DashboardScreen() {
   const snapshotQuery = useAppSnapshot();
   const dashboard = snapshotQuery.data?.dashboard;
+  const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const [personQuery, setPersonQuery] = useState('');
   const normalizedQuery = personQuery.trim().toLocaleLowerCase('es-CO');
   const activePeople = dashboard?.activePeople ?? [];
@@ -27,15 +28,10 @@ export function DashboardScreen() {
       person.displayName.toLocaleLowerCase('es-CO').includes(normalizedQuery),
     );
   }, [activePeople, normalizedQuery]);
-  const attentionCount = activePeople.filter((person) => person.pendingCount > 0).length;
-  const peopleSubtitle =
-    attentionCount > 0
-      ? `${attentionCount} persona${attentionCount > 1 ? 's' : ''} requieren atencion.`
-      : 'Saldos y movimientos.';
 
   if (snapshotQuery.isLoading || !dashboard) {
     return (
-      <ScreenShell headerVariant="plain" title="Happy Circles">
+      <ScreenShell headerVariant="plain" title="Happy Circles" titleAlign="center">
         <Text style={styles.supportText}>Estamos sincronizando el panorama general de tu cuenta.</Text>
       </ScreenShell>
     );
@@ -43,7 +39,7 @@ export function DashboardScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell headerVariant="plain" title="Happy Circles">
+      <ScreenShell headerVariant="plain" title="Happy Circles" titleAlign="center">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -51,6 +47,17 @@ export function DashboardScreen() {
 
   return (
     <ScreenShell
+      headerLeading={
+        <Link href="/profile" asChild>
+          <Pressable style={({ pressed }) => [styles.profileButton, pressed ? styles.quickActionPressed : null]}>
+            <AppAvatar
+              imageUrl={currentUserProfile?.avatarUrl ?? null}
+              label={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+              size={34}
+            />
+          </Pressable>
+        </Link>
+      }
       headerSlot={
         <Link href="/activity" asChild>
           <Pressable style={styles.bellButton}>
@@ -65,8 +72,9 @@ export function DashboardScreen() {
       }
       headerVariant="plain"
       title="Happy Circles"
+      titleAlign="center"
     >
-      <SurfaceCard padding="lg" style={styles.balanceCard} variant="elevated">
+      <View style={styles.balanceHero}>
         <Text style={styles.balanceLabel}>Balance actual</Text>
         <Text
           style={[
@@ -77,22 +85,16 @@ export function DashboardScreen() {
         >
           {formatCop(dashboard.summary.netBalanceMinor)}
         </Text>
-        <Text style={styles.balanceCaption}>Pulso general de lo que debes y de lo que te deben.</Text>
         <View style={styles.balanceMetaRow}>
-          <SurfaceCard padding="md" style={styles.balanceMetaCard} variant="muted">
-            <Text style={styles.balanceMetaLabel}>Debes</Text>
-            <Text style={[styles.balanceMetaValue, styles.balanceNegative]}>
-              {formatCop(dashboard.summary.totalIOweMinor)}
-            </Text>
-          </SurfaceCard>
-          <SurfaceCard padding="md" style={styles.balanceMetaCard} variant="muted">
-            <Text style={styles.balanceMetaLabel}>Te deben</Text>
-            <Text style={[styles.balanceMetaValue, styles.balancePositive]}>
-              {formatCop(dashboard.summary.totalOwedToMeMinor)}
-            </Text>
-          </SurfaceCard>
+          <Text style={[styles.balanceMetaText, styles.balanceNegative]}>
+            Debes {formatCop(dashboard.summary.totalIOweMinor)}
+          </Text>
+          <View style={styles.balanceMetaDivider} />
+          <Text style={[styles.balanceMetaText, styles.balancePositive]}>
+            Te deben {formatCop(dashboard.summary.totalOwedToMeMinor)}
+          </Text>
         </View>
-      </SurfaceCard>
+      </View>
 
       <SectionBlock
         action={
@@ -102,10 +104,9 @@ export function DashboardScreen() {
             </Pressable>
           </Link>
         }
-        subtitle={peopleSubtitle}
         title="Personas"
       >
-        {dashboard.activePeople.length > 0 ? (
+        {dashboard.activePeople.length > 4 ? (
           <TextInput
             autoCapitalize="words"
             clearButtonMode="while-editing"
@@ -142,6 +143,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
+  profileButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
   bellButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
@@ -167,15 +175,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  balanceCard: {
+  balanceHero: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
   },
   balanceLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '800',
     letterSpacing: 0.4,
+    textAlign: 'center',
     textTransform: 'uppercase',
   },
   balanceAmount: {
@@ -186,32 +196,23 @@ const styles = StyleSheet.create({
     lineHeight: 46,
     textAlign: 'center',
   },
-  balanceCaption: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
   balanceMetaRow: {
+    alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
+    justifyContent: 'center',
+    paddingTop: theme.spacing.xs,
   },
-  balanceMetaCard: {
-    alignItems: 'center',
-    flex: 1,
-    gap: theme.spacing.xxs,
-  },
-  balanceMetaLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
+  balanceMetaText: {
+    fontSize: theme.typography.body,
     fontWeight: '700',
-  },
-  balanceMetaValue: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
+    lineHeight: 24,
     textAlign: 'center',
+  },
+  balanceMetaDivider: {
+    backgroundColor: theme.colors.hairline,
+    height: 12,
+    width: 1,
   },
   quickActionPressed: {
     opacity: 0.6,
@@ -235,12 +236,12 @@ const styles = StyleSheet.create({
   searchInput: {
     backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.large,
     borderWidth: 1,
     color: theme.colors.text,
     fontSize: theme.typography.body,
-    minHeight: 48,
+    minHeight: 44,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
 });

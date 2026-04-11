@@ -11,7 +11,7 @@ export interface CreateBalanceRequestInput {
   readonly creditorUserId: UserId;
   readonly amountMinor: number;
   readonly description: string;
-  readonly requestKind: Extract<RequestType, 'balance_increase' | 'balance_decrease'>;
+  readonly requestKind: Extract<RequestType, 'balance_increase'>;
 }
 
 export async function createBalanceRequestCommand(

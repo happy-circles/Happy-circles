@@ -14,6 +14,7 @@ export interface Database {
           id: string;
           email: string;
           display_name: string;
+          avatar_path: string | null;
           phone_country_iso2: string | null;
           phone_country_calling_code: string | null;
           phone_national_number: string | null;

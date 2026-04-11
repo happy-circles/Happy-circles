@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -116,11 +116,40 @@ function SessionOverlay() {
   );
 }
 
+function SessionRouteGuard() {
+  const { status } = useSession();
+  const rootNavigationState = useRootNavigationState();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (!rootNavigationState?.key || status === 'loading') {
+      return;
+    }
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (status === 'signed_out') {
+      if (!inAuthGroup) {
+        router.replace('/sign-in');
+      }
+      return;
+    }
+
+    if (inAuthGroup) {
+      router.replace('/home');
+    }
+  }, [rootNavigationState?.key, router, segments, status]);
+
+  return null;
+}
+
 function RootNavigator() {
   return (
     <>
       <StatusBar style="dark" />
       <NotificationBridge />
+      <SessionRouteGuard />
       <Stack
         screenOptions={{
           animationMatchesGesture: true,

@@ -9,14 +9,14 @@ Deno.serve((request) =>
     }
 
     const requestKind = requireString(body.requestKind, 'requestKind');
-    if (requestKind !== 'balance_increase' && requestKind !== 'balance_decrease') {
+    if (requestKind !== 'balance_increase') {
       throw new Error('Invalid requestKind');
     }
 
     const { data, error } = await client.rpc('create_balance_request', {
       p_actor_user_id: actorUserId,
       p_idempotency_key: requireString(body.idempotencyKey, 'idempotencyKey'),
-      p_request_kind: requestKind,
+      p_request_type: requestKind,
       p_responder_user_id: requireString(body.responderUserId, 'responderUserId'),
       p_debtor_user_id: requireString(body.debtorUserId, 'debtorUserId'),
       p_creditor_user_id: requireString(body.creditorUserId, 'creditorUserId'),

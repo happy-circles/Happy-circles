@@ -11,7 +11,7 @@ Deno.serve((request) =>
     const { data, error } = await client.rpc('create_balance_request', {
       p_actor_user_id: actorUserId,
       p_idempotency_key: requireString(body.idempotencyKey, 'idempotencyKey'),
-      p_request_kind: 'transaction_reversal',
+      p_request_type: 'transaction_reversal',
       p_responder_user_id: requireString(body.responderUserId, 'responderUserId'),
       p_debtor_user_id: requireString(body.debtorUserId, 'debtorUserId'),
       p_creditor_user_id: requireString(body.creditorUserId, 'creditorUserId'),

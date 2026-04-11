@@ -102,7 +102,7 @@ $$;
 create or replace function public.create_balance_request(
   p_actor_user_id uuid,
   p_idempotency_key text,
-  p_request_kind public.request_type,
+  p_request_type public.request_type,
   p_responder_user_id uuid,
   p_debtor_user_id uuid,
   p_creditor_user_id uuid,
@@ -174,7 +174,7 @@ begin
   )
   values (
     v_relationship.id,
-    p_request_kind,
+    p_request_type,
     'pending',
     p_actor_user_id,
     p_responder_user_id,
@@ -195,7 +195,7 @@ begin
     'financial_request_created',
     v_request_id,
     jsonb_build_object(
-      'request_kind', p_request_kind,
+      'request_kind', p_request_type,
       'amount_minor', p_amount_minor,
       'responder_user_id', p_responder_user_id
     )

@@ -155,34 +155,35 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   const canApproveOrReject = settlement.status === 'pending_approvals';
   const canExecute = settlement.status === 'approved';
+  const approvalsPending = settlement.participantStatuses.filter((participant) => participant.endsWith(': pending')).length;
+  const summaryText =
+    settlement.status === 'pending_approvals'
+      ? approvalsPending > 0
+        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para poder ejecutarlo.`
+        : 'Ya no faltan respuestas. Solo queda ejecutar el cierre.'
+      : settlement.status === 'approved'
+        ? 'Todos aprobaron este cierre. Puedes ejecutarlo ahora.'
+        : settlement.status === 'executed'
+          ? 'Este cierre ya fue aplicado al ledger.'
+          : 'Este cierre ya no esta activo en el estado actual del grafo.';
+  const primaryLines = settlement.impactLines.length > 0 ? settlement.impactLines : settlement.movements;
 
   return (
     <ScreenShell
       eyebrow="Cierre"
       largeTitle={false}
-      subtitle="Un resumen corto antes de aprobar, rechazar o ejecutar."
+      subtitle="Lo esencial antes de aprobar o ejecutar."
       title={`Cierre ${proposalId}`}
     >
-      <SurfaceCard padding="lg" variant="accent">
-        <Text style={styles.heroTitle}>Revisa el cierre sugerido antes de confirmarlo.</Text>
-        <Text style={styles.heroBody}>
-          El sistema detecto este circulo sobre saldo neto derivado del ledger. Aqui ves cuanto baja y entre quienes.
-        </Text>
-      </SurfaceCard>
-
       {message ? <MessageBanner message={message} /> : null}
 
       <SurfaceCard padding="lg" variant="elevated">
         <StatusChip label={settlement.status} tone={settlement.status === 'approved' ? 'success' : 'primary'} />
-        <Text style={styles.summaryTitle}>Estado de la propuesta</Text>
-        <Text style={styles.summaryBody}>
-          {settlement.status === 'pending_approvals'
-            ? 'Faltan respuestas antes de ejecutarla.'
-            : 'Ya puede ejecutarse si todo sigue vigente.'}
-        </Text>
+        <Text style={styles.summaryTitle}>Que pasa con este cierre</Text>
+        <Text style={styles.summaryBody}>{summaryText}</Text>
       </SurfaceCard>
 
-      <SectionBlock title="Participantes" subtitle="Todos deben aceptar antes de que quede aprobado.">
+      <SectionBlock title="Participantes" subtitle="Solo necesitas ver quien ya respondio.">
         {settlement.participantStatuses.map((participant) => (
           <SurfaceCard key={participant} padding="md">
             <Text style={styles.text}>{participant}</Text>
@@ -190,39 +191,19 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         ))}
       </SectionBlock>
 
-      <SectionBlock title="Impacto" subtitle="Solo muestra el efecto del cierre, no el grafo completo.">
-        {settlement.impactLines.length === 0 ? (
+      <SectionBlock title="Que cambiara" subtitle="Este es el efecto neto del cierre.">
+        {primaryLines.length === 0 ? (
           <EmptyState
-            description="La propuesta existe, pero no trajo movimientos legibles para esta pantalla."
-            title="Sin movimientos visibles"
+            description="La propuesta existe, pero no trajo un resumen legible para esta pantalla."
+            title="Sin resumen visible"
           />
         ) : (
-          settlement.impactLines.map((impact) => (
-            <SurfaceCard key={impact} padding="md">
-              <Text style={styles.text}>{impact}</Text>
+          primaryLines.map((line) => (
+            <SurfaceCard key={line} padding="md">
+              <Text style={styles.text}>{line}</Text>
             </SurfaceCard>
           ))
         )}
-      </SectionBlock>
-
-      <SectionBlock title="Movimientos" subtitle="Cada linea representa un registro neto al ejecutar.">
-        {settlement.movements.map((movement) => (
-          <SurfaceCard key={movement} padding="md">
-            <Text style={styles.text}>{movement}</Text>
-          </SurfaceCard>
-        ))}
-      </SectionBlock>
-
-      <SectionBlock title="Validacion" subtitle="Solo cuando necesites revisar trazabilidad.">
-        <SurfaceCard padding="lg">
-          <Text style={styles.label}>Snapshot hash</Text>
-          <Text style={styles.text}>{settlement.snapshotHash}</Text>
-          {settlement.explainers.map((item) => (
-            <Text key={item} style={styles.helper}>
-              {item}
-            </Text>
-          ))}
-        </SurfaceCard>
       </SectionBlock>
 
       <View style={styles.actions}>
@@ -267,17 +248,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  heroTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  heroBody: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
   summaryTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
@@ -288,21 +258,10 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  label: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
   text: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     lineHeight: 22,
-  },
-  helper: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
   },
   actions: {
     flexDirection: 'row',

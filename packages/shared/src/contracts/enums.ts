@@ -4,7 +4,6 @@ export type CurrencyCode = typeof CURRENCY_CODE;
 
 export const REQUEST_TYPES = [
   'balance_increase',
-  'balance_decrease',
   'transaction_reversal',
 ] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
@@ -21,7 +20,6 @@ export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 export const TRANSACTION_TYPES = [
   'balance_increase_acceptance',
-  'balance_decrease_acceptance',
   'transaction_reversal_acceptance',
   'cycle_settlement',
 ] as const;

@@ -1,283 +1,136 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { PersonTimelineItemDto } from '@happy-circles/application';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import type { ActivityItemDto } from '@happy-circles/application';
 
 import { EmptyState } from '@/components/empty-state';
-import { FieldBlock } from '@/components/field-block';
+import { AppAvatar } from '@/components/app-avatar';
+import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { MessageBanner } from '@/components/message-banner';
-import { MoneyHero } from '@/components/money-hero';
+import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
+import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
-import { StatusChip } from '@/components/status-chip';
-import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
+import {
+  buildHistoryCases,
+  friendlyHistoryStepLabel,
+  historyCardTitle,
+  historyCaseEyebrow,
+  historyCaseImpactLabel,
+  historyCaseMeta,
+  historyImpactLabel,
+  historyImpactTone,
+  historyStatusLabel,
+  historyStatusTone,
+  toHistoryFeedItem,
+} from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
   useAppSnapshot,
+  useApproveSettlementMutation,
+  useExecuteSettlementMutation,
   useRejectFinancialRequestMutation,
+  useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
-
-function compactHistoryLabel(step: PersonTimelineItemDto): string {
-  if (step.kind === 'settlement') {
-    return 'Cierre de ciclo';
-  }
-
-  if (step.kind === 'payment') {
-    return 'Movimiento registrado';
-  }
-
-  if (step.status === 'posted') {
-    return 'Registrado';
-  }
-
-  if (step.status === 'amended') {
-    return 'Monto actualizado';
-  }
-
-  if (step.status === 'accepted') {
-    return 'Aceptada';
-  }
-
-  if (step.status === 'amended') {
-    return 'Monto actualizado';
-  }
-
-  if (step.status === 'rejected') {
-    return 'Rechazada';
-  }
-
-  return 'Solicitud';
-}
-
-function friendlyHistoryStepLabel(step: PersonTimelineItemDto): string {
-  if (step.kind === 'settlement') {
-    return 'Se registro';
-  }
-
-  if (step.kind === 'payment') {
-    return 'Se registro el movimiento';
-  }
-
-  if (step.status === 'posted') {
-    return 'Se registro';
-  }
-
-  if (step.title.endsWith(' propuso un nuevo monto')) {
-    const actor = step.title.replace(' propuso un nuevo monto', '');
-    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
-  }
-
-  if (step.title.startsWith('Tu creo ')) {
-    return step.title.replace('Tu creo ', 'Tu creaste ');
-  }
-
-  if (step.title.startsWith('Tu acepto ')) {
-    return step.title.replace('Tu acepto ', 'Tu aceptaste ');
-  }
-
-  if (step.title.startsWith('Tu rechazo ')) {
-    return step.title.replace('Tu rechazo ', 'Tu rechazaste ');
-  }
-
-  if (step.title.startsWith('Tu registro ')) {
-    return step.title.replace('Tu registro ', 'Tu registraste ');
-  }
-
-  if (step.title.startsWith('Tu confirmo ')) {
-    return step.title.replace('Tu confirmo ', 'Tu confirmaste ');
-  }
-
-  if (step.title.startsWith('Tu aplico ')) {
-    return step.title.replace('Tu aplico ', 'Tu aplicaste ');
-  }
-
-  return step.title;
-}
-
-function extractHistoryConcept(detail?: string | null): string | null {
-  if (!detail) {
-    return null;
-  }
-
-  let concept = detail.trim();
-  if (concept.length === 0) {
-    return null;
-  }
-
-  if (concept.toLocaleLowerCase('es-CO') === 'cycle settlement system movement') {
-    return null;
-  }
-
-  concept = concept.replace(/^reset\s+/i, '');
-  concept = concept.replace(/^reversal of\s+/i, '');
-  concept = concept.replace(/\s+\S+\s*->\s*\S+\s*$/i, '');
-  concept = concept.trim();
-
-  return concept.length > 0 ? concept : null;
-}
-
-function historyCaseTitle(itemCase: HistoryCase): string {
-  for (const step of itemCase.steps) {
-    const concept = extractHistoryConcept(step.detail);
-    if (concept) {
-      return concept;
-    }
-  }
-
-  return compactHistoryLabel(itemCase.latest);
-}
-
-function historyStatusLabel(status: string): string {
-  if (status === 'pending') {
-    return 'Pendiente';
-  }
-
-  if (status === 'amended') {
-    return 'Nuevo monto';
-  }
-
-  if (status === 'accepted') {
-    return 'Aceptada';
-  }
-
-  if (status === 'rejected') {
-    return 'Rechazada';
-  }
-
-  if (status === 'posted') {
-    return 'Registrado';
-  }
-
-  return status;
-}
-
-function historyStatusTone(status: string): 'primary' | 'success' | 'warning' | 'neutral' {
-  if (status === 'pending' || status === 'amended') {
-    return 'warning';
-  }
-
-  if (status === 'accepted' || status === 'posted') {
-    return 'success';
-  }
-
-  if (status === 'rejected') {
-    return 'neutral';
-  }
-
-  return 'primary';
-}
 
 export interface PersonDetailScreenProps {
   readonly userId: string;
 }
 
-interface HistoryCase {
-  readonly id: string;
-  readonly latest: PersonTimelineItemDto;
-  readonly earliest: PersonTimelineItemDto;
-  readonly steps: readonly PersonTimelineItemDto[];
+type PersonSegmentKey = 'pending' | 'history';
+type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
+
+function readResultStatus(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const status = (value as Record<string, unknown>)['status'];
+  return typeof status === 'string' ? status : null;
 }
 
-type HistoryDirection = 'i_owe' | 'owes_me' | 'neutral';
-
-function historyDirectionFromStep(
-  step: PersonTimelineItemDto,
-  counterpartyName: string,
-): HistoryDirection {
-  if (step.status === 'rejected') {
-    return 'neutral';
+function readNestedStatus(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
   }
 
-  if (step.kind === 'settlement') {
-    return 'neutral';
+  return readResultStatus((value as Record<string, unknown>)[key]);
+}
+
+function readNestedProposalId(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
   }
 
-  if (step.kind === 'payment') {
-    const [from, to] = (step.flowLabel ?? '').split('->').map((part) => part.trim());
-
-    if (from === counterpartyName) {
-      return 'owes_me';
-    }
-
-    if (to === counterpartyName) {
-      return 'i_owe';
-    }
+  const nested = (value as Record<string, unknown>)[key];
+  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) {
+    return null;
   }
 
-  if (step.tone === 'positive') {
-    return 'owes_me';
+  const proposalId = (nested as Record<string, unknown>)['proposalId'];
+  return typeof proposalId === 'string' ? proposalId : null;
+}
+
+function splitSubtitleSegments(value: string): string[] {
+  return value
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function buildFinancialRequestPendingContent(item: ActivityItemDto): {
+  readonly createdByLabel: string;
+  readonly detail: string;
+  readonly createdAtLabel: string;
+} {
+  const parts = splitSubtitleSegments(item.subtitle);
+  const [createdByLabel, detail, createdAtLabel] = parts;
+
+  return {
+    createdByLabel: createdByLabel ?? 'Persona',
+    detail: detail ?? item.subtitle,
+    createdAtLabel: createdAtLabel ?? '',
+  };
+}
+
+function pendingSnippetTone(
+  item: ActivityItemDto,
+): 'primary' | 'success' | 'warning' | 'neutral' | 'danger' {
+  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
+    return 'warning';
   }
 
-  if (step.tone === 'negative') {
-    return 'i_owe';
+  if (item.status === 'approved') {
+    return 'primary';
+  }
+
+  if (item.status === 'rejected') {
+    return 'danger';
   }
 
   return 'neutral';
 }
 
-function historyImpactTone(
-  step: PersonTimelineItemDto,
-  counterpartyName: string,
-): 'positive' | 'negative' | 'neutral' {
-  if (step.kind === 'settlement') {
-    return 'neutral';
+function pendingStatusLabel(status: string): string {
+  if (status === 'pending_approvals') {
+    return 'Pendiente';
   }
 
-  const direction = historyDirectionFromStep(step, counterpartyName);
-
-  if (direction === 'owes_me') {
-    return 'positive';
+  if (status === 'approved') {
+    return 'Aprobado';
   }
 
-  if (direction === 'i_owe') {
-    return 'negative';
+  if (status === 'waiting_other_side') {
+    return 'En espera';
   }
 
-  return 'neutral';
-}
-
-function historyImpactLabel(
-  step: PersonTimelineItemDto,
-  counterpartyName: string,
-): string | null {
-  if (step.status === 'rejected') {
-    return 'No cambio el saldo';
-  }
-
-  if (step.amountMinor <= 0) {
-    return null;
-  }
-
-  if (step.kind === 'settlement') {
-    return `Cierre de ciclo por ${formatCop(step.amountMinor)}`;
-  }
-
-  const direction = historyDirectionFromStep(step, counterpartyName);
-  if (direction === 'neutral') {
-    return null;
-  }
-
-  const amountLabel = formatCop(step.amountMinor);
-  const isProposal = step.kind === 'request' && (step.status === 'pending' || step.status === 'amended');
-  const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
-
-  return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
-}
-
-function historyCaseKey(item: Pick<PersonTimelineItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>): string {
-  if (item.originSettlementProposalId) {
-    return `settlement:${item.originSettlementProposalId}`;
-  }
-
-  if (item.originRequestId) {
-    return `request:${item.originRequestId}`;
-  }
-
-  return `event:${item.id}`;
+  return status;
 }
 
 export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
@@ -286,98 +139,85 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
   const amendRequest = useAmendFinancialRequestMutation();
+  const approveSettlement = useApproveSettlementMutation();
+  const rejectSettlement = useRejectSettlementMutation();
+  const executeSettlement = useExecuteSettlementMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [showAmendment, setShowAmendment] = useState(false);
+  const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
   const [amendmentAmount, setAmendmentAmount] = useState('');
   const [amendmentDescription, setAmendmentDescription] = useState('');
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
+  const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>('history');
+  const pendingItems = person?.pendingItems ?? [];
 
   useEffect(() => {
-    if (!person?.pendingRequest) {
-      setShowAmendment(false);
+    if (!activeAmendmentItemId || !pendingItems.some((item) => item.id === activeAmendmentItemId)) {
+      setActiveAmendmentItemId(null);
       setAmendmentAmount('');
       setAmendmentDescription('');
+    }
+  }, [activeAmendmentItemId, pendingItems]);
+
+  useEffect(() => {
+    if (pendingItems.length > 0) {
+      setPanelSegment('pending');
       return;
     }
 
-    setShowAmendment(false);
-    setAmendmentAmount(String(Math.max(1, Math.round(person.pendingRequest.amountMinor / 100))));
-    setAmendmentDescription(person.pendingRequest.description);
-  }, [person?.pendingRequest?.id]);
+    setPanelSegment('history');
+  }, [pendingItems.length]);
 
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
-  const historyCases = useMemo<HistoryCase[]>(() => {
+  const historyItems = useMemo(
+    () => (person ? person.timeline.map((item) => toHistoryFeedItem(item, person.displayName)) : []),
+    [person],
+  );
+  const historyCases = useMemo(() => {
     if (!person) {
       return [];
     }
 
-    const groups = new Map<string, PersonTimelineItemDto[]>();
-    for (const item of person.timeline) {
-      const key = historyCaseKey(item);
-      const existing = groups.get(key);
-      if (existing) {
-        existing.push(item);
-      } else {
-        groups.set(key, [item]);
-      }
-    }
+    return buildHistoryCases(historyItems);
+  }, [historyItems, person]);
 
-    return Array.from(groups.entries()).map(([id, items]) => {
-      const steps = [...items].reverse();
-      return {
-        id,
-        latest: items[0],
-        earliest: steps[0],
-        steps,
-      };
-    });
-  }, [person]);
-
-  async function handlePendingAction(action: 'accept' | 'reject') {
-    if (!person?.pendingRequest) {
-      return;
-    }
-
-    setBusyKey(action);
-    setMessage(null);
-
-    try {
-      if (action === 'accept') {
-        await acceptRequest.mutateAsync(person.pendingRequest.id);
-        setMessage('Propuesta aceptada.');
-      } else {
-        await rejectRequest.mutateAsync(person.pendingRequest.id);
-        setMessage('Propuesta no aceptada.');
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
-    } finally {
-      setBusyKey(null);
-    }
+  function toggleHistoryCase(caseId: string) {
+    setExpandedCaseIds((current) =>
+      current.includes(caseId) ? current.filter((item) => item !== caseId) : [...current, caseId],
+    );
   }
 
-  async function handleAmendment() {
-    if (!person?.pendingRequest) {
+  function toggleAmendment(item: ActivityItemDto) {
+    if (activeAmendmentItemId === item.id) {
+      setActiveAmendmentItemId(null);
       return;
     }
 
+    const financialRequestContent = buildFinancialRequestPendingContent(item);
+    setActiveAmendmentItemId(item.id);
+    setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
+    setAmendmentDescription(financialRequestContent.detail);
+  }
+
+  async function handleAmendment(requestId: string) {
     if (amendmentAmountMinor <= 0 || amendmentDescription.trim().length === 0) {
       setMessage('Define un monto valido y escribe un concepto para proponer otro monto.');
       return;
     }
 
-    setBusyKey('amendment');
+    setBusyKey(`${requestId}:amendment`);
     setMessage(null);
 
     try {
       await amendRequest.mutateAsync({
-        requestId: person.pendingRequest.id,
+        requestId,
         amountMinor: amendmentAmountMinor,
         description: amendmentDescription.trim(),
       });
-      setShowAmendment(false);
+      setActiveAmendmentItemId(null);
+      setAmendmentAmount('');
+      setAmendmentDescription('');
       setMessage('Nuevo monto enviado.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
@@ -386,9 +226,170 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
     }
   }
 
-  function toggleHistoryCase(caseId: string) {
-    setExpandedCaseIds((current) =>
-      current.includes(caseId) ? current.filter((item) => item !== caseId) : [...current, caseId],
+  function showAutoCyclePrompt(proposalId: string | null, status: string | null) {
+    if (status !== 'pending_approvals' && status !== 'approved') {
+      return;
+    }
+
+    Alert.alert(
+      status === 'approved' ? 'Cierre listo para ejecutar' : 'Cierre de circulo pendiente',
+      status === 'approved'
+        ? 'Todos ya aprobaron este cierre. Quieres abrirlo ahora para ejecutarlo?'
+        : 'Se detecto otro cierre automatico en tu circulo. Quieres revisarlo ahora?',
+      [
+        {
+          text: 'Luego',
+          style: 'cancel',
+        },
+        {
+          text: 'Abrir',
+          onPress: () => {
+            router.push(proposalId ? `/settlements/${proposalId}` : '/activity');
+          },
+        },
+      ],
+    );
+  }
+
+  async function handlePendingItemAction(
+    itemId: string,
+    kind: string,
+    status: string,
+    action: PendingActionKey,
+  ) {
+    const key = `${itemId}:${action}`;
+    setBusyKey(key);
+    setMessage(null);
+
+    try {
+      if (kind === 'financial_request') {
+        if (action === 'accept') {
+          const response = await acceptRequest.mutateAsync(itemId);
+          const autoCycleStatus = readNestedStatus(response, 'autoCycleProposal');
+          const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
+          setMessage(
+            autoCycleStatus === 'pending_approvals'
+              ? 'Propuesta aceptada. Tambien quedo un cierre de ciclo listo para revisar.'
+              : 'Propuesta aceptada.',
+          );
+          showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
+        } else {
+          await rejectRequest.mutateAsync(itemId);
+          setMessage('Propuesta no aceptada.');
+        }
+        return;
+      }
+
+      if (kind === 'settlement_proposal' && status === 'pending_approvals') {
+        if (action === 'approve') {
+          const response = await approveSettlement.mutateAsync(itemId);
+          const nextStatus = readResultStatus(response);
+          setMessage(
+            nextStatus === 'approved'
+              ? 'Todos aceptaron. El cierre quedo aprobado.'
+              : nextStatus === 'stale'
+                ? 'La propuesta quedo obsoleta porque el grafo cambio.'
+                : 'Tu aprobacion quedo registrada.',
+          );
+        } else {
+          await rejectSettlement.mutateAsync(itemId);
+          setMessage('Cierre no aprobado.');
+        }
+        return;
+      }
+
+      if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
+        const response = await executeSettlement.mutateAsync(itemId);
+        const nextStatus = readNestedStatus(response, 'nextAutoCycleProposal');
+        const nextProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
+        setMessage(
+          nextStatus === 'pending_approvals'
+            ? 'Cierre ejecutado. Ya quedo otro cierre de ciclo pendiente.'
+            : 'Cierre ejecutado.',
+        );
+        showAutoCyclePrompt(nextProposalId, nextStatus);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function renderPendingItem(item: ActivityItemDto) {
+    if (item.kind === 'financial_request') {
+      const financialRequestContent = buildFinancialRequestPendingContent(item);
+      return (
+        <PendingFinancialRequestCard
+          amendmentAmount={amendmentAmount}
+          amendmentDescription={amendmentDescription}
+          amountMinor={item.amountMinor ?? 0}
+          amountTone={item.tone === 'positive' || item.tone === 'negative' ? item.tone : 'neutral'}
+          busyAccept={busyKey === `${item.id}:accept`}
+          busyAmendment={busyKey === `${item.id}:amendment`}
+          busyReject={busyKey === `${item.id}:reject`}
+          counterpartyName={person?.displayName ?? 'Persona'}
+          createdAtLabel={financialRequestContent.createdAtLabel}
+          createdByLabel={financialRequestContent.createdByLabel}
+          description={financialRequestContent.detail}
+          key={item.id}
+          onAccept={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')}
+          onChangeAmendmentAmount={setAmendmentAmount}
+          onChangeAmendmentDescription={setAmendmentDescription}
+          onReject={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject')}
+          onSubmitAmendment={busyKey ? undefined : () => void handleAmendment(item.id)}
+          onToggleAmendment={busyKey ? undefined : () => toggleAmendment(item)}
+          responseState={item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'}
+          showAmendment={activeAmendmentItemId === item.id}
+          title={item.title}
+        />
+      );
+    }
+
+    return (
+      <PendingSnippetCard
+        amountLabel={typeof item.amountMinor === 'number' && item.amountMinor > 0 ? formatCop(item.amountMinor) : null}
+        detail={splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle}
+        eyebrow={item.kind === 'settlement_proposal' ? 'Cierre de ciclo' : 'Pendiente'}
+        key={item.id}
+        meta={splitSubtitleSegments(item.subtitle).slice(1).join(' | ') || null}
+        onPress={item.href ? () => router.push(item.href as Parameters<typeof router.push>[0]) : undefined}
+        statusLabel={pendingStatusLabel(item.status)}
+        statusTone={pendingSnippetTone(item)}
+        tone={pendingSnippetTone(item)}
+        title={item.title}
+        variant="default"
+      >
+        {item.kind === 'settlement_proposal' && item.status === 'pending_approvals' ? (
+          <View style={styles.pendingActionStack}>
+            <View style={styles.pendingActionSlot}>
+              <PrimaryAction
+                compact
+                label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar cierre'}
+                onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'approve')}
+              />
+            </View>
+            <Pressable
+              onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject')}
+              style={({ pressed }) => [styles.inlineAction, pressed ? styles.inlineActionPressed : null]}
+            >
+              <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+                {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : item.kind === 'settlement_proposal' && item.status === 'approved' ? (
+          <View style={styles.pendingActionStack}>
+            <View style={styles.pendingActionSlot}>
+              <PrimaryAction
+                compact
+                label={busyKey === `${item.id}:execute` ? 'Ejecutando...' : 'Ejecutar cierre'}
+                onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'execute')}
+              />
+            </View>
+          </View>
+        ) : null}
+      </PendingSnippetCard>
     );
   }
 
@@ -419,462 +420,293 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
     );
   }
 
+  const balanceTone =
+    person.netAmountMinor === 0 ? 'neutral' : person.direction === 'owes_me' ? 'positive' : 'negative';
+  const balanceSummary =
+    person.netAmountMinor === 0
+      ? 'Estan al dia'
+      : person.direction === 'owes_me'
+        ? `Te debe ${formatCop(person.netAmountMinor)}`
+        : `Debes ${formatCop(person.netAmountMinor)}`;
+
   return (
-    <ScreenShell
-      footer={
-        person.netAmountMinor === 0 ? undefined : (
-          <View style={styles.footerActions}>
-            <PrimaryAction
-              label={person.direction === 'owes_me' ? 'Registrar entrada' : 'Registrar salida'}
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.layout}>
+        <View style={styles.fixedTop}>
+          <View style={styles.heroBlock}>
+            <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
+            <Text style={styles.contactFlatName}>{person.displayName}</Text>
+            <Text
+              style={[
+                styles.balanceSummary,
+                balanceTone === 'positive' ? styles.positive : null,
+                balanceTone === 'negative' ? styles.negative : null,
+              ]}
+            >
+              {balanceSummary}
+            </Text>
+            {person.pendingCount > 0 ? (
+              <Text style={styles.heroMeta}>
+                {person.pendingCount} pendiente{person.pendingCount > 1 ? 's' : ''}
+              </Text>
+            ) : person.supportText ? (
+              <Text style={styles.heroMeta}>{person.supportText}</Text>
+            ) : null}
+          </View>
+
+          <View style={styles.quickActionRowFlat}>
+            <Pressable
               onPress={() =>
                 router.push({
                   pathname: '/register',
                   params: {
                     personId: person.userId,
-                    requestKind: 'balance_decrease',
-                    direction: person.direction,
                   },
                 })
               }
-              subtitle="Reducir este saldo"
-            />
+              style={({ pressed }) => [styles.quickActionPill, pressed ? styles.quickActionPillPressed : null]}
+            >
+              <Ionicons color={theme.colors.primary} name="add-circle-outline" size={18} />
+              <Text style={styles.quickActionPillLabel}>Nuevo movimiento</Text>
+            </Pressable>
           </View>
-        )
-      }
-      headerVariant="plain"
-      largeTitle={false}
-      title={person.displayName}
-    >
-      <MoneyHero
-        amountMinor={person.netAmountMinor}
-        badgeLabel={person.netAmountMinor === 0 ? 'Al dia' : person.direction === 'owes_me' ? 'Te debe' : 'Debes'}
-        caption="Este saldo ya resume el efecto neto entre ustedes."
-        label="Saldo entre ustedes"
-        tone={
-          person.netAmountMinor === 0
-            ? 'neutral'
-            : person.direction === 'owes_me'
-              ? 'positive'
-              : 'negative'
-        }
-      />
+        </View>
 
-      {message ? <MessageBanner message={message} /> : null}
-
-      {person.pendingRequest ? (
-        <SurfaceCard padding="lg" variant="accent">
-          <View style={styles.pendingHeader}>
-            <View style={styles.pendingText}>
-              <Text style={styles.pendingEyebrow}>Pendiente con {person.displayName}</Text>
-              <Text style={styles.pendingTitle}>{person.pendingRequest.title}</Text>
-            </View>
-            <StatusChip
-              label={person.pendingRequest.responseState === 'requires_you' ? 'Requiere tu respuesta' : 'Esperando respuesta'}
-              tone={person.pendingRequest.responseState === 'requires_you' ? 'warning' : 'neutral'}
-            />
+        <View style={styles.panelArea}>
+          <View style={styles.tabBar}>
+            <Pressable
+              onPress={() => setPanelSegment('pending')}
+              style={({ pressed }) => [
+                styles.tabButton,
+                panelSegment === 'pending' ? styles.tabButtonActive : null,
+                pressed ? styles.tabButtonPressed : null,
+              ]}
+            >
+              <Text style={[styles.tabLabel, panelSegment === 'pending' ? styles.tabLabelActive : null]}>
+                Pendientes
+              </Text>
+            </Pressable>
+            <View style={styles.tabDivider} />
+            <Pressable
+              onPress={() => setPanelSegment('history')}
+              style={({ pressed }) => [
+                styles.tabButton,
+                panelSegment === 'history' ? styles.tabButtonActive : null,
+                pressed ? styles.tabButtonPressed : null,
+              ]}
+            >
+              <Text style={[styles.tabLabel, panelSegment === 'history' ? styles.tabLabelActive : null]}>
+                Historial
+              </Text>
+            </Pressable>
           </View>
 
-          <Text style={styles.pendingAmount}>{formatCop(person.pendingRequest.amountMinor)}</Text>
-          <Text style={styles.pendingDetail}>{person.pendingRequest.description}</Text>
-          <Text style={styles.pendingMeta}>
-            Creado por {person.pendingRequest.createdByLabel} | {person.pendingRequest.createdAtLabel}
-          </Text>
+          {message ? <MessageBanner message={message} /> : null}
 
-          {person.pendingRequest.responseState === 'requires_you' ? (
-            <>
-              <View style={styles.actionRow}>
-                <View style={styles.actionSlot}>
-                  <PrimaryAction
-                    label={busyKey === 'accept' ? 'Aceptando...' : 'Aceptar'}
-                    onPress={busyKey ? undefined : () => void handlePendingAction('accept')}
+          <View style={styles.sheetScrollWrap}>
+            <ScrollView
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {panelSegment === 'pending' ? (
+                pendingItems.length > 0 ? (
+                  pendingItems.map((item) => renderPendingItem(item))
+                ) : (
+                  <EmptyState
+                    description="Cuando haya algo pendiente con esta persona, aparecera aqui."
+                    title="Nada pendiente"
                   />
-                </View>
-                <View style={styles.actionSlot}>
-                  <PrimaryAction
-                    label={busyKey === 'reject' ? 'Enviando...' : 'No aceptar'}
-                    onPress={busyKey ? undefined : () => void handlePendingAction('reject')}
-                    variant="ghost"
-                  />
-                </View>
-                <View style={styles.actionSlot}>
-                  <PrimaryAction
-                    label={showAmendment ? 'Ocultar cambio' : 'Cambiar monto'}
-                    onPress={busyKey ? undefined : () => setShowAmendment((current) => !current)}
-                    variant="secondary"
-                  />
-                </View>
-              </View>
-
-              {showAmendment ? (
-                <SurfaceCard padding="md" style={styles.amendmentCard} variant="default">
-                  <FieldBlock hint="Escribe el valor en pesos." label="Monto">
-                    <TextInput
-                      keyboardType="number-pad"
-                      onChangeText={setAmendmentAmount}
-                      placeholder="45000"
-                      placeholderTextColor={theme.colors.muted}
-                      style={styles.input}
-                      value={amendmentAmount}
+                )
+              ) : historyCases.length === 0 ? (
+                <EmptyState
+                  description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
+                  title="Sin movimientos todavia"
+                />
+              ) : (
+                historyCases.map((itemCase) => {
+                  const isExpanded = expandedCaseIds.includes(itemCase.id);
+                  const latest = itemCase.latest;
+                  const caseMeta = historyCaseMeta(itemCase) || null;
+                  const caseImpact = historyCaseImpactLabel(itemCase);
+                  const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+                  return (
+                    <HistoryCaseCard
+                      eyebrow={historyCaseEyebrow(itemCase)}
+                      impact={caseImpact}
+                      isCycleSnippet={itemCase.isCycleSnippet}
+                      isExpanded={isExpanded}
+                      key={itemCase.id}
+                      meta={caseMeta}
+                      onToggle={() => toggleHistoryCase(itemCase.id)}
+                      statusLabel={historyStatusLabel(latest.status)}
+                      statusTone={historyStatusTone(latest.status)}
+                      steps={itemCase.steps.map((step) => ({
+                        id: step.id,
+                        title: friendlyHistoryStepLabel(step),
+                        amountLabel:
+                          typeof step.amountMinor === 'number' && step.amountMinor > 0
+                            ? formatCop(step.amountMinor)
+                            : null,
+                        impact: historyImpactLabel(step),
+                        meta: step.happenedAtLabel ?? null,
+                        tone: historyImpactTone(step) as HistoryCaseTone,
+                      }))}
+                      title={historyCardTitle(itemCase)}
+                      tone={caseTone}
                     />
-                    {amendmentAmountMinor > 0 ? (
-                      <Text style={styles.amountPreview}>{formatCop(amendmentAmountMinor)}</Text>
-                    ) : null}
-                  </FieldBlock>
-
-                  <FieldBlock hint="Ajusta el concepto antes de enviarlo." label="Concepto">
-                    <TextInput
-                      multiline
-                      onChangeText={setAmendmentDescription}
-                      placeholder="Explica el nuevo monto"
-                      placeholderTextColor={theme.colors.muted}
-                      style={[styles.input, styles.textarea]}
-                      value={amendmentDescription}
-                    />
-                  </FieldBlock>
-
-                  <View style={styles.actionRow}>
-                    <View style={styles.actionSlot}>
-                      <PrimaryAction
-                        label={busyKey === 'amendment' ? 'Enviando...' : 'Enviar nuevo monto'}
-                        onPress={busyKey ? undefined : () => void handleAmendment()}
-                      />
-                    </View>
-                  </View>
-                </SurfaceCard>
-              ) : null}
-            </>
-          ) : (
-            <Text style={styles.pendingHelper}>
-              Ya enviaste esta propuesta. Cuando {person.displayName} responda, veras el resultado aqui.
-            </Text>
-          )}
-        </SurfaceCard>
-      ) : null}
-
-      <SectionBlock title="Historial">
-        {historyCases.length === 0 ? (
-          <EmptyState
-            description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
-            title="Sin movimientos todavia"
-          />
-        ) : (
-          historyCases.map((itemCase) => {
-            const isExpanded = expandedCaseIds.includes(itemCase.id);
-            const latest = itemCase.latest;
-            const caseMeta = latest.happenedAtLabel ?? null;
-            const caseImpact = historyImpactLabel(latest, person.displayName);
-            const caseTone = historyImpactTone(latest, person.displayName);
-
-            return (
-              <SurfaceCard
-                key={itemCase.id}
-                padding="lg"
-                style={[
-                  styles.caseCard,
-                  caseTone === 'positive' ? styles.caseCardPositive : null,
-                  caseTone === 'negative' ? styles.caseCardNegative : null,
-                ]}
-              >
-                <View style={styles.caseHeader}>
-                  <View style={styles.caseText}>
-                    <Text style={styles.caseTitle}>{historyCaseTitle(itemCase)}</Text>
-                    {caseImpact ? (
-                      <Text
-                        style={[
-                          styles.caseImpact,
-                          caseTone === 'positive' ? styles.positive : null,
-                          caseTone === 'negative' ? styles.negative : null,
-                        ]}
-                      >
-                        {caseImpact}
-                      </Text>
-                    ) : null}
-                    {caseMeta ? <Text style={styles.caseSummary}>{caseMeta}</Text> : null}
-                  </View>
-                  <View style={styles.caseMeta}>
-                    <StatusChip label={historyStatusLabel(latest.status)} tone={historyStatusTone(latest.status)} />
-                  </View>
-                </View>
-
-                <View style={styles.caseFooter}>
-                  <View />
-                  <Pressable
-                    onPress={() => toggleHistoryCase(itemCase.id)}
-                    style={({ pressed }) => [styles.caseToggle, pressed ? styles.caseTogglePressed : null]}
-                  >
-                    <Text style={styles.caseToggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
-                  </Pressable>
-                </View>
-
-                {isExpanded ? (
-                  <View style={styles.caseSteps}>
-                    {itemCase.steps.map((step, index) => {
-                      const stepImpact = historyImpactLabel(step, person.displayName);
-                      const stepTone = historyImpactTone(step, person.displayName);
-
-                      return (
-                        <View key={step.id} style={styles.stepRow}>
-                          <View style={styles.stepRail}>
-                            <View
-                              style={[
-                                styles.stepMarker,
-                                stepTone === 'positive' ? styles.stepMarkerPositive : null,
-                                stepTone === 'negative' ? styles.stepMarkerNegative : null,
-                              ]}
-                            />
-                            {index < itemCase.steps.length - 1 ? <View style={styles.stepLine} /> : null}
-                          </View>
-                          <View style={styles.stepBody}>
-                            <View style={styles.stepTop}>
-                              <Text style={styles.stepTitle}>{friendlyHistoryStepLabel(step)}</Text>
-                              {step.amountMinor > 0 ? (
-                                <Text
-                                  style={[
-                                    styles.stepAmount,
-                                    stepTone === 'positive' ? styles.positive : null,
-                                    stepTone === 'negative' ? styles.negative : null,
-                                  ]}
-                                >
-                                  {formatCop(step.amountMinor)}
-                                </Text>
-                              ) : null}
-                            </View>
-                            {stepImpact ? (
-                              <Text
-                                style={[
-                                  styles.stepImpact,
-                                  stepTone === 'positive' ? styles.positive : null,
-                                  stepTone === 'negative' ? styles.negative : null,
-                                ]}
-                              >
-                                {stepImpact}
-                              </Text>
-                            ) : null}
-                            {step.happenedAtLabel ? <Text style={styles.stepMeta}>{step.happenedAtLabel}</Text> : null}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
-              </SurfaceCard>
-            );
-          })
-        )}
-      </SectionBlock>
-    </ScreenShell>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  layout: {
+    alignSelf: 'center',
+    flex: 1,
+    gap: theme.spacing.md,
+    maxWidth: 560,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+    width: '100%',
+  },
+  fixedTop: {
+    gap: theme.spacing.sm,
+  },
+  heroBlock: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
+  },
+  contactFlatName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+  },
+  balanceSummary: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  heroMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  pendingHeader: {
-    alignItems: 'flex-start',
+  quickActionRowFlat: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
-  pendingText: {
-    flex: 1,
-    gap: 4,
-  },
-  pendingEyebrow: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  pendingTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  pendingAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-  pendingDetail: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  pendingMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  pendingHelper: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  actionSlot: {
-    flexGrow: 1,
-    minWidth: 140,
-  },
-  amendmentCard: {
-    gap: theme.spacing.md,
-  },
-  input: {
-    backgroundColor: theme.colors.surfaceMuted,
+  quickActionPill: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 52,
+    flex: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+    maxWidth: 240,
+    minHeight: 48,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  textarea: {
-    minHeight: 96,
-    paddingTop: theme.spacing.sm,
-    textAlignVertical: 'top',
+  quickActionPillPressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.99 }],
   },
-  amountPreview: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  caseCard: {
-    gap: theme.spacing.md,
-  },
-  caseCardPositive: {
-    borderLeftColor: theme.colors.success,
-    borderLeftWidth: 3,
-  },
-  caseCardNegative: {
-    borderLeftColor: theme.colors.warning,
-    borderLeftWidth: 3,
-  },
-  caseHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  caseText: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  caseMeta: {
-    alignItems: 'flex-end',
-    gap: theme.spacing.sm,
-  },
-  caseTitle: {
+  quickActionPillLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
-    lineHeight: 24,
   },
-  caseImpact: {
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 20,
+  panelArea: {
+    flex: 1,
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
   },
-  caseSummary: {
+  tabBar: {
+    alignItems: 'stretch',
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+  },
+  tabButton: {
+    alignItems: 'center',
+    flex: 1,
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  tabButtonActive: {
+    borderBottomColor: theme.colors.primary,
+    borderBottomWidth: 2,
+  },
+  tabButtonPressed: {
+    opacity: 0.88,
+  },
+  tabDivider: {
+    backgroundColor: theme.colors.hairline,
+    marginBottom: theme.spacing.sm,
+    width: StyleSheet.hairlineWidth,
+  },
+  tabLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    fontWeight: '700',
   },
-  caseFooter: {
-    alignItems: 'center',
-    flexDirection: 'row',
+  tabLabelActive: {
+    color: theme.colors.text,
+  },
+  sheetScrollWrap: {
+    flex: 1,
+  },
+  sheetScrollContent: {
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+    paddingBottom: theme.spacing.sm,
   },
-  caseToggle: {
-    borderRadius: theme.radius.medium,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
+  pendingActionStack: {
+    gap: theme.spacing.xs,
   },
-  caseTogglePressed: {
-    backgroundColor: theme.colors.surfaceSoft,
+  pendingActionSlot: {
+    width: '100%',
   },
-  caseToggleText: {
+  inlineAction: {
+    paddingVertical: 2,
+  },
+  inlineActionPressed: {
+    opacity: 0.62,
+  },
+  inlineActionText: {
     color: theme.colors.primary,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
   },
-  caseSteps: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-  },
-  stepRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  stepRail: {
-    alignItems: 'center',
-    width: 14,
-  },
-  stepMarker: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    height: 10,
-    marginTop: 4,
-    width: 10,
-  },
-  stepMarkerPositive: {
-    backgroundColor: theme.colors.success,
-  },
-  stepMarkerNegative: {
-    backgroundColor: theme.colors.warning,
-  },
-  stepLine: {
-    backgroundColor: theme.colors.hairline,
-    flex: 1,
-    marginTop: 4,
-    width: 1,
-  },
-  stepBody: {
-    flex: 1,
-    gap: 4,
-  },
-  stepTop: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  stepTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
-    flex: 1,
-    paddingRight: theme.spacing.sm,
-  },
-  stepImpact: {
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  stepMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-  },
-  stepAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
+  inlineActionDangerText: {
+    color: theme.colors.danger,
   },
   positive: {
     color: theme.colors.success,
@@ -882,7 +714,10 @@ const styles = StyleSheet.create({
   negative: {
     color: theme.colors.warning,
   },
-  footerActions: {
-    flexDirection: 'row',
+  neutral: {
+    color: theme.colors.textMuted,
+  },
+  danger: {
+    color: theme.colors.danger,
   },
 });

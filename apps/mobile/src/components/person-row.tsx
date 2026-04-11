@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 
+import { AppAvatar } from './app-avatar';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 
@@ -16,19 +17,19 @@ export interface PersonRowProps {
 
 function buildLastUpdateLabel(value: string): string {
   if (value.trim().length === 0) {
-    return 'Ultima actualizacion reciente';
+    return 'Reciente';
   }
 
   const relativeMatch = value.match(/(hace .+|hoy|ayer)$/i);
   if (relativeMatch) {
-    return `Ultima actualizacion ${relativeMatch[1]}`;
+    return relativeMatch[1]!;
   }
 
   if (value.toLocaleLowerCase('es-CO') === 'sin movimientos todavia') {
-    return value;
+    return 'Sin movimientos';
   }
 
-  return `Ultima actualizacion: ${value}`;
+  return value;
 }
 
 export function PersonRow({ person }: PersonRowProps) {
@@ -40,11 +41,17 @@ export function PersonRow({ person }: PersonRowProps) {
   return (
     <Link href={`/person/${person.userId}` as Href} asChild>
       <Pressable style={({ pressed }) => [pressed ? styles.pressed : null]}>
-        <SurfaceCard padding="md" style={styles.card} variant="default">
+        <SurfaceCard
+          padding="md"
+          style={[
+            styles.card,
+            person.direction === 'owes_me' ? styles.cardPositive : null,
+            person.direction === 'i_owe' ? styles.cardNegative : null,
+          ]}
+          variant="default"
+        >
           <View style={styles.leading}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarLabel}>{person.displayName.slice(0, 1)}</Text>
-            </View>
+            <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} rounded={false} size={42} />
             <View style={styles.textWrap}>
               <View style={styles.titleRow}>
                 <Text style={styles.name}>{person.displayName}</Text>
@@ -74,9 +81,16 @@ export function PersonRow({ person }: PersonRowProps) {
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
+    borderLeftWidth: 3,
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
+  },
+  cardPositive: {
+    borderLeftColor: theme.colors.success,
+  },
+  cardNegative: {
+    borderLeftColor: theme.colors.warning,
   },
   pressed: {
     opacity: 0.92,
@@ -86,19 +100,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-  },
-  avatar: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.small,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  avatarLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
   },
   textWrap: {
     flex: 1,

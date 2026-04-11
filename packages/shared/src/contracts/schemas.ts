@@ -37,7 +37,7 @@ export const createBalanceRequestSchema = z.object({
   amountMinor: moneyMinorSchema,
   description: z.string().trim().min(1).max(240),
   currencyCode: z.literal(CURRENCY_CODE).default(CURRENCY_CODE),
-  requestKind: requestTypeSchema,
+  requestKind: z.literal('balance_increase'),
 });
 
 export const amendFinancialRequestSchema = z.object({

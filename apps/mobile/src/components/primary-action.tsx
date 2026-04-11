@@ -11,6 +11,7 @@ export interface PrimaryActionProps {
   readonly onPress?: () => void;
   readonly href?: string;
   readonly variant?: 'primary' | 'secondary' | 'ghost';
+  readonly compact?: boolean;
 }
 
 export function PrimaryAction({
@@ -19,12 +20,14 @@ export function PrimaryAction({
   onPress,
   href,
   variant = 'primary',
+  compact = false,
 }: PrimaryActionProps) {
   const content = (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
+        compact ? styles.baseCompact : null,
         variant === 'primary' ? styles.primary : null,
         variant === 'secondary' ? styles.secondary : null,
         variant === 'ghost' ? styles.ghost : null,
@@ -35,6 +38,7 @@ export function PrimaryAction({
         <Text
           style={[
             styles.label,
+            compact ? styles.labelCompact : null,
             variant === 'primary' ? styles.primaryText : null,
             variant !== 'primary' ? styles.secondaryText : null,
           ]}
@@ -45,6 +49,7 @@ export function PrimaryAction({
           <Text
             style={[
               styles.subtitle,
+              compact ? styles.subtitleCompact : null,
               variant === 'primary' ? styles.primarySubtext : null,
               variant !== 'primary' ? styles.secondarySubtext : null,
             ]}
@@ -57,7 +62,7 @@ export function PrimaryAction({
         <Ionicons
           color={variant === 'primary' ? theme.colors.white : theme.colors.text}
           name="arrow-forward"
-          size={18}
+          size={compact ? 16 : 18}
         />
       ) : null}
     </Pressable>
@@ -86,6 +91,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     width: '100%',
   },
+  baseCompact: {
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   primary: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primaryStrong,
@@ -113,9 +123,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
   },
+  labelCompact: {
+    fontSize: theme.typography.callout,
+    lineHeight: 18,
+  },
   subtitle: {
     fontSize: theme.typography.caption,
     lineHeight: 16,
+  },
+  subtitleCompact: {
+    lineHeight: 14,
   },
   primaryText: {
     color: theme.colors.white,

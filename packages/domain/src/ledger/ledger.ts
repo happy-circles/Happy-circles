@@ -58,9 +58,7 @@ export function buildAcceptedRequestTransaction(
   }
 
   const entries =
-    request.requestKind === 'balance_increase'
-      ? buildBalanceIncreaseAcceptanceEntries(request.amount.amountMinor, accounts)
-      : buildBalanceDecreaseAcceptanceEntries(request.amount.amountMinor, accounts);
+    buildBalanceIncreaseAcceptanceEntries(request.amount.amountMinor, accounts);
 
   assertBalanced(entries);
 
@@ -133,32 +131,10 @@ function buildBalanceIncreaseAcceptanceEntries(
   ];
 }
 
-function buildBalanceDecreaseAcceptanceEntries(
-  amountMinor: number,
-  accounts: LedgerAccountsByPair,
-): readonly LedgerEntry[] {
-  return [
-    {
-      ledgerAccountId: accounts.creditorReceivableAccount.id,
-      entrySide: 'credit',
-      amountMinor,
-      entryOrder: 1,
-    },
-    {
-      ledgerAccountId: accounts.debtorPayableAccount.id,
-      entrySide: 'debit',
-      amountMinor,
-      entryOrder: 2,
-    },
-  ];
-}
-
 function mapRequestKindToTransactionType(requestKind: RequestType): TransactionType {
   switch (requestKind) {
     case 'balance_increase':
       return 'balance_increase_acceptance';
-    case 'balance_decrease':
-      return 'balance_decrease_acceptance';
     case 'transaction_reversal':
       return 'transaction_reversal_acceptance';
     default: {
