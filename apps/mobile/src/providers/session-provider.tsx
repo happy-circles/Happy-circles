@@ -23,7 +23,12 @@ import {
 
 import { getCurrentAppVersion, getCurrentDeviceName, getOrCreateDeviceId } from '@/lib/device-trust';
 import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
-import { getBiometricSupport, authenticateWithBiometrics } from '@/lib/security';
+import {
+  getBiometricSupport,
+  authenticateWithBiometrics,
+  authenticateWithBiometricsResult,
+  type BiometricAuthResult,
+} from '@/lib/security';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 
@@ -128,7 +133,7 @@ interface SessionContextValue {
   revokeTrustedDevice(deviceId: string): Promise<string>;
   refreshAccountState(): Promise<void>;
   signOut(): Promise<void>;
-  unlock(): Promise<boolean>;
+  unlock(): Promise<BiometricAuthResult>;
   lock(): void;
   stepUpAuth(force?: boolean): Promise<boolean>;
   setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
@@ -1089,23 +1094,29 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [deviceTrustState, status, stepUpFreshUntil],
   );
 
-  const unlock = useCallback(async () => {
+  const unlock = useCallback(async (): Promise<BiometricAuthResult> => {
     if (status === 'signed_in_untrusted') {
-      return false;
+      return {
+        success: false,
+        error: 'device_untrusted',
+      };
     }
 
     if (!biometricsEnabled) {
       setStatus('signed_in_unlocked');
-      return true;
+      return {
+        success: true,
+        error: null,
+      };
     }
 
-    const authenticated = await authenticateWithBiometrics();
-    if (authenticated) {
+    const result = await authenticateWithBiometricsResult();
+    if (result.success) {
       setStatus('signed_in_unlocked');
       setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
     }
 
-    return authenticated;
+    return result;
   }, [biometricsEnabled, status]);
 
   const lock = useCallback(() => {

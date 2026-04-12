@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import type { Href } from 'expo-router';
 
@@ -41,6 +41,8 @@ function SessionOverlay() {
   const { biometricLabel, email, isLocked, signOut, status, unlock } = useSession();
   const [message, setMessage] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [retryKey, setRetryKey] = useState(0);
   const autoUnlockTriggeredRef = useRef(false);
 
   const attemptUnlock = useCallback(
@@ -52,12 +54,28 @@ function SessionOverlay() {
       setIsAuthenticating(true);
       setMessage(null);
 
-      const authenticated = await unlock();
-      if (!authenticated) {
+      const result = await unlock();
+      if (!result.success) {
+        const isTransientAutomaticFailure =
+          automatic && (result.error === 'app_cancel' || result.error === 'system_cancel');
+
+        if (isTransientAutomaticFailure) {
+          autoUnlockTriggeredRef.current = false;
+          setTimeout(() => {
+            setRetryKey((current) => current + 1);
+          }, 350);
+          setIsAuthenticating(false);
+          return;
+        }
+
         setMessage(
-          automatic
+          result.error === 'device_untrusted'
+            ? 'Este dispositivo aun no es confiable. Valida el dispositivo desde tu perfil.'
+            : automatic
             ? `No se pudo validar ${biometricLabel}. Intenta otra vez o cierra sesion.`
-            : `No se pudo validar ${biometricLabel}.`,
+            : result.error === 'user_cancel'
+              ? `Cancelaste ${biometricLabel}.`
+              : `No se pudo validar ${biometricLabel}.`,
         );
       }
 
@@ -65,6 +83,16 @@ function SessionOverlay() {
     },
     [biometricLabel, isAuthenticating, unlock],
   );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setAppState(nextState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLocked) {
@@ -78,9 +106,19 @@ function SessionOverlay() {
       return;
     }
 
+    if (appState !== 'active') {
+      return;
+    }
+
     autoUnlockTriggeredRef.current = true;
-    void attemptUnlock(true);
-  }, [attemptUnlock, isLocked, status]);
+    const timer = setTimeout(() => {
+      void attemptUnlock(true);
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [appState, attemptUnlock, isLocked, retryKey, status]);
 
   if (status === 'loading') {
     return (
