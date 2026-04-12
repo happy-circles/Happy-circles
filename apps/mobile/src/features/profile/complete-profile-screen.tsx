@@ -6,13 +6,15 @@ import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 export function CompleteProfileScreen() {
   const router = useRouter();
-  const { completeProfile, profile } = useSession();
+  const session = useSession();
+  const profile = session.profile;
 
   const initialCountry = useMemo(
     () =>
@@ -41,7 +43,7 @@ export function CompleteProfileScreen() {
     setMessage(null);
 
     try {
-      const result = await completeProfile({
+      const result = await session.completeProfile({
         fullName,
         phoneCountryIso2: selectedCountry.iso2,
         phoneCountryCallingCode: selectedCountry.callingCode,
@@ -50,7 +52,8 @@ export function CompleteProfileScreen() {
 
       setMessage(result);
       if (result === 'Perfil actualizado.') {
-        router.replace('/home');
+        const pendingIntent = await readPendingInviteIntent();
+        router.replace(pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
       }
     } finally {
       setBusy(false);

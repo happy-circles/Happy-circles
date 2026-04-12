@@ -98,7 +98,7 @@ export function DashboardScreen() {
 
       <SectionBlock
         action={
-          <Link href="/invite" asChild>
+          <Link href="/invite/index" asChild>
             <Pressable style={({ pressed }) => [styles.peopleAction, pressed ? styles.quickActionPressed : null]}>
               <Ionicons color={theme.colors.primary} name="person-add-outline" size={18} />
             </Pressable>
@@ -119,7 +119,7 @@ export function DashboardScreen() {
         ) : null}
         {dashboard.activePeople.length === 0 ? (
           <EmptyState
-            actionHref="/invite"
+            actionHref="/invite/index"
             actionLabel="Enviar invitacion"
             description="Cuando tengas relaciones activas y movimientos confirmados, apareceran aqui."
             title="Todavia no hay relaciones activas"

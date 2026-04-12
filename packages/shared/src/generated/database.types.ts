@@ -15,6 +15,7 @@ export interface Database {
           email: string;
           display_name: string;
           avatar_path: string | null;
+          public_connection_token: string;
           phone_country_iso2: string | null;
           phone_country_calling_code: string | null;
           phone_national_number: string | null;
@@ -58,8 +59,14 @@ export interface Database {
         Row: {
           id: string;
           inviter_user_id: string;
-          invitee_user_id: string;
+          invitee_user_id: string | null;
           status: string;
+          target_mode: string;
+          invite_token: string | null;
+          expires_at: string;
+          resolved_at: string | null;
+          accepted_by_user_id: string | null;
+          channel_label: string;
           created_at: string;
           updated_at: string;
         };
@@ -258,6 +265,43 @@ export interface Database {
           subtype: string;
           status: string;
           created_at: string;
+        };
+      };
+      v_relationship_invites_live: {
+        Row: {
+          id: string;
+          inviter_user_id: string;
+          invitee_user_id: string | null;
+          status: string;
+          target_mode: string;
+          invite_token: string | null;
+          expires_at: string;
+          resolved_at: string | null;
+          accepted_by_user_id: string | null;
+          channel_label: string;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      v_contact_invites_live: {
+        Row: {
+          id: string;
+          inviter_user_id: string;
+          invitee_name: string;
+          invitee_phone_country_iso2: string;
+          invitee_phone_country_calling_code: string;
+          invitee_phone_national_number: string;
+          invitee_phone_e164: string;
+          status: string;
+          claimed_by_user_id: string | null;
+          relationship_invite_id: string | null;
+          relationship_invite_status: string | null;
+          relationship_invite_expires_at: string | null;
+          relationship_invite_resolved_at: string | null;
+          relationship_invite_target_mode: string | null;
+          relationship_invite_channel_label: string | null;
+          created_at: string;
+          updated_at: string;
         };
       };
     };

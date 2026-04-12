@@ -5,6 +5,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import type { Href } from 'expo-router';
 
+import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
@@ -38,7 +39,7 @@ function NotificationBridge() {
 }
 
 function SessionOverlay() {
-  const { biometricLabel, email, isLocked, signOut, status, unlock } = useSession();
+  const session = useSession();
   const [message, setMessage] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
@@ -54,7 +55,7 @@ function SessionOverlay() {
       setIsAuthenticating(true);
       setMessage(null);
 
-      const result = await unlock();
+      const result = await session.unlock();
       if (!result.success) {
         const isTransientAutomaticFailure =
           automatic && (result.error === 'app_cancel' || result.error === 'system_cancel');
@@ -72,16 +73,16 @@ function SessionOverlay() {
           result.error === 'device_untrusted'
             ? 'Este dispositivo aun no es confiable. Valida el dispositivo desde tu perfil.'
             : automatic
-            ? `No se pudo validar ${biometricLabel}. Intenta otra vez o cierra sesion.`
+            ? `No se pudo validar ${session.biometricLabel}. Intenta otra vez o cierra sesion.`
             : result.error === 'user_cancel'
-              ? `Cancelaste ${biometricLabel}.`
-              : `No se pudo validar ${biometricLabel}.`,
+              ? `Cancelaste ${session.biometricLabel}.`
+              : `No se pudo validar ${session.biometricLabel}.`,
         );
       }
 
       setIsAuthenticating(false);
     },
-    [biometricLabel, isAuthenticating, unlock],
+    [isAuthenticating, session],
   );
 
   useEffect(() => {
@@ -95,14 +96,14 @@ function SessionOverlay() {
   }, []);
 
   useEffect(() => {
-    if (!isLocked) {
+    if (!session.isLocked) {
       autoUnlockTriggeredRef.current = false;
       setMessage(null);
       setIsAuthenticating(false);
       return;
     }
 
-    if (status === 'loading' || autoUnlockTriggeredRef.current) {
+    if (session.status === 'loading' || autoUnlockTriggeredRef.current) {
       return;
     }
 
@@ -118,9 +119,9 @@ function SessionOverlay() {
     return () => {
       clearTimeout(timer);
     };
-  }, [appState, attemptUnlock, isLocked, retryKey, status]);
+  }, [appState, attemptUnlock, retryKey, session.isLocked, session.status]);
 
-  if (status === 'loading') {
+  if (session.status === 'loading') {
     return (
       <View style={styles.overlay}>
         <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
@@ -131,24 +132,24 @@ function SessionOverlay() {
     );
   }
 
-  if (!isLocked) {
+  if (!session.isLocked) {
     return null;
   }
 
   return (
     <View style={styles.overlay}>
       <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
-        <Text style={styles.lockTitle}>{isAuthenticating ? `Verificando ${biometricLabel}` : 'App bloqueada'}</Text>
+        <Text style={styles.lockTitle}>{isAuthenticating ? `Verificando ${session.biometricLabel}` : 'App bloqueada'}</Text>
         <Text style={styles.lockSubtitle}>
-          {email ?? 'Tu sesion'} requiere {biometricLabel} para entrar sin volver a escribir tu clave.
+          {session.email ?? 'Tu sesion'} requiere {session.biometricLabel} para entrar sin volver a escribir tu clave.
         </Text>
         {message ? <Text style={styles.lockMessage}>{message}</Text> : null}
         <PrimaryAction
-          label={isAuthenticating ? `Validando ${biometricLabel}...` : `Entrar con ${biometricLabel}`}
+          label={isAuthenticating ? `Validando ${session.biometricLabel}...` : `Entrar con ${session.biometricLabel}`}
           subtitle="Si la validacion sale bien, entraras de una vez."
           onPress={isAuthenticating ? undefined : () => void attemptUnlock(false)}
         />
-        <PrimaryAction label="Cerrar sesion" onPress={() => void signOut()} variant="secondary" />
+        <PrimaryAction label="Cerrar sesion" onPress={() => void session.signOut()} variant="secondary" />
       </SurfaceCard>
     </View>
   );
@@ -165,39 +166,61 @@ function SessionRouteGuard() {
       return;
     }
 
-    const currentRootSegment = String(segments[0] ?? '');
-    const inAuthGroup = currentRootSegment === '(auth)';
-    const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
-    const isBasicReadableRoute =
-      isCompleteProfileRoute ||
-      currentRootSegment === '(tabs)' ||
-      currentRootSegment === 'activity' ||
-      currentRootSegment === 'profile' ||
-      currentRootSegment === 'person' ||
-      currentRootSegment === 'settlements';
+    let cancelled = false;
 
-    if (status === 'signed_out') {
-      if (!inAuthGroup) {
-        router.replace('/sign-in');
+    async function syncRoutes() {
+      const currentRootSegment = String(segments[0] ?? '');
+      const inAuthGroup = currentRootSegment === '(auth)';
+      const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
+      const isInviteLinkRoute = currentRootSegment === 'invite';
+      const isConnectRoute = currentRootSegment === 'connect';
+      const isPublicInviteRoute = isInviteLinkRoute || isConnectRoute;
+      const isBasicReadableRoute =
+        isCompleteProfileRoute ||
+        isPublicInviteRoute ||
+        currentRootSegment === '(tabs)' ||
+        currentRootSegment === 'activity' ||
+        currentRootSegment === 'profile' ||
+        currentRootSegment === 'person' ||
+        currentRootSegment === 'settlements';
+
+      if (status === 'signed_out') {
+        if (!inAuthGroup && !isPublicInviteRoute && !cancelled) {
+          router.replace('/sign-in');
+        }
+        return;
       }
-      return;
+
+      if (profileCompletionState === 'incomplete' && !isBasicReadableRoute) {
+        if (!cancelled) {
+          router.replace('/complete-profile' as Href);
+        }
+        return;
+      }
+
+      const pendingIntent =
+        profileCompletionState === 'complete' ? await readPendingInviteIntent() : null;
+      const nextSignedInHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home';
+
+      if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
+        if (!cancelled) {
+          router.replace(nextSignedInHref);
+        }
+        return;
+      }
+
+      if (inAuthGroup && !cancelled) {
+        router.replace(
+          (profileCompletionState === 'incomplete' ? '/complete-profile' : nextSignedInHref) as Href,
+        );
+      }
     }
 
-    if (profileCompletionState === 'incomplete' && !isBasicReadableRoute) {
-      router.replace('/complete-profile' as Href);
-      return;
-    }
+    void syncRoutes();
 
-    if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
-      router.replace('/home');
-      return;
-    }
-
-    if (inAuthGroup) {
-      router.replace(
-        (profileCompletionState === 'incomplete' ? '/complete-profile' : '/home') as Href,
-      );
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [profileCompletionState, rootNavigationState?.key, router, segments, status]);
 
   return null;

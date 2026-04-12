@@ -7,6 +7,7 @@ import {
   CURRENCY_CODE,
   ENTRY_SIDES,
   PARTICIPANT_DECISIONS,
+  RELATIONSHIP_INVITE_TARGET_MODES,
   PROPOSAL_STATUSES,
   REQUEST_STATUSES,
   REQUEST_TYPES,
@@ -55,12 +56,31 @@ export const requestDecisionSchema = z.object({
 export const relationshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteeUserId: uuidSchema,
+  channelLabel: z.string().trim().min(1).max(80).optional(),
 });
 
 export const relationshipInviteDecisionSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteId: uuidSchema,
 });
+
+export const shareableInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const inviteTokenSchema = z.object({
+  inviteToken: z.string().trim().min(12).max(128),
+});
+
+export const inviteTokenDecisionSchema = inviteTokenSchema.extend({
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const profileConnectionPreviewSchema = z.object({
+  connectionToken: z.string().trim().min(12).max(128),
+});
+
+export const relationshipInviteTargetModeSchema = z.enum(RELATIONSHIP_INVITE_TARGET_MODES);
 
 export const emailPasswordSignInSchema = z.object({
   email: z.string().trim().email(),

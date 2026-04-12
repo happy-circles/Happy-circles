@@ -135,7 +135,7 @@ interface SessionContextValue {
   signOut(): Promise<void>;
   unlock(): Promise<BiometricAuthResult>;
   lock(): void;
-  stepUpAuth(force?: boolean): Promise<boolean>;
+  stepUpAuth(force?: boolean): Promise<BiometricAuthResult>;
   setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
 }
@@ -281,7 +281,6 @@ function normalizeIdentityProvider(value: string | null | undefined): IdentityPr
 
 function isLowQualityDisplayName(
   displayName: string | null | undefined,
-  _email: string | null,
 ): boolean {
   const normalized = displayName?.trim() ?? '';
   if (normalized.length < 3) {
@@ -296,7 +295,7 @@ function deriveProfileCompletionState(profile: UserProfileRow | null): ProfileCo
     return 'loading';
   }
 
-  if (isLowQualityDisplayName(profile.display_name, profile.email) || !profile.phone_e164) {
+  if (isLowQualityDisplayName(profile.display_name) || !profile.phone_e164) {
     return 'incomplete';
   }
 
@@ -392,6 +391,40 @@ function resolveStatusAfterAccountLoad(input: {
   }
 
   return 'signed_in_unlocked';
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function formatStepUpErrorMessage(
+  actionLabel: string,
+  biometricLabel: string,
+  error: string | null,
+): string {
+  if (error === 'device_untrusted') {
+    return 'Este dispositivo aun no es confiable. Validalo primero desde Perfil.';
+  }
+
+  if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
+    return `Este dispositivo no puede usar ${biometricLabel} para ${actionLabel}.`;
+  }
+
+  if (error === 'lockout') {
+    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
+  }
+
+  if (error === 'user_cancel') {
+    return `Cancelaste ${biometricLabel}.`;
+  }
+
+  if (error === 'authentication_failed') {
+    return `No se pudo validar ${biometricLabel} para ${actionLabel}.`;
+  }
+
+  return `No se pudo validar tu identidad para ${actionLabel}.`;
 }
 
 async function resolveUserIdentities(currentSession: Session): Promise<readonly AuthIdentity[]> {
@@ -528,7 +561,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         supabase
           .from('user_profiles')
           .select(
-            'id, email, display_name, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, created_at, updated_at',
+            'id, email, display_name, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, public_connection_token, created_at, updated_at',
           )
           .eq('id', nextSession.user.id)
           .single(),
@@ -839,12 +872,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       const result = await WebBrowser.openAuthSessionAsync(authResult.data.url, redirectTo);
-      if (result.type === 'cancel' || result.type === 'dismiss') {
+      const resultType = String(result.type);
+
+      if (resultType === 'cancel' || resultType === 'dismiss') {
         return mode === 'link' ? 'Vinculacion con Google cancelada.' : 'Inicio con Google cancelado.';
       }
 
-      if (result.type === 'success') {
-        await applySessionFromUrl(result.url);
+      if (resultType === 'success') {
+        const redirectUrl =
+          'url' in result && typeof result.url === 'string' ? result.url : null;
+        await applySessionFromUrl(redirectUrl);
         return mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.';
       }
 
@@ -1072,24 +1109,36 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, [clearSignedInState]);
 
   const stepUpAuth = useCallback(
-    async (force = false) => {
+    async (force = false): Promise<BiometricAuthResult> => {
       if (deviceTrustState !== 'trusted') {
-        return false;
+        return {
+          success: false,
+          error: 'device_untrusted',
+        };
       }
 
       if (!force && stepUpFreshUntil && stepUpFreshUntil > Date.now()) {
-        return true;
+        return {
+          success: true,
+          error: null,
+        };
       }
 
-      const authenticated = await authenticateWithBiometrics();
-      if (authenticated) {
+      let result = await authenticateWithBiometricsResult();
+
+      if (!result.success && (result.error === 'app_cancel' || result.error === 'system_cancel')) {
+        await wait(250);
+        result = await authenticateWithBiometricsResult();
+      }
+
+      if (result.success) {
         setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
         if (status === 'signed_in_locked') {
           setStatus('signed_in_unlocked');
         }
       }
 
-      return authenticated;
+      return result;
     },
     [deviceTrustState, status, stepUpFreshUntil],
   );
@@ -1130,8 +1179,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
     async (enabled: boolean): Promise<BiometricToggleResult> => {
       if (!enabled) {
         if (biometricsEnabled) {
-          const authenticated = await stepUpAuth(true);
-          if (!authenticated) {
+          const result = await stepUpAuth(true);
+          if (!result.success) {
             return {
               ok: false,
               message: 'No se pudo validar tu identidad para desactivar la biometria.',
@@ -1218,9 +1267,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
         }
 
         if (changingProtectedProfileData) {
-          const authenticated = await stepUpAuth(true);
-          if (!authenticated) {
-            return 'No se pudo validar tu identidad para cambiar el perfil.';
+          const result = await stepUpAuth(true);
+          if (!result.success) {
+            return formatStepUpErrorMessage('cambiar el perfil', biometricLabel, result.error);
           }
         }
 
@@ -1258,7 +1307,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return formatValidationMessage(error);
       }
     },
-    [deviceTrustState, profile, profileCompletionState, refreshAccountState, stepUpAuth],
+    [biometricLabel, deviceTrustState, profile, profileCompletionState, refreshAccountState, stepUpAuth],
   );
 
   const linkGoogle = useCallback(async () => {
@@ -1266,36 +1315,36 @@ export function SessionProvider({ children }: PropsWithChildren) {
       return 'Solo puedes vincular Google desde un dispositivo confiable.';
     }
 
-    const authenticated = await stepUpAuth(true);
-    if (!authenticated) {
-      return 'No se pudo validar tu identidad para vincular Google.';
+    const authResult = await stepUpAuth(true);
+    if (!authResult.success) {
+      return formatStepUpErrorMessage('vincular Google', biometricLabel, authResult.error);
     }
 
-    const result = await performGoogleOAuthFlow('link');
-    if (result === 'Google vinculado.') {
+    const oauthResult = await performGoogleOAuthFlow('link');
+    if (oauthResult === 'Google vinculado.') {
       await refreshAccountState();
     }
 
-    return result;
-  }, [deviceTrustState, performGoogleOAuthFlow, refreshAccountState, stepUpAuth]);
+    return oauthResult;
+  }, [biometricLabel, deviceTrustState, performGoogleOAuthFlow, refreshAccountState, stepUpAuth]);
 
   const linkApple = useCallback(async () => {
     if (deviceTrustState !== 'trusted') {
       return 'Solo puedes vincular Apple desde un dispositivo confiable.';
     }
 
-    const authenticated = await stepUpAuth(true);
-    if (!authenticated) {
-      return 'No se pudo validar tu identidad para vincular Apple.';
+    const authResult = await stepUpAuth(true);
+    if (!authResult.success) {
+      return formatStepUpErrorMessage('vincular Apple', biometricLabel, authResult.error);
     }
 
-    const result = await performAppleAuth('link');
-    if (result.message === 'Apple vinculado.') {
+    const appleResult = await performAppleAuth('link');
+    if (appleResult.message === 'Apple vinculado.') {
       await refreshAccountState();
     }
 
-    return result.message;
-  }, [deviceTrustState, performAppleAuth, refreshAccountState, stepUpAuth]);
+    return appleResult.message;
+  }, [biometricLabel, deviceTrustState, performAppleAuth, refreshAccountState, stepUpAuth]);
 
   const attachEmailPassword = useCallback(
     async (input: AttachEmailPasswordInput) => {
@@ -1314,9 +1363,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
           return 'Solo puedes agregar clave desde un dispositivo confiable.';
         }
 
-        const authenticated = await stepUpAuth(true);
-        if (!authenticated) {
-          return 'No se pudo validar tu identidad para agregar una clave.';
+        const result = await stepUpAuth(true);
+        if (!result.success) {
+          return formatStepUpErrorMessage('agregar una clave', biometricLabel, result.error);
         }
 
         const { error } = await supabase.auth.updateUser({
@@ -1333,7 +1382,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return formatValidationMessage(error);
       }
     },
-    [deviceTrustState, refreshAccountState, stepUpAuth],
+    [biometricLabel, deviceTrustState, refreshAccountState, stepUpAuth],
   );
 
   const trustCurrentDevice = useCallback(
@@ -1441,9 +1490,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Solo puedes revocar dispositivos desde un dispositivo confiable.';
       }
 
-      const authenticated = await stepUpAuth(true);
-      if (!authenticated) {
-        return 'No se pudo validar tu identidad para revocar el dispositivo.';
+      const result = await stepUpAuth(true);
+      if (!result.success) {
+        return formatStepUpErrorMessage('revocar el dispositivo', biometricLabel, result.error);
       }
 
       const timestamp = new Date().toISOString();
@@ -1466,7 +1515,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         ? 'Este dispositivo fue revocado y quedo sin confianza.'
         : 'Dispositivo revocado.';
     },
-    [currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
+    [biometricLabel, currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
   );
 
   const value = useMemo<SessionContextValue>(

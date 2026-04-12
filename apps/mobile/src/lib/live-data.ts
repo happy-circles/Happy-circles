@@ -16,23 +16,27 @@ import {
   createContactInviteSchema,
   cycleSettlementDecisionSchema,
   cycleSettlementExecutionSchema,
+  inviteTokenDecisionSchema,
+  inviteTokenSchema,
+  profileConnectionPreviewSchema,
   relationshipInviteDecisionSchema,
   relationshipInviteSchema,
   requestDecisionSchema,
+  shareableInviteSchema,
   type Database,
 } from '@happy-circles/shared';
 
 import { useSession } from '@/providers/session-provider';
 import { AVATAR_BUCKET, resolveAvatarUrl } from './avatar';
 import { formatCop } from './data';
-import { buildActivityHistoryItems } from './history-cases';
+import { buildActivityHistoryItems, compareHistoryItems } from './history-cases';
 import { createIdempotencyKey } from './idempotency';
 import { queryClient } from './query-client';
 import { supabase } from './supabase';
 
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
-type ContactInviteRow = Database['public']['Tables']['contact_invites']['Row'];
-type RelationshipInviteRow = Database['public']['Tables']['relationship_invites']['Row'];
+type ContactInviteRow = Database['public']['Views']['v_contact_invites_live']['Row'];
+type RelationshipInviteRow = Database['public']['Views']['v_relationship_invites_live']['Row'];
 type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
 type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
 type SettlementProposalRow = Database['public']['Tables']['settlement_proposals']['Row'];
@@ -87,10 +91,14 @@ export interface SettlementDetailDto {
 export interface RelationshipInviteDto {
   readonly id: string;
   readonly direction: 'incoming' | 'outgoing';
-  readonly userId: string;
+  readonly userId: string | null;
   readonly displayName: string;
   readonly status: string;
+  readonly targetMode: 'direct_user' | 'share_link';
+  readonly channelLabel: string;
   readonly createdAt: string;
+  readonly expiresAt: string | null;
+  readonly resolvedAt: string | null;
 }
 
 export interface ContactInviteDto {
@@ -101,6 +109,11 @@ export interface ContactInviteDto {
   readonly createdAt: string;
   readonly matchedDisplayName: string | null;
   readonly relationshipInviteId: string | null;
+  readonly relationshipInviteStatus: string | null;
+  readonly relationshipInviteExpiresAt: string | null;
+  readonly relationshipInviteResolvedAt: string | null;
+  readonly relationshipInviteTargetMode: string | null;
+  readonly relationshipInviteChannelLabel: string | null;
 }
 
 export interface CreateContactInviteResult {
@@ -109,6 +122,43 @@ export interface CreateContactInviteResult {
   readonly phoneE164: string;
   readonly matchedUserId: string | null;
   readonly relationshipInviteId: string | null;
+  readonly relationshipInviteStatus: string | null;
+  readonly relationshipInviteExpiresAt: string | null;
+  readonly relationshipInviteResolvedAt: string | null;
+}
+
+export interface CreateShareableInviteResult {
+  readonly inviteId: string;
+  readonly status: string;
+  readonly targetMode: 'share_link';
+  readonly inviteToken: string;
+  readonly inviteLink: string;
+  readonly expiresAt: string;
+  readonly channelLabel: string;
+}
+
+export interface InviteLinkPreviewResult {
+  readonly inviteId: string;
+  readonly status: string;
+  readonly canAccept: boolean;
+  readonly reason: string;
+  readonly inviterUserId: string;
+  readonly inviterDisplayName: string;
+  readonly channelLabel: string;
+  readonly targetMode: 'share_link';
+  readonly expiresAt: string | null;
+  readonly resolvedAt: string | null;
+}
+
+export interface ProfileConnectionPreviewResult {
+  readonly targetUserId: string;
+  readonly displayName: string;
+  readonly canCreateInvite: boolean;
+  readonly reason: string;
+  readonly existingInviteId: string | null;
+  readonly existingInviteStatus: string | null;
+  readonly existingInviteDirection: 'incoming' | 'outgoing' | null;
+  readonly existingInviteExpiresAt: string | null;
 }
 
 interface ActionableItem {
@@ -137,6 +187,7 @@ export interface AppSnapshot {
     readonly displayName: string;
     readonly email: string;
     readonly avatarUrl: string | null;
+    readonly publicConnectionToken: string;
   } | null;
   readonly incomingInvites: readonly RelationshipInviteDto[];
   readonly outgoingInvites: readonly RelationshipInviteDto[];
@@ -250,7 +301,6 @@ function buildProfileByUserId(profiles: readonly UserProfileRow[]): Map<string, 
 function deriveDirection(
   currentUserId: string,
   edge: OpenDebtRow | undefined,
-  _latestRequest: FinancialRequestRow | undefined,
 ): PersonCardDto['direction'] {
   if (edge) {
     return edge.creditor_user_id === currentUserId ? 'owes_me' : 'i_owe';
@@ -261,6 +311,17 @@ function deriveDirection(
 
 function sortByNewest<T extends { readonly createdAt: string }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function sortHistoryItems<
+  T extends {
+    readonly id: string;
+    readonly kind: ActivityItemDto['kind'];
+    readonly status: string;
+    readonly happenedAt?: string;
+  },
+>(items: readonly T[]): T[] {
+  return [...items].sort(compareHistoryItems);
 }
 
 function actionableItemToActivityItem(item: ActionableItem): ActivityItemDto {
@@ -325,7 +386,6 @@ function buildPendingRequestImpactTitle(input: {
 function formatPendingRequestTitle(
   request: FinancialRequestRow,
   currentUserId: string,
-  names: Map<string, string>,
 ): string {
   return buildPendingRequestImpactTitle({
     request,
@@ -886,6 +946,107 @@ function buildPendingSettlementItems(
   return items;
 }
 
+function inviteDisplayName(
+  invite: RelationshipInviteRow,
+  names: Map<string, string>,
+  currentUserId: string,
+): { readonly userId: string | null; readonly displayName: string } {
+  if (invite.target_mode === 'share_link' && invite.status === 'pending') {
+    return {
+      userId: null,
+      displayName: 'Link compartible',
+    };
+  }
+
+  const counterpartUserId =
+    invite.inviter_user_id === currentUserId
+      ? invite.invitee_user_id
+      : invite.invitee_user_id === currentUserId
+        ? invite.inviter_user_id
+        : invite.invitee_user_id ?? invite.inviter_user_id;
+
+  return {
+    userId: counterpartUserId,
+    displayName: counterpartUserId ? (names.get(counterpartUserId) ?? 'Persona') : 'Link compartible',
+  };
+}
+
+function buildInvitePendingSubtitle(invite: RelationshipInviteRow): string {
+  const pieces = [invite.channel_label];
+
+  if (invite.expires_at) {
+    pieces.push(`vence ${formatRelativeLabel(invite.expires_at)}`);
+  } else {
+    pieces.push(formatRelativeLabel(invite.created_at));
+  }
+
+  return pieces.join(' | ');
+}
+
+function buildInviteHistoryTitle(input: {
+  readonly invite: RelationshipInviteRow;
+  readonly currentUserId: string;
+  readonly displayName: string;
+}): string {
+  const { invite, currentUserId, displayName } = input;
+  const isOutgoing = invite.inviter_user_id === currentUserId;
+  const isShareLinkWithoutCounterpart =
+    invite.target_mode === 'share_link' && !invite.invitee_user_id && !invite.accepted_by_user_id;
+
+  if (invite.status === 'accepted') {
+    if (isOutgoing) {
+      return invite.target_mode === 'share_link'
+        ? `${displayName} uso tu link`
+        : `${displayName} acepto tu invitacion`;
+    }
+
+    return invite.target_mode === 'share_link'
+      ? `Aceptaste el link de ${displayName}`
+      : `Aceptaste la invitacion de ${displayName}`;
+  }
+
+  if (invite.status === 'rejected') {
+    return isOutgoing
+      ? `${displayName} rechazo tu invitacion`
+      : `Rechazaste la invitacion de ${displayName}`;
+  }
+
+  if (invite.status === 'expired') {
+    if (isShareLinkWithoutCounterpart) {
+      return 'Tu link compartible vencio';
+    }
+
+    return isOutgoing
+      ? `Vencio tu invitacion a ${displayName}`
+      : `Vencio la invitacion de ${displayName}`;
+  }
+
+  if (invite.status === 'canceled') {
+    return isShareLinkWithoutCounterpart
+      ? 'Cancelaste tu link compartible'
+      : `Cancelaste la invitacion a ${displayName}`;
+  }
+
+  return isOutgoing ? `Invitacion enviada a ${displayName}` : `Invitacion de ${displayName}`;
+}
+
+function buildInviteHistorySubtitle(input: {
+  readonly invite: RelationshipInviteRow;
+  readonly displayName: string;
+}): string {
+  const { invite, displayName } = input;
+  const pieces = [invite.channel_label];
+
+  if (invite.target_mode === 'share_link' && invite.status === 'accepted') {
+    pieces.push(`Conectaste con ${displayName}`);
+  } else if (displayName !== 'Link compartible') {
+    pieces.push(displayName);
+  }
+
+  pieces.push(formatRelativeLabel(invite.resolved_at ?? invite.updated_at ?? invite.created_at));
+  return pieces.join(' | ');
+}
+
 function buildInviteItems(
   invites: readonly RelationshipInviteRow[],
   names: Map<string, string>,
@@ -894,57 +1055,90 @@ function buildInviteItems(
   readonly incomingInvites: readonly RelationshipInviteDto[];
   readonly outgoingInvites: readonly RelationshipInviteDto[];
   readonly pendingActivityItems: readonly ActionableItem[];
+  readonly historyActivityItems: readonly ActivityItemDto[];
 } {
   const incomingInvites: RelationshipInviteDto[] = [];
   const outgoingInvites: RelationshipInviteDto[] = [];
   const pendingActivityItems: ActionableItem[] = [];
+  const historyActivityItems: ActivityItemDto[] = [];
 
   for (const invite of invites) {
-    if (invite.status !== 'pending') {
+    if (invite.inviter_user_id !== currentUserId && invite.invitee_user_id !== currentUserId) {
       continue;
     }
 
     const isIncoming = invite.invitee_user_id === currentUserId;
-    const counterpartUserId = isIncoming ? invite.inviter_user_id : invite.invitee_user_id;
-    const displayName = names.get(counterpartUserId) ?? 'Persona';
+    const counterpart = inviteDisplayName(invite, names, currentUserId);
     const dto: RelationshipInviteDto = {
       id: invite.id,
       direction: isIncoming ? 'incoming' : 'outgoing',
-      userId: counterpartUserId,
-      displayName,
+      userId: counterpart.userId,
+      displayName: counterpart.displayName,
       status: invite.status,
+      targetMode: invite.target_mode as RelationshipInviteDto['targetMode'],
+      channelLabel: invite.channel_label,
       createdAt: invite.created_at,
+      expiresAt: invite.expires_at,
+      resolvedAt: invite.resolved_at,
     };
 
-    if (isIncoming) {
-      incomingInvites.push(dto);
-    } else {
-      outgoingInvites.push(dto);
-    }
+    if (invite.status === 'pending') {
+      if (isIncoming) {
+        incomingInvites.push(dto);
+      } else {
+        outgoingInvites.push(dto);
+      }
 
-    if (isIncoming) {
+      if (isIncoming) {
+        pendingActivityItems.push({
+          id: invite.id,
+          kind: 'relationship_invite',
+          title: `${counterpart.displayName} quiere conectar contigo`,
+          subtitle: buildInvitePendingSubtitle(invite),
+          status: 'requires_you',
+          ctaLabel: 'Responder',
+          href: '/invite/index',
+          createdAt: invite.created_at,
+        });
+        continue;
+      }
+
       pendingActivityItems.push({
         id: invite.id,
         kind: 'relationship_invite',
-        title: `${displayName} quiere conectar contigo`,
-        subtitle: `Invitacion pendiente | ${formatRelativeLabel(invite.created_at)}`,
-        status: 'requires_you',
-        ctaLabel: 'Responder',
-        href: '/invite',
+        title:
+          invite.target_mode === 'share_link'
+            ? 'Link compartible activo'
+            : `Esperando a ${counterpart.displayName}`,
+        subtitle: buildInvitePendingSubtitle(invite),
+        status: 'waiting_other_side',
+        ctaLabel: invite.target_mode === 'share_link' ? 'Ver link' : 'Ver',
+        href: '/invite/index',
         createdAt: invite.created_at,
       });
       continue;
     }
 
-    pendingActivityItems.push({
+    const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
+    historyActivityItems.push({
       id: invite.id,
       kind: 'relationship_invite',
-      title: `Esperando a ${displayName}`,
-      subtitle: `Invitacion enviada | ${formatRelativeLabel(invite.created_at)}`,
-      status: 'waiting_other_side',
-      ctaLabel: 'Ver',
-      href: '/invite',
-      createdAt: invite.created_at,
+      title: buildInviteHistoryTitle({
+        invite,
+        currentUserId,
+        displayName: counterpart.displayName,
+      }),
+      subtitle: buildInviteHistorySubtitle({
+        invite,
+        displayName: counterpart.displayName,
+      }),
+      status: invite.status,
+      href: '/invite/index',
+      sourceType: 'user',
+      happenedAt,
+      happenedAtLabel: formatRelativeLabel(happenedAt),
+      counterpartyLabel:
+        counterpart.displayName !== 'Link compartible' ? counterpart.displayName : undefined,
     });
   }
 
@@ -952,6 +1146,7 @@ function buildInviteItems(
     incomingInvites: sortByNewest(incomingInvites),
     outgoingInvites: sortByNewest(outgoingInvites),
     pendingActivityItems: sortByNewest(pendingActivityItems),
+    historyActivityItems: sortHistoryItems(historyActivityItems),
   };
 }
 
@@ -970,6 +1165,11 @@ function buildContactInviteItems(
         ? (names.get(invite.claimed_by_user_id) ?? invite.invitee_name)
         : null,
       relationshipInviteId: invite.relationship_invite_id,
+      relationshipInviteStatus: invite.relationship_invite_status,
+      relationshipInviteExpiresAt: invite.relationship_invite_expires_at,
+      relationshipInviteResolvedAt: invite.relationship_invite_resolved_at,
+      relationshipInviteTargetMode: invite.relationship_invite_target_mode,
+      relationshipInviteChannelLabel: invite.relationship_invite_channel_label,
     })),
   );
 }
@@ -1095,28 +1295,6 @@ function buildMovementFlowLabel(
   const debtor = names.get(row.debtor_user_id) ?? 'Deudor';
   const creditor = names.get(row.creditor_user_id) ?? 'Acreedor';
   return `${debtor} -> ${creditor}`;
-}
-
-function buildRequestFlowLabel(
-  row: RelationshipHistoryRow,
-  currentUserId: string,
-  counterpartyName: string,
-  names: Map<string, string>,
-): string | null {
-  if (!row.creator_user_id || !row.responder_user_id) {
-    return null;
-  }
-
-  const creator =
-    row.creator_user_id === currentUserId
-      ? 'Tu'
-      : (names.get(row.creator_user_id) ?? counterpartyName);
-  const responder =
-    row.responder_user_id === currentUserId
-      ? 'Tu'
-      : (names.get(row.responder_user_id) ?? counterpartyName);
-
-  return `${creator} -> ${responder}`;
 }
 
 function buildTimelineStepTitle(
@@ -1331,7 +1509,6 @@ function buildLiveSnapshot(input: {
   const openDebtsByRelationshipId = new Map(
     input.openDebts.map((row) => [row.relationship_id, row]),
   );
-  const requestById = new Map(input.financialRequests.map((request) => [request.id, request]));
   const requestsByRelationshipId = groupBy(input.financialRequests, (row) => row.relationship_id);
   const historyByRelationshipId = groupBy(history, (row) => row.relationship_id);
   const settlementParticipantsByProposalId = groupBy(
@@ -1360,7 +1537,7 @@ function buildLiveSnapshot(input: {
       );
       const latestRequest = requests[0];
       const edge = openDebtsByRelationshipId.get(relationship.id);
-      const direction = deriveDirection(input.currentUserId, edge, latestRequest);
+      const direction = deriveDirection(input.currentUserId, edge);
       const timeline = historyByRelationshipId.get(relationship.id) ?? [];
       const latestHistory = timeline[0];
       const pendingCount = requests.filter((row) => row.status === 'pending').length + relatedSettlements.length;
@@ -1396,7 +1573,7 @@ function buildLiveSnapshot(input: {
         .map((request): ActionableItem => ({
           id: request.id,
           kind: 'financial_request',
-          title: formatPendingRequestTitle(request, input.currentUserId, nameByUserId),
+          title: formatPendingRequestTitle(request, input.currentUserId),
           subtitle: formatPendingRequestSubtitle(request, nameByUserId),
           status:
             request.responder_user_id === input.currentUserId
@@ -1476,7 +1653,7 @@ function buildLiveSnapshot(input: {
       return {
         id: request.id,
         kind: 'financial_request',
-        title: formatPendingRequestTitle(request, input.currentUserId, nameByUserId),
+        title: formatPendingRequestTitle(request, input.currentUserId),
         subtitle: formatPendingRequestSubtitle(request, nameByUserId),
         status:
           request.responder_user_id === input.currentUserId
@@ -1500,7 +1677,10 @@ function buildLiveSnapshot(input: {
     ...inviteState.pendingActivityItems,
   ]);
 
-  const historyItems = buildActivityHistoryItems(peopleById);
+  const historyItems = sortHistoryItems([
+    ...buildActivityHistoryItems(peopleById),
+    ...inviteState.historyActivityItems,
+  ]);
 
   const summary = input.openDebts.reduce(
     (accumulator, debt) => {
@@ -1569,6 +1749,7 @@ function buildLiveSnapshot(input: {
             currentUserProfileRow.avatar_path,
             currentUserProfileRow.updated_at,
           ),
+          publicConnectionToken: currentUserProfileRow.public_connection_token,
         }
       : null,
     incomingInvites: inviteState.incomingInvites,
@@ -1611,16 +1792,22 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     settlementParticipantsResult,
     auditResult,
   ] = await Promise.all([
-    client.from('user_profiles').select('id, display_name, email, avatar_path, created_at, updated_at'),
     client
-      .from('contact_invites')
+      .from('user_profiles')
       .select(
-        'id, inviter_user_id, invitee_name, invitee_phone_country_iso2, invitee_phone_country_calling_code, invitee_phone_national_number, invitee_phone_e164, status, claimed_by_user_id, relationship_invite_id, created_at, updated_at',
+        'id, display_name, email, avatar_path, public_connection_token, created_at, updated_at',
+      ),
+    client
+      .from('v_contact_invites_live')
+      .select(
+        'id, inviter_user_id, invitee_name, invitee_phone_country_iso2, invitee_phone_country_calling_code, invitee_phone_national_number, invitee_phone_e164, status, claimed_by_user_id, relationship_invite_id, relationship_invite_status, relationship_invite_expires_at, relationship_invite_resolved_at, relationship_invite_target_mode, relationship_invite_channel_label, created_at, updated_at',
       )
       .order('created_at', { ascending: false }),
     client
-      .from('relationship_invites')
-      .select('id, inviter_user_id, invitee_user_id, status, created_at, updated_at')
+      .from('v_relationship_invites_live')
+      .select(
+        'id, inviter_user_id, invitee_user_id, status, target_mode, invite_token, expires_at, resolved_at, accepted_by_user_id, channel_label, created_at, updated_at',
+      )
       .order('created_at', { ascending: false }),
     client
       .from('relationships')
@@ -1726,13 +1913,17 @@ async function fetchAppSnapshot(userId: string | null) {
   return fetchLiveSnapshot(userId);
 }
 
-async function parseFunctionError(error: {
-  readonly message: string;
-  readonly context?: Response;
-}) {
-  if (error.context) {
+async function parseFunctionError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return 'Unexpected error';
+  }
+
+  const maybeContext =
+    'context' in error && error.context instanceof Response ? error.context : null;
+
+  if (maybeContext) {
     try {
-      const cloned = error.context.clone();
+      const cloned = maybeContext.clone();
       const body = (await cloned.json()) as { error?: string; message?: string };
       if (typeof body.error === 'string' && body.error.length > 0) {
         return body.error;
@@ -1743,7 +1934,7 @@ async function parseFunctionError(error: {
       }
     } catch {
       try {
-        const text = await error.context.text();
+        const text = await maybeContext.text();
         if (text.trim().length > 0) {
           return `${error.message}: ${text}`;
         }
@@ -1773,11 +1964,11 @@ async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TRe
   body: TBody,
 ): Promise<TResult> {
   const client = assertSupabaseClient();
-  const invoke = () => client.functions.invoke(name, { body });
-  let { data, error } = await invoke();
+  const invoke = async () => client.functions.invoke<TResult>(name, { body });
+  let result = await invoke();
 
-  if (error) {
-    const parsedMessage = await parseFunctionError(error);
+  if (result.error) {
+    const parsedMessage = await parseFunctionError(result.error);
     if (isJwtAuthError(parsedMessage)) {
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
       if (refreshError || !refreshData.session) {
@@ -1785,18 +1976,26 @@ async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TRe
         throw new Error('Tu sesion ya no es valida. Cierra sesion y vuelve a entrar.');
       }
 
-      ({ data, error } = await invoke());
-      if (error) {
-        throw new Error(await parseFunctionError(error));
+      result = await invoke();
+      if (result.error) {
+        throw new Error(await parseFunctionError(result.error));
       }
 
-      return data as TResult;
+      if (result.data === null) {
+        throw new Error(`La funcion ${name} respondio sin payload.`);
+      }
+
+      return result.data;
     }
 
     throw new Error(parsedMessage);
   }
 
-  return data as TResult;
+  if (result.data === null) {
+    throw new Error(`La funcion ${name} respondio sin payload.`);
+  }
+
+  return result.data;
 }
 
 async function invalidateAppSnapshot() {
@@ -1806,19 +2005,41 @@ async function invalidateAppSnapshot() {
 }
 
 function useSensitiveMutationGuard() {
-  const { deviceTrustState, profileCompletionState, stepUpAuth } = useSession();
+  const session = useSession();
 
   return async (actionLabel: string) => {
-    if (profileCompletionState !== 'complete') {
+    if (session.profileCompletionState !== 'complete') {
       throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
     }
 
-    if (deviceTrustState !== 'trusted') {
+    if (session.deviceTrustState !== 'trusted') {
       throw new Error('Este dispositivo aun no es confiable. Validalo primero desde Perfil.');
     }
 
-    const authenticated = await stepUpAuth();
-    if (!authenticated) {
+    const result = await session.stepUpAuth();
+    if (!result.success) {
+      if (
+        result.error === 'not_available' ||
+        result.error === 'not_enrolled' ||
+        result.error === 'passcode_not_set'
+      ) {
+        throw new Error(`Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`);
+      }
+
+      if (result.error === 'lockout') {
+        throw new Error(
+          `${session.biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`,
+        );
+      }
+
+      if (result.error === 'user_cancel') {
+        throw new Error(`Cancelaste ${session.biometricLabel}.`);
+      }
+
+      if (result.error === 'authentication_failed') {
+        throw new Error(`No se pudo validar ${session.biometricLabel} para ${actionLabel}.`);
+      }
+
       throw new Error(`No se pudo validar tu identidad para ${actionLabel}.`);
     }
   };
@@ -1836,15 +2057,88 @@ export function useAppSnapshot() {
 
 export function useCreateRelationshipInviteMutation() {
   return useMutation({
-    mutationFn: async (inviteeUserId: string) => {
+    mutationFn: async (
+      input: string | { readonly inviteeUserId: string; readonly channelLabel?: string },
+    ) => {
+      const inviteeUserId = typeof input === 'string' ? input : input.inviteeUserId;
+      const channelLabel = typeof input === 'string' ? undefined : input.channelLabel;
       const payload = relationshipInviteSchema.parse({
         idempotencyKey: createIdempotencyKey('create_relationship_invite'),
         inviteeUserId,
+        channelLabel,
       });
 
       return invokeSupabaseFunction('create-relationship-invite', payload);
     },
     onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useCreateShareableInviteMutation() {
+  return useMutation({
+    mutationFn: async () => {
+      const payload = shareableInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('create_shareable_invite'),
+      });
+
+      return invokeSupabaseFunction<typeof payload, CreateShareableInviteResult>(
+        'create-shareable-invite',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useInvitePreviewByTokenQuery(inviteToken: string | null) {
+  const { userId } = useSession();
+
+  return useQuery({
+    queryKey: ['invite-preview', userId ?? 'signed-out', inviteToken ?? 'missing'],
+    enabled: Boolean(userId && inviteToken),
+    queryFn: async () => {
+      const payload = inviteTokenSchema.parse({
+        inviteToken,
+      });
+
+      return invokeSupabaseFunction<typeof payload, InviteLinkPreviewResult>(
+        'get-invite-preview-by-token',
+        payload,
+      );
+    },
+  });
+}
+
+export function useAcceptInviteByTokenMutation() {
+  return useMutation({
+    mutationFn: async (inviteToken: string) => {
+      const payload = inviteTokenDecisionSchema.parse({
+        idempotencyKey: createIdempotencyKey('accept_invite_by_token'),
+        inviteToken,
+      });
+
+      return invokeSupabaseFunction('accept-invite-by-token', payload);
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useProfileConnectionPreviewQuery(connectionToken: string | null) {
+  const { userId } = useSession();
+
+  return useQuery({
+    queryKey: ['profile-connection-preview', userId ?? 'signed-out', connectionToken ?? 'missing'],
+    enabled: Boolean(userId && connectionToken),
+    queryFn: async () => {
+      const payload = profileConnectionPreviewSchema.parse({
+        connectionToken,
+      });
+
+      return invokeSupabaseFunction<typeof payload, ProfileConnectionPreviewResult>(
+        'get-profile-connection-preview',
+        payload,
+      );
+    },
   });
 }
 

@@ -10,7 +10,7 @@ export interface HistoryCaseItem {
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
-  readonly kind: 'request' | 'payment' | 'settlement' | 'system';
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'relationship_invite';
   readonly amountMinor?: number;
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
@@ -31,7 +31,7 @@ export interface HistoryCase<T extends HistoryCaseItem = HistoryCaseItem> {
 }
 
 export type ActivityHistoryItem = ActivityItemDto & {
-  readonly kind: 'request' | 'payment' | 'settlement' | 'system';
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'relationship_invite';
 };
 
 type ComparableHistoryItem = {
@@ -81,7 +81,7 @@ function formatNaturalList(values: readonly string[]): string {
   }
 
   if (values.length === 1) {
-    return values[0]!;
+    return values[0];
   }
 
   if (values.length === 2) {
@@ -102,6 +102,10 @@ function uniqueCounterpartyLabels<T extends HistoryCaseItem>(itemCase: HistoryCa
 }
 
 function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): string {
+  if (item.kind === 'relationship_invite') {
+    return 'Invitacion';
+  }
+
   if (item.kind === 'settlement') {
     return 'Cierre de ciclo';
   }
@@ -181,7 +185,8 @@ export function isHistoryCaseItem(item: ActivityItemDto): item is ActivityHistor
     item.kind === 'request' ||
     item.kind === 'payment' ||
     item.kind === 'settlement' ||
-    item.kind === 'system'
+    item.kind === 'system' ||
+    item.kind === 'relationship_invite'
   );
 }
 
@@ -226,8 +231,8 @@ export function buildHistoryCases<T extends HistoryCaseItem>(items: readonly T[]
           id,
           // Keep pending proposals inside the expanded timeline, but anchor the case
           // on the latest completed event so history does not duplicate inbox items.
-          latest: completedItems[0]!,
-          earliest: steps[0]!,
+          latest: completedItems[0],
+          earliest: steps[0],
           steps,
           isCycleSnippet: groupedItems.some((item) => item.kind === 'settlement'),
         },
@@ -318,6 +323,14 @@ export function historyStatusLabel(status: string): string {
     return 'Rechazada';
   }
 
+  if (status === 'expired') {
+    return 'Expirada';
+  }
+
+  if (status === 'canceled') {
+    return 'Cancelada';
+  }
+
   if (status === 'posted') {
     return 'Registrado';
   }
@@ -334,7 +347,7 @@ export function historyStatusTone(status: string): HistoryStatusTone {
     return 'success';
   }
 
-  if (status === 'rejected') {
+  if (status === 'rejected' || status === 'expired' || status === 'canceled') {
     return 'danger';
   }
 
@@ -346,6 +359,10 @@ export function historyStatusTone(status: string): HistoryStatusTone {
 }
 
 export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
+  if (item.kind === 'relationship_invite') {
+    return item.title;
+  }
+
   if (item.kind === 'settlement') {
     return item.counterpartyLabel ? `Ajuste con ${item.counterpartyLabel}` : 'Ajuste registrado';
   }
@@ -389,11 +406,18 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
 export function historyImpactTone(
   item: HistoryCaseItem,
 ): 'positive' | 'negative' | 'neutral' | 'danger' {
+  if (
+    item.kind === 'relationship_invite' &&
+    (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled')
+  ) {
+    return 'danger';
+  }
+
   if (item.status === 'rejected') {
     return 'danger';
   }
 
-  if (item.kind === 'settlement') {
+  if (item.kind === 'settlement' || item.kind === 'relationship_invite') {
     return 'neutral';
   }
 
@@ -411,6 +435,18 @@ export function historyImpactTone(
 }
 
 export function historyImpactLabel(item: HistoryCaseItem): string | null {
+  if (item.kind === 'relationship_invite') {
+    if (item.status === 'accepted') {
+      return 'Relacion creada';
+    }
+
+    if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
+      return 'Sin relacion creada';
+    }
+
+    return null;
+  }
+
   if (item.status === 'rejected') {
     return 'No cambio el saldo';
   }
@@ -438,6 +474,10 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
 export function historyCaseEyebrow<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
   if (itemCase.isCycleSnippet) {
     return null;
+  }
+
+  if (itemCase.latest.kind === 'relationship_invite') {
+    return 'Invitaciones';
   }
 
   return itemCase.latest.counterpartyLabel ?? null;

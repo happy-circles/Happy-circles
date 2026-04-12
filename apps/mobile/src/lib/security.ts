@@ -1,3 +1,4 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 
@@ -9,6 +10,14 @@ export interface BiometricSupport {
 export interface BiometricAuthResult {
   readonly success: boolean;
   readonly error: string | null;
+}
+
+function shouldAllowDeviceFallback(): boolean {
+  if (Platform.OS !== 'ios') {
+    return false;
+  }
+
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
 export async function getBiometricSupport(): Promise<BiometricSupport> {
@@ -43,10 +52,13 @@ export async function authenticateWithBiometricsResult(): Promise<BiometricAuthR
     };
   }
 
+  const allowDeviceFallback = shouldAllowDeviceFallback();
+
   const result = await LocalAuthentication.authenticateAsync({
     promptMessage: 'Desbloquea Happy Circles',
     cancelLabel: 'Cancelar',
-    disableDeviceFallback: false,
+    disableDeviceFallback: !allowDeviceFallback,
+    fallbackLabel: allowDeviceFallback ? 'Usar codigo' : '',
   });
 
   if (result.success) {

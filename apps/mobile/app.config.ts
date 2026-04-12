@@ -17,6 +17,12 @@ const config: ExpoConfig = {
     'expo-notifications',
     'expo-apple-authentication',
     [
+      'expo-camera',
+      {
+        cameraPermission: 'Happy Circles usa la camara para escanear codigos QR de invitacion.',
+      },
+    ],
+    [
       'expo-web-browser',
       {
         experimentalLauncherActivity: false,
@@ -30,6 +36,7 @@ const config: ExpoConfig = {
     bundleIdentifier: 'com.happycircles.app',
     usesAppleSignIn: true,
     infoPlist: {
+      NSCameraUsageDescription: 'Use the camera to scan QR invitations in Happy Circles.',
       NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
     },
   },

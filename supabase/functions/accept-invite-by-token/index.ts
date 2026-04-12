@@ -3,15 +3,10 @@ import { handleRpc, requireString, createServiceRoleClient } from '../_shared/ht
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId) => {
     const client = createServiceRoleClient();
-    const channelLabel =
-      typeof body.channelLabel === 'string' && body.channelLabel.trim().length > 0
-        ? body.channelLabel.trim()
-        : null;
-    const { data, error } = await client.rpc('create_relationship_invite', {
+    const { data, error } = await client.rpc('accept_invite_by_token', {
       p_actor_user_id: actorUserId,
       p_idempotency_key: requireString(body.idempotencyKey, 'idempotencyKey'),
-      p_invitee_user_id: requireString(body.inviteeUserId, 'inviteeUserId'),
-      p_channel_label: channelLabel,
+      p_invite_token: requireString(body.inviteToken, 'inviteToken'),
     });
 
     if (error) {

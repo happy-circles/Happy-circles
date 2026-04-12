@@ -50,6 +50,9 @@ export type ParticipantDecision = (typeof PARTICIPANT_DECISIONS)[number];
 export const CONTACT_INVITE_STATUSES = ['pending', 'matched', 'canceled'] as const;
 export type ContactInviteStatus = (typeof CONTACT_INVITE_STATUSES)[number];
 
+export const RELATIONSHIP_INVITE_TARGET_MODES = ['direct_user', 'share_link'] as const;
+export type RelationshipInviteTargetMode = (typeof RELATIONSHIP_INVITE_TARGET_MODES)[number];
+
 export const AUDIT_ENTITY_TYPES = [
   'relationship_invite',
   'relationship',
