@@ -9,18 +9,28 @@ export function buildAvatarLabel(value: string | null | undefined): string {
 }
 
 export function resolveAvatarUrl(path: string | null | undefined, version?: string | null): string | null {
-  if (!path || !supabase) {
+  const normalizedPath = path?.trim() ?? '';
+  if (!normalizedPath) {
     return null;
   }
 
-  const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+  const appendVersion = (value: string): string =>
+    version
+      ? `${value}${value.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`
+      : value;
+
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    return appendVersion(normalizedPath);
+  }
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(normalizedPath);
   if (!data.publicUrl) {
     return null;
   }
 
-  if (!version) {
-    return data.publicUrl;
-  }
-
-  return `${data.publicUrl}?v=${encodeURIComponent(version)}`;
+  return appendVersion(data.publicUrl);
 }

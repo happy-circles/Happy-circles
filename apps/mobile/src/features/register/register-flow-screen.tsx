@@ -1,13 +1,18 @@
-import { useMemo, useState } from 'react';
-import { Pressable, TextInput, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { TextInput } from 'react-native';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
 import { FieldBlock } from '@/components/field-block';
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { Snackbar } from '@/components/snackbar';
+import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
@@ -23,6 +28,17 @@ const DIRECTION_OPTIONS = [
 
 const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
 const DESCRIPTION_SUGGESTIONS = ['Comida', 'Mercado', 'Transporte', 'Salida'] as const;
+
+interface RegisterFormErrors {
+  readonly personId?: string;
+  readonly amount?: string;
+  readonly description?: string;
+}
+
+interface BannerState {
+  readonly message: string;
+  readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
 
 function buildDraftPreview(input: {
   readonly amountMinor: number;
@@ -40,11 +56,13 @@ function buildDraftPreview(input: {
 
 export function RegisterFlowScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     personId?: string;
     direction?: string;
   }>();
-  const { userId } = useSession();
+  const session = useSession();
+  const { userId } = session;
   const snapshotQuery = useAppSnapshot();
   const createRequest = useCreateRequestMutation();
 
@@ -57,7 +75,13 @@ export function RegisterFlowScreen() {
   const [direction, setDirection] = useState<Direction>(contextualDirection ?? 'owes_me');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
+  const [banner, setBanner] = useState<BannerState | null>(null);
+  const [errors, setErrors] = useState<RegisterFormErrors>({});
+  const searchInputRef = useRef<TextInput | null>(null);
+  const amountInputRef = useRef<TextInput | null>(null);
+  const descriptionInputRef = useRef<TextInput | null>(null);
+  const { snackbar, showSnackbar } = useFeedbackSnackbar();
+  const showBusyOverlay = useDelayedBusy(createRequest.isPending);
 
   const allPeople = snapshotQuery.data?.people ?? [];
   const people = useMemo(() => {
@@ -83,6 +107,86 @@ export function RegisterFlowScreen() {
         })
       : null;
   const canShowForm = !snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0;
+  const isDirty =
+    query.trim().length > 0 ||
+    amount.trim().length > 0 ||
+    description.trim().length > 0 ||
+    personId !== contextualPersonId ||
+    direction !== (contextualDirection ?? 'owes_me');
+
+  useEffect(() => {
+    if (!isDirty || createRequest.isPending) {
+      return;
+    }
+
+    return navigation.addListener('beforeRemove', (event: { preventDefault(): void; data: { action: object } }) => {
+      event.preventDefault();
+      Alert.alert('Tienes cambios sin guardar', 'Si sales ahora, perderas el movimiento que estas armando.', [
+        {
+          text: 'Seguir editando',
+          style: 'cancel',
+        },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () =>
+            navigation.dispatch(event.data.action as Parameters<typeof navigation.dispatch>[0]),
+        },
+      ]);
+    });
+  }, [createRequest.isPending, isDirty, navigation]);
+
+  function clearFieldError(field: keyof RegisterFormErrors) {
+    setErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [field]: undefined,
+      };
+    });
+  }
+
+  function validateForm(): RegisterFormErrors {
+    return {
+      personId: personId ? undefined : 'Selecciona a quien corresponde este movimiento.',
+      amount: amountMinor > 0 ? undefined : 'Ingresa un monto mayor a 0.',
+      description:
+        description.trim().length > 0 ? undefined : 'Escribe o selecciona un concepto para continuar.',
+    };
+  }
+
+  function showValidationFeedback(nextErrors: RegisterFormErrors) {
+    const errorCount = Object.values(nextErrors).filter(Boolean).length;
+    if (errorCount === 0) {
+      return;
+    }
+
+    setErrors(nextErrors);
+    setBanner({
+      message:
+        errorCount === 1
+          ? 'Te falta 1 dato para guardar este movimiento.'
+          : `Te faltan ${errorCount} datos para guardar este movimiento.`,
+      tone: 'danger',
+    });
+
+    if (nextErrors.personId) {
+      searchInputRef.current?.focus();
+      return;
+    }
+
+    if (nextErrors.amount) {
+      amountInputRef.current?.focus();
+      return;
+    }
+
+    if (nextErrors.description) {
+      descriptionInputRef.current?.focus();
+    }
+  }
 
   function openInviteFlow(suggestedName?: string) {
     router.push({
@@ -97,13 +201,17 @@ export function RegisterFlowScreen() {
   }
 
   async function handleSave() {
-    if (!personId || amountMinor <= 0 || description.trim().length === 0) {
-      setMessage('Elige una persona, define un monto y selecciona o escribe un concepto.');
+    const nextErrors = validateForm();
+    if (Object.values(nextErrors).some(Boolean)) {
+      showValidationFeedback(nextErrors);
       return;
     }
 
     if (!userId) {
-      setMessage('Tu sesion aun no esta lista. Intenta otra vez en unos segundos.');
+      setBanner({
+        message: 'Tu sesion aun no esta lista. Intenta otra vez en unos segundos.',
+        tone: 'danger',
+      });
       return;
     }
 
@@ -111,6 +219,7 @@ export function RegisterFlowScreen() {
     const creditorUserId = direction === 'i_owe' ? personId : userId;
 
     try {
+      setBanner(null);
       await createRequest.mutateAsync({
         responderUserId: personId,
         debtorUserId,
@@ -119,11 +228,30 @@ export function RegisterFlowScreen() {
         description: description.trim(),
       });
 
-      setMessage(`Propuesta enviada a ${selectedPerson?.displayName ?? 'la otra persona'}.`);
       setAmount('');
       setDescription('');
+      setQuery('');
+      setErrors({});
+      showSnackbar(`Movimiento creado con ${selectedPerson?.displayName ?? 'la otra persona'}.`, 'success');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo guardar el movimiento.');
+      const nextMessage =
+        error instanceof Error ? error.message : 'No se pudo guardar el movimiento.';
+      if (
+        showBlockedActionAlert(nextMessage, router, {
+          hasEmailPassword: session.linkedMethods.hasEmailPassword,
+          profile: {
+            avatarPath: session.profile?.avatar_path ?? null,
+            phoneE164: session.profile?.phone_e164 ?? null,
+          },
+        })
+      ) {
+        return;
+      }
+
+      setBanner({
+        message: nextMessage,
+        tone: 'danger',
+      });
     }
   }
 
@@ -132,16 +260,19 @@ export function RegisterFlowScreen() {
       footer={
         canShowForm ? (
           <PrimaryAction
+            disabled={createRequest.isPending}
             label={createRequest.isPending ? 'Guardando...' : 'Guardar'}
+            loading={createRequest.isPending}
             onPress={createRequest.isPending ? undefined : () => void handleSave()}
           />
         ) : undefined
       }
       headerVariant="plain"
+      overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
       title="Nuevo movimiento"
       titleSize="title1"
     >
-      {message ? <MessageBanner message={message} /> : null}
+      {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
       {snapshotQuery.isLoading ? <Text style={styles.helper}>Cargando relaciones activas...</Text> : null}
 
@@ -192,12 +323,17 @@ export function RegisterFlowScreen() {
           </View>
 
           <View style={styles.section}>
-            <FieldBlock label="Persona">
+            <FieldBlock error={errors.personId ?? null} label="Persona">
               <>
-                <TextInput
-                  onChangeText={setQuery}
+                <AppTextInput
+                  hasError={Boolean(errors.personId)}
+                  onChangeText={(value) => {
+                    setQuery(value);
+                    clearFieldError('personId');
+                  }}
                   placeholder="Buscar por nombre"
                   placeholderTextColor={theme.colors.muted}
+                  ref={searchInputRef}
                   style={styles.input}
                   value={query}
                 />
@@ -206,7 +342,10 @@ export function RegisterFlowScreen() {
                     <ChoiceChip
                       key={person.userId}
                       label={person.displayName}
-                      onPress={() => setPersonId(person.userId)}
+                      onPress={() => {
+                        setPersonId(person.userId);
+                        clearFieldError('personId');
+                      }}
                       selected={person.userId === personId}
                     />
                   ))}
@@ -225,12 +364,17 @@ export function RegisterFlowScreen() {
           </View>
 
           <View style={styles.section}>
-            <FieldBlock label="Monto">
-              <TextInput
+            <FieldBlock error={errors.amount ?? null} label="Monto">
+              <AppTextInput
+                hasError={Boolean(errors.amount)}
                 keyboardType="number-pad"
-                onChangeText={setAmount}
+                onChangeText={(value) => {
+                  setAmount(value);
+                  clearFieldError('amount');
+                }}
                 placeholder="45000"
                 placeholderTextColor={theme.colors.muted}
+                ref={amountInputRef}
                 style={styles.input}
                 value={amount}
               />
@@ -239,7 +383,10 @@ export function RegisterFlowScreen() {
                   <ChoiceChip
                     key={value}
                     label={formatCop(value * 100)}
-                    onPress={() => setAmount(String(value))}
+                    onPress={() => {
+                      setAmount(String(value));
+                      clearFieldError('amount');
+                    }}
                     selected={amount === String(value)}
                   />
                 ))}
@@ -249,22 +396,30 @@ export function RegisterFlowScreen() {
           </View>
 
           <View style={styles.sectionLast}>
-            <FieldBlock label="Concepto">
+            <FieldBlock error={errors.description ?? null} label="Concepto">
               <View style={styles.choiceRow}>
                 {DESCRIPTION_SUGGESTIONS.map((item) => (
                   <ChoiceChip
                     key={item}
                     label={item}
-                    onPress={() => setDescription(item)}
+                    onPress={() => {
+                      setDescription(item);
+                      clearFieldError('description');
+                    }}
                     selected={description.trim().toLocaleLowerCase('es-CO') === item.toLocaleLowerCase('es-CO')}
                   />
                 ))}
               </View>
-              <TextInput
+              <AppTextInput
+                hasError={Boolean(errors.description)}
                 multiline
-                onChangeText={setDescription}
+                onChangeText={(value) => {
+                  setDescription(value);
+                  clearFieldError('description');
+                }}
                 placeholder="Ej. cena, mercado, transporte"
                 placeholderTextColor={theme.colors.muted}
+                ref={descriptionInputRef}
                 style={[styles.input, styles.textarea]}
                 value={description}
               />
@@ -282,6 +437,12 @@ export function RegisterFlowScreen() {
           </View>
         </View>
       ) : null}
+
+      <LoadingOverlay
+        message="No cierres esta pantalla mientras confirmamos el movimiento."
+        title="Guardando movimiento"
+        visible={showBusyOverlay}
+      />
     </ScreenShell>
   );
 }
@@ -338,17 +499,7 @@ const styles = StyleSheet.create({
   typeLabelActive: {
     color: theme.colors.text,
   },
-  input: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
+  input: {},
   textarea: {
     minHeight: 96,
     paddingTop: theme.spacing.sm,

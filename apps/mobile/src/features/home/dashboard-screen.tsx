@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { PersonRow } from '@/components/person-row';
@@ -110,7 +111,7 @@ export function DashboardScreen() {
         title="Personas"
       >
         {dashboard.activePeople.length > 4 ? (
-          <TextInput
+          <AppTextInput
             autoCapitalize="words"
             clearButtonMode="while-editing"
             onChangeText={setPersonQuery}
@@ -245,14 +246,8 @@ const styles = StyleSheet.create({
     width: 38,
   },
   searchInput: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
     borderRadius: theme.radius.large,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
     minHeight: 44,
-    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
   },
 });

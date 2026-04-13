@@ -3,12 +3,15 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { EmptyState } from '@/components/empty-state';
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
+import { Snackbar } from '@/components/snackbar';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
+import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import {
   useAppSnapshot,
   useApproveSettlementMutation,
@@ -16,9 +19,15 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSession } from '@/providers/session-provider';
 
 export interface SettlementDetailScreenProps {
   readonly proposalId: string;
+}
+
+interface BannerState {
+  readonly message: string;
+  readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 }
 
 function readResultStatus(value: unknown): string | null {
@@ -54,13 +63,16 @@ function readNestedProposalId(value: unknown, key: string): string | null {
 
 export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenProps) {
   const router = useRouter();
+  const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
 
-  const [message, setMessage] = useState<string | null>(null);
+  const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | 'execute' | null>(null);
+  const { snackbar, showSnackbar } = useFeedbackSnackbar();
+  const showBusyOverlay = useDelayedBusy(Boolean(busyAction));
 
   const settlement = snapshotQuery.data?.settlementsById[proposalId] ?? null;
 
@@ -91,36 +103,61 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   async function handleAction(action: 'approve' | 'reject' | 'execute') {
     setBusyAction(action);
-    setMessage(null);
+    setBanner(null);
 
     try {
       if (action === 'approve') {
         const response = await approveSettlement.mutateAsync(proposalId);
         const nextStatus = readResultStatus(response);
-        setMessage(
-          nextStatus === 'approved'
-            ? 'Todos aceptaron. El cierre ya quedo aprobado.'
-            : nextStatus === 'stale'
-              ? 'La propuesta ya no coincide con el grafo actual y quedo obsoleta.'
+        if (nextStatus === 'stale') {
+          setBanner({
+            message: 'La propuesta ya no coincide con el grafo actual y quedo obsoleta.',
+            tone: 'warning',
+          });
+        } else {
+          showSnackbar(
+            nextStatus === 'approved'
+              ? 'Todos aceptaron. El cierre ya quedo aprobado.'
               : 'Tu aprobacion quedo registrada.',
-        );
+            'success',
+          );
+        }
       } else if (action === 'reject') {
         await rejectSettlement.mutateAsync(proposalId);
-        setMessage('Cierre rechazado.');
+        showSnackbar('Cierre rechazado.', 'neutral');
       } else {
         const response = await executeSettlement.mutateAsync(proposalId);
         const nextStatus = readResultStatus(response);
         const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleProposal');
         const nextAutoCycleProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
-        setMessage(
-          nextStatus === 'stale'
-            ? 'La propuesta se volvio obsoleta antes de ejecutar.'
-            : 'Cierre ejecutado.',
-        );
+        if (nextStatus === 'stale') {
+          setBanner({
+            message: 'La propuesta se volvio obsoleta antes de ejecutar.',
+            tone: 'warning',
+          });
+        } else {
+          showSnackbar('Cierre ejecutado.', 'success');
+        }
         showAutoCyclePrompt(nextAutoCycleProposalId, nextAutoCycleStatus);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
+      const nextMessage = error instanceof Error ? error.message : 'No se pudo completar la accion.';
+      if (
+        showBlockedActionAlert(nextMessage, router, {
+          hasEmailPassword: session.linkedMethods.hasEmailPassword,
+          profile: {
+            avatarPath: session.profile?.avatar_path ?? null,
+            phoneE164: session.profile?.phone_e164 ?? null,
+          },
+        })
+      ) {
+        return;
+      }
+
+      setBanner({
+        message: nextMessage,
+        tone: 'danger',
+      });
     } finally {
       setBusyAction(null);
     }
@@ -172,10 +209,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     <ScreenShell
       eyebrow="Cierre"
       largeTitle={false}
+      overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
       subtitle="Lo esencial antes de aprobar o ejecutar."
       title={`Cierre ${proposalId}`}
     >
-      {message ? <MessageBanner message={message} /> : null}
+      {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
       <SurfaceCard padding="lg" variant="elevated">
         <StatusChip label={settlement.status} tone={settlement.status === 'approved' ? 'success' : 'primary'} />
@@ -212,13 +250,34 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <View style={styles.actionSlot}>
               <PrimaryAction
                 label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
+                loading={busyAction === 'approve'}
                 onPress={busyAction ? undefined : () => void handleAction('approve')}
               />
             </View>
             <View style={styles.actionSlot}>
               <PrimaryAction
                 label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
-                onPress={busyAction ? undefined : () => void handleAction('reject')}
+                loading={busyAction === 'reject'}
+                onPress={
+                  busyAction
+                    ? undefined
+                    : () =>
+                        Alert.alert(
+                          'Rechazar cierre',
+                          'Tu respuesta dejara claro que no apruebas este cierre.',
+                          [
+                            {
+                              text: 'Cancelar',
+                              style: 'cancel',
+                            },
+                            {
+                              text: 'Rechazar',
+                              style: 'destructive',
+                              onPress: () => void handleAction('reject'),
+                            },
+                          ],
+                        )
+                }
                 variant="secondary"
               />
             </View>
@@ -229,7 +288,27 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           <View style={styles.actionSlot}>
             <PrimaryAction
               label={busyAction === 'execute' ? 'Ejecutando...' : 'Ejecutar cierre'}
-              onPress={busyAction ? undefined : () => void handleAction('execute')}
+              loading={busyAction === 'execute'}
+              onPress={
+                busyAction
+                  ? undefined
+                  : () =>
+                      Alert.alert(
+                        'Ejecutar cierre',
+                        'Aplicaremos este cierre al ledger y ya no podras deshacerlo desde aqui.',
+                        [
+                          {
+                            text: 'Cancelar',
+                            style: 'cancel',
+                          },
+                          {
+                            text: 'Ejecutar',
+                            style: 'destructive',
+                            onPress: () => void handleAction('execute'),
+                          },
+                        ],
+                      )
+              }
             />
           </View>
         ) : null}
@@ -238,6 +317,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           <PrimaryAction href="/activity" label="Volver a alertas" variant="ghost" />
         </View>
       </View>
+      <LoadingOverlay
+        message="No cierres esta pantalla mientras registramos la decision."
+        title="Procesando accion"
+        visible={showBusyOverlay}
+      />
     </ScreenShell>
   );
 }

@@ -4,8 +4,9 @@ import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'ex
 import * as Contacts from 'expo-contacts';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { Modal, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
@@ -227,14 +228,6 @@ type PendingContactSelection = {
   readonly alias: string;
   readonly phoneOptions: readonly ContactPhoneOption[];
 };
-
-function contactReferenceLabel(contactReference: ContactReference | null): string {
-  if (!contactReference) {
-    return 'Sin contacto asociado';
-  }
-
-  return [contactReference.alias, contactReference.maskedPhone].join(' | ');
-}
 
 export function InvitePersonScreen() {
   const router = useRouter();
@@ -638,7 +631,7 @@ export function InvitePersonScreen() {
           </View>
         ) : (
           <View style={styles.section}>
-            <TextInput
+            <AppTextInput
               autoCapitalize="none"
               autoCorrect={false}
               onChangeText={setManualInviteInput}
@@ -748,17 +741,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  input: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
+  input: {},
   referenceLine: {
     color: theme.colors.text,
     fontSize: theme.typography.body,

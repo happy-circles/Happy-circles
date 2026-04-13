@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 
+import { AppTextInput } from './app-text-input';
 import { FieldBlock } from './field-block';
 import { PendingSnippetCard } from './pending-snippet-card';
 import { PrimaryAction } from './primary-action';
@@ -22,6 +23,8 @@ export interface PendingFinancialRequestCardProps {
   readonly showAmendment?: boolean;
   readonly amendmentAmount?: string;
   readonly amendmentDescription?: string;
+  readonly amendmentAmountError?: string | null;
+  readonly amendmentDescriptionError?: string | null;
   readonly onAccept?: () => void;
   readonly onReject?: () => void;
   readonly onToggleAmendment?: () => void;
@@ -46,6 +49,8 @@ export function PendingFinancialRequestCard({
   showAmendment = false,
   amendmentAmount = '',
   amendmentDescription = '',
+  amendmentAmountError = null,
+  amendmentDescriptionError = null,
   onAccept,
   onReject,
   onToggleAmendment,
@@ -78,8 +83,9 @@ export function PendingFinancialRequestCard({
             <View style={styles.actionSlot}>
               <PrimaryAction
                 label={busyAccept ? 'Aceptando...' : 'Aceptar'}
-                onPress={busyAccept || busyReject || busyAmendment ? undefined : onAccept}
                 compact
+                loading={busyAccept}
+                onPress={busyAccept || busyReject || busyAmendment ? undefined : onAccept}
               />
             </View>
           </View>
@@ -104,8 +110,9 @@ export function PendingFinancialRequestCard({
 
           {showAmendment ? (
             <View style={styles.amendmentPanel}>
-              <FieldBlock hint="Escribe el valor en pesos." label="Monto">
-                <TextInput
+              <FieldBlock error={amendmentAmountError} hint="Escribe el valor en pesos." label="Monto">
+                <AppTextInput
+                  hasError={Boolean(amendmentAmountError)}
                   keyboardType="number-pad"
                   onChangeText={onChangeAmendmentAmount}
                   placeholder="45000"
@@ -118,8 +125,13 @@ export function PendingFinancialRequestCard({
                 ) : null}
               </FieldBlock>
 
-              <FieldBlock hint="Ajusta el concepto antes de enviarlo." label="Concepto">
-                <TextInput
+              <FieldBlock
+                error={amendmentDescriptionError}
+                hint="Ajusta el concepto antes de enviarlo."
+                label="Concepto"
+              >
+                <AppTextInput
+                  hasError={Boolean(amendmentDescriptionError)}
                   multiline
                   onChangeText={onChangeAmendmentDescription}
                   placeholder="Explica el nuevo monto"
@@ -133,8 +145,9 @@ export function PendingFinancialRequestCard({
                 <View style={styles.actionSlot}>
                   <PrimaryAction
                     label={busyAmendment ? 'Enviando...' : 'Enviar nuevo monto'}
-                    onPress={busyAccept || busyReject || busyAmendment ? undefined : onSubmitAmendment}
                     compact
+                    loading={busyAmendment}
+                    onPress={busyAccept || busyReject || busyAmendment ? undefined : onSubmitAmendment}
                   />
                 </View>
               </View>
@@ -180,17 +193,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     padding: theme.spacing.md,
   },
-  input: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
+  input: {},
   textarea: {
     minHeight: 96,
     paddingTop: theme.spacing.sm,

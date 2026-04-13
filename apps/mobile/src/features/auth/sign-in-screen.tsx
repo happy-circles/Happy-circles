@@ -11,12 +11,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   UIManager,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { BrandMark } from '@/components/brand-mark';
 import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
@@ -36,13 +36,7 @@ function animateModeChange() {
 }
 
 export function SignInScreen({ initialMode = null }: SignInScreenProps) {
-  const {
-    appleSignInAvailable,
-    registerAccount,
-    signInWithApple,
-    signInWithGoogle,
-    signInWithPassword,
-  } = useSession();
+  const session = useSession();
   const [activeMode, setActiveMode] = useState<SignInScreenMode | null>(initialMode);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -142,7 +136,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
     try {
       const result = isRegister
-        ? await registerAccount({
+        ? await session.registerAccount({
             fullName,
             email,
             password,
@@ -151,7 +145,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
             phoneCountryCallingCode: selectedCountry.callingCode,
             phoneNationalNumber,
           })
-        : await signInWithPassword({
+        : await session.signInWithPassword({
             email,
             password,
           });
@@ -172,7 +166,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
     setSocialBusyProvider('google');
 
     try {
-      const result = await signInWithGoogle();
+      const result = await session.signInWithGoogle();
       setMessage(result);
     } finally {
       setSocialBusyProvider(null);
@@ -189,7 +183,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
     setSocialBusyProvider('apple');
 
     try {
-      const result = await signInWithApple();
+      const result = await session.signInWithApple();
       setMessage(result);
     } finally {
       setSocialBusyProvider(null);
@@ -262,7 +256,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                 </Text>
               </Pressable>
 
-              {appleSignInAvailable ? (
+              {session.appleSignInAvailable ? (
                 <AppleAuthentication.AppleAuthenticationButton
                   buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                   buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
@@ -279,9 +273,10 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
               <View style={styles.formArea}>
                 <View onLayout={handleFieldLayout('email')}>
                   <FieldBlock label="Correo">
-                    <TextInput
+                    <AppTextInput
                       autoCapitalize="none"
                       autoComplete="email"
+                      chrome="glass"
                       keyboardType="email-address"
                       onChangeText={setEmail}
                       onFocus={() => focusField('email')}
@@ -295,9 +290,10 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
                 <View onLayout={handleFieldLayout('password')}>
                   <FieldBlock label="Contrasena">
-                    <TextInput
+                    <AppTextInput
                       autoCapitalize="none"
                       autoComplete="password"
+                      chrome="glass"
                       onChangeText={setPassword}
                       onFocus={() => focusField('password')}
                       placeholder="Tu contrasena"
@@ -318,8 +314,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
                     <View onLayout={handleFieldLayout('fullName')}>
                       <FieldBlock label="Nombre">
-                        <TextInput
+                        <AppTextInput
                           autoCapitalize="words"
+                          chrome="glass"
                           onChangeText={setFullName}
                           onFocus={() => focusField('fullName')}
                           placeholder="Nombre y apellido"
@@ -341,7 +338,8 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                               <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
                             </Pressable>
 
-                            <TextInput
+                            <AppTextInput
+                              chrome="glass"
                               keyboardType="phone-pad"
                               onChangeText={setPhoneNationalNumber}
                               onFocus={() => {
@@ -519,17 +517,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     paddingTop: theme.spacing.xs,
   },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
-    borderColor: 'rgba(15, 23, 40, 0.08)',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 54,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
+  input: {},
   extraGlass: {
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
     borderColor: 'rgba(255, 255, 255, 0.84)',

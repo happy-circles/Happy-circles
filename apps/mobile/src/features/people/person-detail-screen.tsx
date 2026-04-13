@@ -9,11 +9,14 @@ import type { ActivityItemDto } from '@happy-circles/application';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { Snackbar } from '@/components/snackbar';
+import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
@@ -38,6 +41,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSession } from '@/providers/session-provider';
 
 export interface PersonDetailScreenProps {
   readonly userId: string;
@@ -45,6 +49,15 @@ export interface PersonDetailScreenProps {
 
 type PersonSegmentKey = 'pending' | 'history';
 type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
+interface BannerState {
+  readonly message: string;
+  readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+interface AmendmentErrors {
+  readonly amount?: string;
+  readonly description?: string;
+}
 
 function readResultStatus(value: unknown): string | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -135,6 +148,7 @@ function pendingStatusLabel(status: string): string {
 
 export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   const router = useRouter();
+  const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
@@ -143,13 +157,16 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
-  const [message, setMessage] = useState<string | null>(null);
+  const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
   const [amendmentAmount, setAmendmentAmount] = useState('');
   const [amendmentDescription, setAmendmentDescription] = useState('');
+  const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>('history');
+  const { snackbar, showSnackbar } = useFeedbackSnackbar();
+  const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
   const pendingItems = person?.pendingItems ?? [];
 
   useEffect(() => {
@@ -157,6 +174,7 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
       setActiveAmendmentItemId(null);
       setAmendmentAmount('');
       setAmendmentDescription('');
+      setAmendmentErrors({});
     }
   }, [activeAmendmentItemId, pendingItems]);
 
@@ -191,6 +209,7 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   function toggleAmendment(item: ActivityItemDto) {
     if (activeAmendmentItemId === item.id) {
       setActiveAmendmentItemId(null);
+      setAmendmentErrors({});
       return;
     }
 
@@ -198,16 +217,30 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
     setActiveAmendmentItemId(item.id);
     setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
     setAmendmentDescription(financialRequestContent.detail);
+    setAmendmentErrors({});
   }
 
   async function handleAmendment(requestId: string) {
-    if (amendmentAmountMinor <= 0 || amendmentDescription.trim().length === 0) {
-      setMessage('Define un monto valido y escribe un concepto para proponer otro monto.');
+    const nextErrors: AmendmentErrors = {
+      amount: amendmentAmountMinor > 0 ? undefined : 'Ingresa un monto mayor a 0.',
+      description:
+        amendmentDescription.trim().length > 0 ? undefined : 'Explica el concepto del nuevo monto.',
+    };
+    const errorCount = Object.values(nextErrors).filter(Boolean).length;
+    if (errorCount > 0) {
+      setAmendmentErrors(nextErrors);
+      setBanner({
+        message:
+          errorCount === 1
+            ? 'Te falta 1 dato para enviar el nuevo monto.'
+            : `Te faltan ${errorCount} datos para enviar el nuevo monto.`,
+        tone: 'danger',
+      });
       return;
     }
 
     setBusyKey(`${requestId}:amendment`);
-    setMessage(null);
+    setBanner(null);
 
     try {
       await amendRequest.mutateAsync({
@@ -218,9 +251,27 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
       setActiveAmendmentItemId(null);
       setAmendmentAmount('');
       setAmendmentDescription('');
-      setMessage('Nuevo monto enviado.');
+      setAmendmentErrors({});
+      showSnackbar('Nuevo monto enviado.', 'success');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
+      const nextMessage =
+        error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.';
+      if (
+        showBlockedActionAlert(nextMessage, router, {
+          hasEmailPassword: session.linkedMethods.hasEmailPassword,
+          profile: {
+            avatarPath: session.profile?.avatar_path ?? null,
+            phoneE164: session.profile?.phone_e164 ?? null,
+          },
+        })
+      ) {
+        return;
+      }
+
+      setBanner({
+        message: nextMessage,
+        tone: 'danger',
+      });
     } finally {
       setBusyKey(null);
     }
@@ -259,7 +310,7 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
   ) {
     const key = `${itemId}:${action}`;
     setBusyKey(key);
-    setMessage(null);
+    setBanner(null);
 
     try {
       if (kind === 'financial_request') {
@@ -267,15 +318,16 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
           const response = await acceptRequest.mutateAsync(itemId);
           const autoCycleStatus = readNestedStatus(response, 'autoCycleProposal');
           const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
-          setMessage(
+          showSnackbar(
             autoCycleStatus === 'pending_approvals'
               ? 'Propuesta aceptada. Tambien quedo un cierre de ciclo listo para revisar.'
               : 'Propuesta aceptada.',
+            'success',
           );
           showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
         } else {
           await rejectRequest.mutateAsync(itemId);
-          setMessage('Propuesta no aceptada.');
+          showSnackbar('Propuesta no aceptada.', 'neutral');
         }
         return;
       }
@@ -284,16 +336,22 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
         if (action === 'approve') {
           const response = await approveSettlement.mutateAsync(itemId);
           const nextStatus = readResultStatus(response);
-          setMessage(
-            nextStatus === 'approved'
-              ? 'Todos aceptaron. El cierre quedo aprobado.'
-              : nextStatus === 'stale'
-                ? 'La propuesta quedo obsoleta porque el grafo cambio.'
+          if (nextStatus === 'stale') {
+            setBanner({
+              message: 'La propuesta quedo obsoleta porque el grafo cambio.',
+              tone: 'warning',
+            });
+          } else {
+            showSnackbar(
+              nextStatus === 'approved'
+                ? 'Todos aceptaron. El cierre quedo aprobado.'
                 : 'Tu aprobacion quedo registrada.',
-          );
+              'success',
+            );
+          }
         } else {
           await rejectSettlement.mutateAsync(itemId);
-          setMessage('Cierre no aprobado.');
+          showSnackbar('Cierre no aprobado.', 'neutral');
         }
         return;
       }
@@ -302,18 +360,54 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
         const response = await executeSettlement.mutateAsync(itemId);
         const nextStatus = readNestedStatus(response, 'nextAutoCycleProposal');
         const nextProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
-        setMessage(
+        showSnackbar(
           nextStatus === 'pending_approvals'
             ? 'Cierre ejecutado. Ya quedo otro cierre de ciclo pendiente.'
             : 'Cierre ejecutado.',
+          'success',
         );
         showAutoCyclePrompt(nextProposalId, nextStatus);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
+      const nextMessage = error instanceof Error ? error.message : 'No se pudo completar la accion.';
+      if (
+        showBlockedActionAlert(nextMessage, router, {
+          hasEmailPassword: session.linkedMethods.hasEmailPassword,
+          profile: {
+            avatarPath: session.profile?.avatar_path ?? null,
+            phoneE164: session.profile?.phone_e164 ?? null,
+          },
+        })
+      ) {
+        return;
+      }
+
+      setBanner({
+        message: nextMessage,
+        tone: 'danger',
+      });
     } finally {
       setBusyKey(null);
     }
+  }
+
+  function confirmPendingAction(input: {
+    readonly title: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly onConfirm: () => void;
+  }) {
+    Alert.alert(input.title, input.message, [
+      {
+        text: 'Cancelar',
+        style: 'cancel',
+      },
+      {
+        text: input.confirmLabel,
+        style: 'destructive',
+        onPress: input.onConfirm,
+      },
+    ]);
   }
 
   function renderPendingItem(item: ActivityItemDto) {
@@ -333,10 +427,36 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
           createdByLabel={financialRequestContent.createdByLabel}
           description={financialRequestContent.detail}
           key={item.id}
+          amendmentAmountError={activeAmendmentItemId === item.id ? amendmentErrors.amount ?? null : null}
+          amendmentDescriptionError={
+            activeAmendmentItemId === item.id ? amendmentErrors.description ?? null : null
+          }
           onAccept={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')}
-          onChangeAmendmentAmount={setAmendmentAmount}
-          onChangeAmendmentDescription={setAmendmentDescription}
-          onReject={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject')}
+          onChangeAmendmentAmount={(value) => {
+            setAmendmentAmount(value);
+            setAmendmentErrors((current) => ({
+              ...current,
+              amount: undefined,
+            }));
+          }}
+          onChangeAmendmentDescription={(value) => {
+            setAmendmentDescription(value);
+            setAmendmentErrors((current) => ({
+              ...current,
+              description: undefined,
+            }));
+          }}
+          onReject={
+            busyKey
+              ? undefined
+              : () =>
+                  confirmPendingAction({
+                    title: 'No aceptar propuesta',
+                    message: 'Avisaremos que no aceptas este movimiento y seguira pendiente de otra resolucion.',
+                    confirmLabel: 'No aceptar',
+                    onConfirm: () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
+                  })
+          }
           onSubmitAmendment={busyKey ? undefined : () => void handleAmendment(item.id)}
           onToggleAmendment={busyKey ? undefined : () => toggleAmendment(item)}
           responseState={item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'}
@@ -365,12 +485,23 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
             <View style={styles.pendingActionSlot}>
               <PrimaryAction
                 compact
+                loading={busyKey === `${item.id}:approve`}
                 label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar cierre'}
                 onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'approve')}
               />
             </View>
             <Pressable
-              onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject')}
+              onPress={
+                busyKey
+                  ? undefined
+                  : () =>
+                      confirmPendingAction({
+                        title: 'No aprobar cierre',
+                        message: 'Tu respuesta dejara este cierre como no aprobado para el resto del circulo.',
+                        confirmLabel: 'No aprobar',
+                        onConfirm: () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
+                      })
+              }
               style={({ pressed }) => [styles.inlineAction, pressed ? styles.inlineActionPressed : null]}
             >
               <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
@@ -383,8 +514,28 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
             <View style={styles.pendingActionSlot}>
               <PrimaryAction
                 compact
+                loading={busyKey === `${item.id}:execute`}
                 label={busyKey === `${item.id}:execute` ? 'Ejecutando...' : 'Ejecutar cierre'}
-                onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'execute')}
+                onPress={
+                  busyKey
+                    ? undefined
+                    : () =>
+                        Alert.alert(
+                          'Ejecutar cierre',
+                          'Aplicaremos este cierre al ledger y ya no podras deshacerlo desde aqui.',
+                          [
+                            {
+                              text: 'Cancelar',
+                              style: 'cancel',
+                            },
+                            {
+                              text: 'Ejecutar',
+                              style: 'destructive',
+                              onPress: () => void handlePendingItemAction(item.id, item.kind, item.status, 'execute'),
+                            },
+                          ],
+                        )
+                }
               />
             </View>
           </View>
@@ -501,7 +652,7 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
             </Pressable>
           </View>
 
-          {message ? <MessageBanner message={message} /> : null}
+          {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
           <View style={styles.sheetScrollWrap}>
             <ScrollView
@@ -562,6 +713,12 @@ export function PersonDetailScreen({ userId }: PersonDetailScreenProps) {
           </View>
         </View>
       </View>
+      <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
+      <LoadingOverlay
+        message="No cierres esta pantalla mientras registramos la respuesta."
+        title="Procesando accion"
+        visible={showBusyOverlay}
+      />
     </SafeAreaView>
   );
 }

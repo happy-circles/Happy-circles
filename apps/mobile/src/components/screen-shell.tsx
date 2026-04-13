@@ -1,4 +1,4 @@
-import type { PropsWithChildren, ReactNode } from 'react';
+import type { PropsWithChildren, ReactNode, RefObject } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly headerLeading?: ReactNode;
   readonly headerSlot?: ReactNode;
   readonly footer?: ReactNode;
+  readonly overlay?: ReactNode;
+  readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
 }
 
@@ -30,6 +32,8 @@ export function ScreenShell({
   headerLeading,
   headerSlot,
   footer,
+  overlay,
+  scrollViewRef,
   children,
   contentContainerStyle,
 }: ScreenShellProps) {
@@ -47,6 +51,7 @@ export function ScreenShell({
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={[styles.content, footer ? styles.contentWithFooter : null, contentContainerStyle]}
         keyboardShouldPersistTaps="handled"
@@ -82,6 +87,7 @@ export function ScreenShell({
           <View style={styles.contentWidth}>{footer}</View>
         </View>
       ) : null}
+      {overlay}
     </SafeAreaView>
   );
 }

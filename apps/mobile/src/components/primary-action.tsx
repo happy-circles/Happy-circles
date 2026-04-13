@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
@@ -12,6 +12,8 @@ export interface PrimaryActionProps {
   readonly href?: string;
   readonly variant?: 'primary' | 'secondary' | 'ghost';
   readonly compact?: boolean;
+  readonly loading?: boolean;
+  readonly disabled?: boolean;
 }
 
 export function PrimaryAction({
@@ -21,17 +23,22 @@ export function PrimaryAction({
   href,
   variant = 'primary',
   compact = false,
+  loading = false,
+  disabled = false,
 }: PrimaryActionProps) {
+  const isDisabled = loading || disabled;
   const content = (
     <Pressable
-      onPress={onPress}
+      disabled={isDisabled}
+      onPress={isDisabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
         compact ? styles.baseCompact : null,
         variant === 'primary' ? styles.primary : null,
         variant === 'secondary' ? styles.secondary : null,
         variant === 'ghost' ? styles.ghost : null,
-        pressed ? styles.pressed : null,
+        pressed && !isDisabled ? styles.pressed : null,
+        isDisabled ? styles.disabled : null,
       ]}
     >
       <View style={styles.copy}>
@@ -58,7 +65,12 @@ export function PrimaryAction({
           </Text>
         ) : null}
       </View>
-      {variant !== 'ghost' ? (
+      {loading ? (
+        <ActivityIndicator
+          color={variant === 'primary' ? theme.colors.white : theme.colors.text}
+          size={compact ? 'small' : 'small'}
+        />
+      ) : variant !== 'ghost' ? (
         <Ionicons
           color={variant === 'primary' ? theme.colors.white : theme.colors.text}
           name="arrow-forward"
@@ -113,6 +125,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
+  },
+  disabled: {
+    opacity: 0.58,
   },
   copy: {
     flex: 1,

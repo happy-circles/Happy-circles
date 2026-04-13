@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocalSearchParams } from 'expo-router';
 import type { Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import type { ScrollView, TextInput } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
@@ -36,29 +38,8 @@ function formatDeviceStateLabel(trustState: string) {
 }
 
 export function ProfileScreen() {
-  const {
-    appleSignInAvailable,
-    attachEmailPassword,
-    biometricAvailable,
-    biometricLabel,
-    biometricsEnabled,
-    currentDeviceId,
-    deviceTrustState,
-    email,
-    isTrustedDevice,
-    linkedMethods,
-    notificationsEnabled,
-    profile,
-    profileCompletionState,
-    revokeTrustedDevice,
-    setBiometricsEnabled,
-    setNotificationsEnabled,
-    signOut,
-    linkApple,
-    linkGoogle,
-    trustCurrentDevice,
-    trustedDevices,
-  } = useSession();
+  const params = useLocalSearchParams<{ focus?: string; section?: string }>();
+  const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
@@ -69,30 +50,204 @@ export function ProfileScreen() {
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const methodsOffsetRef = useRef(0);
+  const deviceOffsetRef = useRef(0);
+  const methodsMeasuredRef = useRef(false);
+  const deviceMeasuredRef = useRef(false);
+  const trustPasswordInputRef = useRef<TextInput | null>(null);
+  const attachPasswordInputRef = useRef<TextInput | null>(null);
+  const pendingScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const delayedFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [highlightTarget, setHighlightTarget] = useState<'methods' | 'device' | null>(null);
 
-  const accountLabel = currentUserProfile?.displayName ?? profile?.display_name ?? email ?? 'Sin sesion';
-  const accountEmail = currentUserProfile?.email ?? profile?.email ?? email ?? 'Sin correo';
+  const accountLabel =
+    currentUserProfile?.displayName ?? session.profile?.display_name ?? session.email ?? 'Sin sesion';
+  const accountEmail = currentUserProfile?.email ?? session.profile?.email ?? session.email ?? 'Sin correo';
   const reminderSummary = snapshotQuery.isLoading
     ? 'Calculando...'
     : pendingCount > 0
       ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} hoy`
       : 'Sin pendientes';
-  const phoneLabel = profile?.phone_e164 ?? 'Falta completar';
+  const phoneLabel = session.profile?.phone_e164 ?? 'Falta completar';
   const primaryReauthLabel = useMemo(() => {
-    if (linkedMethods.hasEmailPassword) {
+    if (session.linkedMethods.hasEmailPassword) {
       return 'Validar con clave';
     }
 
-    if (linkedMethods.hasGoogle) {
+    if (session.linkedMethods.hasGoogle) {
       return 'Validar con Google';
     }
 
-    if (linkedMethods.hasApple) {
+    if (session.linkedMethods.hasApple) {
       return 'Validar con Apple';
     }
 
     return 'Validar dispositivo';
-  }, [linkedMethods.hasApple, linkedMethods.hasEmailPassword, linkedMethods.hasGoogle]);
+  }, [
+    session.linkedMethods.hasApple,
+    session.linkedMethods.hasEmailPassword,
+    session.linkedMethods.hasGoogle,
+  ]);
+  const nextCompleteProfileFocus = !session.profile?.avatar_path
+    ? 'avatar'
+    : !session.profile?.phone_e164
+      ? 'phone'
+      : 'fullName';
+  const completeProfileHref = {
+    pathname: '/complete-profile',
+    params: {
+      focus: nextCompleteProfileFocus,
+    },
+  } as Href;
+
+  const clearFocusTimers = useCallback(() => {
+    if (pendingScrollTimeoutRef.current) {
+      clearTimeout(pendingScrollTimeoutRef.current);
+      pendingScrollTimeoutRef.current = null;
+    }
+
+    if (delayedFocusTimeoutRef.current) {
+      clearTimeout(delayedFocusTimeoutRef.current);
+      delayedFocusTimeoutRef.current = null;
+    }
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+  }, []);
+
+  const queueHighlightReset = useCallback(() => {
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightTarget(null);
+      highlightTimeoutRef.current = null;
+    }, 2600);
+  }, []);
+
+  const focusProfileSection = useCallback(
+    (focusTarget: string | null, sectionTarget: string | null) => {
+      const resolvedFocusTarget =
+        focusTarget === 'trust-password' && (!session.linkedMethods.hasEmailPassword || session.isTrustedDevice)
+          ? 'device-help'
+          : focusTarget === 'attach-password' && session.linkedMethods.hasEmailPassword
+            ? 'methods'
+            : focusTarget;
+
+      const scrollToMethods = () => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, methodsOffsetRef.current - 24),
+          animated: true,
+        });
+        setHighlightTarget('methods');
+        queueHighlightReset();
+      };
+
+      const scrollToDevice = () => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, deviceOffsetRef.current - 24),
+          animated: true,
+        });
+        setHighlightTarget('device');
+        queueHighlightReset();
+      };
+
+      if (resolvedFocusTarget === 'attach-password') {
+        if (!methodsMeasuredRef.current || !attachPasswordInputRef.current) {
+          return false;
+        }
+
+        scrollToMethods();
+        delayedFocusTimeoutRef.current = setTimeout(() => {
+          attachPasswordInputRef.current?.focus();
+          delayedFocusTimeoutRef.current = null;
+        }, 220);
+        return true;
+      }
+
+      if (resolvedFocusTarget === 'trust-password') {
+        if (!deviceMeasuredRef.current || !trustPasswordInputRef.current) {
+          return false;
+        }
+
+        scrollToDevice();
+        delayedFocusTimeoutRef.current = setTimeout(() => {
+          trustPasswordInputRef.current?.focus();
+          delayedFocusTimeoutRef.current = null;
+        }, 220);
+        return true;
+      }
+
+      if (
+        resolvedFocusTarget === 'trust-device' ||
+        resolvedFocusTarget === 'device-help' ||
+        sectionTarget === 'device'
+      ) {
+        if (!deviceMeasuredRef.current) {
+          return false;
+        }
+
+        scrollToDevice();
+        return true;
+      }
+
+      if (resolvedFocusTarget === 'methods' || sectionTarget === 'methods') {
+        if (!methodsMeasuredRef.current) {
+          return false;
+        }
+
+        scrollToMethods();
+        return true;
+      }
+
+      return false;
+    },
+    [queueHighlightReset, session.isTrustedDevice, session.linkedMethods.hasEmailPassword],
+  );
+
+  useEffect(() => {
+    const focusTarget = typeof params.focus === 'string' ? params.focus : null;
+    const sectionTarget = typeof params.section === 'string' ? params.section : null;
+    if (!focusTarget && !sectionTarget) {
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const attemptFocus = () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (focusProfileSection(focusTarget, sectionTarget)) {
+        pendingScrollTimeoutRef.current = null;
+        return;
+      }
+
+      attempts += 1;
+      if (attempts >= 10) {
+        pendingScrollTimeoutRef.current = null;
+        return;
+      }
+
+      pendingScrollTimeoutRef.current = setTimeout(attemptFocus, 120);
+    };
+
+    pendingScrollTimeoutRef.current = setTimeout(attemptFocus, 60);
+
+    return () => {
+      cancelled = true;
+      clearFocusTimers();
+    };
+  }, [clearFocusTimers, focusProfileSection, params.focus, params.section]);
+
+  useEffect(() => () => clearFocusTimers(), [clearFocusTimers]);
 
   async function runAction(actionKey: string, action: () => Promise<string>) {
     setBusyAction(actionKey);
@@ -108,7 +263,7 @@ export function ProfileScreen() {
   }
 
   async function handleBiometrics(nextValue: boolean) {
-    const result = await setBiometricsEnabled(nextValue);
+    const result = await session.setBiometricsEnabled(nextValue);
     setMessage(result.message);
   }
 
@@ -126,7 +281,7 @@ export function ProfileScreen() {
         return;
       }
 
-      await setNotificationsEnabled(true);
+      await session.setNotificationsEnabled(true);
       await cancelScheduledReminders();
       if (pendingCount > 0) {
         await scheduleDailyPendingReminder();
@@ -136,7 +291,7 @@ export function ProfileScreen() {
       return;
     }
 
-    await setNotificationsEnabled(false);
+    await session.setNotificationsEnabled(false);
     await cancelScheduledReminders();
     setMessage('Recordatorios desactivados.');
   }
@@ -193,7 +348,12 @@ export function ProfileScreen() {
   }
 
   return (
-    <ScreenShell headerVariant="plain" largeTitle={false} title="Perfil">
+    <ScreenShell
+      headerVariant="plain"
+      largeTitle={false}
+      scrollViewRef={scrollViewRef}
+      title="Perfil"
+    >
       <View style={styles.accountHeader}>
         <Pressable
           disabled={avatarMutation.isPending}
@@ -228,13 +388,13 @@ export function ProfileScreen() {
 
       {message ? <MessageBanner message={message} /> : null}
 
-      {profileCompletionState === 'incomplete' ? (
+      {session.profileCompletionState === 'incomplete' ? (
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Perfil minimo pendiente</Text>
           <Text style={styles.panelBody}>
             Antes de mover dinero necesitamos nombre usable y celular unico.
           </Text>
-          <Link href={'/complete-profile' as Href} asChild>
+          <Link href={completeProfileHref} asChild>
             <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
               <Text style={styles.inlineButtonText}>Completar ahora</Text>
             </Pressable>
@@ -255,13 +415,15 @@ export function ProfileScreen() {
         <View style={styles.listRow}>
           <View style={styles.textWrap}>
             <Text style={styles.rowTitle}>Biometria</Text>
-            <Text style={styles.rowSubtitle}>{biometricAvailable ? biometricLabel : 'No disponible'}</Text>
+            <Text style={styles.rowSubtitle}>
+              {session.biometricAvailable ? session.biometricLabel : 'No disponible'}
+            </Text>
           </View>
           <Switch
-            disabled={!biometricAvailable}
+            disabled={!session.biometricAvailable}
             onValueChange={(nextValue) => void handleBiometrics(nextValue)}
             trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-            value={biometricsEnabled}
+            value={session.biometricsEnabled}
           />
         </View>
 
@@ -275,26 +437,35 @@ export function ProfileScreen() {
           <Switch
             onValueChange={(nextValue) => void handleNotifications(nextValue)}
             trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-            value={notificationsEnabled}
+            value={session.notificationsEnabled}
           />
         </View>
       </View>
 
-      <View style={styles.panel}>
+      <View
+        onLayout={(event) => {
+          methodsMeasuredRef.current = true;
+          methodsOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+        style={[styles.panel, highlightTarget === 'methods' ? styles.focusPanel : null]}
+      >
         <Text style={styles.panelTitle}>Metodos de acceso</Text>
 
         <View style={styles.methodRow}>
           <View style={styles.textWrap}>
             <Text style={styles.rowTitle}>Correo y clave</Text>
             <Text style={styles.rowSubtitle}>
-              {linkedMethods.hasEmailPassword ? 'Listo para entrar en cualquier dispositivo.' : 'Aun no agregas una clave.'}
+              {session.linkedMethods.hasEmailPassword
+                ? 'Listo para entrar en cualquier dispositivo.'
+                : 'Aun no agregas una clave.'}
             </Text>
           </View>
         </View>
-        {!linkedMethods.hasEmailPassword ? (
+        {!session.linkedMethods.hasEmailPassword ? (
           <View style={styles.stack}>
-            <TextInput
+            <AppTextInput
               autoCapitalize="none"
+              ref={attachPasswordInputRef}
               onChangeText={setAttachPassword}
               placeholder="Nueva clave"
               placeholderTextColor={theme.colors.muted}
@@ -302,7 +473,7 @@ export function ProfileScreen() {
               style={styles.input}
               value={attachPassword}
             />
-            <TextInput
+            <AppTextInput
               autoCapitalize="none"
               onChangeText={setAttachPasswordConfirm}
               placeholder="Confirmar clave"
@@ -319,7 +490,7 @@ export function ProfileScreen() {
                   ? undefined
                   : () =>
                       void runAction('attach-password', async () =>
-                        attachEmailPassword({
+                        session.attachEmailPassword({
                           password: attachPassword,
                           confirmPassword: attachPasswordConfirm,
                         }),
@@ -335,12 +506,12 @@ export function ProfileScreen() {
           <View style={styles.textWrap}>
             <Text style={styles.rowTitle}>Google</Text>
             <Text style={styles.rowSubtitle}>
-              {linkedMethods.hasGoogle ? 'Vinculado' : 'Disponible para acceso rapido'}
+              {session.linkedMethods.hasGoogle ? 'Vinculado' : 'Disponible para acceso rapido'}
             </Text>
           </View>
-          {!linkedMethods.hasGoogle ? (
+          {!session.linkedMethods.hasGoogle ? (
             <Pressable
-              onPress={() => void runAction('link-google', linkGoogle)}
+              onPress={() => void runAction('link-google', async () => session.linkGoogle())}
               style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
             >
               <Text style={styles.inlineButtonText}>
@@ -350,19 +521,19 @@ export function ProfileScreen() {
           ) : null}
         </View>
 
-        {appleSignInAvailable ? (
+        {session.appleSignInAvailable ? (
           <>
             <View style={styles.separator} />
             <View style={styles.methodRow}>
               <View style={styles.textWrap}>
                 <Text style={styles.rowTitle}>Apple</Text>
                 <Text style={styles.rowSubtitle}>
-                  {linkedMethods.hasApple ? 'Vinculado' : 'Disponible en iPhone'}
+                  {session.linkedMethods.hasApple ? 'Vinculado' : 'Disponible en iPhone'}
                 </Text>
               </View>
-              {!linkedMethods.hasApple ? (
+              {!session.linkedMethods.hasApple ? (
                 <Pressable
-                  onPress={() => void runAction('link-apple', linkApple)}
+                  onPress={() => void runAction('link-apple', async () => session.linkApple())}
                   style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
                 >
                   <Text style={styles.inlineButtonText}>
@@ -381,25 +552,32 @@ export function ProfileScreen() {
             <Text style={styles.rowTitle}>Celular</Text>
             <Text style={styles.rowSubtitle}>{phoneLabel}</Text>
           </View>
-          <Link href={'/complete-profile' as Href} asChild>
+          <Link href={{ pathname: '/complete-profile', params: { focus: 'phone' } } as Href} asChild>
             <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
-              <Text style={styles.inlineButtonText}>{profile?.phone_e164 ? 'Editar' : 'Completar'}</Text>
+              <Text style={styles.inlineButtonText}>{session.profile?.phone_e164 ? 'Editar' : 'Completar'}</Text>
             </Pressable>
           </Link>
         </View>
       </View>
 
-      <View style={styles.panel}>
+      <View
+        onLayout={(event) => {
+          deviceMeasuredRef.current = true;
+          deviceOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+        style={[styles.panel, highlightTarget === 'device' ? styles.focusPanel : null]}
+      >
         <Text style={styles.panelTitle}>Dispositivos</Text>
         <Text style={styles.panelBody}>
-          Estado actual: {isTrustedDevice ? 'confiable' : formatDeviceStateLabel(deviceTrustState)}.
+          Estado actual: {session.isTrustedDevice ? 'confiable' : formatDeviceStateLabel(session.deviceTrustState)}.
         </Text>
 
-        {!isTrustedDevice ? (
+        {!session.isTrustedDevice ? (
           <View style={styles.stack}>
-            {linkedMethods.hasEmailPassword ? (
-              <TextInput
+            {session.linkedMethods.hasEmailPassword ? (
+              <AppTextInput
                 autoCapitalize="none"
+                ref={trustPasswordInputRef}
                 onChangeText={setTrustPassword}
                 placeholder="Tu clave actual"
                 placeholderTextColor={theme.colors.muted}
@@ -416,7 +594,7 @@ export function ProfileScreen() {
                   ? undefined
                   : () =>
                       void runAction('trust-device', async () =>
-                        trustCurrentDevice({
+                        session.trustCurrentDevice({
                           password: trustPassword,
                         }),
                       )
@@ -426,11 +604,11 @@ export function ProfileScreen() {
         ) : null}
 
         <View style={styles.stack}>
-          {trustedDevices.map((device) => (
+          {session.trustedDevices.map((device) => (
             <View key={device.id} style={styles.deviceRow}>
               <View style={styles.textWrap}>
                 <Text style={styles.rowTitle}>
-                  {formatDeviceTitle(device.device_id, currentDeviceId, device.platform)}
+                  {formatDeviceTitle(device.device_id, session.currentDeviceId, device.platform)}
                 </Text>
                 <Text style={styles.rowSubtitle}>
                   {formatDeviceStateLabel(device.trust_state)}
@@ -439,7 +617,11 @@ export function ProfileScreen() {
               </View>
               {device.trust_state !== 'revoked' ? (
                 <Pressable
-                  onPress={() => void runAction(`revoke-${device.device_id}`, async () => revokeTrustedDevice(device.device_id))}
+                  onPress={() =>
+                    void runAction(`revoke-${device.device_id}`, async () =>
+                      session.revokeTrustedDevice(device.device_id),
+                    )
+                  }
                   style={({ pressed }) => [styles.inlineButtonDanger, pressed ? styles.rowPressed : null]}
                 >
                   <Text style={styles.inlineButtonDangerText}>
@@ -455,7 +637,7 @@ export function ProfileScreen() {
       <View style={styles.list}>
         <View style={styles.separator} />
         <Pressable
-          onPress={() => void signOut()}
+          onPress={() => void session.signOut()}
           style={({ pressed }) => [styles.listRow, pressed ? styles.rowPressed : null]}
         >
           <Text style={styles.signOutLabel}>Cerrar sesion</Text>
@@ -520,6 +702,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     padding: theme.spacing.md,
   },
+  focusPanel: {
+    borderColor: theme.colors.primary,
+  },
   panelTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
@@ -579,15 +764,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   input: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
     minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
   },
   inlineButton: {
     backgroundColor: theme.colors.surfaceSoft,
