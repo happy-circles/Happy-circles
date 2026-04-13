@@ -1,3 +1,7 @@
+\set QUIET 1
+\pset format unaligned
+\pset tuples_only on
+
 do $$
 declare
   v_graph_snapshot_hash text;
@@ -84,3 +88,7 @@ begin
   end if;
 end
 $$;
+
+\unset QUIET
+select '1..1';
+select 'ok 1 - cycle settlement proposal rules';

@@ -192,6 +192,7 @@ export interface AppSnapshot {
   readonly incomingInvites: readonly RelationshipInviteDto[];
   readonly outgoingInvites: readonly RelationshipInviteDto[];
   readonly whatsappInvites: readonly ContactInviteDto[];
+  readonly inviteHistory: readonly ActivityItemDto[];
   readonly activitySections: readonly ActivitySectionDto[];
   readonly pendingCount: number;
   readonly auditEvents: readonly AuditListItem[];
@@ -1097,7 +1098,7 @@ function buildInviteItems(
           subtitle: buildInvitePendingSubtitle(invite),
           status: 'requires_you',
           ctaLabel: 'Responder',
-          href: '/invite/index',
+          href: '/invite',
           createdAt: invite.created_at,
         });
         continue;
@@ -1113,7 +1114,7 @@ function buildInviteItems(
         subtitle: buildInvitePendingSubtitle(invite),
         status: 'waiting_other_side',
         ctaLabel: invite.target_mode === 'share_link' ? 'Ver link' : 'Ver',
-        href: '/invite/index',
+        href: '/invite',
         createdAt: invite.created_at,
       });
       continue;
@@ -1133,7 +1134,7 @@ function buildInviteItems(
         displayName: counterpart.displayName,
       }),
       status: invite.status,
-      href: '/invite/index',
+      href: '/invite',
       sourceType: 'user',
       happenedAt,
       happenedAtLabel: formatRelativeLabel(happenedAt),
@@ -1755,6 +1756,7 @@ function buildLiveSnapshot(input: {
     incomingInvites: inviteState.incomingInvites,
     outgoingInvites: inviteState.outgoingInvites,
     whatsappInvites: contactInviteItems,
+    inviteHistory: inviteState.historyActivityItems,
     activitySections: [
       {
         key: 'pending',
@@ -1795,7 +1797,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('user_profiles')
       .select(
-        'id, display_name, email, avatar_path, public_connection_token, created_at, updated_at',
+        'id, display_name, email, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, public_connection_token, created_at, updated_at',
       ),
     client
       .from('v_contact_invites_live')
@@ -1849,16 +1851,16 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     throw new Error(profilesResult.error.message);
   }
 
-  if (relationshipsResult.error) {
-    throw new Error(relationshipsResult.error.message);
-  }
-
   if (contactInvitesResult.error) {
     throw new Error(contactInvitesResult.error.message);
   }
 
   if (relationshipInvitesResult.error) {
     throw new Error(relationshipInvitesResult.error.message);
+  }
+
+  if (relationshipsResult.error) {
+    throw new Error(relationshipsResult.error.message);
   }
 
   if (openDebtsResult.error) {

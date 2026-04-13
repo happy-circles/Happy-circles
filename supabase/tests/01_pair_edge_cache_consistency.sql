@@ -1,3 +1,7 @@
+\set QUIET 1
+\pset format unaligned
+\pset tuples_only on
+
 do $$
 declare
   v_mismatch_count integer;
@@ -20,3 +24,7 @@ begin
   end if;
 end
 $$;
+
+\unset QUIET
+select '1..1';
+select 'ok 1 - pair edge cache consistency';

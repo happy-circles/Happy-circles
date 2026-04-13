@@ -1,6 +1,12 @@
 do $$
 begin
-  if not exists (select 1 from pg_type where typname = 'contact_invite_status') then
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'contact_invite_status'
+      and n.nspname = 'public'
+  ) then
     create type public.contact_invite_status as enum ('pending', 'matched', 'canceled');
   end if;
 end

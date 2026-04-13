@@ -4,7 +4,7 @@ language sql
 security definer
 set search_path = public
 as $$
-  select lower(encode(gen_random_bytes(greatest(p_bytes, 12)), 'hex'));
+  select lower(encode(extensions.gen_random_bytes(greatest(p_bytes, 12)), 'hex'));
 $$;
 
 alter table public.user_profiles
@@ -752,7 +752,10 @@ begin
     btrim(p_invitee_phone_country_calling_code),
     regexp_replace(p_invitee_phone_national_number, '[^0-9]', '', 'g'),
     v_phone_e164,
-    case when v_invitee_user_id is null then 'pending' else 'matched' end,
+    case
+      when v_invitee_user_id is null then 'pending'::public.contact_invite_status
+      else 'matched'::public.contact_invite_status
+    end,
     v_invitee_user_id,
     v_existing_pending_invite.id
   )

@@ -85,7 +85,7 @@ export function RegisterFlowScreen() {
 
   function openInviteFlow(suggestedName?: string) {
     router.push({
-      pathname: '/invite/index',
+      pathname: '/invite',
       params: {
         inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
         amountMinor: amountMinor > 0 ? String(amountMinor) : undefined,

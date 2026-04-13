@@ -1,10 +1,14 @@
+\set QUIET 1
+\pset format unaligned
+\pset tuples_only on
+
 with demo_users as (
   select *
   from (
     values
       ('00000000-0000-0000-0000-0000000000e5'::uuid, 'elena@example.com', 'Elena'),
       ('00000000-0000-0000-0000-0000000000f6'::uuid, 'felipe@example.com', 'Felipe'),
-      ('00000000-0000-0000-0000-0000000000g7'::uuid, 'gina@example.com', 'Gina')
+      ('00000000-0000-0000-0000-0000000000a7'::uuid, 'gina@example.com', 'Gina')
   ) as seed_user(id, email, display_name)
 )
 insert into auth.users (
@@ -60,7 +64,7 @@ from (
   values
     ('00000000-0000-0000-0000-0000000000e5'::uuid, 'elena@example.com', 'Elena'),
     ('00000000-0000-0000-0000-0000000000f6'::uuid, 'felipe@example.com', 'Felipe'),
-    ('00000000-0000-0000-0000-0000000000g7'::uuid, 'gina@example.com', 'Gina')
+    ('00000000-0000-0000-0000-0000000000a7'::uuid, 'gina@example.com', 'Gina')
 ) as demo_users(id, email, display_name)
 on conflict (id) do update
 set email = excluded.email,
@@ -70,7 +74,7 @@ do $$
 declare
   v_user_elena constant uuid := '00000000-0000-0000-0000-0000000000e5';
   v_user_felipe constant uuid := '00000000-0000-0000-0000-0000000000f6';
-  v_user_gina constant uuid := '00000000-0000-0000-0000-0000000000g7';
+  v_user_gina constant uuid := '00000000-0000-0000-0000-0000000000a7';
   v_matched_contact jsonb;
   v_matched_invite_id uuid;
   v_profile_preview jsonb;
@@ -83,6 +87,10 @@ declare
   v_expired_invite jsonb;
   v_expired_invite_id uuid;
   v_expired_token text;
+  v_expired_preview jsonb;
+  v_duplicate_invite jsonb;
+  v_duplicate_token text;
+  v_duplicate_preview jsonb;
 begin
   delete from public.contact_invites
   where inviter_user_id in (v_user_elena, v_user_felipe, v_user_gina)
@@ -125,6 +133,24 @@ begin
       and public_connection_token is null
   ) then
     raise exception 'expected public connection token for test users';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_class
+    where oid = 'public.v_relationship_invites_live'::regclass
+      and coalesce(reloptions, array[]::text[]) @> array['security_invoker=true']
+  ) then
+    raise exception 'expected v_relationship_invites_live to run with security_invoker';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_class
+    where oid = 'public.v_contact_invites_live'::regclass
+      and coalesce(reloptions, array[]::text[]) @> array['security_invoker=true']
+  ) then
+    raise exception 'expected v_contact_invites_live to run with security_invoker';
   end if;
 
   v_matched_contact := public.create_contact_invite(
@@ -201,6 +227,31 @@ begin
     raise exception 'expected active relationship after accepting shareable invite';
   end if;
 
+  v_duplicate_invite := public.create_shareable_invite(
+    v_user_elena,
+    'test-invite-redesign-duplicate-link'
+  );
+  v_duplicate_token := v_duplicate_invite ->> 'inviteToken';
+  v_duplicate_preview := public.get_invite_preview_by_token(v_user_gina, v_duplicate_token);
+
+  if (v_duplicate_preview ->> 'reason') <> 'already_connected' then
+    raise exception 'expected already_connected preview for duplicate share link, got %', v_duplicate_preview ->> 'reason';
+  end if;
+
+  begin
+    perform public.accept_invite_by_token(
+      v_user_gina,
+      'test-invite-redesign-duplicate-link-accept',
+      v_duplicate_token
+    );
+    raise exception 'expected relationship_already_exists when accepting duplicate share link';
+  exception
+    when others then
+      if position('relationship_already_exists' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+
   v_expired_invite := public.create_shareable_invite(
     v_user_felipe,
     'test-invite-redesign-expired-link'
@@ -211,6 +262,12 @@ begin
   update public.relationship_invites
   set expires_at = timezone('utc', now()) - interval '5 minutes'
   where id = v_expired_invite_id;
+
+  v_expired_preview := public.get_invite_preview_by_token(v_user_elena, v_expired_token);
+
+  if (v_expired_preview ->> 'status') <> 'expired' then
+    raise exception 'expected expired share link preview to report expired, got %', v_expired_preview ->> 'status';
+  end if;
 
   begin
     perform public.accept_invite_by_token(
@@ -274,3 +331,7 @@ begin
   end if;
 end
 $$;
+
+\unset QUIET
+select '1..1';
+select 'ok 1 - invite redesign smoke';

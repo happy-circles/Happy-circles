@@ -6,8 +6,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { ActivityItemDto } from '@happy-circles/application';
-
 import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
 import { FieldBlock } from '@/components/field-block';
@@ -214,13 +212,7 @@ export function InvitePersonScreen() {
   const incomingInvites = snapshotQuery.data?.incomingInvites ?? [];
   const outgoingInvites = snapshotQuery.data?.outgoingInvites ?? [];
   const whatsappInvites = snapshotQuery.data?.whatsappInvites ?? [];
-  const historyInviteItems = useMemo(
-    () =>
-      (snapshotQuery.data?.activitySections.find((section) => section.key === 'history')?.items ?? []).filter(
-        (item): item is ActivityItemDto => item.kind === 'relationship_invite',
-      ),
-    [snapshotQuery.data?.activitySections],
-  );
+  const historyInviteItems = snapshotQuery.data?.inviteHistory ?? [];
   const externalPendingInvites = useMemo(
     () =>
       whatsappInvites.filter(

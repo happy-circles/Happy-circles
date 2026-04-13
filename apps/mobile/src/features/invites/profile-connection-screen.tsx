@@ -107,7 +107,7 @@ export function ProfileConnectionScreen() {
       });
       await clearPendingInviteIntent();
       setMessage('Invitacion creada. Ahora queda pendiente de respuesta.');
-      router.replace('/invite/index');
+      router.replace('/invite');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo crear la invitacion.');
     } finally {
@@ -120,7 +120,7 @@ export function ProfileConnectionScreen() {
       eyebrow="QR"
       footer={
         <View style={styles.footer}>
-          <PrimaryAction label="Ir a invitaciones" onPress={() => router.replace('/invite/index')} variant="ghost" />
+          <PrimaryAction label="Ir a invitaciones" onPress={() => router.replace('/invite')} variant="ghost" />
         </View>
       }
       largeTitle={false}
@@ -181,7 +181,7 @@ export function ProfileConnectionScreen() {
           ) : (
             <PrimaryAction
               label="Abrir invitaciones"
-              onPress={() => router.replace('/invite/index')}
+              onPress={() => router.replace('/invite')}
               variant="secondary"
             />
           )}
