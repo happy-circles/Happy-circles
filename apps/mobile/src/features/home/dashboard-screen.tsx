@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { PersonRow } from '@/components/person-row';
+import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { formatCop } from '@/lib/data';
+import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 
 export function DashboardScreen() {
+  const router = useRouter();
   const snapshotQuery = useAppSnapshot();
   const dashboard = snapshotQuery.data?.dashboard;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
@@ -118,12 +121,17 @@ export function DashboardScreen() {
           />
         ) : null}
         {dashboard.activePeople.length === 0 ? (
-          <EmptyState
-            actionHref="/invite"
-            actionLabel="Enviar invitacion"
-            description="Cuando tengas relaciones activas y movimientos confirmados, apareceran aqui."
-            title="Todavia no hay relaciones activas"
-          />
+          <View style={styles.onboardingStack}>
+            <EmptyState
+              description={noActiveRelationshipsEmptyState.description}
+              title={noActiveRelationshipsEmptyState.title}
+            />
+            <PrimaryAction
+              label={noActiveRelationshipsEmptyState.actionLabel}
+              onPress={() => router.push('/invite')}
+              subtitle={noActiveRelationshipsEmptyState.actionSubtitle}
+            />
+          </View>
         ) : filteredPeople.length === 0 ? (
           <EmptyState
             description="Prueba con otro nombre o borra la busqueda para ver toda tu red."
@@ -216,6 +224,9 @@ const styles = StyleSheet.create({
   },
   quickActionPressed: {
     opacity: 0.6,
+  },
+  onboardingStack: {
+    gap: theme.spacing.sm,
   },
   balancePositive: {
     color: theme.colors.success,

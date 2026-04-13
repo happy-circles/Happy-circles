@@ -9,6 +9,7 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { formatCop } from '@/lib/data';
+import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
@@ -136,8 +137,9 @@ export function RegisterFlowScreen() {
           />
         ) : undefined
       }
-      largeTitle={false}
+      headerVariant="plain"
       title="Nuevo movimiento"
+      titleSize="title1"
     >
       {message ? <MessageBanner message={message} /> : null}
 
@@ -153,13 +155,13 @@ export function RegisterFlowScreen() {
       {!snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length === 0 ? (
         <View style={styles.stack}>
           <EmptyState
-            description="Primero invita a alguien por WhatsApp. Cuando esa persona este en tu red, podras registrar movimientos aqui."
-            title="Todavia no tienes relaciones activas"
+            description={noActiveRelationshipsEmptyState.description}
+            title={noActiveRelationshipsEmptyState.title}
           />
           <PrimaryAction
-            label="Invitar persona"
+            label={noActiveRelationshipsEmptyState.actionLabel}
             onPress={() => openInviteFlow()}
-            subtitle="Llevamos el contexto del movimiento si ya lo tienes claro."
+            subtitle={noActiveRelationshipsEmptyState.actionSubtitle}
           />
         </View>
       ) : null}

@@ -1,4 +1,4 @@
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
@@ -18,15 +18,21 @@ export function EmptyState({ title, description, actionLabel, actionHref }: Empt
       <Text style={styles.kicker}>Sin contenido</Text>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
-      {actionLabel && actionHref ? <PrimaryAction label={actionLabel} href={actionHref} /> : null}
+      {actionLabel && actionHref ? (
+        <View style={styles.actionSlot}>
+          <PrimaryAction label={actionLabel} href={actionHref} />
+        </View>
+      ) : null}
     </SurfaceCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  actionSlot: {
+    width: '100%',
   },
   kicker: {
     color: theme.colors.textMuted,
@@ -34,6 +40,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   title: {
     color: theme.colors.text,
@@ -42,6 +49,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   description: {
+    alignSelf: 'center',
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,

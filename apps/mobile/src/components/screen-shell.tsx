@@ -10,6 +10,7 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly subtitle?: string;
   readonly eyebrow?: string;
   readonly largeTitle?: boolean;
+  readonly titleSize?: 'largeTitle' | 'title1' | 'title2';
   readonly titleAlign?: 'left' | 'center';
   readonly headerVariant?: 'card' | 'plain';
   readonly headerLeading?: ReactNode;
@@ -23,6 +24,7 @@ export function ScreenShell({
   subtitle,
   eyebrow,
   largeTitle = true,
+  titleSize,
   titleAlign = 'left',
   headerVariant = 'card',
   headerLeading,
@@ -31,6 +33,17 @@ export function ScreenShell({
   children,
   contentContainerStyle,
 }: ScreenShellProps) {
+  const resolvedTitleStyle =
+    titleSize === 'largeTitle'
+      ? styles.largeTitle
+      : titleSize === 'title1'
+        ? styles.title1
+        : titleSize === 'title2'
+          ? styles.compactTitle
+          : largeTitle
+            ? styles.largeTitle
+            : styles.compactTitle;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -52,7 +65,7 @@ export function ScreenShell({
                 style={[
                   styles.title,
                   titleAlign === 'center' ? styles.titleCentered : null,
-                  largeTitle ? styles.largeTitle : styles.compactTitle,
+                  resolvedTitleStyle,
                 ]}
               >
                 {title}
@@ -143,6 +156,11 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.largeTitle,
     letterSpacing: -1,
     lineHeight: 40,
+  },
+  title1: {
+    fontSize: theme.typography.title1,
+    letterSpacing: -0.8,
+    lineHeight: 34,
   },
   compactTitle: {
     fontSize: theme.typography.title2,

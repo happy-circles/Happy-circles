@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
@@ -24,11 +25,127 @@ import {
   useCreateWhatsAppInviteMutation,
   useRejectRelationshipInviteMutation,
 } from '@/lib/live-data';
-import { buildPhoneE164, COUNTRY_OPTIONS, DEFAULT_COUNTRY, formatPhoneForWhatsApp } from '@/lib/phone';
+import {
+  buildPhoneE164,
+  COUNTRY_OPTIONS,
+  DEFAULT_COUNTRY,
+  formatPhoneForWhatsApp,
+  normalizePhoneDigits,
+  type CountryOption,
+} from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 type InviteSegment = 'pending' | 'history';
+type ContactPhoneOption = {
+  readonly key: string;
+  readonly label: string;
+  readonly nationalNumber: string;
+  readonly countryIso: string;
+  readonly callingCode: string;
+};
+type ContactPhonePickerState = {
+  readonly contactName: string;
+  readonly options: readonly ContactPhoneOption[];
+};
+
+const COUNTRY_OPTIONS_BY_CALLING_CODE = [...COUNTRY_OPTIONS].sort(
+  (left, right) =>
+    normalizePhoneDigits(right.callingCode).length - normalizePhoneDigits(left.callingCode).length,
+);
+
+function findCountryOptionByIso2(iso2: string | null | undefined): CountryOption | null {
+  if (!iso2) {
+    return null;
+  }
+
+  const normalizedIso2 = iso2.trim().toUpperCase();
+  return COUNTRY_OPTIONS.find((country) => country.iso2 === normalizedIso2) ?? null;
+}
+
+function findCountryOptionByPhoneNumber(rawNumber: string): CountryOption | null {
+  if (!rawNumber.trim().startsWith('+')) {
+    return null;
+  }
+
+  const normalizedDigits = normalizePhoneDigits(rawNumber);
+  return (
+    COUNTRY_OPTIONS_BY_CALLING_CODE.find((country) =>
+      normalizedDigits.startsWith(normalizePhoneDigits(country.callingCode)),
+    ) ?? null
+  );
+}
+
+function resolveContactName(contact: Contacts.Contact | Contacts.ExistingContact): string {
+  const normalizedName = contact.name?.trim();
+  if (normalizedName) {
+    return normalizedName;
+  }
+
+  const composedName = [contact.firstName, contact.middleName, contact.lastName]
+    .map((part) => part?.trim() ?? '')
+    .filter((part) => part.length > 0)
+    .join(' ')
+    .trim();
+
+  if (composedName.length > 0) {
+    return composedName;
+  }
+
+  return 'Contacto';
+}
+
+function buildContactPhoneOptions(
+  contact: Contacts.ExistingContact,
+  fallbackCountryIso: string,
+): ContactPhoneOption[] {
+  const fallbackCountry = findCountryOptionByIso2(fallbackCountryIso) ?? DEFAULT_COUNTRY;
+  const seenNumbers = new Set<string>();
+
+  return (contact.phoneNumbers ?? []).flatMap((phoneNumber, index) => {
+    const rawNumber = phoneNumber.number?.trim() ?? '';
+    const fallbackDigits = phoneNumber.digits ?? '';
+    const normalizedDigits = normalizePhoneDigits(rawNumber || fallbackDigits);
+    if (normalizedDigits.length === 0) {
+      return [];
+    }
+
+    const country =
+      findCountryOptionByIso2(phoneNumber.countryCode) ??
+      findCountryOptionByPhoneNumber(rawNumber) ??
+      fallbackCountry;
+    const normalizedCallingCode = normalizePhoneDigits(country.callingCode);
+    const nationalNumber =
+      rawNumber.startsWith('+') && normalizedDigits.startsWith(normalizedCallingCode)
+        ? normalizedDigits.slice(normalizedCallingCode.length)
+        : normalizedDigits;
+
+    if (nationalNumber.length === 0) {
+      return [];
+    }
+
+    const dedupeKey = buildPhoneE164(country.callingCode, nationalNumber);
+    if (seenNumbers.has(dedupeKey)) {
+      return [];
+    }
+
+    seenNumbers.add(dedupeKey);
+
+    const label = phoneNumber.label?.trim().length ? phoneNumber.label.trim() : `Numero ${index + 1}`;
+    const displayNumber =
+      rawNumber.length > 0 ? rawNumber : `${country.callingCode} ${nationalNumber}`;
+
+    return [
+      {
+        key: phoneNumber.id ?? dedupeKey,
+        label: `${label} | ${displayNumber}`,
+        nationalNumber,
+        countryIso: country.iso2,
+        callingCode: country.callingCode,
+      },
+    ];
+  });
+}
 
 function formatInviteDate(value: string): string {
   const timestamp = Date.parse(value);
@@ -203,6 +320,7 @@ export function InvitePersonScreen() {
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+  const [contactPhonePicker, setContactPhonePicker] = useState<ContactPhonePickerState | null>(null);
 
   const selectedCountry = useMemo(
     () => COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY,
@@ -231,6 +349,71 @@ export function InvitePersonScreen() {
   const profileConnectionLink = profileConnectionToken
     ? `happycircles://connect/${profileConnectionToken}`
     : null;
+
+  function applySelectedContact(contactName: string, phoneOption: ContactPhoneOption) {
+    setInviteeName(contactName);
+    setCountryIso(phoneOption.countryIso);
+    setPhoneNationalNumber(phoneOption.nationalNumber);
+    setContactPhonePicker(null);
+    setMessage(`Precargamos ${contactName} con ${phoneOption.label}.`);
+  }
+
+  async function handlePickContact() {
+    if (busyKey) {
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      setMessage('Elegir desde contactos solo esta disponible en iOS y Android.');
+      return;
+    }
+
+    setBusyKey('pick-contact');
+    setMessage(null);
+
+    try {
+      const permission = await Contacts.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setMessage('Necesitamos permiso de contactos para rellenar nombre y celular desde tu agenda.');
+        return;
+      }
+
+      const pickedContact = await Contacts.presentContactPickerAsync();
+      if (!pickedContact) {
+        return;
+      }
+
+      const contact =
+        (await Contacts.getContactByIdAsync(pickedContact.id, [
+          Contacts.Fields.Name,
+          Contacts.Fields.FirstName,
+          Contacts.Fields.MiddleName,
+          Contacts.Fields.LastName,
+          Contacts.Fields.PhoneNumbers,
+        ])) ?? pickedContact;
+      const contactName = resolveContactName(contact);
+      const phoneOptions = buildContactPhoneOptions(contact, selectedCountry.iso2);
+
+      if (phoneOptions.length === 0) {
+        setMessage('Ese contacto no tiene numeros validos para usar en la invitacion.');
+        return;
+      }
+
+      if (phoneOptions.length === 1) {
+        applySelectedContact(contactName, phoneOptions[0]);
+        return;
+      }
+
+      setContactPhonePicker({
+        contactName,
+        options: phoneOptions,
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo abrir tu agenda.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
   async function handleCreateInvite() {
     setBusyKey('create-whatsapp');
@@ -398,6 +581,13 @@ export function InvitePersonScreen() {
             subtitle="Si el numero ya existe en Happy Circles, lo resolvemos como invitacion interna y no abrimos WhatsApp."
           >
             <SurfaceCard padding="lg" variant="elevated">
+              <PrimaryAction
+                label={busyKey === 'pick-contact' ? 'Abriendo contactos...' : 'Elegir de contactos'}
+                onPress={busyKey ? undefined : () => void handlePickContact()}
+                subtitle="Precarga nombre y numero desde tu agenda"
+                variant="secondary"
+              />
+
               <FieldBlock label="Nombre">
                 <TextInput
                   autoCapitalize="words"
@@ -684,6 +874,57 @@ export function InvitePersonScreen() {
         </>
       ) : null}
 
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setContactPhonePicker(null)}
+        transparent
+        visible={contactPhonePicker !== null}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            onPress={() => setContactPhonePicker(null)}
+            style={styles.modalDismissZone}
+          />
+          <View style={styles.modalSheet}>
+            <SurfaceCard padding="lg" style={styles.modalCard} variant="elevated">
+              <Text style={styles.cardTitle}>Elegir numero</Text>
+              <Text style={styles.helper}>
+                {contactPhonePicker
+                  ? `${contactPhonePicker.contactName} tiene varios numeros. Elige cual quieres usar para la invitacion.`
+                  : ''}
+              </Text>
+
+              <ScrollView
+                contentContainerStyle={styles.contactOptionList}
+                showsVerticalScrollIndicator={false}
+              >
+                {contactPhonePicker?.options.map((phoneOption) => (
+                  <Pressable
+                    key={phoneOption.key}
+                    onPress={() => applySelectedContact(contactPhonePicker.contactName, phoneOption)}
+                    style={({ pressed }) => [
+                      styles.contactOption,
+                      pressed ? styles.contactOptionPressed : null,
+                    ]}
+                  >
+                    <Text style={styles.contactOptionTitle}>{phoneOption.label}</Text>
+                    <Text style={styles.contactOptionSubtitle}>
+                      {phoneOption.callingCode} | {phoneOption.countryIso}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <PrimaryAction
+                label="Cancelar"
+                onPress={() => setContactPhonePicker(null)}
+                variant="ghost"
+              />
+            </SurfaceCard>
+          </View>
+        </View>
+      </Modal>
+
       {snapshotQuery.isLoading ? (
         <SurfaceCard>
           <Text style={styles.helper}>Cargando invitaciones y relaciones...</Text>
@@ -703,6 +944,48 @@ export function InvitePersonScreen() {
 const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
+  },
+  modalBackdrop: {
+    backgroundColor: theme.colors.overlay,
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: theme.spacing.md,
+  },
+  modalDismissZone: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalSheet: {
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    gap: theme.spacing.md,
+    maxHeight: '70%',
+    ...theme.shadow.floating,
+  },
+  contactOptionList: {
+    gap: theme.spacing.sm,
+  },
+  contactOption: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    gap: theme.spacing.xxs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  contactOptionPressed: {
+    opacity: 0.9,
+  },
+  contactOptionTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    fontWeight: '700',
+  },
+  contactOptionSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
   stack: {
     gap: theme.spacing.md,

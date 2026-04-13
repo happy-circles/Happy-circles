@@ -17,6 +17,13 @@ const config: ExpoConfig = {
     'expo-notifications',
     'expo-apple-authentication',
     [
+      'expo-contacts',
+      {
+        contactsPermission:
+          'Happy Circles usa tus contactos solo para ayudarte a elegir un numero al invitar por WhatsApp.',
+      },
+    ],
+    [
       'expo-camera',
       {
         cameraPermission: 'Happy Circles usa la camara para escanear codigos QR de invitacion.',
