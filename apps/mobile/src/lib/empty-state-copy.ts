@@ -1,7 +1,7 @@
 export const noActiveRelationshipsEmptyState = {
   title: 'Todavia no tienes relaciones activas',
   description:
-    'Primero invita a alguien por WhatsApp. Cuando esa persona este en tu red, podras registrar movimientos aqui.',
-  actionLabel: 'Invitar persona',
-  actionSubtitle: 'Llevamos el contexto del movimiento si ya lo tienes claro.',
+    'Primero conecta con alguien desde Personas. Puedes compartir una invitacion privada o pegar una que te hayan mandado.',
+  actionLabel: 'Abrir Personas',
+  actionSubtitle: 'Desde ahi puedes invitar o entrar con un link o codigo.',
 } as const;

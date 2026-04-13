@@ -16,9 +16,15 @@ Deno.serve((request) =>
         body.intendedRecipientAlias.trim().length > 0
           ? body.intendedRecipientAlias.trim()
           : null,
-      p_delivery_phone_e164:
-        typeof body.deliveryPhoneE164 === 'string' && body.deliveryPhoneE164.trim().length > 0
-          ? body.deliveryPhoneE164.trim()
+      p_intended_recipient_phone_e164:
+        typeof body.intendedRecipientPhoneE164 === 'string' &&
+        body.intendedRecipientPhoneE164.trim().length > 0
+          ? body.intendedRecipientPhoneE164.trim()
+          : null,
+      p_intended_recipient_phone_label:
+        typeof body.intendedRecipientPhoneLabel === 'string' &&
+        body.intendedRecipientPhoneLabel.trim().length > 0
+          ? body.intendedRecipientPhoneLabel.trim()
           : null,
     });
 

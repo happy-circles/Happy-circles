@@ -29,7 +29,7 @@ const config: ExpoConfig = {
       'expo-contacts',
       {
         contactsPermission:
-          'Happy Circles usa tus contactos solo para ayudarte a elegir un numero al invitar por WhatsApp.',
+          'Happy Circles usa tus contactos solo para ayudarte a asociar una invitacion privada a la persona correcta.',
       },
     ],
     [

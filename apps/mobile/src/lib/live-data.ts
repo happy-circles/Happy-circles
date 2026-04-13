@@ -93,7 +93,7 @@ export interface FriendshipInviteDto {
   readonly inviteId: string;
   readonly flow: 'internal' | 'external';
   readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
-  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly originChannel: 'internal' | 'remote' | 'qr';
   readonly actionState:
     | 'requires_you_response'
     | 'requires_you_review'
@@ -109,6 +109,8 @@ export interface FriendshipInviteDto {
   readonly resolvedAt: string | null;
   readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
   readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
   readonly href: string;
 }
 
@@ -136,7 +138,7 @@ export interface FriendshipInviteListItem extends ActivityItemDto {
   readonly inviteId: string;
   readonly flow: 'internal' | 'external';
   readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
-  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly originChannel: 'internal' | 'remote' | 'qr';
   readonly actionState:
     | 'requires_you_response'
     | 'requires_you_review'
@@ -148,6 +150,8 @@ export interface FriendshipInviteListItem extends ActivityItemDto {
   readonly resolvedAt: string | null;
   readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
   readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
   readonly ctaLabel: string;
   readonly createdAt: string;
 }
@@ -166,12 +170,13 @@ export interface FriendshipInviteDeliveryResult {
   readonly deliveryToken: string;
   readonly flow: 'external';
   readonly status: string;
-  readonly channel: 'whatsapp' | 'link' | 'qr';
-  readonly originChannel: 'whatsapp' | 'link' | 'qr';
+  readonly channel: 'remote' | 'qr';
+  readonly originChannel: 'remote' | 'qr';
   readonly expiresAt: string;
   readonly inviteExpiresAt: string;
   readonly intendedRecipientAlias: string | null;
-  readonly deliveryPhoneE164: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
 }
 
 export interface FriendshipInviteActionResult {
@@ -186,13 +191,15 @@ export interface FriendshipInvitePreviewResult {
   readonly deliveryId: string;
   readonly flow: 'internal' | 'external';
   readonly status: string;
-  readonly channel: 'whatsapp' | 'link' | 'qr';
-  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly channel: 'remote' | 'qr';
+  readonly originChannel: 'internal' | 'remote' | 'qr';
   readonly expiresAt: string | null;
   readonly resolvedAt: string | null;
   readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
   readonly inviterDisplayName: string;
   readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
   readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
   readonly identityFlags: FriendshipIdentityFlags;
   readonly canClaim: boolean;
@@ -1019,20 +1026,38 @@ function parseFriendshipClaimantSnapshot(value: Database['public']['Tables']['fr
   };
 }
 
+function maskInvitePhone(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const digits = value.replaceAll(/\D/g, '');
+  if (digits.length < 4) {
+    return null;
+  }
+
+  return `***${digits.slice(-4)}`;
+}
+
+function buildIntendedRecipientReference(invite: FriendshipInviteRow): string | null {
+  const parts = [
+    invite.intended_recipient_alias?.trim() || null,
+    maskInvitePhone(invite.intended_recipient_phone_e164),
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' | ') : null;
+}
+
 function channelLabel(channel: FriendshipInviteRow['origin_channel'] | FriendshipInviteDeliveryRow['channel']) {
   if (channel === 'internal') {
     return 'Interna';
-  }
-
-  if (channel === 'whatsapp') {
-    return 'WhatsApp';
   }
 
   if (channel === 'qr') {
     return 'QR';
   }
 
-  return 'Link';
+  return 'Remota';
 }
 
 function getFriendshipActorRole(
@@ -1099,6 +1124,7 @@ function buildFriendshipInviteItems(input: {
       ? (input.names.get(invite.target_user_id) ?? 'Persona')
       : invite.intended_recipient_alias ?? 'Persona';
     const claimantName = claimantSnapshot?.displayName ?? 'Persona';
+    const intendedRecipientReference = buildIntendedRecipientReference(invite);
     const pieces = [channelLabel(latestDelivery?.channel ?? invite.origin_channel)];
     if (invite.expires_at) {
       pieces.push(`vence ${formatRelativeLabel(invite.expires_at)}`);
@@ -1124,14 +1150,13 @@ function buildFriendshipInviteItems(input: {
     } else if (invite.status === 'pending_claim') {
       title =
         latestDelivery?.channel === 'qr'
-          ? 'QR temporal activo'
-          : latestDelivery?.channel === 'link'
-            ? 'Link listo para compartir'
-            : `Invitacion enviada a ${invite.intended_recipient_alias ?? 'tu contacto'}`;
+          ? invite.intended_recipient_alias
+            ? `QR temporal para ${invite.intended_recipient_alias}`
+            : 'QR temporal activo'
+          : `Invitacion lista para ${invite.intended_recipient_alias ?? 'tu contacto'}`;
       subtitle = [
         channelLabel(latestDelivery?.channel ?? invite.origin_channel),
-        invite.intended_recipient_alias,
-        latestDelivery?.delivery_phone_e164,
+        intendedRecipientReference,
         latestDelivery?.expires_at ? `vence ${formatRelativeLabel(latestDelivery.expires_at)}` : null,
       ]
         .filter(Boolean)
@@ -1143,6 +1168,7 @@ function buildFriendshipInviteItems(input: {
         title = `Verifica a ${claimantName}`;
         subtitle = [
           channelLabel(latestDelivery?.channel ?? invite.origin_channel),
+          intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
           claimantSnapshot?.maskedEmail,
           claimantSnapshot?.maskedPhone,
         ]
@@ -1182,7 +1208,7 @@ function buildFriendshipInviteItems(input: {
               : 'Invitacion cancelada';
       subtitle = [
         channelLabel(latestDelivery?.channel ?? invite.origin_channel),
-        actorRole === 'sender' && invite.intended_recipient_alias ? invite.intended_recipient_alias : null,
+        actorRole === 'sender' ? intendedRecipientReference : null,
         formatRelativeLabel(happenedAt),
       ]
         .filter(Boolean)
@@ -1214,6 +1240,8 @@ function buildFriendshipInviteItems(input: {
         resolvedAt: invite.resolved_at,
         claimantSnapshot,
         intendedRecipientAlias: invite.intended_recipient_alias,
+        intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
+        intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
       });
       continue;
     }
@@ -1245,6 +1273,8 @@ function buildFriendshipInviteItems(input: {
       resolvedAt: invite.resolved_at,
       claimantSnapshot,
       intendedRecipientAlias: invite.intended_recipient_alias,
+      intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
+      intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
     });
   }
 
@@ -1886,13 +1916,13 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('v_friendship_invites_live')
       .select(
-        'id, inviter_user_id, target_user_id, claimant_user_id, relationship_id, flow, origin_channel, status, resolution_actor, resolution_reason, intended_recipient_alias, claimant_snapshot, source_context, expires_at, resolved_at, created_at, updated_at',
+        'id, inviter_user_id, target_user_id, claimant_user_id, relationship_id, flow, origin_channel, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, claimant_snapshot, source_context, expires_at, resolved_at, created_at, updated_at',
       )
       .order('created_at', { ascending: false }),
     client
       .from('v_friendship_invite_deliveries_live')
       .select(
-        'id, invite_id, token, channel, source_context, delivery_phone_e164, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
+        'id, invite_id, token, channel, source_context, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
       )
       .order('created_at', { ascending: false }),
     client
@@ -2165,17 +2195,19 @@ export function useCreateInternalFriendshipInviteMutation() {
 export function useCreateExternalFriendshipInviteMutation() {
   return useMutation({
     mutationFn: async (input: {
-      readonly channel: 'whatsapp' | 'link' | 'qr';
+      readonly channel: 'remote' | 'qr';
       readonly sourceContext?: string;
       readonly intendedRecipientAlias?: string;
-      readonly deliveryPhoneE164?: string;
+      readonly intendedRecipientPhoneE164?: string;
+      readonly intendedRecipientPhoneLabel?: string;
     }) => {
       const payload = createExternalFriendshipInviteSchema.parse({
         idempotencyKey: createIdempotencyKey(`create_external_friendship_invite_${input.channel}`),
         channel: input.channel,
         sourceContext: input.sourceContext,
         intendedRecipientAlias: input.intendedRecipientAlias,
-        deliveryPhoneE164: input.deliveryPhoneE164,
+        intendedRecipientPhoneE164: input.intendedRecipientPhoneE164,
+        intendedRecipientPhoneLabel: input.intendedRecipientPhoneLabel,
       });
 
       return invokeSupabaseFunction<typeof payload, FriendshipInviteDeliveryResult>(

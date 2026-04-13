@@ -91,10 +91,11 @@ declare
   v_user_felipe constant uuid := '00000000-0000-0000-0000-0000000000f6';
   v_user_gina constant uuid := '00000000-0000-0000-0000-0000000000a7';
   v_internal jsonb;
-  v_external_link jsonb;
-  v_external_whatsapp jsonb;
+  v_external_remote_share jsonb;
+  v_external_remote_copy jsonb;
   v_external_qr_1 jsonb;
   v_external_qr_2 jsonb;
+  v_external_remote_changed jsonb;
   v_cancelable jsonb;
   v_preview jsonb;
   v_claim jsonb;
@@ -190,26 +191,68 @@ begin
       end if;
   end;
 
-  v_external_link := public.create_external_friendship_invite(
+  begin
+    perform public.create_external_friendship_invite(
+      v_user_elena,
+      'test-friendship-remote-missing-phone',
+      'remote',
+      'sql_test_remote_missing_phone',
+      'Gina trabajo',
+      null,
+      null
+    );
+    raise exception 'expected contact_reference_required for remote invite without phone';
+  exception
+    when others then
+      if position('contact_reference_required' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+
+  v_external_remote_share := public.create_external_friendship_invite(
     v_user_elena,
-    'test-friendship-link',
-    'link',
-    'sql_test_link',
+    'test-friendship-remote-share',
+    'remote',
+    'sql_test_remote_share',
     'Gina trabajo',
-    null
+    '+573001111103',
+    'mobile'
   );
 
-  v_external_whatsapp := public.create_external_friendship_invite(
+  v_external_remote_copy := public.create_external_friendship_invite(
     v_user_elena,
-    'test-friendship-whatsapp',
-    'whatsapp',
-    'sql_test_whatsapp',
+    'test-friendship-remote-copy',
+    'remote',
+    'sql_test_remote_copy',
     'Gina trabajo',
-    '+573001111103'
+    '+573001111103',
+    'mobile'
   );
 
-  if (v_external_link ->> 'inviteId')::uuid <> (v_external_whatsapp ->> 'inviteId')::uuid then
-    raise exception 'expected link and whatsapp deliveries to reuse same pending external invite';
+  if (v_external_remote_share ->> 'inviteId')::uuid <> (v_external_remote_copy ->> 'inviteId')::uuid then
+    raise exception 'expected remote share and copy to reuse the same external invite';
+  end if;
+
+  if (v_external_remote_share ->> 'deliveryToken') <> (v_external_remote_copy ->> 'deliveryToken') then
+    raise exception 'expected remote share and copy to reuse the same delivery token';
+  end if;
+
+  if (v_external_remote_share ->> 'intendedRecipientPhoneE164') <> '+573001111103' then
+    raise exception 'expected intendedRecipientPhoneE164 in remote payload, got %', v_external_remote_share;
+  end if;
+
+  v_external_remote_changed := public.create_external_friendship_invite(
+    v_user_elena,
+    'test-friendship-remote-changed',
+    'remote',
+    'sql_test_remote_changed',
+    'Gina viaje',
+    '+573001111104',
+    'work'
+  );
+
+  if (v_external_remote_changed ->> 'inviteId')::uuid = (v_external_remote_share ->> 'inviteId')::uuid then
+    raise exception 'expected changing contact intent to create a different remote invite';
   end if;
 
   v_external_qr_1 := public.create_external_friendship_invite(
@@ -245,18 +288,22 @@ begin
 
   v_preview := public.get_friendship_invite_preview(
     v_user_gina,
-    v_external_whatsapp ->> 'deliveryToken'
+    v_external_remote_share ->> 'deliveryToken'
   );
 
   if coalesce((v_preview ->> 'canClaim')::boolean, false) is not true then
-    raise exception 'expected whatsapp delivery to be claimable by Gina';
+    raise exception 'expected remote delivery to be claimable by Gina';
+  end if;
+
+  if (v_preview ->> 'intendedRecipientPhoneE164') <> '+573001111103' then
+    raise exception 'expected preview to expose intended recipient phone, got %', v_preview;
   end if;
 
   begin
     perform public.claim_external_friendship_invite(
       v_user_elena,
       'test-friendship-self-claim',
-      v_external_whatsapp ->> 'deliveryToken'
+      v_external_remote_share ->> 'deliveryToken'
     );
     raise exception 'expected cannot_claim_own_invite for sender self claim';
   exception
@@ -269,7 +316,7 @@ begin
   v_claim := public.claim_external_friendship_invite(
     v_user_gina,
     'test-friendship-claim',
-    v_external_whatsapp ->> 'deliveryToken'
+    v_external_remote_share ->> 'deliveryToken'
   );
 
   if (v_claim ->> 'status') <> 'pending_sender_review' then
@@ -279,7 +326,7 @@ begin
   select count(*)
     into v_delivery_count
   from public.friendship_invite_deliveries
-  where invite_id = (v_external_whatsapp ->> 'inviteId')::uuid
+  where invite_id = (v_external_remote_share ->> 'inviteId')::uuid
     and status = 'issued';
 
   if v_delivery_count <> 0 then
@@ -288,7 +335,7 @@ begin
 
   v_preview := public.get_friendship_invite_preview(
     v_user_elena,
-    v_external_whatsapp ->> 'deliveryToken'
+    v_external_remote_share ->> 'deliveryToken'
   );
 
   if coalesce((v_preview ->> 'canApprove')::boolean, false) is not true then
@@ -298,7 +345,7 @@ begin
   v_review := public.review_external_friendship_invite(
     v_user_elena,
     'test-friendship-review-approve',
-    (v_external_whatsapp ->> 'inviteId')::uuid,
+    (v_external_remote_share ->> 'inviteId')::uuid,
     'approve'
   );
 
@@ -321,10 +368,11 @@ begin
   v_cancelable := public.create_external_friendship_invite(
     v_user_felipe,
     'test-friendship-cancelable',
-    'link',
+    'remote',
     'sql_test_cancel',
     'Persona de prueba',
-    null
+    '+573001111199',
+    'mobile'
   );
 
   v_cancel := public.cancel_friendship_invite(

@@ -61,7 +61,7 @@ export const FRIENDSHIP_INVITE_STATUSES = [
 ] as const;
 export type FriendshipInviteStatus = (typeof FRIENDSHIP_INVITE_STATUSES)[number];
 
-export const FRIENDSHIP_INVITE_CHANNELS = ['internal', 'whatsapp', 'link', 'qr'] as const;
+export const FRIENDSHIP_INVITE_CHANNELS = ['internal', 'remote', 'qr'] as const;
 export type FriendshipInviteChannel = (typeof FRIENDSHIP_INVITE_CHANNELS)[number];
 
 export const AUDIT_ENTITY_TYPES = [

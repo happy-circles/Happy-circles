@@ -1,55 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Contacts from 'expo-contacts';
-import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { ChoiceChip } from '@/components/choice-chip';
-import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { formatCop } from '@/lib/data';
 import { useCreateExternalFriendshipInviteMutation } from '@/lib/live-data';
-import {
-  buildPhoneE164,
-  COUNTRY_OPTIONS,
-  DEFAULT_COUNTRY,
-  formatPhoneForWhatsApp,
-  normalizePhoneDigits,
-  type CountryOption,
-} from '@/lib/phone';
+import { buildPhoneE164, COUNTRY_OPTIONS, DEFAULT_COUNTRY, normalizePhoneDigits } from '@/lib/phone';
 import { theme } from '@/lib/theme';
-
-type ContactPhoneOption = {
-  readonly key: string;
-  readonly label: string;
-  readonly nationalNumber: string;
-  readonly countryIso: string;
-  readonly callingCode: string;
-};
-
-type ContactPhonePickerState = {
-  readonly contactName: string;
-  readonly options: readonly ContactPhoneOption[];
-};
-
-type ActiveQrInvite = {
-  readonly deliveryToken: string;
-  readonly inviteLink: string;
-  readonly expiresAt: string;
-};
-
-const COUNTRY_OPTIONS_BY_CALLING_CODE = [...COUNTRY_OPTIONS].sort(
-  (left, right) =>
-    normalizePhoneDigits(right.callingCode).length - normalizePhoneDigits(left.callingCode).length,
-);
 
 function buildInviteLink(deliveryToken: string): string {
   return `${appConfig.appWebOrigin.replace(/\/$/, '')}/invite/${deliveryToken}`;
@@ -69,26 +35,13 @@ function formatExpiryLabel(expiresAt: string): string {
   }).format(new Date(timestamp));
 }
 
-function findCountryOptionByIso2(iso2: string | null | undefined): CountryOption | null {
-  if (!iso2) {
-    return null;
+function maskPhoneValue(value: string): string {
+  const digits = normalizePhoneDigits(value);
+  if (digits.length < 4) {
+    return value;
   }
 
-  const normalizedIso2 = iso2.trim().toUpperCase();
-  return COUNTRY_OPTIONS.find((country) => country.iso2 === normalizedIso2) ?? null;
-}
-
-function findCountryOptionByPhoneNumber(rawNumber: string): CountryOption | null {
-  if (!rawNumber.trim().startsWith('+')) {
-    return null;
-  }
-
-  const normalizedDigits = normalizePhoneDigits(rawNumber);
-  return (
-    COUNTRY_OPTIONS_BY_CALLING_CODE.find((country) =>
-      normalizedDigits.startsWith(normalizePhoneDigits(country.callingCode)),
-    ) ?? null
-  );
+  return `***${digits.slice(-4)}`;
 }
 
 function resolveContactName(contact: Contacts.Contact | Contacts.ExistingContact): string {
@@ -110,67 +63,105 @@ function resolveContactName(contact: Contacts.Contact | Contacts.ExistingContact
   return 'Contacto';
 }
 
-function buildContactPhoneOptions(
-  contact: Contacts.ExistingContact,
-  fallbackCountryIso: string,
-): ContactPhoneOption[] {
-  const fallbackCountry = findCountryOptionByIso2(fallbackCountryIso) ?? DEFAULT_COUNTRY;
-  const seenNumbers = new Set<string>();
+function findCountryOptionByPhoneNumber(rawNumber: string) {
+  const trimmed = rawNumber.trim();
+  if (!trimmed.startsWith('+')) {
+    return DEFAULT_COUNTRY;
+  }
 
-  return (contact.phoneNumbers ?? []).flatMap((phoneNumber, index) => {
-    const rawNumber = phoneNumber.number?.trim() ?? '';
-    const fallbackDigits = phoneNumber.digits ?? '';
-    const normalizedDigits = normalizePhoneDigits(rawNumber || fallbackDigits);
-    if (normalizedDigits.length === 0) {
+  const digits = normalizePhoneDigits(trimmed);
+  const sortedOptions = [...COUNTRY_OPTIONS].sort(
+    (left, right) => normalizePhoneDigits(right.callingCode).length - normalizePhoneDigits(left.callingCode).length,
+  );
+
+  for (const option of sortedOptions) {
+    if (digits.startsWith(normalizePhoneDigits(option.callingCode))) {
+      return option;
+    }
+  }
+
+  return DEFAULT_COUNTRY;
+}
+
+type ContactPhoneOption = {
+  readonly id: string;
+  readonly label: string | null;
+  readonly phoneE164: string;
+  readonly maskedPhone: string;
+};
+
+function buildContactPhoneOptions(contact: Contacts.Contact | Contacts.ExistingContact): ContactPhoneOption[] {
+  const phoneNumbers = contact.phoneNumbers ?? [];
+
+  return phoneNumbers.flatMap((phoneNumber, index) => {
+    const rawNumber = phoneNumber.number?.trim();
+    if (!rawNumber) {
       return [];
     }
 
-    const country =
-      findCountryOptionByIso2(phoneNumber.countryCode) ??
-      findCountryOptionByPhoneNumber(rawNumber) ??
-      fallbackCountry;
-    const normalizedCallingCode = normalizePhoneDigits(country.callingCode);
+    const country = findCountryOptionByPhoneNumber(rawNumber);
+    const digits = normalizePhoneDigits(rawNumber);
+    const callingCodeDigits = normalizePhoneDigits(country.callingCode);
     const nationalNumber =
-      rawNumber.startsWith('+') && normalizedDigits.startsWith(normalizedCallingCode)
-        ? normalizedDigits.slice(normalizedCallingCode.length)
-        : normalizedDigits;
+      rawNumber.startsWith('+') && digits.startsWith(callingCodeDigits)
+        ? digits.slice(callingCodeDigits.length)
+        : digits;
+    const phoneE164 = rawNumber.startsWith('+')
+      ? `+${digits}`
+      : buildPhoneE164(country.callingCode, nationalNumber);
 
-    if (nationalNumber.length === 0) {
+    if (normalizePhoneDigits(phoneE164).length < 8) {
       return [];
     }
-
-    const dedupeKey = buildPhoneE164(country.callingCode, nationalNumber);
-    if (seenNumbers.has(dedupeKey)) {
-      return [];
-    }
-
-    seenNumbers.add(dedupeKey);
-
-    const label = phoneNumber.label?.trim().length ? phoneNumber.label.trim() : `Numero ${index + 1}`;
-    const displayNumber =
-      rawNumber.length > 0 ? rawNumber : `${country.callingCode} ${nationalNumber}`;
 
     return [
       {
-        key: phoneNumber.id ?? dedupeKey,
-        label: `${label} | ${displayNumber}`,
-        nationalNumber,
-        countryIso: country.iso2,
-        callingCode: country.callingCode,
+        id: typeof phoneNumber.id === 'string' ? phoneNumber.id : `phone-${index}`,
+        label:
+          typeof phoneNumber.label === 'string' && phoneNumber.label.trim().length > 0
+            ? phoneNumber.label.trim()
+            : null,
+        phoneE164,
+        maskedPhone: maskPhoneValue(phoneE164),
       },
     ];
   });
 }
 
-function buildWhatsAppInviteMessage(input: {
-  readonly inviteeName: string;
+type ContactReference = {
+  readonly contactId: string;
+  readonly alias: string;
+  readonly phoneE164: string;
+  readonly phoneLabel: string | null;
+  readonly maskedPhone: string;
+  readonly referenceKey: string;
+};
+
+function buildContactReference(input: {
+  readonly contactId: string;
+  readonly alias: string;
+  readonly phoneOption: ContactPhoneOption;
+}): ContactReference {
+  const alias = input.alias.trim() || 'Contacto';
+  return {
+    contactId: input.contactId,
+    alias,
+    phoneE164: input.phoneOption.phoneE164,
+    phoneLabel: input.phoneOption.label,
+    maskedPhone: input.phoneOption.maskedPhone,
+    referenceKey: `${input.contactId}:${alias}:${input.phoneOption.phoneE164}`,
+  };
+}
+
+function buildShareInviteMessage(input: {
+  readonly inviteeAlias: string;
   readonly amountMinor: number | null;
   readonly direction: 'i_owe' | 'owes_me' | null;
   readonly description: string | null;
   readonly inviteLink: string;
 }): string {
-  const inviteeName = input.inviteeName.trim();
-  const prefix = inviteeName.length > 0 ? `Hola ${inviteeName},` : 'Hola,';
+  const alias = input.inviteeAlias.trim();
+  const prefix = alias.length > 0 ? `Hola ${alias},` : 'Hola,';
 
   if (input.amountMinor && input.amountMinor > 0 && input.direction) {
     const movementText =
@@ -182,10 +173,10 @@ function buildWhatsAppInviteMessage(input: {
         ? ` por ${input.description.trim()}`
         : '';
 
-    return `${prefix} te envie una invitacion de Happy Circles para registrar ${movementText}${descriptionText}. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+    return `${prefix} te comparti una invitacion de Happy Circles para registrar ${movementText}${descriptionText}. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
   }
 
-  return `${prefix} te envie una invitacion de Happy Circles para conectar conmigo de forma privada. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+  return `${prefix} te comparti una invitacion de Happy Circles para conectar conmigo de forma privada. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
 }
 
 function extractInviteToken(scannedValue: string): string | null {
@@ -212,6 +203,39 @@ function extractInviteToken(scannedValue: string): string | null {
   return null;
 }
 
+function isExpired(expiresAt: string): boolean {
+  const timestamp = Date.parse(expiresAt);
+  return Number.isNaN(timestamp) || timestamp <= Date.now();
+}
+
+type ActiveRemoteInvite = {
+  readonly deliveryToken: string;
+  readonly inviteLink: string;
+  readonly expiresAt: string;
+  readonly referenceKey: string;
+};
+
+type ActiveQrInvite = {
+  readonly deliveryToken: string;
+  readonly inviteLink: string;
+  readonly expiresAt: string;
+  readonly referenceKey: string;
+};
+
+type PendingContactSelection = {
+  readonly contactId: string;
+  readonly alias: string;
+  readonly phoneOptions: readonly ContactPhoneOption[];
+};
+
+function contactReferenceLabel(contactReference: ContactReference | null): string {
+  if (!contactReference) {
+    return 'Sin contacto asociado';
+  }
+
+  return [contactReference.alias, contactReference.maskedPhone].join(' | ');
+}
+
 export function InvitePersonScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -223,35 +247,69 @@ export function InvitePersonScreen() {
   const createExternalInvite = useCreateExternalFriendshipInviteMutation();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
-  const initialInviteeName = typeof params.inviteeName === 'string' ? params.inviteeName : '';
   const transactionAmountMinor =
     typeof params.amountMinor === 'string' ? Number.parseInt(params.amountMinor, 10) : Number.NaN;
   const transactionDirection =
     params.direction === 'i_owe' || params.direction === 'owes_me' ? params.direction : null;
   const transactionDescription = typeof params.description === 'string' ? params.description : null;
 
-  const [inviteeName, setInviteeName] = useState(initialInviteeName);
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
-  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [mode, setMode] = useState<'send' | 'receive'>('send');
+  const [contactReference, setContactReference] = useState<ContactReference | null>(null);
+  const [pendingContactSelection, setPendingContactSelection] = useState<PendingContactSelection | null>(null);
+  const [remoteInvite, setRemoteInvite] = useState<ActiveRemoteInvite | null>(null);
   const [qrInvite, setQrInvite] = useState<ActiveQrInvite | null>(null);
+  const [manualInviteInput, setManualInviteInput] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
-  const [contactPhonePicker, setContactPhonePicker] = useState<ContactPhonePickerState | null>(null);
 
-  const selectedCountry = useMemo(
-    () => COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY,
-    [countryIso],
-  );
+  function clearInvitesForReference(nextReferenceKey: string | null) {
+    if (remoteInvite && remoteInvite.referenceKey !== (nextReferenceKey ?? 'none')) {
+      setRemoteInvite(null);
+    }
 
-  function applySelectedContact(contactName: string, phoneOption: ContactPhoneOption) {
-    setInviteeName(contactName);
-    setCountryIso(phoneOption.countryIso);
-    setPhoneNationalNumber(phoneOption.nationalNumber);
-    setContactPhonePicker(null);
-    setMessage(`Precargamos ${contactName} con ${phoneOption.label}.`);
+    if (qrInvite && qrInvite.referenceKey !== (nextReferenceKey ?? 'none')) {
+      setQrInvite(null);
+    }
+  }
+
+  function applyContactReference(nextReference: ContactReference) {
+    clearInvitesForReference(nextReference.referenceKey);
+    setContactReference(nextReference);
+    setPendingContactSelection(null);
+    setMessage(`Usaremos ${nextReference.alias} ${nextReference.maskedPhone} como referencia para esta invitacion.`);
+  }
+
+  async function ensureRemoteInvite(): Promise<ActiveRemoteInvite> {
+    if (!contactReference) {
+      throw new Error('Elige un contacto con numero antes de compartir la invitacion remota.');
+    }
+
+    if (
+      remoteInvite &&
+      remoteInvite.referenceKey === contactReference.referenceKey &&
+      !isExpired(remoteInvite.expiresAt)
+    ) {
+      return remoteInvite;
+    }
+
+    const response = await createExternalInvite.mutateAsync({
+      channel: 'remote',
+      sourceContext: 'invite_screen_remote',
+      intendedRecipientAlias: contactReference.alias,
+      intendedRecipientPhoneE164: contactReference.phoneE164,
+      intendedRecipientPhoneLabel: contactReference.phoneLabel ?? undefined,
+    });
+
+    const nextInvite: ActiveRemoteInvite = {
+      deliveryToken: response.deliveryToken,
+      inviteLink: buildInviteLink(response.deliveryToken),
+      expiresAt: response.expiresAt,
+      referenceKey: contactReference.referenceKey,
+    };
+    setRemoteInvite(nextInvite);
+    return nextInvite;
   }
 
   async function handlePickContact() {
@@ -269,8 +327,8 @@ export function InvitePersonScreen() {
 
     try {
       const permission = await Contacts.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        setMessage('Necesitamos permiso de contactos para rellenar nombre y celular desde tu agenda.');
+      if (permission.status !== Contacts.PermissionStatus.GRANTED) {
+        setMessage('Necesitamos permiso de contactos para asociar esta invitacion remota a alguien de tu agenda.');
         return;
       }
 
@@ -287,22 +345,29 @@ export function InvitePersonScreen() {
           Contacts.Fields.LastName,
           Contacts.Fields.PhoneNumbers,
         ])) ?? pickedContact;
-      const contactName = resolveContactName(contact);
-      const phoneOptions = buildContactPhoneOptions(contact, selectedCountry.iso2);
+      const alias = resolveContactName(contact);
+      const phoneOptions = buildContactPhoneOptions(contact);
 
       if (phoneOptions.length === 0) {
-        setMessage('Ese contacto no tiene numeros validos para usar en la invitacion.');
+        setMessage('Ese contacto no tiene un numero valido para asociar la invitacion remota.');
         return;
       }
 
       if (phoneOptions.length === 1) {
-        applySelectedContact(contactName, phoneOptions[0]);
+        applyContactReference(
+          buildContactReference({
+            contactId: contact.id,
+            alias,
+            phoneOption: phoneOptions[0],
+          }),
+        );
         return;
       }
 
-      setContactPhonePicker({
-        contactName,
-        options: phoneOptions,
+      setPendingContactSelection({
+        contactId: contact.id,
+        alias,
+        phoneOptions,
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo abrir tu agenda.');
@@ -311,75 +376,54 @@ export function InvitePersonScreen() {
     }
   }
 
-  async function handleCreateInviteByWhatsApp() {
+  async function handleShareInvite() {
     if (busyKey) {
       return;
     }
 
-    const phoneE164 = buildPhoneE164(selectedCountry.callingCode, phoneNationalNumber);
-    if (!inviteeName.trim()) {
-      setMessage('Escribe al menos un nombre para saber a quien le enviaste la invitacion.');
-      return;
-    }
-
-    if (normalizePhoneDigits(phoneNationalNumber).length < 6) {
-      setMessage('Escribe un numero valido antes de abrir WhatsApp.');
-      return;
-    }
-
-    setBusyKey('create-whatsapp');
+    setBusyKey('share');
     setMessage(null);
 
     try {
-      const response = await createExternalInvite.mutateAsync({
-        channel: 'whatsapp',
-        sourceContext: 'invite_screen_whatsapp',
-        intendedRecipientAlias: inviteeName.trim(),
-        deliveryPhoneE164: phoneE164,
-      });
-      const inviteLink = buildInviteLink(response.deliveryToken);
-      const whatsappText = buildWhatsAppInviteMessage({
-        inviteeName,
+      const activeInvite = await ensureRemoteInvite();
+      const shareMessage = buildShareInviteMessage({
+        inviteeAlias: contactReference?.alias ?? '',
         amountMinor:
           Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0 ? transactionAmountMinor : null,
         direction: transactionDirection,
         description: transactionDescription,
-        inviteLink,
+        inviteLink: activeInvite.inviteLink,
       });
-      const whatsappUrl = `https://wa.me/${formatPhoneForWhatsApp(phoneE164)}?text=${encodeURIComponent(whatsappText)}`;
 
-      await Linking.openURL(whatsappUrl);
-      setShareLink(inviteLink);
-      setPhoneNationalNumber('');
-      setInviteeName('');
-      setMessage('Abrimos WhatsApp con un link unico. La amistad solo se crea cuando la otra cuenta lo reclama y tu la confirmas.');
+      await Share.share({
+        title: 'Invitacion de Happy Circles',
+        message: shareMessage,
+      });
+
+      setMessage(
+        'Abrimos las opciones para compartir el mismo link remoto.',
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo preparar la invitacion.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo abrir el menu para compartir.');
     } finally {
       setBusyKey(null);
     }
   }
 
-  async function handleCreateShareLink() {
+  async function handleCopyInviteLink() {
     if (busyKey) {
       return;
     }
 
-    setBusyKey('create-link');
+    setBusyKey('copy-link');
     setMessage(null);
 
     try {
-      const response = await createExternalInvite.mutateAsync({
-        channel: 'link',
-        sourceContext: 'invite_screen_link',
-        intendedRecipientAlias: inviteeName.trim() || undefined,
-      });
-      const inviteLink = buildInviteLink(response.deliveryToken);
-      await Clipboard.setStringAsync(inviteLink);
-      setShareLink(inviteLink);
-      setMessage('Copiamos un link nuevo al portapapeles. Quien lo abra debe reclamarlo y luego tu confirmas la identidad.');
+      const activeInvite = await ensureRemoteInvite();
+      await Clipboard.setStringAsync(activeInvite.inviteLink);
+      setMessage('Copiamos el link remoto.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo crear el link.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo copiar el link.');
     } finally {
       setBusyKey(null);
     }
@@ -397,14 +441,17 @@ export function InvitePersonScreen() {
       const response = await createExternalInvite.mutateAsync({
         channel: 'qr',
         sourceContext: 'invite_screen_qr',
-        intendedRecipientAlias: inviteeName.trim() || undefined,
+        intendedRecipientAlias: contactReference?.alias,
+        intendedRecipientPhoneE164: contactReference?.phoneE164,
+        intendedRecipientPhoneLabel: contactReference?.phoneLabel ?? undefined,
       });
       setQrInvite({
         deliveryToken: response.deliveryToken,
         inviteLink: buildInviteLink(response.deliveryToken),
         expiresAt: response.expiresAt,
+        referenceKey: contactReference?.referenceKey ?? 'none',
       });
-      setMessage('Generamos un QR temporal nuevo. Si se usa o vence, el siguiente QR sera otro.');
+      setMessage('Generamos un QR temporal nuevo.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo generar el QR.');
     } finally {
@@ -427,6 +474,54 @@ export function InvitePersonScreen() {
 
     setScannerLocked(false);
     setScannerOpen(true);
+  }
+
+  function navigateToInviteToken(rawValue: string) {
+    const token = extractInviteToken(rawValue);
+    if (!token) {
+      setMessage('Pega un link completo o un codigo valido de invitacion.');
+      return;
+    }
+
+    setManualInviteInput('');
+    setScannerOpen(false);
+    router.push({
+      pathname: '/invite/[token]',
+      params: { token },
+    });
+  }
+
+  async function handlePasteManualInvite() {
+    if (busyKey) {
+      return;
+    }
+
+    setBusyKey('paste-manual');
+    setMessage(null);
+
+    try {
+      const value = await Clipboard.getStringAsync();
+      if (!value.trim()) {
+        setMessage('No encontramos nada en el portapapeles.');
+        return;
+      }
+
+      setManualInviteInput(value);
+      navigateToInviteToken(value);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo leer el portapapeles.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function handleSubmitManualInvite() {
+    if (busyKey) {
+      return;
+    }
+
+    setMessage(null);
+    navigateToInviteToken(manualInviteInput);
   }
 
   function handleBarcodeScanned(result: BarcodeScanningResult) {
@@ -454,224 +549,173 @@ export function InvitePersonScreen() {
 
   return (
     <ScreenShell
-      eyebrow="Red"
       footer={
         <View style={styles.footer}>
           <PrimaryAction label="Cerrar" onPress={() => router.dismiss()} variant="ghost" />
         </View>
       }
+      headerVariant="plain"
       largeTitle={false}
-      subtitle="WhatsApp, link y QR desembocan en el mismo flujo privado de confirmacion."
-      title="Invitar persona"
+      title="Personas"
+      titleSize="title1"
     >
-      <SurfaceCard padding="lg" variant="accent">
-        <Text style={styles.cardTitle}>Una invitacion, varios canales</Text>
-        <Text style={styles.helper}>
-          El numero, el link y el QR solo entregan el acceso. La amistad se crea cuando la otra persona reclama el token y tu confirmas que si es ella.
-        </Text>
-      </SurfaceCard>
-
       {message ? <MessageBanner message={message} /> : null}
 
-      {Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0 && transactionDirection ? (
-        <SurfaceCard padding="lg" variant="accent">
-          <Text style={styles.cardTitle}>Esta invitacion nace desde un movimiento</Text>
-          <Text style={styles.helper}>
-            {transactionDirection === 'i_owe' ? 'Salida de' : 'Entrada de'} {formatCop(transactionAmountMinor)}
-            {transactionDescription && transactionDescription.trim().length > 0
-              ? ` por ${transactionDescription.trim()}`
-              : ''}
-            . Ese contexto se incluye en el mensaje de WhatsApp, pero la identidad final siempre se valida por cuenta.
-          </Text>
-        </SurfaceCard>
-      ) : null}
+      <View style={styles.form}>
+        <SegmentedControl
+          onChange={setMode}
+          options={[
+            { label: 'Enviar', value: 'send' },
+            { label: 'Recibir', value: 'receive' },
+          ]}
+          value={mode}
+        />
 
-      <SectionBlock
-        title="Enviar por WhatsApp"
-        subtitle="WhatsApp solo reparte el link. El numero queda guardado como trazabilidad del envio."
-      >
-        <SurfaceCard padding="lg" variant="elevated">
-          <PrimaryAction
-            label={busyKey === 'pick-contact' ? 'Abriendo contactos...' : 'Elegir de contactos'}
-            onPress={busyKey ? undefined : () => void handlePickContact()}
-            subtitle="Precarga nombre y numero desde tu agenda"
-            variant="secondary"
-          />
+        {mode === 'send' ? (
+          <View style={styles.section}>
+            {Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0 && transactionDirection ? (
+              <Text style={styles.helperCompact}>
+                {transactionDirection === 'i_owe' ? 'Salida' : 'Entrada'} de {formatCop(transactionAmountMinor)}
+                {transactionDescription && transactionDescription.trim().length > 0
+                  ? ` por ${transactionDescription.trim()}`
+                  : ''}
+              </Text>
+            ) : null}
 
-          <FieldBlock label="Nombre o alias">
-            <TextInput
-              autoCapitalize="words"
-              onChangeText={setInviteeName}
-              placeholder="Como identificas a esta persona"
-              placeholderTextColor={theme.colors.muted}
-              style={styles.input}
-              value={inviteeName}
-            />
-          </FieldBlock>
-
-          <FieldBlock label="Celular">
-            <View style={styles.phoneRow}>
-              <View style={styles.callingCodeBox}>
-                <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
-              </View>
-              <TextInput
-                keyboardType="phone-pad"
-                onChangeText={setPhoneNationalNumber}
-                placeholder="3001234567"
-                placeholderTextColor={theme.colors.muted}
-                style={[styles.input, styles.phoneInput]}
-                value={phoneNationalNumber}
-              />
-            </View>
-          </FieldBlock>
-
-          <FieldBlock label="Pais">
-            <View style={styles.choiceRow}>
-              {COUNTRY_OPTIONS.map((country) => (
-                <ChoiceChip
-                  key={country.iso2}
-                  label={`${country.label} ${country.callingCode}`}
-                  onPress={() => setCountryIso(country.iso2)}
-                  selected={country.iso2 === selectedCountry.iso2}
-                />
-              ))}
-            </View>
-          </FieldBlock>
-
-          <PrimaryAction
-            label={busyKey === 'create-whatsapp' ? 'Preparando...' : 'Enviar por WhatsApp'}
-            onPress={busyKey ? undefined : () => void handleCreateInviteByWhatsApp()}
-            subtitle="Genera un token externo y abre WhatsApp con el link HTTPS"
-          />
-        </SurfaceCard>
-      </SectionBlock>
-
-      <SectionBlock
-        title="Copiar link"
-        subtitle="Genera un link unico de invitacion. Quien lo abra entra al mismo flujo de claim."
-      >
-        <SurfaceCard padding="lg" variant="elevated">
-          <Text style={styles.cardTitle}>Link compartible</Text>
-          <Text style={styles.helper}>
-            Ideal para Telegram, email o SMS. Si despues lo reclama la cuenta equivocada, tu lado decide si confirmar o cerrarlo.
-          </Text>
-          {shareLink ? <Text style={styles.linkPreview}>{shareLink}</Text> : null}
-          <PrimaryAction
-            label={busyKey === 'create-link' ? 'Generando...' : 'Crear y copiar link'}
-            onPress={busyKey ? undefined : () => void handleCreateShareLink()}
-            subtitle="Copia la URL HTTPS al portapapeles"
-          />
-        </SurfaceCard>
-      </SectionBlock>
-
-      <SectionBlock
-        title="Mostrar o escanear QR"
-        subtitle="El QR ya no representa un perfil publico; representa una invitacion temporal de un solo uso."
-      >
-        <SurfaceCard padding="lg" variant="elevated">
-          <Text style={styles.cardTitle}>Mi QR temporal</Text>
-          <Text style={styles.helper}>
-            Sirve para encuentros presenciales. Si se usa o vence, el siguiente QR mostrado debe ser otro.
-          </Text>
-
-          {qrInvite ? (
-            <View style={styles.qrBlock}>
-              <View style={styles.qrCanvas}>
-                <QRCode value={qrInvite.inviteLink} size={176} />
-              </View>
-              <Text style={styles.helper}>Valido hasta {formatExpiryLabel(qrInvite.expiresAt)}</Text>
-              <Text style={styles.linkPreview}>{qrInvite.inviteLink}</Text>
-            </View>
-          ) : (
-            <Text style={styles.helper}>Todavia no generas un QR temporal para esta sesion.</Text>
-          )}
-
-          <View style={styles.qrActionRow}>
-            <View style={styles.qrActionSlot}>
-              <PrimaryAction
-                label={busyKey === 'create-qr' ? 'Generando...' : qrInvite ? 'Generar otro QR' : 'Generar QR temporal'}
-                onPress={busyKey ? undefined : () => void handleCreateQrInvite()}
-                variant="secondary"
-              />
-            </View>
-            <View style={styles.qrActionSlot}>
-              <PrimaryAction
-                label={scannerOpen ? 'Cerrar scanner' : 'Escanear QR'}
-                onPress={() => void handleOpenScanner()}
-              />
-            </View>
-          </View>
-
-          {qrInvite ? (
             <PrimaryAction
-              label="Copiar link del QR"
-              onPress={() => {
-                void Clipboard.setStringAsync(qrInvite.inviteLink);
-                setMessage('Copiamos el link del QR actual.');
-              }}
+              label={busyKey === 'pick-contact' ? 'Abriendo contactos...' : contactReference ? 'Cambiar contacto' : 'Elegir contacto'}
+              onPress={busyKey ? undefined : () => void handlePickContact()}
+              variant="secondary"
+            />
+
+            <SurfaceCard padding="md" variant={contactReference ? 'elevated' : 'default'}>
+              <Text style={styles.referenceLine}>
+                {contactReference ? contactReference.alias : 'Sin contacto'}
+              </Text>
+              <Text style={styles.referenceMeta}>
+                {contactReference
+                  ? [contactReference.phoneLabel, contactReference.maskedPhone].filter(Boolean).join(' | ')
+                  : 'Elige un contacto para compartir o copiar el link'}
+              </Text>
+            </SurfaceCard>
+
+            <PrimaryAction
+              label={busyKey === 'share' ? 'Abriendo opciones...' : 'Compartir'}
+              onPress={busyKey ? undefined : () => void handleShareInvite()}
+            />
+            <PrimaryAction
+              label={busyKey === 'copy-link' ? 'Copiando...' : 'Copiar link'}
+              onPress={busyKey ? undefined : () => void handleCopyInviteLink()}
               variant="ghost"
             />
-          ) : null}
 
-          {scannerOpen ? (
-            <View style={styles.scannerWrap}>
-              <CameraView
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                onBarcodeScanned={handleBarcodeScanned}
-                style={styles.scanner}
+            <View style={styles.sectionDivider} />
+
+            {qrInvite ? (
+              <View style={styles.qrBlock}>
+                <View style={styles.qrCanvas}>
+                  <QRCode value={qrInvite.inviteLink} size={176} />
+                </View>
+                <Text style={styles.helperCompact}>Vence {formatExpiryLabel(qrInvite.expiresAt)}</Text>
+              </View>
+            ) : null}
+
+            <PrimaryAction
+              label={busyKey === 'create-qr' ? 'Generando...' : qrInvite ? 'Generar otro QR' : 'Generar QR temporal'}
+              onPress={busyKey ? undefined : () => void handleCreateQrInvite()}
+              variant="secondary"
+            />
+            {qrInvite ? (
+              <PrimaryAction
+                label="Copiar link del QR"
+                onPress={() => {
+                  void Clipboard.setStringAsync(qrInvite.inviteLink);
+                  setMessage('Copiamos el link del QR actual.');
+                }}
+                variant="ghost"
               />
-            </View>
-          ) : null}
-        </SurfaceCard>
-      </SectionBlock>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setManualInviteInput}
+              placeholder="Pega el link o codigo"
+              placeholderTextColor={theme.colors.muted}
+              style={styles.input}
+              value={manualInviteInput}
+            />
+
+            <PrimaryAction
+              label={busyKey === 'paste-manual' ? 'Pegando...' : 'Pegar desde portapapeles'}
+              onPress={busyKey ? undefined : () => void handlePasteManualInvite()}
+              variant="secondary"
+            />
+            <PrimaryAction
+              label="Continuar"
+              onPress={busyKey ? undefined : handleSubmitManualInvite}
+            />
+            <PrimaryAction
+              label={scannerOpen ? 'Cerrar scanner' : 'Escanear QR'}
+              onPress={() => void handleOpenScanner()}
+              variant="ghost"
+            />
+
+            {scannerOpen ? (
+              <View style={styles.scannerWrap}>
+                <CameraView
+                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                  style={styles.scanner}
+                />
+              </View>
+            ) : null}
+          </View>
+        )}
+      </View>
 
       <Modal
         animationType="fade"
-        onRequestClose={() => setContactPhonePicker(null)}
+        onRequestClose={() => setPendingContactSelection(null)}
         transparent
-        visible={contactPhonePicker !== null}
+        visible={pendingContactSelection !== null}
       >
-        <View style={styles.modalBackdrop}>
-          <Pressable
-            onPress={() => setContactPhonePicker(null)}
-            style={styles.modalDismissZone}
-          />
-          <View style={styles.modalSheet}>
-            <SurfaceCard padding="lg" style={styles.modalCard} variant="elevated">
-              <Text style={styles.cardTitle}>Elegir numero</Text>
-              <Text style={styles.helper}>
-                {contactPhonePicker
-                  ? `${contactPhonePicker.contactName} tiene varios numeros. Elige cual quieres usar como trazabilidad del envio por WhatsApp.`
-                  : ''}
-              </Text>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setPendingContactSelection(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Elige el numero</Text>
+            <Text style={styles.helper}>
+              {pendingContactSelection ? `${pendingContactSelection.alias} tiene varios numeros. Elige el correcto.` : ''}
+            </Text>
+            <View style={styles.modalActions}>
+              {pendingContactSelection?.phoneOptions.map((phoneOption) => (
+                <PrimaryAction
+                  key={phoneOption.id}
+                  label={phoneOption.label ? `${phoneOption.label} | ${phoneOption.maskedPhone}` : phoneOption.maskedPhone}
+                  onPress={() => {
+                    if (!pendingContactSelection) {
+                      return;
+                    }
 
-              <ScrollView
-                contentContainerStyle={styles.contactOptionList}
-                showsVerticalScrollIndicator={false}
-              >
-                {contactPhonePicker?.options.map((phoneOption) => (
-                  <Pressable
-                    key={phoneOption.key}
-                    onPress={() => applySelectedContact(contactPhonePicker.contactName, phoneOption)}
-                    style={({ pressed }) => [
-                      styles.contactOption,
-                      pressed ? styles.contactOptionPressed : null,
-                    ]}
-                  >
-                    <Text style={styles.contactOptionTitle}>{phoneOption.label}</Text>
-                    <Text style={styles.contactOptionSubtitle}>
-                      {phoneOption.callingCode} | {phoneOption.countryIso}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
+                    applyContactReference(
+                      buildContactReference({
+                        contactId: pendingContactSelection.contactId,
+                        alias: pendingContactSelection.alias,
+                        phoneOption,
+                      }),
+                    );
+                  }}
+                  variant="secondary"
+                />
+              ))}
               <PrimaryAction
                 label="Cancelar"
-                onPress={() => setContactPhonePicker(null)}
+                onPress={() => setPendingContactSelection(null)}
                 variant="ghost"
               />
-            </SurfaceCard>
+            </View>
           </View>
         </View>
       </Modal>
@@ -683,52 +727,21 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
   },
-  modalBackdrop: {
-    backgroundColor: theme.colors.overlay,
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: theme.spacing.md,
-  },
-  modalDismissZone: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalSheet: {
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
+  form: {
     gap: theme.spacing.md,
-    maxHeight: '70%',
-    ...theme.shadow.floating,
   },
-  contactOptionList: {
-    gap: theme.spacing.sm,
+  section: {
+    gap: theme.spacing.md,
   },
-  contactOption: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    gap: theme.spacing.xxs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+  sectionDivider: {
+    borderTopColor: theme.colors.hairline,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: theme.spacing.lg,
   },
-  contactOptionPressed: {
-    opacity: 0.9,
-  },
-  contactOptionTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  contactOptionSubtitle: {
+  helperCompact: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  cardTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
   },
   helper: {
     color: theme.colors.textMuted,
@@ -746,7 +759,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  linkPreview: {
+  referenceLine: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  referenceMeta: {
     color: theme.colors.text,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
@@ -760,13 +779,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.large,
     padding: theme.spacing.md,
   },
-  qrActionRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  qrActionSlot: {
-    flex: 1,
-  },
   scannerWrap: {
     borderRadius: theme.radius.large,
     marginTop: theme.spacing.sm,
@@ -776,32 +788,29 @@ const styles = StyleSheet.create({
     minHeight: 280,
     width: '100%',
   },
-  choiceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-  },
-  phoneRow: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  callingCodeBox: {
+  modalOverlay: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minWidth: 88,
-    paddingHorizontal: theme.spacing.md,
-  },
-  callingCodeText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  phoneInput: {
+    backgroundColor: 'rgba(6, 11, 20, 0.7)',
     flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.large,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    maxWidth: 420,
+    padding: theme.spacing.lg,
+    width: '100%',
+  },
+  modalTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+  },
+  modalActions: {
+    gap: theme.spacing.sm,
   },
 });

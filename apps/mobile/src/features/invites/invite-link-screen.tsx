@@ -62,6 +62,23 @@ function inviteReasonLabel(reason: string): string {
   return 'No puedes continuar con esta invitacion.';
 }
 
+function maskPhoneValue(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const digits = value.replaceAll(/\D/g, '');
+  if (digits.length < 4) {
+    return null;
+  }
+
+  return `***${digits.slice(-4)}`;
+}
+
+function channelLabel(channel: 'remote' | 'qr') {
+  return channel === 'qr' ? 'QR temporal' : 'Invitacion remota';
+}
+
 export function InviteLinkScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
@@ -213,16 +230,31 @@ export function InviteLinkScreen() {
         <SurfaceCard padding="lg" variant="elevated">
           <Text style={styles.title}>{preview.inviterDisplayName}</Text>
           <Text style={styles.helper}>
-            {preview.channel.toUpperCase()} | {preview.expiresAt ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}` : 'sin vencimiento'}
+            {channelLabel(preview.channel)} |{' '}
+            {preview.expiresAt ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}` : 'sin vencimiento'}
           </Text>
 
-          {preview.intendedRecipientAlias ? (
-            <Text style={styles.body}>Invitacion pensada para: {preview.intendedRecipientAlias}</Text>
+          {preview.intendedRecipientAlias || preview.intendedRecipientPhoneE164 ? (
+            <View style={styles.snapshotBlock}>
+              <Text style={styles.snapshotTitle}>Contacto pensado</Text>
+              {preview.intendedRecipientAlias ? (
+                <Text style={styles.snapshotLine}>{preview.intendedRecipientAlias}</Text>
+              ) : null}
+              {preview.intendedRecipientPhoneE164 ? (
+                <Text style={styles.snapshotLine}>
+                  {[preview.intendedRecipientPhoneLabel, maskPhoneValue(preview.intendedRecipientPhoneE164)]
+                    .filter(Boolean)
+                    .join(' | ')}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
 
           {preview.claimantSnapshot ? (
             <View style={styles.snapshotBlock}>
-              <Text style={styles.snapshotTitle}>Cuenta que reclamo esta invitacion</Text>
+              <Text style={styles.snapshotTitle}>
+                {preview.canApprove ? 'Cuenta que reclamo esta invitacion' : 'Cuenta que reclamo el acceso'}
+              </Text>
               <Text style={styles.snapshotLine}>{preview.claimantSnapshot.displayName}</Text>
               {preview.claimantSnapshot.maskedEmail ? (
                 <Text style={styles.snapshotLine}>{preview.claimantSnapshot.maskedEmail}</Text>
@@ -237,7 +269,7 @@ export function InviteLinkScreen() {
             {preview.canClaim
               ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
               : preview.canApprove
-                ? `Confirma si la cuenta que reclamo esta invitacion si corresponde a la persona que querias agregar.`
+                ? `Compara el contacto pensado con la cuenta que reclamo esta invitacion y confirma si si corresponde a la persona que querias agregar.`
                 : inviteReasonLabel(preview.reason)}
           </Text>
 

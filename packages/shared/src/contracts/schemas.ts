@@ -73,11 +73,30 @@ export const friendshipInviteDecisionSchema = z.object({
 export const createExternalFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   channel: friendshipInviteChannelSchema.refine((value) => value !== 'internal', {
-    message: 'El canal externo debe ser whatsapp, link o qr.',
+    message: 'El canal externo debe ser remote o qr.',
   }),
   sourceContext: z.string().trim().min(1).max(80).optional(),
   intendedRecipientAlias: z.string().trim().min(1).max(120).optional(),
-  deliveryPhoneE164: z.string().trim().min(8).max(24).optional(),
+  intendedRecipientPhoneE164: z.string().trim().min(8).max(24).optional(),
+  intendedRecipientPhoneLabel: z.string().trim().min(1).max(40).optional(),
+}).superRefine((value, context) => {
+  if (value.channel === 'remote') {
+    if (!value.intendedRecipientAlias) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'La invitacion remota requiere un alias de contacto.',
+        path: ['intendedRecipientAlias'],
+      });
+    }
+
+    if (!value.intendedRecipientPhoneE164) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'La invitacion remota requiere un numero de contacto.',
+        path: ['intendedRecipientPhoneE164'],
+      });
+    }
+  }
 });
 
 export const friendshipInviteTokenSchema = z.object({

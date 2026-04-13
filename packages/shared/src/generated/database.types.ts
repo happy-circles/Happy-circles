@@ -52,6 +52,8 @@ export interface Database {
           resolution_actor: string | null;
           resolution_reason: string | null;
           intended_recipient_alias: string | null;
+          intended_recipient_phone_e164: string | null;
+          intended_recipient_phone_label: string | null;
           claimant_snapshot: Json | null;
           source_context: string | null;
           expires_at: string;
@@ -67,7 +69,6 @@ export interface Database {
           token: string;
           channel: string;
           source_context: string | null;
-          delivery_phone_e164: string | null;
           status: string;
           created_at: string;
           updated_at: string;
@@ -286,6 +287,8 @@ export interface Database {
           resolution_actor: string | null;
           resolution_reason: string | null;
           intended_recipient_alias: string | null;
+          intended_recipient_phone_e164: string | null;
+          intended_recipient_phone_label: string | null;
           claimant_snapshot: Json | null;
           source_context: string | null;
           expires_at: string;
@@ -301,7 +304,6 @@ export interface Database {
           token: string;
           channel: string;
           source_context: string | null;
-          delivery_phone_e164: string | null;
           status: string;
           created_at: string;
           updated_at: string;

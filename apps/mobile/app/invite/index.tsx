@@ -8,7 +8,7 @@ export default function InviteRoute() {
     <>
       <Stack.Screen
         options={{
-          title: 'Invitaciones',
+          title: 'Personas',
           presentation: 'modal',
           headerBackTitle: '',
           headerShadowVisible: false,
