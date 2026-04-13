@@ -6,11 +6,7 @@ const INVITE_INTENT_KEY = 'happy_circles.pending_invite_intent';
 
 export type PendingInviteIntent =
   | {
-      readonly type: 'invite_link';
-      readonly token: string;
-    }
-  | {
-      readonly type: 'profile_connection';
+      readonly type: 'friendship_invite';
       readonly token: string;
     };
 
@@ -23,22 +19,15 @@ function isPendingInviteIntent(value: unknown): value is PendingInviteIntent {
   const token = (value as Record<string, unknown>)['token'];
 
   return (
-    (type === 'invite_link' || type === 'profile_connection') &&
-    typeof token === 'string' &&
-    token.trim().length >= 12
+    type === 'friendship_invite' && typeof token === 'string' && token.trim().length >= 12
   );
 }
 
 export function hrefForPendingInviteIntent(intent: PendingInviteIntent): Href {
-  return intent.type === 'invite_link'
-    ? ({
-        pathname: '/invite/[token]',
-        params: { token: intent.token },
-      } as Href)
-    : ({
-        pathname: '/connect/[token]',
-        params: { token: intent.token },
-      } as Href);
+  return {
+    pathname: '/invite/[token]',
+    params: { token: intent.token },
+  } as Href;
 }
 
 export async function readPendingInviteIntent(): Promise<PendingInviteIntent | null> {

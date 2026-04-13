@@ -15,11 +15,11 @@ export interface Database {
           email: string;
           display_name: string;
           avatar_path: string | null;
-          public_connection_token: string;
           phone_country_iso2: string | null;
           phone_country_calling_code: string | null;
           phone_national_number: string | null;
           phone_e164: string | null;
+          phone_verified_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -39,36 +39,42 @@ export interface Database {
           revoked_at: string | null;
         };
       };
-      contact_invites: {
+      friendship_invites: {
         Row: {
           id: string;
           inviter_user_id: string;
-          invitee_name: string;
-          invitee_phone_country_iso2: string;
-          invitee_phone_country_calling_code: string;
-          invitee_phone_national_number: string;
-          invitee_phone_e164: string;
+          target_user_id: string | null;
+          claimant_user_id: string | null;
+          relationship_id: string | null;
+          flow: string;
+          origin_channel: string;
           status: string;
-          claimed_by_user_id: string | null;
-          relationship_invite_id: string | null;
+          resolution_actor: string | null;
+          resolution_reason: string | null;
+          intended_recipient_alias: string | null;
+          claimant_snapshot: Json | null;
+          source_context: string | null;
+          expires_at: string;
+          resolved_at: string | null;
           created_at: string;
           updated_at: string;
         };
       };
-      relationship_invites: {
+      friendship_invite_deliveries: {
         Row: {
           id: string;
-          inviter_user_id: string;
-          invitee_user_id: string | null;
+          invite_id: string;
+          token: string;
+          channel: string;
+          source_context: string | null;
+          delivery_phone_e164: string | null;
           status: string;
-          target_mode: string;
-          invite_token: string | null;
-          expires_at: string;
-          resolved_at: string | null;
-          accepted_by_user_id: string | null;
-          channel_label: string;
           created_at: string;
           updated_at: string;
+          expires_at: string;
+          claimed_at: string | null;
+          claimed_by_user_id: string | null;
+          revoked_at: string | null;
         };
       };
       relationships: {
@@ -267,41 +273,42 @@ export interface Database {
           created_at: string;
         };
       };
-      v_relationship_invites_live: {
+      v_friendship_invites_live: {
         Row: {
           id: string;
           inviter_user_id: string;
-          invitee_user_id: string | null;
+          target_user_id: string | null;
+          claimant_user_id: string | null;
+          relationship_id: string | null;
+          flow: string;
+          origin_channel: string;
           status: string;
-          target_mode: string;
-          invite_token: string | null;
+          resolution_actor: string | null;
+          resolution_reason: string | null;
+          intended_recipient_alias: string | null;
+          claimant_snapshot: Json | null;
+          source_context: string | null;
           expires_at: string;
           resolved_at: string | null;
-          accepted_by_user_id: string | null;
-          channel_label: string;
           created_at: string;
           updated_at: string;
         };
       };
-      v_contact_invites_live: {
+      v_friendship_invite_deliveries_live: {
         Row: {
           id: string;
-          inviter_user_id: string;
-          invitee_name: string;
-          invitee_phone_country_iso2: string;
-          invitee_phone_country_calling_code: string;
-          invitee_phone_national_number: string;
-          invitee_phone_e164: string;
+          invite_id: string;
+          token: string;
+          channel: string;
+          source_context: string | null;
+          delivery_phone_e164: string | null;
           status: string;
-          claimed_by_user_id: string | null;
-          relationship_invite_id: string | null;
-          relationship_invite_status: string | null;
-          relationship_invite_expires_at: string | null;
-          relationship_invite_resolved_at: string | null;
-          relationship_invite_target_mode: string | null;
-          relationship_invite_channel_label: string | null;
           created_at: string;
           updated_at: string;
+          expires_at: string;
+          claimed_at: string | null;
+          claimed_by_user_id: string | null;
+          revoked_at: string | null;
         };
       };
     };

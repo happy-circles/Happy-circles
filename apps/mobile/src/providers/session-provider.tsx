@@ -295,7 +295,11 @@ function deriveProfileCompletionState(profile: UserProfileRow | null): ProfileCo
     return 'loading';
   }
 
-  if (isLowQualityDisplayName(profile.display_name) || !profile.phone_e164) {
+  if (
+    isLowQualityDisplayName(profile.display_name) ||
+    !profile.phone_e164 ||
+    !profile.avatar_path
+  ) {
     return 'incomplete';
   }
 
@@ -561,7 +565,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         supabase
           .from('user_profiles')
           .select(
-            'id, email, display_name, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, public_connection_token, created_at, updated_at',
+            'id, email, display_name, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
           )
           .eq('id', nextSession.user.id)
           .single(),

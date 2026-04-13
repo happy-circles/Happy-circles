@@ -16,7 +16,7 @@ export interface PersonCardDto {
 
 export interface PendingActionDto {
   readonly id: string;
-  readonly kind: 'financial_request' | 'settlement_proposal' | 'relationship_invite' | 'reminder';
+  readonly kind: 'financial_request' | 'settlement_proposal' | 'friendship_invite' | 'reminder';
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
@@ -44,7 +44,7 @@ export interface ActivityItemDto {
   readonly kind:
     | 'financial_request'
     | 'settlement_proposal'
-    | 'relationship_invite'
+    | 'friendship_invite'
     | 'accepted_request'
     | 'manual_payment'
     | 'system_note'

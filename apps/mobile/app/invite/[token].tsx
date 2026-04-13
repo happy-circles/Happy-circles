@@ -8,7 +8,7 @@ export default function InviteLinkRoute() {
     <>
       <Stack.Screen
         options={{
-          title: 'Aceptar invitacion',
+          title: 'Invitacion de amistad',
           presentation: 'modal',
           headerBackTitle: '',
           headerShadowVisible: false,

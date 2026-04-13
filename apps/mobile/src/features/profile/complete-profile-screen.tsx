@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { AppAvatar } from '@/components/app-avatar';
 import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { resolveAvatarUrl } from '@/lib/avatar';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
+import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
@@ -15,6 +19,7 @@ export function CompleteProfileScreen() {
   const router = useRouter();
   const session = useSession();
   const profile = session.profile;
+  const avatarMutation = useUpdateProfileAvatarMutation();
 
   const initialCountry = useMemo(
     () =>
@@ -33,9 +38,66 @@ export function CompleteProfileScreen() {
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
+  const avatarUrl = resolveAvatarUrl(profile?.avatar_path ?? null, profile?.updated_at ?? null);
+
+  async function uploadPickedAvatar(result: ImagePicker.ImagePickerResult) {
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    try {
+      await avatarMutation.mutateAsync({
+        uri: result.assets[0].uri,
+        contentType: result.assets[0].mimeType,
+      });
+      setMessage('Foto de perfil actualizada.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo actualizar la foto.');
+    }
+  }
+
+  async function handlePickAvatar() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setMessage('Necesitas permitir acceso a tus fotos para continuar.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    await uploadPickedAvatar(result);
+  }
+
+  async function handleTakeAvatarPhoto() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setMessage('Necesitas permitir acceso a la camara para continuar.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      cameraType: ImagePicker.CameraType.front,
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    await uploadPickedAvatar(result);
+  }
 
   async function handleSave() {
     if (busy) {
+      return;
+    }
+
+    if (!session.profile?.avatar_path) {
+      setMessage('Agrega una foto antes de continuar.');
       return;
     }
 
@@ -71,11 +133,42 @@ export function CompleteProfileScreen() {
       headerVariant="plain"
       largeTitle={false}
       title="Completa tu perfil"
-      subtitle="Antes de mover dinero necesitamos un nombre usable y un celular unico para esta cuenta."
+      subtitle="Antes de aceptar o enviar invitaciones necesitamos nombre usable, foto y celular unico para esta cuenta."
     >
       {message ? <MessageBanner message={message} /> : null}
 
       <View style={styles.form}>
+        <View style={styles.avatarBlock}>
+          <AppAvatar
+            imageUrl={avatarUrl}
+            label={fullName || profile?.display_name || profile?.email || 'Tu perfil'}
+            size={88}
+          />
+          <View style={styles.avatarActionRow}>
+            <Pressable
+              disabled={avatarMutation.isPending}
+              onPress={() => void handleTakeAvatarPhoto()}
+              style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.pressed : null]}
+            >
+              <Text style={styles.avatarActionText}>
+                {avatarMutation.isPending ? 'Subiendo...' : 'Tomar foto'}
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={avatarMutation.isPending}
+              onPress={() => void handlePickAvatar()}
+              style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.pressed : null]}
+            >
+              <Text style={styles.avatarActionText}>Elegir foto</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.avatarHelper}>
+            {profile?.avatar_path
+              ? 'Tu foto actual ya cuenta para validar identidad.'
+              : 'La foto es obligatoria para poder continuar con invitaciones de amistad.'}
+          </Text>
+        </View>
+
         <FieldBlock label="Nombre">
           <TextInput
             autoCapitalize="words"
@@ -138,6 +231,33 @@ export function CompleteProfileScreen() {
 const styles = StyleSheet.create({
   form: {
     gap: theme.spacing.md,
+  },
+  avatarBlock: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  avatarActionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  avatarActionChip: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  avatarActionText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  avatarHelper: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   input: {
     backgroundColor: theme.colors.surfaceMuted,

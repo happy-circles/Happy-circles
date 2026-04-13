@@ -6,8 +6,10 @@ import {
   AUDIT_EVENT_NAMES,
   CURRENCY_CODE,
   ENTRY_SIDES,
+  FRIENDSHIP_INVITE_CHANNELS,
+  FRIENDSHIP_INVITE_FLOWS,
+  FRIENDSHIP_INVITE_STATUSES,
   PARTICIPANT_DECISIONS,
-  RELATIONSHIP_INVITE_TARGET_MODES,
   PROPOSAL_STATUSES,
   REQUEST_STATUSES,
   REQUEST_TYPES,
@@ -29,6 +31,9 @@ export const proposalStatusSchema = z.enum(PROPOSAL_STATUSES);
 export const participantDecisionSchema = z.enum(PARTICIPANT_DECISIONS);
 export const auditEntityTypeSchema = z.enum(AUDIT_ENTITY_TYPES);
 export const auditEventNameSchema = z.enum(AUDIT_EVENT_NAMES);
+export const friendshipInviteFlowSchema = z.enum(FRIENDSHIP_INVITE_FLOWS);
+export const friendshipInviteStatusSchema = z.enum(FRIENDSHIP_INVITE_STATUSES);
+export const friendshipInviteChannelSchema = z.enum(FRIENDSHIP_INVITE_CHANNELS);
 
 export const createBalanceRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
@@ -53,34 +58,48 @@ export const requestDecisionSchema = z.object({
   requestId: uuidSchema,
 });
 
-export const relationshipInviteSchema = z.object({
+export const createInternalFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
-  inviteeUserId: uuidSchema,
-  channelLabel: z.string().trim().min(1).max(80).optional(),
+  targetUserId: uuidSchema,
+  sourceContext: z.string().trim().min(1).max(80).optional(),
 });
 
-export const relationshipInviteDecisionSchema = z.object({
+export const friendshipInviteDecisionSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
+  decision: z.enum(['accept', 'reject']),
+});
+
+export const createExternalFriendshipInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  channel: friendshipInviteChannelSchema.refine((value) => value !== 'internal', {
+    message: 'El canal externo debe ser whatsapp, link o qr.',
+  }),
+  sourceContext: z.string().trim().min(1).max(80).optional(),
+  intendedRecipientAlias: z.string().trim().min(1).max(120).optional(),
+  deliveryPhoneE164: z.string().trim().min(8).max(24).optional(),
+});
+
+export const friendshipInviteTokenSchema = z.object({
+  deliveryToken: z.string().trim().min(12).max(128),
+});
+
+export const claimExternalFriendshipInviteSchema = friendshipInviteTokenSchema.extend({
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const reviewExternalFriendshipInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
+  decision: z.enum(['approve', 'reject']),
+});
+
+export const friendshipInvitePreviewSchema = friendshipInviteTokenSchema;
+
+export const cancelFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteId: uuidSchema,
 });
-
-export const shareableInviteSchema = z.object({
-  idempotencyKey: idempotencyKeySchema,
-});
-
-export const inviteTokenSchema = z.object({
-  inviteToken: z.string().trim().min(12).max(128),
-});
-
-export const inviteTokenDecisionSchema = inviteTokenSchema.extend({
-  idempotencyKey: idempotencyKeySchema,
-});
-
-export const profileConnectionPreviewSchema = z.object({
-  connectionToken: z.string().trim().min(12).max(128),
-});
-
-export const relationshipInviteTargetModeSchema = z.enum(RELATIONSHIP_INVITE_TARGET_MODES);
 
 export const emailPasswordSignInSchema = z.object({
   email: z.string().trim().email(),
@@ -126,14 +145,6 @@ export const attachEmailPasswordSchema = z
       });
     }
   });
-
-export const createContactInviteSchema = z.object({
-  idempotencyKey: idempotencyKeySchema,
-  inviteeName: z.string().trim().min(2).max(120),
-  phoneCountryIso2: z.string().trim().length(2),
-  phoneCountryCallingCode: z.string().trim().min(2).max(6),
-  phoneNationalNumber: z.string().trim().min(6).max(20),
-});
 
 export const cycleSettlementProposalSchema = z.object({
   idempotencyKey: idempotencyKeySchema,

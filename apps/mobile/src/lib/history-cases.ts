@@ -10,7 +10,7 @@ export interface HistoryCaseItem {
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
-  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'relationship_invite';
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'friendship_invite';
   readonly amountMinor?: number;
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
@@ -31,7 +31,7 @@ export interface HistoryCase<T extends HistoryCaseItem = HistoryCaseItem> {
 }
 
 export type ActivityHistoryItem = ActivityItemDto & {
-  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'relationship_invite';
+  readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'friendship_invite';
 };
 
 type ComparableHistoryItem = {
@@ -102,7 +102,7 @@ function uniqueCounterpartyLabels<T extends HistoryCaseItem>(itemCase: HistoryCa
 }
 
 function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): string {
-  if (item.kind === 'relationship_invite') {
+  if (item.kind === 'friendship_invite') {
     return 'Invitacion';
   }
 
@@ -186,7 +186,7 @@ export function isHistoryCaseItem(item: ActivityItemDto): item is ActivityHistor
     item.kind === 'payment' ||
     item.kind === 'settlement' ||
     item.kind === 'system' ||
-    item.kind === 'relationship_invite'
+    item.kind === 'friendship_invite'
   );
 }
 
@@ -359,7 +359,7 @@ export function historyStatusTone(status: string): HistoryStatusTone {
 }
 
 export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
-  if (item.kind === 'relationship_invite') {
+  if (item.kind === 'friendship_invite') {
     return item.title;
   }
 
@@ -407,7 +407,7 @@ export function historyImpactTone(
   item: HistoryCaseItem,
 ): 'positive' | 'negative' | 'neutral' | 'danger' {
   if (
-    item.kind === 'relationship_invite' &&
+    item.kind === 'friendship_invite' &&
     (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled')
   ) {
     return 'danger';
@@ -417,7 +417,7 @@ export function historyImpactTone(
     return 'danger';
   }
 
-  if (item.kind === 'settlement' || item.kind === 'relationship_invite') {
+  if (item.kind === 'settlement' || item.kind === 'friendship_invite') {
     return 'neutral';
   }
 
@@ -435,7 +435,7 @@ export function historyImpactTone(
 }
 
 export function historyImpactLabel(item: HistoryCaseItem): string | null {
-  if (item.kind === 'relationship_invite') {
+  if (item.kind === 'friendship_invite') {
     if (item.status === 'accepted') {
       return 'Relacion creada';
     }
@@ -476,7 +476,7 @@ export function historyCaseEyebrow<T extends HistoryCaseItem>(itemCase: HistoryC
     return null;
   }
 
-  if (itemCase.latest.kind === 'relationship_invite') {
+  if (itemCase.latest.kind === 'friendship_invite') {
     return 'Invitaciones';
   }
 

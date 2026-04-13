@@ -12,6 +12,7 @@ import { PendingFinancialRequestCard } from '@/components/pending-financial-requ
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { SectionBlock } from '@/components/section-block';
+import { SegmentedControl } from '@/components/segmented-control';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
@@ -28,20 +29,22 @@ import {
 } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
-  useAcceptRelationshipInviteMutation,
   useAmendFinancialRequestMutation,
   useAppSnapshot,
   useApproveSettlementMutation,
+  useCancelFriendshipInviteMutation,
   useExecuteSettlementMutation,
+  useRespondInternalFriendshipInviteMutation,
+  useReviewExternalFriendshipInviteMutation,
   useRejectFinancialRequestMutation,
-  useRejectRelationshipInviteMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 
 type AlertLane = 'urgent' | 'resolve' | 'follow_up';
+type ActivityDomainKey = 'transactions' | 'friendships';
 type ActivitySegmentKey = 'pending' | 'history';
-type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
+type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute' | 'cancel';
 
 interface PendingCardPresentation {
   readonly eyebrow: string;
@@ -50,7 +53,7 @@ interface PendingCardPresentation {
     readonly label: string;
   };
   readonly secondaryAction?: {
-    readonly key: 'reject';
+    readonly key: 'reject' | 'cancel';
     readonly label: string;
   };
 }
@@ -78,6 +81,15 @@ function isUrgentAlert(item: ActivityItemDto): boolean {
     item.kind === 'settlement_proposal' &&
     (item.status === 'pending_approvals' || item.status === 'approved')
   );
+}
+
+function matchesActivityDomain(
+  item: ActivityItemDto,
+  domain: ActivityDomainKey,
+): boolean {
+  return domain === 'friendships'
+    ? item.kind === 'friendship_invite'
+    : item.kind !== 'friendship_invite';
 }
 
 function classifyAlertLane(item: ActivityItemDto): AlertLane {
@@ -187,7 +199,7 @@ function buildPendingCardPresentation(
     };
   }
 
-  if (item.kind === 'relationship_invite' && item.status === 'requires_you') {
+  if (item.kind === 'friendship_invite' && item.status === 'requires_you_response') {
     return {
       eyebrow: 'Nueva invitacion',
       primaryAction: {
@@ -201,7 +213,37 @@ function buildPendingCardPresentation(
     };
   }
 
-  if (item.kind === 'relationship_invite' && item.status === 'waiting_other_side') {
+  if (item.kind === 'friendship_invite' && item.status === 'requires_you_review') {
+    return {
+      eyebrow: 'Por verificar',
+      primaryAction: {
+        key: 'approve',
+        label: actionLabel(item.id, busyKey, 'approve', 'Si es esta persona', 'Confirmando...'),
+      },
+      secondaryAction: {
+        key: 'reject',
+        label: actionLabel(item.id, busyKey, 'reject', 'No es', 'Cerrando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'friendship_invite' && item.status === 'pending_claim') {
+    return {
+      eyebrow: 'Enviada afuera',
+      secondaryAction: {
+        key: 'cancel',
+        label: actionLabel(item.id, busyKey, 'cancel', 'Cancelar', 'Cancelando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'friendship_invite' && item.status === 'waiting_sender_review') {
+    return {
+      eyebrow: 'Esperando validacion',
+    };
+  }
+
+  if (item.kind === 'friendship_invite' && item.status === 'waiting_other_side') {
     return {
       eyebrow: 'Esperando respuesta',
     };
@@ -246,7 +288,7 @@ function buildPendingSnippetContent(
     };
   }
 
-  if (item.kind === 'relationship_invite') {
+  if (item.kind === 'friendship_invite') {
     const [detail, meta] = parts;
     return {
       detail: detail ?? item.subtitle,
@@ -270,7 +312,15 @@ function pendingSnippetTone(
     return 'warning';
   }
 
+  if (item.status === 'requires_you_response' || item.status === 'requires_you_review') {
+    return 'warning';
+  }
+
   if (item.status === 'approved') {
+    return 'primary';
+  }
+
+  if (item.status === 'pending_claim') {
     return 'primary';
   }
 
@@ -309,9 +359,10 @@ export function ActivityScreen() {
   const snapshotQuery = useAppSnapshot();
   const acceptRequest = useAcceptFinancialRequestMutation();
   const amendRequest = useAmendFinancialRequestMutation();
-  const acceptInvite = useAcceptRelationshipInviteMutation();
+  const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
-  const rejectInvite = useRejectRelationshipInviteMutation();
+  const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
+  const cancelFriendshipInvite = useCancelFriendshipInviteMutation();
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
@@ -322,6 +373,7 @@ export function ActivityScreen() {
   const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
   const [amendmentAmount, setAmendmentAmount] = useState('');
   const [amendmentDescription, setAmendmentDescription] = useState('');
+  const [domainSegment, setDomainSegment] = useState<ActivityDomainKey>('transactions');
   const [panelSegment, setPanelSegment] = useState<ActivitySegmentKey>('pending');
 
   const sections = snapshotQuery.data?.activitySections ?? [];
@@ -333,10 +385,21 @@ export function ActivityScreen() {
     () => sections.find((item) => item.key === 'history'),
     [sections],
   );
-  const pendingItems = pendingSection?.items ?? [];
-  const historyCases = useMemo(
-    () => buildHistoryCases((historySection?.items ?? []).filter(isHistoryCaseItem)),
+  const transactionPendingItems = useMemo(
+    () => (pendingSection?.items ?? []).filter((item) => matchesActivityDomain(item, 'transactions')),
+    [pendingSection?.items],
+  );
+  const transactionHistoryItems = useMemo(
+    () => (historySection?.items ?? []).filter((item) => matchesActivityDomain(item, 'transactions')),
     [historySection?.items],
+  );
+  const friendshipPendingItems = snapshotQuery.data?.friendshipPendingItems ?? [];
+  const friendshipHistoryItems = snapshotQuery.data?.friendshipHistoryItems ?? [];
+  const pendingItems = domainSegment === 'friendships' ? friendshipPendingItems : transactionPendingItems;
+  const historyItems = domainSegment === 'friendships' ? friendshipHistoryItems : transactionHistoryItems;
+  const historyCases = useMemo(
+    () => buildHistoryCases(historyItems.filter(isHistoryCaseItem)),
+    [historyItems],
   );
   const urgentItems = useMemo(
     () => pendingItems.filter((item) => classifyAlertLane(item) === 'urgent'),
@@ -350,7 +413,7 @@ export function ActivityScreen() {
     () => pendingItems.filter((item) => classifyAlertLane(item) === 'follow_up'),
     [pendingItems],
   );
-  const alertCount = pendingItems.length;
+  const pendingCount = pendingItems.length;
   const pendingGroups = useMemo<PendingGroup[]>(
     () => {
       const groups: PendingGroup[] = [];
@@ -371,10 +434,41 @@ export function ActivityScreen() {
     },
     [followUpItems, resolveItems, urgentItems],
   );
+  const friendshipPendingGroups = useMemo<PendingGroup[]>(
+    () =>
+      [
+        {
+          key: 'resolve' as const,
+          title: 'Por verificar',
+          items: friendshipPendingItems.filter((item) => item.status === 'requires_you_review'),
+        },
+        {
+          key: 'resolve' as const,
+          title: 'Por responder',
+          items: friendshipPendingItems.filter((item) => item.status === 'requires_you_response'),
+        },
+        {
+          key: 'follow_up' as const,
+          title: 'Esperando validacion',
+          items: friendshipPendingItems.filter((item) => item.status === 'waiting_sender_review'),
+        },
+        {
+          key: 'follow_up' as const,
+          title: 'Enviadas afuera',
+          items: friendshipPendingItems.filter((item) => item.status === 'pending_claim'),
+        },
+        {
+          key: 'follow_up' as const,
+          title: 'Esperando a la otra persona',
+          items: friendshipPendingItems.filter((item) => item.status === 'waiting_other_side'),
+        },
+      ].filter((group) => group.items.length > 0),
+    [friendshipPendingItems],
+  );
 
   useEffect(() => {
-    setPanelSegment(alertCount > 0 ? 'pending' : 'history');
-  }, [alertCount]);
+    setPanelSegment(pendingCount > 0 ? 'pending' : 'history');
+  }, [domainSegment, pendingCount]);
 
   useEffect(() => {
     if (
@@ -561,6 +655,25 @@ export function ActivityScreen() {
     setAmendmentDescription(financialRequestContent.detail);
   }
 
+  function renderFriendshipHistoryCard(item: ActivityItemDto) {
+    const snippetContent = buildPendingSnippetContent(item, 'follow_up');
+
+    return (
+      <PendingSnippetCard
+        amountLabel={null}
+        detail={snippetContent.detail}
+        eyebrow="Historial"
+        key={item.id}
+        meta={snippetContent.meta}
+        statusLabel={historyStatusLabel(item.status)}
+        statusTone={historyStatusTone(item.status)}
+        title={item.title}
+        tone={pendingSnippetTone(item)}
+        variant="default"
+      />
+    );
+  }
+
   async function handleAmendment(requestId: string) {
     const amountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
     const trimmedDescription = amendmentDescription.trim();
@@ -650,14 +763,43 @@ export function ActivityScreen() {
         return;
       }
 
-      if (kind === 'relationship_invite' && status === 'requires_you') {
+      if (kind === 'friendship_invite' && status === 'requires_you_response') {
         if (action === 'accept') {
-          await acceptInvite.mutateAsync(itemId);
+          await respondInternalInvite.mutateAsync({
+            inviteId: itemId,
+            decision: 'accept',
+          });
           setMessage('Invitacion aceptada.');
         } else {
-          await rejectInvite.mutateAsync(itemId);
+          await respondInternalInvite.mutateAsync({
+            inviteId: itemId,
+            decision: 'reject',
+          });
           setMessage('Invitacion rechazada.');
         }
+        return;
+      }
+
+      if (kind === 'friendship_invite' && status === 'requires_you_review') {
+        if (action === 'approve') {
+          await reviewExternalInvite.mutateAsync({
+            inviteId: itemId,
+            decision: 'approve',
+          });
+          setMessage('Conexion confirmada.');
+        } else {
+          await reviewExternalInvite.mutateAsync({
+            inviteId: itemId,
+            decision: 'reject',
+          });
+          setMessage('Invitacion cerrada.');
+        }
+        return;
+      }
+
+      if (kind === 'friendship_invite' && status === 'pending_claim' && action === 'cancel') {
+        await cancelFriendshipInvite.mutateAsync(itemId);
+        setMessage('Invitacion cancelada.');
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
@@ -704,6 +846,15 @@ export function ActivityScreen() {
         </View>
 
         <View style={styles.panelArea}>
+          <SegmentedControl
+            onChange={setDomainSegment}
+            options={[
+              { label: 'Transacciones', value: 'transactions' },
+              { label: 'Amistades', value: 'friendships' },
+            ]}
+            value={domainSegment}
+          />
+
           <View style={styles.tabBar}>
             <Pressable
               onPress={() => setPanelSegment('pending')}
@@ -751,16 +902,28 @@ export function ActivityScreen() {
               showsVerticalScrollIndicator={false}
             >
               {panelSegment === 'pending' ? (
-                alertCount === 0 ? (
+                pendingCount === 0 ? (
                   <EmptyState
                     description={
-                      pendingSection?.emptyMessage ??
-                      'Cuando haya algo por responder o seguir, aparecera aqui.'
+                      domainSegment === 'friendships'
+                        ? 'Cuando haya invitaciones de amistad por responder o seguir, apareceran aqui.'
+                        : pendingSection?.emptyMessage ??
+                          'Cuando haya algo por responder o seguir, aparecera aqui.'
                     }
-                    title="Nada pendiente"
+                    title={
+                      domainSegment === 'friendships'
+                        ? 'Sin amistades pendientes'
+                        : 'Nada pendiente'
+                    }
                   />
                 ) : (
-                  pendingGroups.length === 1 ? (
+                  domainSegment === 'friendships' ? (
+                    friendshipPendingGroups.map((group) => (
+                      <SectionBlock key={group.title} title={group.title}>
+                        {group.items.map((item) => renderPendingCard(item, group.key))}
+                      </SectionBlock>
+                    ))
+                  ) : pendingGroups.length === 1 ? (
                     pendingGroups[0]!.items.map((item) =>
                       renderPendingCard(item, pendingGroups[0]!.key),
                     )
@@ -771,6 +934,15 @@ export function ActivityScreen() {
                       </SectionBlock>
                     ))
                   )
+                )
+              ) : domainSegment === 'friendships' ? (
+                historyItems.length === 0 ? (
+                  <EmptyState
+                    description="Cuando una invitacion de amistad se resuelva, quedara registrada aqui."
+                    title="Sin historial de amistades"
+                  />
+                ) : (
+                  historyItems.map((item) => renderFriendshipHistoryCard(item))
                 )
               ) : historyCases.length === 0 ? (
                 <EmptyState

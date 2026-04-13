@@ -11,68 +11,86 @@ import {
   writePendingInviteIntent,
 } from '@/lib/invite-intent';
 import {
-  useAcceptInviteByTokenMutation,
-  useInvitePreviewByTokenQuery,
+  useClaimExternalFriendshipInviteMutation,
+  useFriendshipInvitePreviewQuery,
+  useReviewExternalFriendshipInviteMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 function inviteReasonLabel(reason: string): string {
-  if (reason === 'self') {
-    return 'Este link te pertenece a ti.';
+  if (reason === 'identity_incomplete') {
+    return 'Completa tu perfil para poder reclamar esta invitacion.';
   }
 
   if (reason === 'already_connected') {
     return 'Ya tienes una relacion activa con esta persona.';
   }
 
+  if (reason === 'sender_view') {
+    return 'Esta invitacion sigue esperando a que alguien la reclame.';
+  }
+
+  if (reason === 'sender_review') {
+    return 'Ya hay una cuenta esperando tu validacion.';
+  }
+
+  if (reason === 'claimed_by_other') {
+    return 'Esta invitacion ya fue reclamada por otra cuenta.';
+  }
+
+  if (reason === 'delivery_revoked') {
+    return 'Este acceso ya fue reemplazado por otro.';
+  }
+
   if (reason === 'accepted') {
-    return 'Este link ya fue usado.';
+    return 'La amistad ya quedo creada.';
   }
 
   if (reason === 'rejected') {
-    return 'Esta invitacion ya fue rechazada.';
+    return 'Esta invitacion ya fue cerrada.';
   }
 
   if (reason === 'expired') {
-    return 'Este link ya vencio.';
+    return 'Este acceso ya vencio.';
   }
 
   if (reason === 'canceled') {
-    return 'Este link ya no esta disponible.';
+    return 'La invitacion ya fue cancelada.';
   }
 
-  return 'No puedes aceptar esta invitacion.';
+  return 'No puedes continuar con esta invitacion.';
 }
 
 export function InviteLinkScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
   const { profileCompletionState, status } = useSession();
-  const acceptInviteByToken = useAcceptInviteByTokenMutation();
+  const claimInvite = useClaimExternalFriendshipInviteMutation();
+  const reviewInvite = useReviewExternalFriendshipInviteMutation();
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<'claim' | 'approve' | 'reject' | null>(null);
 
-  const inviteToken = useMemo(
+  const deliveryToken = useMemo(
     () => (typeof params.token === 'string' && params.token.trim().length > 0 ? params.token.trim() : null),
     [params.token],
   );
   const readyForPreview = status !== 'signed_out' && profileCompletionState === 'complete';
-  const previewQuery = useInvitePreviewByTokenQuery(readyForPreview ? inviteToken : null);
+  const previewQuery = useFriendshipInvitePreviewQuery(readyForPreview ? deliveryToken : null);
   const preview = previewQuery.data;
 
   useEffect(() => {
     let cancelled = false;
 
     async function syncAccess() {
-      if (!inviteToken) {
+      if (!deliveryToken) {
         return;
       }
 
       if (status === 'signed_out') {
         await writePendingInviteIntent({
-          type: 'invite_link',
-          token: inviteToken,
+          type: 'friendship_invite',
+          token: deliveryToken,
         });
 
         if (!cancelled) {
@@ -83,8 +101,8 @@ export function InviteLinkScreen() {
 
       if (profileCompletionState === 'incomplete') {
         await writePendingInviteIntent({
-          type: 'invite_link',
-          token: inviteToken,
+          type: 'friendship_invite',
+          token: deliveryToken,
         });
 
         if (!cancelled) {
@@ -98,25 +116,52 @@ export function InviteLinkScreen() {
     return () => {
       cancelled = true;
     };
-  }, [inviteToken, profileCompletionState, router, status]);
+  }, [deliveryToken, profileCompletionState, router, status]);
 
-  async function handleAccept() {
-    if (!inviteToken || busy) {
+  async function handleClaim() {
+    if (!deliveryToken || busyAction) {
       return;
     }
 
-    setBusy(true);
+    setBusyAction('claim');
     setMessage(null);
 
     try {
-      await acceptInviteByToken.mutateAsync(inviteToken);
+      await claimInvite.mutateAsync(deliveryToken);
       await clearPendingInviteIntent();
-      setMessage('Invitacion aceptada. La relacion ya quedo creada.');
-      router.replace('/home');
+      setMessage('Reclamaste esta invitacion. Ahora la otra persona debe validar que si eres tu.');
+      await previewQuery.refetch();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo aceptar la invitacion.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo reclamar la invitacion.');
     } finally {
-      setBusy(false);
+      setBusyAction(null);
+    }
+  }
+
+  async function handleReview(decision: 'approve' | 'reject') {
+    if (!preview?.inviteId || busyAction) {
+      return;
+    }
+
+    setBusyAction(decision);
+    setMessage(null);
+
+    try {
+      await reviewInvite.mutateAsync({
+        inviteId: preview.inviteId,
+        decision,
+      });
+      await clearPendingInviteIntent();
+      setMessage(
+        decision === 'approve'
+          ? 'Conexion confirmada. La amistad ya quedo creada.'
+          : 'Invitacion cerrada. Puedes generar otra si lo necesitas.',
+      );
+      await previewQuery.refetch();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo completar la validacion.');
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -129,35 +174,35 @@ export function InviteLinkScreen() {
         </View>
       }
       largeTitle={false}
-      subtitle="Confirma antes de crear la relacion dentro de Happy Circles."
-      title="Aceptar link"
+      subtitle="El token solo abre el flujo. La amistad se crea despues del claim y la validacion final."
+      title="Invitacion de amistad"
     >
       {message ? <MessageBanner message={message} /> : null}
 
-      {!inviteToken ? (
+      {!deliveryToken ? (
         <SurfaceCard padding="lg">
           <Text style={styles.title}>Link invalido</Text>
           <Text style={styles.helper}>No encontramos el token de esta invitacion.</Text>
         </SurfaceCard>
       ) : null}
 
-      {inviteToken && !readyForPreview ? (
+      {deliveryToken && !readyForPreview ? (
         <SurfaceCard padding="lg" variant="accent">
           <Text style={styles.title}>Preparando acceso</Text>
           <Text style={styles.helper}>
-            Vamos a llevarte por login o perfil antes de mostrar la confirmacion final.
+            Vamos a llevarte por login o perfil antes de mostrar la confirmacion real de esta invitacion.
           </Text>
         </SurfaceCard>
       ) : null}
 
-      {inviteToken && readyForPreview && previewQuery.isLoading ? (
+      {deliveryToken && readyForPreview && previewQuery.isLoading ? (
         <SurfaceCard padding="lg">
           <Text style={styles.title}>Leyendo invitacion</Text>
-          <Text style={styles.helper}>Consultando el estado real del link en Supabase.</Text>
+          <Text style={styles.helper}>Consultando el estado actual del token.</Text>
         </SurfaceCard>
       ) : null}
 
-      {inviteToken && readyForPreview && previewQuery.error ? (
+      {deliveryToken && readyForPreview && previewQuery.error ? (
         <SurfaceCard padding="lg">
           <Text style={styles.title}>No pudimos abrir esta invitacion</Text>
           <Text style={styles.helper}>{previewQuery.error.message}</Text>
@@ -168,27 +213,64 @@ export function InviteLinkScreen() {
         <SurfaceCard padding="lg" variant="elevated">
           <Text style={styles.title}>{preview.inviterDisplayName}</Text>
           <Text style={styles.helper}>
-            {preview.channelLabel} | {preview.expiresAt ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}` : 'sin vencimiento'}
-          </Text>
-          <Text style={styles.body}>
-            {preview.canAccept
-              ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
-              : inviteReasonLabel(preview.reason)}
+            {preview.channel.toUpperCase()} | {preview.expiresAt ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}` : 'sin vencimiento'}
           </Text>
 
-          {preview.canAccept ? (
+          {preview.intendedRecipientAlias ? (
+            <Text style={styles.body}>Invitacion pensada para: {preview.intendedRecipientAlias}</Text>
+          ) : null}
+
+          {preview.claimantSnapshot ? (
+            <View style={styles.snapshotBlock}>
+              <Text style={styles.snapshotTitle}>Cuenta que reclamo esta invitacion</Text>
+              <Text style={styles.snapshotLine}>{preview.claimantSnapshot.displayName}</Text>
+              {preview.claimantSnapshot.maskedEmail ? (
+                <Text style={styles.snapshotLine}>{preview.claimantSnapshot.maskedEmail}</Text>
+              ) : null}
+              {preview.claimantSnapshot.maskedPhone ? (
+                <Text style={styles.snapshotLine}>{preview.claimantSnapshot.maskedPhone}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          <Text style={styles.body}>
+            {preview.canClaim
+              ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
+              : preview.canApprove
+                ? `Confirma si la cuenta que reclamo esta invitacion si corresponde a la persona que querias agregar.`
+                : inviteReasonLabel(preview.reason)}
+          </Text>
+
+          {preview.canClaim ? (
             <PrimaryAction
-              label={busy ? 'Aceptando...' : 'Aceptar invitacion'}
-              onPress={busy ? undefined : () => void handleAccept()}
-              subtitle="La relacion se crea solo cuando confirmes."
+              label={busyAction === 'claim' ? 'Reclamando...' : 'Quiero conectar'}
+              onPress={busyAction ? undefined : () => void handleClaim()}
+              subtitle="Todavia no crea la amistad; primero se valida en el otro lado."
             />
-          ) : (
+          ) : null}
+
+          {preview.canApprove ? (
+            <View style={styles.actionStack}>
+              <PrimaryAction
+                label={busyAction === 'approve' ? 'Confirmando...' : 'Si es esta persona'}
+                onPress={busyAction ? undefined : () => void handleReview('approve')}
+                subtitle="Crea la amistad y cierra la invitacion"
+              />
+              <PrimaryAction
+                label={busyAction === 'reject' ? 'Cerrando...' : 'No es'}
+                onPress={busyAction ? undefined : () => void handleReview('reject')}
+                variant="secondary"
+              />
+            </View>
+          ) : null}
+
+          {!preview.canClaim && !preview.canApprove ? (
             <PrimaryAction
               label="Volver al inicio"
               onPress={() => router.replace('/home')}
               variant="secondary"
             />
-          )}
+          ) : null}
         </SurfaceCard>
       ) : null}
     </ScreenShell>
@@ -213,5 +295,26 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.body,
     lineHeight: 22,
+  },
+  snapshotBlock: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    gap: theme.spacing.xxs,
+    padding: theme.spacing.md,
+  },
+  snapshotTitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  snapshotLine: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+  },
+  actionStack: {
+    gap: theme.spacing.sm,
   },
 });

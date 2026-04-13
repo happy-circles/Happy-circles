@@ -47,14 +47,25 @@ export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export const PARTICIPANT_DECISIONS = ['pending', 'approved', 'rejected'] as const;
 export type ParticipantDecision = (typeof PARTICIPANT_DECISIONS)[number];
 
-export const CONTACT_INVITE_STATUSES = ['pending', 'matched', 'canceled'] as const;
-export type ContactInviteStatus = (typeof CONTACT_INVITE_STATUSES)[number];
+export const FRIENDSHIP_INVITE_FLOWS = ['internal', 'external'] as const;
+export type FriendshipInviteFlow = (typeof FRIENDSHIP_INVITE_FLOWS)[number];
 
-export const RELATIONSHIP_INVITE_TARGET_MODES = ['direct_user', 'share_link'] as const;
-export type RelationshipInviteTargetMode = (typeof RELATIONSHIP_INVITE_TARGET_MODES)[number];
+export const FRIENDSHIP_INVITE_STATUSES = [
+  'pending_recipient',
+  'pending_claim',
+  'pending_sender_review',
+  'accepted',
+  'rejected',
+  'canceled',
+  'expired',
+] as const;
+export type FriendshipInviteStatus = (typeof FRIENDSHIP_INVITE_STATUSES)[number];
+
+export const FRIENDSHIP_INVITE_CHANNELS = ['internal', 'whatsapp', 'link', 'qr'] as const;
+export type FriendshipInviteChannel = (typeof FRIENDSHIP_INVITE_CHANNELS)[number];
 
 export const AUDIT_ENTITY_TYPES = [
-  'relationship_invite',
+  'friendship_invite',
   'relationship',
   'financial_request',
   'ledger_transaction',
@@ -64,9 +75,15 @@ export const AUDIT_ENTITY_TYPES = [
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
 export const AUDIT_EVENT_NAMES = [
-  'relationship_invited',
-  'relationship_invite_rejected',
-  'relationship_accepted',
+  'friendship_invite_created',
+  'friendship_invite_delivery_created',
+  'friendship_invite_claimed',
+  'friendship_invite_sender_approved',
+  'friendship_invite_sender_rejected',
+  'friendship_invite_accepted',
+  'friendship_invite_rejected',
+  'friendship_invite_canceled',
+  'friendship_invite_expired',
   'financial_request_created',
   'financial_request_rejected',
   'financial_request_amended',

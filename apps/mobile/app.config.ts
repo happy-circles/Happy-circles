@@ -1,5 +1,14 @@
 import type { ExpoConfig } from 'expo/config';
 
+const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happycircles.com';
+const appWebHost = (() => {
+  try {
+    return new URL(appWebOrigin).host;
+  } catch {
+    return 'app.happycircles.com';
+  }
+})();
+
 const config: ExpoConfig = {
   name: 'Happy Circles',
   slug: 'happy-circles',
@@ -42,6 +51,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.happycircles.app',
     usesAppleSignIn: true,
+    associatedDomains: [`applinks:${appWebHost}`],
     infoPlist: {
       NSCameraUsageDescription: 'Use the camera to scan QR invitations in Happy Circles.',
       NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
@@ -49,6 +59,20 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.happycircles.app',
+    intentFilters: [
+      {
+        action: 'VIEW',
+        autoVerify: true,
+        category: ['BROWSABLE', 'DEFAULT'],
+        data: [
+          {
+            scheme: 'https',
+            host: appWebHost,
+            pathPrefix: '/invite/',
+          },
+        ],
+      },
+    ],
   },
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
@@ -56,6 +80,7 @@ const config: ExpoConfig = {
       process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
       process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
       '',
+    appWebOrigin,
   },
 };
 

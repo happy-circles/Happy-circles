@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 
 import type { Href } from 'expo-router';
+import type { Json } from '@happy-circles/shared';
 
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
+import { appConfig } from '@/lib/config';
+import { getCurrentAppVersion } from '@/lib/device-trust';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
@@ -36,6 +41,135 @@ function NotificationBridge() {
   }, [router]);
 
   return null;
+}
+
+type MinimumSupportedVersionSetting = {
+  readonly minimumVersion: string;
+  readonly message: string | null;
+};
+
+function normalizeVersion(version: string): number[] | null {
+  const trimmed = version.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parts = trimmed.split('.');
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const normalized: number[] = [];
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) {
+      return null;
+    }
+    normalized.push(Number(part));
+  }
+  return normalized;
+}
+
+function compareVersions(left: string, right: string): number | null {
+  const leftParts = normalizeVersion(left);
+  const rightParts = normalizeVersion(right);
+
+  if (!leftParts || !rightParts) {
+    return null;
+  }
+
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftValue = leftParts[index] ?? 0;
+    const rightValue = rightParts[index] ?? 0;
+    if (leftValue > rightValue) {
+      return 1;
+    }
+    if (leftValue < rightValue) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+function parseMinimumSupportedVersion(value: Json): MinimumSupportedVersionSetting | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const minimumVersion =
+    typeof record.minimumVersion === 'string' ? record.minimumVersion.trim() : '';
+  const message = typeof record.message === 'string' ? record.message.trim() : '';
+
+  if (!minimumVersion) {
+    return null;
+  }
+
+  return {
+    minimumVersion,
+    message: message || null,
+  };
+}
+
+async function readMinimumSupportedVersion(): Promise<MinimumSupportedVersionSetting | null> {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value_json')
+    .eq('key', 'mobile_min_supported_version')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const row = data as { readonly value_json: Json } | null;
+  return parseMinimumSupportedVersion(row?.value_json ?? null);
+}
+
+function MandatoryUpdateGate() {
+  const currentVersion = getCurrentAppVersion();
+  const minimumVersionQuery = useQuery({
+    queryKey: ['app_settings', 'mobile_min_supported_version'],
+    queryFn: readMinimumSupportedVersion,
+    staleTime: 60_000,
+  });
+
+  const minimumVersion = minimumVersionQuery.data?.minimumVersion ?? null;
+  const comparison =
+    !__DEV__ && currentVersion && minimumVersion
+      ? compareVersions(currentVersion, minimumVersion)
+      : null;
+  const requiresUpdate = comparison !== null && comparison < 0;
+
+  if (!requiresUpdate) {
+    return null;
+  }
+
+  const message =
+    minimumVersionQuery.data?.message ??
+    'Actualiza Happy Circles para seguir usando esta version de la app.';
+
+  return (
+    <View style={styles.overlay}>
+      <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
+        <Text style={styles.lockTitle}>Actualizacion obligatoria</Text>
+        <Text style={styles.lockSubtitle}>{message}</Text>
+        <Text style={styles.lockMessage}>
+          Version actual: {currentVersion} · Version minima: {minimumVersion}
+        </Text>
+        <PrimaryAction
+          label="Abrir sitio de actualizacion"
+          subtitle={appConfig.appWebOrigin}
+          onPress={() => void Linking.openURL(appConfig.appWebOrigin)}
+        />
+      </SurfaceCard>
+    </View>
+  );
 }
 
 function SessionOverlay() {
@@ -173,8 +307,7 @@ function SessionRouteGuard() {
       const inAuthGroup = currentRootSegment === '(auth)';
       const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
       const isInviteLinkRoute = currentRootSegment === 'invite';
-      const isConnectRoute = currentRootSegment === 'connect';
-      const isPublicInviteRoute = isInviteLinkRoute || isConnectRoute;
+      const isPublicInviteRoute = isInviteLinkRoute;
       const isBasicReadableRoute =
         isCompleteProfileRoute ||
         isPublicInviteRoute ||
@@ -248,6 +381,7 @@ function RootNavigator() {
           headerTintColor: theme.colors.text,
         }}
       />
+      <MandatoryUpdateGate />
       <SessionOverlay />
     </>
   );

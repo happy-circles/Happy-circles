@@ -21,10 +21,10 @@ site_url = "http://localhost:8081"
 [functions.accept-financial-request]
 verify_jwt = false
 
-[functions.accept-invite-by-token]
+[functions.cancel-friendship-invite]
 verify_jwt = false
 
-[functions.accept-relationship-invite]
+[functions.claim-external-friendship-invite]
 verify_jwt = false
 
 [functions.approve-cycle-settlement]
@@ -36,22 +36,19 @@ verify_jwt = false
 [functions.create-balance-request]
 verify_jwt = false
 
-[functions.create-relationship-invite]
+[functions.create-external-friendship-invite]
 verify_jwt = false
 
-[functions.create-shareable-invite]
+[functions.create-internal-friendship-invite]
 verify_jwt = false
 
-[functions.create-whatsapp-invite]
+[functions.get-friendship-invite-preview]
 verify_jwt = false
 
 [functions.execute-approved-cycle-settlement]
 verify_jwt = false
 
-[functions.get-invite-preview-by-token]
-verify_jwt = false
-
-[functions.get-profile-connection-preview]
+[functions.respond-internal-friendship-invite]
 verify_jwt = false
 
 [functions.propose-cycle-settlement]
@@ -66,5 +63,5 @@ verify_jwt = false
 [functions.reject-financial-request]
 verify_jwt = false
 
-[functions.reject-relationship-invite]
+[functions.review-external-friendship-invite]
 verify_jwt = false

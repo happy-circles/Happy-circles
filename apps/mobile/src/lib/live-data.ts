@@ -13,16 +13,16 @@ import type {
 import {
   amendFinancialRequestSchema,
   createBalanceRequestSchema,
-  createContactInviteSchema,
+  cancelFriendshipInviteSchema,
+  claimExternalFriendshipInviteSchema,
+  createExternalFriendshipInviteSchema,
+  createInternalFriendshipInviteSchema,
   cycleSettlementDecisionSchema,
   cycleSettlementExecutionSchema,
-  inviteTokenDecisionSchema,
-  inviteTokenSchema,
-  profileConnectionPreviewSchema,
-  relationshipInviteDecisionSchema,
-  relationshipInviteSchema,
+  friendshipInviteDecisionSchema,
+  friendshipInvitePreviewSchema,
+  reviewExternalFriendshipInviteSchema,
   requestDecisionSchema,
-  shareableInviteSchema,
   type Database,
 } from '@happy-circles/shared';
 
@@ -35,8 +35,9 @@ import { queryClient } from './query-client';
 import { supabase } from './supabase';
 
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
-type ContactInviteRow = Database['public']['Views']['v_contact_invites_live']['Row'];
-type RelationshipInviteRow = Database['public']['Views']['v_relationship_invites_live']['Row'];
+type FriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
+type FriendshipInviteDeliveryRow =
+  Database['public']['Views']['v_friendship_invite_deliveries_live']['Row'];
 type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
 type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
 type SettlementProposalRow = Database['public']['Tables']['settlement_proposals']['Row'];
@@ -88,84 +89,124 @@ export interface SettlementDetailDto {
   readonly explainers: readonly string[];
 }
 
-export interface RelationshipInviteDto {
-  readonly id: string;
-  readonly direction: 'incoming' | 'outgoing';
-  readonly userId: string | null;
-  readonly displayName: string;
+export interface FriendshipInviteDto {
+  readonly inviteId: string;
+  readonly flow: 'internal' | 'external';
+  readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
+  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly actionState:
+    | 'requires_you_response'
+    | 'requires_you_review'
+    | 'waiting_sender_review'
+    | 'pending_claim'
+    | 'waiting_other_side'
+    | 'history';
+  readonly title: string;
+  readonly subtitle: string;
   readonly status: string;
-  readonly targetMode: 'direct_user' | 'share_link';
-  readonly channelLabel: string;
   readonly createdAt: string;
   readonly expiresAt: string | null;
   readonly resolvedAt: string | null;
+  readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
+  readonly intendedRecipientAlias: string | null;
+  readonly href: string;
 }
 
-export interface ContactInviteDto {
-  readonly id: string;
-  readonly inviteeName: string;
-  readonly phoneE164: string;
-  readonly status: string;
-  readonly createdAt: string;
-  readonly matchedDisplayName: string | null;
-  readonly relationshipInviteId: string | null;
-  readonly relationshipInviteStatus: string | null;
-  readonly relationshipInviteExpiresAt: string | null;
-  readonly relationshipInviteResolvedAt: string | null;
-  readonly relationshipInviteTargetMode: string | null;
-  readonly relationshipInviteChannelLabel: string | null;
+export interface FriendshipIdentityFlags {
+  readonly emailConfirmed: boolean;
+  readonly hasDisplayName: boolean;
+  readonly hasAvatar: boolean;
+  readonly hasPhone: boolean;
+  readonly phoneVerified: boolean;
 }
 
-export interface CreateContactInviteResult {
-  readonly contactInviteId: string;
-  readonly status: string;
-  readonly phoneE164: string;
-  readonly matchedUserId: string | null;
-  readonly relationshipInviteId: string | null;
-  readonly relationshipInviteStatus: string | null;
-  readonly relationshipInviteExpiresAt: string | null;
-  readonly relationshipInviteResolvedAt: string | null;
+export interface FriendshipClaimantSnapshot {
+  readonly displayName: string;
+  readonly avatarPath: string | null;
+  readonly maskedEmail: string | null;
+  readonly maskedPhone: string | null;
+  readonly emailConfirmed: boolean;
+  readonly phonePresent: boolean;
+  readonly phoneVerified: boolean;
+  readonly claimedAt: string | null;
 }
 
-export interface CreateShareableInviteResult {
+export interface FriendshipInviteListItem extends ActivityItemDto {
+  readonly kind: 'friendship_invite';
   readonly inviteId: string;
+  readonly flow: 'internal' | 'external';
+  readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
+  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly actionState:
+    | 'requires_you_response'
+    | 'requires_you_review'
+    | 'waiting_sender_review'
+    | 'pending_claim'
+    | 'waiting_other_side'
+    | 'history';
+  readonly expiresAt: string | null;
+  readonly resolvedAt: string | null;
+  readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
+  readonly intendedRecipientAlias: string | null;
+  readonly ctaLabel: string;
+  readonly createdAt: string;
+}
+
+export interface FriendshipSummary {
+  readonly requiresResponseCount: number;
+  readonly requiresReviewCount: number;
+  readonly waitingSenderReviewCount: number;
+  readonly sentOutsideCount: number;
+  readonly historyCount: number;
+}
+
+export interface FriendshipInviteDeliveryResult {
+  readonly inviteId: string;
+  readonly deliveryId: string;
+  readonly deliveryToken: string;
+  readonly flow: 'external';
   readonly status: string;
-  readonly targetMode: 'share_link';
-  readonly inviteToken: string;
-  readonly inviteLink: string;
+  readonly channel: 'whatsapp' | 'link' | 'qr';
+  readonly originChannel: 'whatsapp' | 'link' | 'qr';
   readonly expiresAt: string;
-  readonly channelLabel: string;
+  readonly inviteExpiresAt: string;
+  readonly intendedRecipientAlias: string | null;
+  readonly deliveryPhoneE164: string | null;
 }
 
-export interface InviteLinkPreviewResult {
+export interface FriendshipInviteActionResult {
   readonly inviteId: string;
   readonly status: string;
-  readonly canAccept: boolean;
-  readonly reason: string;
-  readonly inviterUserId: string;
-  readonly inviterDisplayName: string;
-  readonly channelLabel: string;
-  readonly targetMode: 'share_link';
-  readonly expiresAt: string | null;
-  readonly resolvedAt: string | null;
+  readonly resolvedAt?: string | null;
+  readonly relationshipId?: string | null;
 }
 
-export interface ProfileConnectionPreviewResult {
-  readonly targetUserId: string;
-  readonly displayName: string;
-  readonly canCreateInvite: boolean;
+export interface FriendshipInvitePreviewResult {
+  readonly inviteId: string;
+  readonly deliveryId: string;
+  readonly flow: 'internal' | 'external';
+  readonly status: string;
+  readonly channel: 'whatsapp' | 'link' | 'qr';
+  readonly originChannel: 'internal' | 'whatsapp' | 'link' | 'qr';
+  readonly expiresAt: string | null;
+  readonly resolvedAt: string | null;
+  readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
+  readonly inviterDisplayName: string;
+  readonly intendedRecipientAlias: string | null;
+  readonly claimantSnapshot: FriendshipClaimantSnapshot | null;
+  readonly identityFlags: FriendshipIdentityFlags;
+  readonly canClaim: boolean;
+  readonly canApprove: boolean;
+  readonly canReject: boolean;
+  readonly canRespond: boolean;
   readonly reason: string;
-  readonly existingInviteId: string | null;
-  readonly existingInviteStatus: string | null;
-  readonly existingInviteDirection: 'incoming' | 'outgoing' | null;
-  readonly existingInviteExpiresAt: string | null;
 }
 
 interface ActionableItem {
   readonly id: PendingActionDto['id'];
   readonly kind: Extract<
     PendingActionDto['kind'],
-    'financial_request' | 'settlement_proposal' | 'relationship_invite'
+    'financial_request' | 'settlement_proposal' | 'friendship_invite'
   >;
   readonly title: PendingActionDto['title'];
   readonly subtitle: PendingActionDto['subtitle'];
@@ -187,12 +228,10 @@ export interface AppSnapshot {
     readonly displayName: string;
     readonly email: string;
     readonly avatarUrl: string | null;
-    readonly publicConnectionToken: string;
   } | null;
-  readonly incomingInvites: readonly RelationshipInviteDto[];
-  readonly outgoingInvites: readonly RelationshipInviteDto[];
-  readonly whatsappInvites: readonly ContactInviteDto[];
-  readonly inviteHistory: readonly ActivityItemDto[];
+  readonly friendshipPendingItems: readonly FriendshipInviteListItem[];
+  readonly friendshipHistoryItems: readonly FriendshipInviteListItem[];
+  readonly friendshipSummary: FriendshipSummary;
   readonly activitySections: readonly ActivitySectionDto[];
   readonly pendingCount: number;
   readonly auditEvents: readonly AuditListItem[];
@@ -947,232 +986,279 @@ function buildPendingSettlementItems(
   return items;
 }
 
-function inviteDisplayName(
-  invite: RelationshipInviteRow,
-  names: Map<string, string>,
-  currentUserId: string,
-): { readonly userId: string | null; readonly displayName: string } {
-  if (invite.target_mode === 'share_link' && invite.status === 'pending') {
-    return {
-      userId: null,
-      displayName: 'Link compartible',
-    };
+function parseFriendshipClaimantSnapshot(value: Database['public']['Tables']['friendship_invites']['Row']['claimant_snapshot']): FriendshipClaimantSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
   }
 
-  const counterpartUserId =
-    invite.inviter_user_id === currentUserId
-      ? invite.invitee_user_id
-      : invite.invitee_user_id === currentUserId
-        ? invite.inviter_user_id
-        : invite.invitee_user_id ?? invite.inviter_user_id;
-
+  const snapshot = value as Record<string, unknown>;
   return {
-    userId: counterpartUserId,
-    displayName: counterpartUserId ? (names.get(counterpartUserId) ?? 'Persona') : 'Link compartible',
+    displayName:
+      typeof snapshot.displayName === 'string' && snapshot.displayName.trim().length > 0
+        ? snapshot.displayName.trim()
+        : 'Persona',
+    avatarPath:
+      typeof snapshot.avatarPath === 'string' && snapshot.avatarPath.trim().length > 0
+        ? snapshot.avatarPath.trim()
+        : null,
+    maskedEmail:
+      typeof snapshot.maskedEmail === 'string' && snapshot.maskedEmail.trim().length > 0
+        ? snapshot.maskedEmail.trim()
+        : null,
+    maskedPhone:
+      typeof snapshot.maskedPhone === 'string' && snapshot.maskedPhone.trim().length > 0
+        ? snapshot.maskedPhone.trim()
+        : null,
+    emailConfirmed: snapshot.emailConfirmed === true,
+    phonePresent: snapshot.phonePresent === true,
+    phoneVerified: snapshot.phoneVerified === true,
+    claimedAt:
+      typeof snapshot.claimedAt === 'string' && snapshot.claimedAt.trim().length > 0
+        ? snapshot.claimedAt.trim()
+        : null,
   };
 }
 
-function buildInvitePendingSubtitle(invite: RelationshipInviteRow): string {
-  const pieces = [invite.channel_label];
-
-  if (invite.expires_at) {
-    pieces.push(`vence ${formatRelativeLabel(invite.expires_at)}`);
-  } else {
-    pieces.push(formatRelativeLabel(invite.created_at));
+function channelLabel(channel: FriendshipInviteRow['origin_channel'] | FriendshipInviteDeliveryRow['channel']) {
+  if (channel === 'internal') {
+    return 'Interna';
   }
 
-  return pieces.join(' | ');
+  if (channel === 'whatsapp') {
+    return 'WhatsApp';
+  }
+
+  if (channel === 'qr') {
+    return 'QR';
+  }
+
+  return 'Link';
 }
 
-function buildInviteHistoryTitle(input: {
-  readonly invite: RelationshipInviteRow;
-  readonly currentUserId: string;
-  readonly displayName: string;
-}): string {
-  const { invite, currentUserId, displayName } = input;
-  const isOutgoing = invite.inviter_user_id === currentUserId;
-  const isShareLinkWithoutCounterpart =
-    invite.target_mode === 'share_link' && !invite.invitee_user_id && !invite.accepted_by_user_id;
-
-  if (invite.status === 'accepted') {
-    if (isOutgoing) {
-      return invite.target_mode === 'share_link'
-        ? `${displayName} uso tu link`
-        : `${displayName} acepto tu invitacion`;
-    }
-
-    return invite.target_mode === 'share_link'
-      ? `Aceptaste el link de ${displayName}`
-      : `Aceptaste la invitacion de ${displayName}`;
-  }
-
-  if (invite.status === 'rejected') {
-    return isOutgoing
-      ? `${displayName} rechazo tu invitacion`
-      : `Rechazaste la invitacion de ${displayName}`;
-  }
-
-  if (invite.status === 'expired') {
-    if (isShareLinkWithoutCounterpart) {
-      return 'Tu link compartible vencio';
-    }
-
-    return isOutgoing
-      ? `Vencio tu invitacion a ${displayName}`
-      : `Vencio la invitacion de ${displayName}`;
-  }
-
-  if (invite.status === 'canceled') {
-    return isShareLinkWithoutCounterpart
-      ? 'Cancelaste tu link compartible'
-      : `Cancelaste la invitacion a ${displayName}`;
-  }
-
-  return isOutgoing ? `Invitacion enviada a ${displayName}` : `Invitacion de ${displayName}`;
-}
-
-function buildInviteHistorySubtitle(input: {
-  readonly invite: RelationshipInviteRow;
-  readonly displayName: string;
-}): string {
-  const { invite, displayName } = input;
-  const pieces = [invite.channel_label];
-
-  if (invite.target_mode === 'share_link' && invite.status === 'accepted') {
-    pieces.push(`Conectaste con ${displayName}`);
-  } else if (displayName !== 'Link compartible') {
-    pieces.push(displayName);
-  }
-
-  pieces.push(formatRelativeLabel(invite.resolved_at ?? invite.updated_at ?? invite.created_at));
-  return pieces.join(' | ');
-}
-
-function buildInviteItems(
-  invites: readonly RelationshipInviteRow[],
-  names: Map<string, string>,
+function getFriendshipActorRole(
+  invite: FriendshipInviteRow,
   currentUserId: string,
-): {
-  readonly incomingInvites: readonly RelationshipInviteDto[];
-  readonly outgoingInvites: readonly RelationshipInviteDto[];
-  readonly pendingActivityItems: readonly ActionableItem[];
-  readonly historyActivityItems: readonly ActivityItemDto[];
-} {
-  const incomingInvites: RelationshipInviteDto[] = [];
-  const outgoingInvites: RelationshipInviteDto[] = [];
-  const pendingActivityItems: ActionableItem[] = [];
-  const historyActivityItems: ActivityItemDto[] = [];
+): FriendshipInviteListItem['actorRole'] {
+  if (invite.inviter_user_id === currentUserId) {
+    return 'sender';
+  }
 
-  for (const invite of invites) {
-    if (invite.inviter_user_id !== currentUserId && invite.invitee_user_id !== currentUserId) {
+  if (invite.target_user_id === currentUserId) {
+    return 'recipient';
+  }
+
+  if (invite.claimant_user_id === currentUserId) {
+    return 'claimant';
+  }
+
+  return 'none';
+}
+
+function buildLatestDeliveryByInviteId(
+  deliveries: readonly FriendshipInviteDeliveryRow[],
+): ReadonlyMap<string, FriendshipInviteDeliveryRow> {
+  const map = new Map<string, FriendshipInviteDeliveryRow>();
+
+  for (const delivery of deliveries) {
+    const current = map.get(delivery.invite_id);
+    if (!current || delivery.created_at > current.created_at) {
+      map.set(delivery.invite_id, delivery);
+    }
+  }
+
+  return map;
+}
+
+function buildFriendshipInviteItems(input: {
+  readonly invites: readonly FriendshipInviteRow[];
+  readonly deliveries: readonly FriendshipInviteDeliveryRow[];
+  readonly names: Map<string, string>;
+  readonly currentUserId: string;
+}): {
+  readonly pendingItems: readonly FriendshipInviteListItem[];
+  readonly historyItems: readonly FriendshipInviteListItem[];
+  readonly summary: FriendshipSummary;
+} {
+  const latestDeliveryByInviteId = buildLatestDeliveryByInviteId(input.deliveries);
+  const pendingItems: FriendshipInviteListItem[] = [];
+  const historyItems: FriendshipInviteListItem[] = [];
+
+  for (const invite of input.invites) {
+    const actorRole = getFriendshipActorRole(invite, input.currentUserId);
+    if (actorRole === 'none') {
       continue;
     }
 
-    const isIncoming = invite.invitee_user_id === currentUserId;
-    const counterpart = inviteDisplayName(invite, names, currentUserId);
-    const dto: RelationshipInviteDto = {
-      id: invite.id,
-      direction: isIncoming ? 'incoming' : 'outgoing',
-      userId: counterpart.userId,
-      displayName: counterpart.displayName,
-      status: invite.status,
-      targetMode: invite.target_mode as RelationshipInviteDto['targetMode'],
-      channelLabel: invite.channel_label,
-      createdAt: invite.created_at,
-      expiresAt: invite.expires_at,
-      resolvedAt: invite.resolved_at,
-    };
+    const latestDelivery = latestDeliveryByInviteId.get(invite.id);
+    const claimantSnapshot = parseFriendshipClaimantSnapshot(invite.claimant_snapshot);
+    const inviterName =
+      invite.inviter_user_id === input.currentUserId
+        ? 'Tu'
+        : (input.names.get(invite.inviter_user_id) ?? 'Persona');
+    const targetName = invite.target_user_id
+      ? (input.names.get(invite.target_user_id) ?? 'Persona')
+      : invite.intended_recipient_alias ?? 'Persona';
+    const claimantName = claimantSnapshot?.displayName ?? 'Persona';
+    const pieces = [channelLabel(latestDelivery?.channel ?? invite.origin_channel)];
+    if (invite.expires_at) {
+      pieces.push(`vence ${formatRelativeLabel(invite.expires_at)}`);
+    }
 
-    if (invite.status === 'pending') {
-      if (isIncoming) {
-        incomingInvites.push(dto);
+    let title = 'Invitacion';
+    let subtitle = pieces.join(' | ');
+    let actionState: FriendshipInviteListItem['actionState'] = 'history';
+    let status = invite.status;
+
+    if (invite.status === 'pending_recipient') {
+      if (actorRole === 'recipient') {
+        title = `${inviterName} quiere conectar contigo`;
+        subtitle = `${channelLabel(invite.origin_channel)} | responde en la app`;
+        actionState = 'requires_you_response';
+        status = 'requires_you_response';
       } else {
-        outgoingInvites.push(dto);
+        title = `Esperando a ${targetName}`;
+        subtitle = `${channelLabel(invite.origin_channel)} | invitacion interna pendiente`;
+        actionState = 'waiting_other_side';
+        status = 'waiting_other_side';
       }
-
-      if (isIncoming) {
-        pendingActivityItems.push({
-          id: invite.id,
-          kind: 'relationship_invite',
-          title: `${counterpart.displayName} quiere conectar contigo`,
-          subtitle: buildInvitePendingSubtitle(invite),
-          status: 'requires_you',
-          ctaLabel: 'Responder',
-          href: '/invite',
-          createdAt: invite.created_at,
-        });
-        continue;
+    } else if (invite.status === 'pending_claim') {
+      title =
+        latestDelivery?.channel === 'qr'
+          ? 'QR temporal activo'
+          : latestDelivery?.channel === 'link'
+            ? 'Link listo para compartir'
+            : `Invitacion enviada a ${invite.intended_recipient_alias ?? 'tu contacto'}`;
+      subtitle = [
+        channelLabel(latestDelivery?.channel ?? invite.origin_channel),
+        invite.intended_recipient_alias,
+        latestDelivery?.delivery_phone_e164,
+        latestDelivery?.expires_at ? `vence ${formatRelativeLabel(latestDelivery.expires_at)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' | ');
+      actionState = 'pending_claim';
+      status = 'pending_claim';
+    } else if (invite.status === 'pending_sender_review') {
+      if (actorRole === 'sender') {
+        title = `Verifica a ${claimantName}`;
+        subtitle = [
+          channelLabel(latestDelivery?.channel ?? invite.origin_channel),
+          claimantSnapshot?.maskedEmail,
+          claimantSnapshot?.maskedPhone,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        actionState = 'requires_you_review';
+        status = 'requires_you_review';
+      } else {
+        title = `Esperando validacion de ${inviterName}`;
+        subtitle = `${channelLabel(latestDelivery?.channel ?? invite.origin_channel)} | ya reclamaste esta invitacion`;
+        actionState = 'waiting_sender_review';
+        status = 'waiting_sender_review';
       }
-
-      pendingActivityItems.push({
+    } else {
+      const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
+      title =
+        invite.status === 'accepted'
+          ? actorRole === 'sender'
+            ? invite.flow === 'external'
+              ? `Confirmaste a ${claimantName}`
+              : `${targetName} acepto tu invitacion`
+            : actorRole === 'claimant'
+              ? `${inviterName} confirmo esta conexion`
+              : `Aceptaste la invitacion de ${inviterName}`
+          : invite.status === 'rejected'
+            ? actorRole === 'sender'
+              ? invite.flow === 'external'
+                ? `Rechazaste a ${claimantName}`
+                : `${targetName} rechazo tu invitacion`
+              : actorRole === 'claimant'
+                ? `${inviterName} rechazo esta conexion`
+                : `Rechazaste la invitacion de ${inviterName}`
+            : invite.status === 'expired'
+              ? actorRole === 'sender'
+                ? 'La invitacion vencio'
+                : 'Esta invitacion vencio'
+              : 'Invitacion cancelada';
+      subtitle = [
+        channelLabel(latestDelivery?.channel ?? invite.origin_channel),
+        actorRole === 'sender' && invite.intended_recipient_alias ? invite.intended_recipient_alias : null,
+        formatRelativeLabel(happenedAt),
+      ]
+        .filter(Boolean)
+        .join(' | ');
+      historyItems.push({
         id: invite.id,
-        kind: 'relationship_invite',
-        title:
-          invite.target_mode === 'share_link'
-            ? 'Link compartible activo'
-            : `Esperando a ${counterpart.displayName}`,
-        subtitle: buildInvitePendingSubtitle(invite),
-        status: 'waiting_other_side',
-        ctaLabel: invite.target_mode === 'share_link' ? 'Ver link' : 'Ver',
-        href: '/invite',
+        inviteId: invite.id,
+        kind: 'friendship_invite',
+        flow: invite.flow as FriendshipInviteListItem['flow'],
+        actorRole,
+        originChannel: invite.origin_channel as FriendshipInviteListItem['originChannel'],
+        actionState: 'history',
+        title,
+        subtitle,
+        status: invite.status,
+        ctaLabel: 'Ver',
+        href: '/activity',
+        sourceType: 'user',
         createdAt: invite.created_at,
+        happenedAt,
+        happenedAtLabel: formatRelativeLabel(happenedAt),
+        counterpartyLabel:
+          actorRole === 'sender'
+            ? (invite.flow === 'external' ? claimantSnapshot?.displayName ?? invite.intended_recipient_alias ?? undefined : targetName)
+            : inviterName !== 'Tu'
+              ? inviterName
+              : undefined,
+        expiresAt: invite.expires_at,
+        resolvedAt: invite.resolved_at,
+        claimantSnapshot,
+        intendedRecipientAlias: invite.intended_recipient_alias,
       });
       continue;
     }
 
-    const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
-    historyActivityItems.push({
+    pendingItems.push({
       id: invite.id,
-      kind: 'relationship_invite',
-      title: buildInviteHistoryTitle({
-        invite,
-        currentUserId,
-        displayName: counterpart.displayName,
-      }),
-      subtitle: buildInviteHistorySubtitle({
-        invite,
-        displayName: counterpart.displayName,
-      }),
-      status: invite.status,
-      href: '/invite',
-      sourceType: 'user',
-      happenedAt,
-      happenedAtLabel: formatRelativeLabel(happenedAt),
-      counterpartyLabel:
-        counterpart.displayName !== 'Link compartible' ? counterpart.displayName : undefined,
+      inviteId: invite.id,
+      kind: 'friendship_invite',
+      flow: invite.flow as FriendshipInviteListItem['flow'],
+      actorRole,
+      originChannel: invite.origin_channel as FriendshipInviteListItem['originChannel'],
+      actionState,
+      title,
+      subtitle,
+      status,
+      ctaLabel:
+        actionState === 'requires_you_response'
+          ? 'Responder'
+          : actionState === 'requires_you_review'
+            ? 'Verificar'
+            : actionState === 'pending_claim'
+              ? latestDelivery?.channel === 'qr'
+                ? 'QR activo'
+                : 'Compartir'
+              : 'Ver',
+      href: '/activity',
+      createdAt: invite.created_at,
+      expiresAt: invite.expires_at,
+      resolvedAt: invite.resolved_at,
+      claimantSnapshot,
+      intendedRecipientAlias: invite.intended_recipient_alias,
     });
   }
 
   return {
-    incomingInvites: sortByNewest(incomingInvites),
-    outgoingInvites: sortByNewest(outgoingInvites),
-    pendingActivityItems: sortByNewest(pendingActivityItems),
-    historyActivityItems: sortHistoryItems(historyActivityItems),
+    pendingItems: sortByNewest(pendingItems),
+    historyItems: sortHistoryItems(historyItems),
+    summary: {
+      requiresResponseCount: pendingItems.filter((item) => item.actionState === 'requires_you_response').length,
+      requiresReviewCount: pendingItems.filter((item) => item.actionState === 'requires_you_review').length,
+      waitingSenderReviewCount: pendingItems.filter((item) => item.actionState === 'waiting_sender_review').length,
+      sentOutsideCount: pendingItems.filter((item) => item.actionState === 'pending_claim').length,
+      historyCount: historyItems.length,
+    },
   };
-}
-
-function buildContactInviteItems(
-  invites: readonly ContactInviteRow[],
-  names: Map<string, string>,
-): readonly ContactInviteDto[] {
-  return sortByNewest(
-    invites.map((invite) => ({
-      id: invite.id,
-      inviteeName: invite.invitee_name,
-      phoneE164: invite.invitee_phone_e164,
-      status: invite.status,
-      createdAt: invite.created_at,
-      matchedDisplayName: invite.claimed_by_user_id
-        ? (names.get(invite.claimed_by_user_id) ?? invite.invitee_name)
-        : null,
-      relationshipInviteId: invite.relationship_invite_id,
-      relationshipInviteStatus: invite.relationship_invite_status,
-      relationshipInviteExpiresAt: invite.relationship_invite_expires_at,
-      relationshipInviteResolvedAt: invite.relationship_invite_resolved_at,
-      relationshipInviteTargetMode: invite.relationship_invite_target_mode,
-      relationshipInviteChannelLabel: invite.relationship_invite_channel_label,
-    })),
-  );
 }
 
 function historyToneForRow(
@@ -1470,8 +1556,8 @@ function buildAuditItems(events: readonly AuditEventRow[]): AuditListItem[] {
 function buildLiveSnapshot(input: {
   readonly currentUserId: string;
   readonly profiles: readonly UserProfileRow[];
-  readonly contactInvites: readonly ContactInviteRow[];
-  readonly relationshipInvites: readonly RelationshipInviteRow[];
+  readonly friendshipInvites: readonly FriendshipInviteRow[];
+  readonly friendshipInviteDeliveries: readonly FriendshipInviteDeliveryRow[];
   readonly relationships: readonly RelationshipRow[];
   readonly openDebts: readonly OpenDebtRow[];
   readonly financialRequests: readonly FinancialRequestRow[];
@@ -1516,12 +1602,12 @@ function buildLiveSnapshot(input: {
     input.settlementParticipants,
     (row) => row.settlement_proposal_id,
   );
-  const inviteState = buildInviteItems(
-    input.relationshipInvites,
-    nameByUserId,
-    input.currentUserId,
-  );
-  const contactInviteItems = buildContactInviteItems(input.contactInvites, nameByUserId);
+  const friendshipState = buildFriendshipInviteItems({
+    invites: input.friendshipInvites,
+    deliveries: input.friendshipInviteDeliveries,
+    names: nameByUserId,
+    currentUserId: input.currentUserId,
+  });
   const pendingSettlements = buildPendingSettlementItems(
     input.settlementProposals,
     settlementParticipantsByProposalId,
@@ -1675,12 +1761,12 @@ function buildLiveSnapshot(input: {
   const pendingItems = sortByNewest([
     ...pendingRequests,
     ...pendingSettlements,
-    ...inviteState.pendingActivityItems,
+    ...friendshipState.pendingItems,
   ]);
 
   const historyItems = sortHistoryItems([
     ...buildActivityHistoryItems(peopleById),
-    ...inviteState.historyActivityItems,
+    ...friendshipState.historyItems,
   ]);
 
   const summary = input.openDebts.reduce(
@@ -1734,7 +1820,7 @@ function buildLiveSnapshot(input: {
             subtitle: pendingItems[0].subtitle,
             status: pendingItems[0].status,
             ctaLabel: pendingItems[0].ctaLabel,
-            href: pendingItems[0].href,
+            href: pendingItems[0].href ?? '/activity',
             amountMinor: pendingItems[0].amountMinor,
           }
         : null,
@@ -1750,13 +1836,11 @@ function buildLiveSnapshot(input: {
             currentUserProfileRow.avatar_path,
             currentUserProfileRow.updated_at,
           ),
-          publicConnectionToken: currentUserProfileRow.public_connection_token,
         }
       : null,
-    incomingInvites: inviteState.incomingInvites,
-    outgoingInvites: inviteState.outgoingInvites,
-    whatsappInvites: contactInviteItems,
-    inviteHistory: inviteState.historyActivityItems,
+    friendshipPendingItems: friendshipState.pendingItems,
+    friendshipHistoryItems: friendshipState.historyItems,
+    friendshipSummary: friendshipState.summary,
     activitySections: [
       {
         key: 'pending',
@@ -1783,8 +1867,8 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
   const client = assertSupabaseClient();
   const [
     profilesResult,
-    contactInvitesResult,
-    relationshipInvitesResult,
+    friendshipInvitesResult,
+    friendshipInviteDeliveriesResult,
     relationshipsResult,
     openDebtsResult,
     requestsResult,
@@ -1797,18 +1881,18 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('user_profiles')
       .select(
-        'id, display_name, email, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, public_connection_token, created_at, updated_at',
+        'id, display_name, email, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
       ),
     client
-      .from('v_contact_invites_live')
+      .from('v_friendship_invites_live')
       .select(
-        'id, inviter_user_id, invitee_name, invitee_phone_country_iso2, invitee_phone_country_calling_code, invitee_phone_national_number, invitee_phone_e164, status, claimed_by_user_id, relationship_invite_id, relationship_invite_status, relationship_invite_expires_at, relationship_invite_resolved_at, relationship_invite_target_mode, relationship_invite_channel_label, created_at, updated_at',
+        'id, inviter_user_id, target_user_id, claimant_user_id, relationship_id, flow, origin_channel, status, resolution_actor, resolution_reason, intended_recipient_alias, claimant_snapshot, source_context, expires_at, resolved_at, created_at, updated_at',
       )
       .order('created_at', { ascending: false }),
     client
-      .from('v_relationship_invites_live')
+      .from('v_friendship_invite_deliveries_live')
       .select(
-        'id, inviter_user_id, invitee_user_id, status, target_mode, invite_token, expires_at, resolved_at, accepted_by_user_id, channel_label, created_at, updated_at',
+        'id, invite_id, token, channel, source_context, delivery_phone_e164, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
       )
       .order('created_at', { ascending: false }),
     client
@@ -1851,12 +1935,12 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     throw new Error(profilesResult.error.message);
   }
 
-  if (contactInvitesResult.error) {
-    throw new Error(contactInvitesResult.error.message);
+  if (friendshipInvitesResult.error) {
+    throw new Error(friendshipInvitesResult.error.message);
   }
 
-  if (relationshipInvitesResult.error) {
-    throw new Error(relationshipInvitesResult.error.message);
+  if (friendshipInviteDeliveriesResult.error) {
+    throw new Error(friendshipInviteDeliveriesResult.error.message);
   }
 
   if (relationshipsResult.error) {
@@ -1894,8 +1978,8 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
   return buildLiveSnapshot({
     currentUserId,
     profiles: profilesResult.data ?? [],
-    contactInvites: contactInvitesResult.data ?? [],
-    relationshipInvites: relationshipInvitesResult.data ?? [],
+    friendshipInvites: friendshipInvitesResult.data ?? [],
+    friendshipInviteDeliveries: friendshipInviteDeliveriesResult.data ?? [],
     relationships: relationshipsResult.data ?? [],
     openDebts: openDebtsResult.data ?? [],
     financialRequests: requestsResult.data ?? [],
@@ -2057,34 +2141,20 @@ export function useAppSnapshot() {
   });
 }
 
-export function useCreateRelationshipInviteMutation() {
+export function useCreateInternalFriendshipInviteMutation() {
   return useMutation({
-    mutationFn: async (
-      input: string | { readonly inviteeUserId: string; readonly channelLabel?: string },
-    ) => {
-      const inviteeUserId = typeof input === 'string' ? input : input.inviteeUserId;
-      const channelLabel = typeof input === 'string' ? undefined : input.channelLabel;
-      const payload = relationshipInviteSchema.parse({
-        idempotencyKey: createIdempotencyKey('create_relationship_invite'),
-        inviteeUserId,
-        channelLabel,
+    mutationFn: async (input: {
+      readonly targetUserId: string;
+      readonly sourceContext?: string;
+    }) => {
+      const payload = createInternalFriendshipInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('create_internal_friendship_invite'),
+        targetUserId: input.targetUserId,
+        sourceContext: input.sourceContext,
       });
 
-      return invokeSupabaseFunction('create-relationship-invite', payload);
-    },
-    onSuccess: invalidateAppSnapshot,
-  });
-}
-
-export function useCreateShareableInviteMutation() {
-  return useMutation({
-    mutationFn: async () => {
-      const payload = shareableInviteSchema.parse({
-        idempotencyKey: createIdempotencyKey('create_shareable_invite'),
-      });
-
-      return invokeSupabaseFunction<typeof payload, CreateShareableInviteResult>(
-        'create-shareable-invite',
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteActionResult>(
+        'create-internal-friendship-invite',
         payload,
       );
     },
@@ -2092,60 +2162,69 @@ export function useCreateShareableInviteMutation() {
   });
 }
 
-export function useInvitePreviewByTokenQuery(inviteToken: string | null) {
+export function useCreateExternalFriendshipInviteMutation() {
+  return useMutation({
+    mutationFn: async (input: {
+      readonly channel: 'whatsapp' | 'link' | 'qr';
+      readonly sourceContext?: string;
+      readonly intendedRecipientAlias?: string;
+      readonly deliveryPhoneE164?: string;
+    }) => {
+      const payload = createExternalFriendshipInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey(`create_external_friendship_invite_${input.channel}`),
+        channel: input.channel,
+        sourceContext: input.sourceContext,
+        intendedRecipientAlias: input.intendedRecipientAlias,
+        deliveryPhoneE164: input.deliveryPhoneE164,
+      });
+
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteDeliveryResult>(
+        'create-external-friendship-invite',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useFriendshipInvitePreviewQuery(deliveryToken: string | null) {
   const { userId } = useSession();
 
   return useQuery({
-    queryKey: ['invite-preview', userId ?? 'signed-out', inviteToken ?? 'missing'],
-    enabled: Boolean(userId && inviteToken),
+    queryKey: ['friendship-invite-preview', userId ?? 'signed-out', deliveryToken ?? 'missing'],
+    enabled: Boolean(userId && deliveryToken),
     queryFn: async () => {
-      const payload = inviteTokenSchema.parse({
-        inviteToken,
+      const payload = friendshipInvitePreviewSchema.parse({
+        deliveryToken,
       });
 
-      return invokeSupabaseFunction<typeof payload, InviteLinkPreviewResult>(
-        'get-invite-preview-by-token',
+      return invokeSupabaseFunction<typeof payload, FriendshipInvitePreviewResult>(
+        'get-friendship-invite-preview',
         payload,
       );
     },
   });
 }
 
-export function useAcceptInviteByTokenMutation() {
+export function useClaimExternalFriendshipInviteMutation() {
   return useMutation({
-    mutationFn: async (inviteToken: string) => {
-      const payload = inviteTokenDecisionSchema.parse({
-        idempotencyKey: createIdempotencyKey('accept_invite_by_token'),
-        inviteToken,
+    mutationFn: async (deliveryToken: string) => {
+      const payload = claimExternalFriendshipInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('claim_external_friendship_invite'),
+        deliveryToken,
       });
 
-      return invokeSupabaseFunction('accept-invite-by-token', payload);
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteActionResult>(
+        'claim-external-friendship-invite',
+        payload,
+      );
     },
     onSuccess: invalidateAppSnapshot,
-  });
-}
-
-export function useProfileConnectionPreviewQuery(connectionToken: string | null) {
-  const { userId } = useSession();
-
-  return useQuery({
-    queryKey: ['profile-connection-preview', userId ?? 'signed-out', connectionToken ?? 'missing'],
-    enabled: Boolean(userId && connectionToken),
-    queryFn: async () => {
-      const payload = profileConnectionPreviewSchema.parse({
-        connectionToken,
-      });
-
-      return invokeSupabaseFunction<typeof payload, ProfileConnectionPreviewResult>(
-        'get-profile-connection-preview',
-        payload,
-      );
-    },
   });
 }
 
 export function useUpdateProfileAvatarMutation() {
-  const { userId } = useSession();
+  const { refreshAccountState, userId } = useSession();
 
   return useMutation({
     mutationFn: async (input: {
@@ -2192,28 +2271,27 @@ export function useUpdateProfileAvatarMutation() {
 
       return avatarPath;
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async () => {
+      await refreshAccountState();
+      await invalidateAppSnapshot();
+    },
   });
 }
 
-export function useCreateWhatsAppInviteMutation() {
+export function useReviewExternalFriendshipInviteMutation() {
   return useMutation({
     mutationFn: async (input: {
-      readonly inviteeName: string;
-      readonly phoneCountryIso2: string;
-      readonly phoneCountryCallingCode: string;
-      readonly phoneNationalNumber: string;
+      readonly inviteId: string;
+      readonly decision: 'approve' | 'reject';
     }) => {
-      const payload = createContactInviteSchema.parse({
-        idempotencyKey: createIdempotencyKey('create_contact_invite'),
-        inviteeName: input.inviteeName,
-        phoneCountryIso2: input.phoneCountryIso2,
-        phoneCountryCallingCode: input.phoneCountryCallingCode,
-        phoneNationalNumber: input.phoneNationalNumber,
+      const payload = reviewExternalFriendshipInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey(`review_external_friendship_invite_${input.decision}`),
+        inviteId: input.inviteId,
+        decision: input.decision,
       });
 
-      return invokeSupabaseFunction<typeof payload, CreateContactInviteResult>(
-        'create-whatsapp-invite',
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteActionResult>(
+        'review-external-friendship-invite',
         payload,
       );
     },
@@ -2221,29 +2299,39 @@ export function useCreateWhatsAppInviteMutation() {
   });
 }
 
-export function useAcceptRelationshipInviteMutation() {
+export function useRespondInternalFriendshipInviteMutation() {
   return useMutation({
-    mutationFn: async (inviteId: string) => {
-      const payload = relationshipInviteDecisionSchema.parse({
-        idempotencyKey: createIdempotencyKey('accept_relationship_invite'),
-        inviteId,
+    mutationFn: async (input: {
+      readonly inviteId: string;
+      readonly decision: 'accept' | 'reject';
+    }) => {
+      const payload = friendshipInviteDecisionSchema.parse({
+        idempotencyKey: createIdempotencyKey(`respond_internal_friendship_invite_${input.decision}`),
+        inviteId: input.inviteId,
+        decision: input.decision,
       });
 
-      return invokeSupabaseFunction('accept-relationship-invite', payload);
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteActionResult>(
+        'respond-internal-friendship-invite',
+        payload,
+      );
     },
     onSuccess: invalidateAppSnapshot,
   });
 }
 
-export function useRejectRelationshipInviteMutation() {
+export function useCancelFriendshipInviteMutation() {
   return useMutation({
     mutationFn: async (inviteId: string) => {
-      const payload = relationshipInviteDecisionSchema.parse({
-        idempotencyKey: createIdempotencyKey('reject_relationship_invite'),
+      const payload = cancelFriendshipInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('cancel_friendship_invite'),
         inviteId,
       });
 
-      return invokeSupabaseFunction('reject-relationship-invite', payload);
+      return invokeSupabaseFunction<typeof payload, FriendshipInviteActionResult>(
+        'cancel-friendship-invite',
+        payload,
+      );
     },
     onSuccess: invalidateAppSnapshot,
   });
