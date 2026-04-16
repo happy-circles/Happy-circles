@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { Href } from 'expo-router';
 
+import { buildSetupAccountHref } from './setup-account';
+
 interface AlertNavigation {
   push(pathname: Href): void;
 }
@@ -22,6 +24,7 @@ interface BlockedActionResolution {
 interface BlockedActionContext {
   readonly hasEmailPassword?: boolean;
   readonly profile?: {
+    readonly displayName?: string | null;
     readonly avatarPath?: string | null;
     readonly phoneE164?: string | null;
   };
@@ -112,24 +115,18 @@ function resolveBlockedAction(
   context?: BlockedActionContext,
 ): BlockedActionResolution | null {
   const normalized = message.toLocaleLowerCase('es-CO');
-  const nextCompleteProfileFocus = !context?.profile?.avatarPath
-    ? 'avatar'
-    : !context.profile.phoneE164
-      ? 'phone'
-      : 'fullName';
-  const nextDeviceFocus = context?.hasEmailPassword ? 'trust-password' : 'trust-device';
+  const missingDisplayName =
+    context?.profile?.displayName === undefined
+      ? false
+      : !((context.profile.displayName ?? '').trim().length);
+  const nextRequiredStep = !context?.profile?.phoneE164 || missingDisplayName ? 'profile' : 'photo';
 
   if (normalized.includes('completa tu perfil')) {
     return {
       title: 'Completa tu perfil para continuar',
       message: 'Antes de mover dinero necesitamos nombre usable, foto y celular unico en tu cuenta.',
       ctaLabel: 'Completar ahora',
-      route: {
-        pathname: '/complete-profile',
-        params: {
-          focus: nextCompleteProfileFocus,
-        },
-      },
+      route: buildSetupAccountHref(nextRequiredStep),
     };
   }
 
@@ -140,15 +137,9 @@ function resolveBlockedAction(
   ) {
     return {
       title: 'Valida este dispositivo para continuar',
-      message: 'Esta accion requiere un dispositivo confiable. Puedes validarlo desde tu perfil.',
-      ctaLabel: 'Ir a perfil',
-      route: {
-        pathname: '/profile',
-        params: {
-          section: 'device',
-          focus: nextDeviceFocus,
-        },
-      },
+      message: 'Esta accion requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
+      ctaLabel: 'Abrir setup',
+      route: buildSetupAccountHref('security'),
     };
   }
 
@@ -162,14 +153,8 @@ function resolveBlockedAction(
     return {
       title: 'Valida tu identidad para continuar',
       message,
-      ctaLabel: 'Ir a perfil',
-      route: {
-        pathname: '/profile',
-        params: {
-          section: 'device',
-          focus: 'device-help',
-        },
-      },
+      ctaLabel: 'Abrir setup',
+      route: buildSetupAccountHref('security'),
     };
   }
 

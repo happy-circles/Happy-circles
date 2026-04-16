@@ -10,6 +10,7 @@ import {
   clearPendingInviteIntent,
   writePendingInviteIntent,
 } from '@/lib/invite-intent';
+import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
   useClaimExternalFriendshipInviteMutation,
   useFriendshipInvitePreviewQuery,
@@ -123,7 +124,7 @@ export function InviteLinkScreen() {
         });
 
         if (!cancelled) {
-          router.replace('/complete-profile');
+          router.replace(buildSetupAccountHref('profile'));
         }
       }
     }
@@ -211,7 +212,7 @@ export function InviteLinkScreen() {
         <SurfaceCard padding="lg" variant="accent">
           <Text style={styles.title}>Preparando acceso</Text>
           <Text style={styles.helper}>
-            Vamos a llevarte por login o perfil antes de mostrar la confirmacion real de esta invitacion.
+            Vamos a llevarte por login o setup antes de mostrar la confirmacion real de esta invitacion.
           </Text>
         </SurfaceCard>
       ) : null}

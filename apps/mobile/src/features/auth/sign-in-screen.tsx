@@ -21,7 +21,6 @@ import { BrandMark } from '@/components/brand-mark';
 import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
@@ -38,12 +37,8 @@ function animateModeChange() {
 export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   const session = useSession();
   const [activeMode, setActiveMode] = useState<SignInScreenMode | null>(initialMode);
-  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
-  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
-  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,8 +46,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   const scrollRef = useRef<ScrollView | null>(null);
   const fieldOffsetsRef = useRef<Record<string, number>>({});
 
-  const selectedCountry =
-    COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
   const isRegister = activeMode === 'register';
   const isRecovery = activeMode === 'recover';
   const brandStateStyle = keyboardVisible
@@ -116,7 +109,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
     }
 
     animateModeChange();
-    setCountryMenuOpen(false);
     setMessage(null);
     setActiveMode(nextMode);
 
@@ -138,13 +130,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
     try {
       const result = isRegister
         ? await session.registerAccount({
-            fullName,
             email,
             password,
             confirmPassword: password,
-            phoneCountryIso2: selectedCountry.iso2,
-            phoneCountryCallingCode: selectedCountry.callingCode,
-            phoneNationalNumber,
           })
         : isRecovery
           ? await session.requestPasswordReset(email)
@@ -164,7 +152,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       return;
     }
 
-    setCountryMenuOpen(false);
     setMessage(null);
     setSocialBusyProvider('google');
 
@@ -181,7 +168,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       return;
     }
 
-    setCountryMenuOpen(false);
     setMessage(null);
     setSocialBusyProvider('apple');
 
@@ -267,6 +253,16 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
             {!isRecovery ? (
               <View style={styles.socialActions}>
+                {session.appleSignInAvailable ? (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                    cornerRadius={18}
+                    onPress={() => void handleAppleButtonPress()}
+                    style={styles.appleButton}
+                  />
+                ) : null}
+
                 <Pressable
                   onPress={() => void handleGoogleSignIn()}
                   style={({ pressed }) => [
@@ -279,16 +275,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                     {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
                   </Text>
                 </Pressable>
-
-                {session.appleSignInAvailable ? (
-                  <AppleAuthentication.AppleAuthenticationButton
-                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                    cornerRadius={18}
-                    onPress={() => void handleAppleButtonPress()}
-                    style={styles.appleButton}
-                  />
-                ) : null}
               </View>
             ) : null}
 
@@ -343,73 +329,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   <View style={styles.extraGlass}>
                     <View style={styles.extraGlassHeader}>
                       <View style={styles.extraGlassDot} />
-                      <Text style={styles.extraGlassLabel}>Solo al crear cuenta</Text>
+                      <Text style={styles.extraGlassLabel}>Despues sigues con tu setup</Text>
                     </View>
-
-                    <View onLayout={handleFieldLayout('fullName')}>
-                      <FieldBlock label="Nombre">
-                        <AppTextInput
-                          autoCapitalize="words"
-                          chrome="glass"
-                          onChangeText={setFullName}
-                          onFocus={() => focusField('fullName')}
-                          placeholder="Nombre y apellido"
-                          placeholderTextColor={theme.colors.muted}
-                          style={styles.input}
-                          value={fullName}
-                        />
-                      </FieldBlock>
-                    </View>
-
-                    <View onLayout={handleFieldLayout('phone')}>
-                      <FieldBlock label="Celular">
-                        <View style={styles.phoneField}>
-                          <View style={styles.phoneRow}>
-                            <Pressable
-                              onPress={() => setCountryMenuOpen((value) => !value)}
-                              style={styles.callingCodeBox}
-                            >
-                              <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
-                            </Pressable>
-
-                            <AppTextInput
-                              chrome="glass"
-                              keyboardType="phone-pad"
-                              onChangeText={setPhoneNationalNumber}
-                              onFocus={() => {
-                                setCountryMenuOpen(false);
-                                focusField('phone');
-                              }}
-                              placeholder="3001234567"
-                              placeholderTextColor={theme.colors.muted}
-                              style={[styles.input, styles.phoneInput]}
-                              value={phoneNationalNumber}
-                            />
-                          </View>
-
-                          {countryMenuOpen ? (
-                            <View style={styles.countryMenu}>
-                              {COUNTRY_OPTIONS.map((country, index) => (
-                                <Pressable
-                                  key={country.iso2}
-                                  onPress={() => {
-                                    setCountryIso(country.iso2);
-                                    setCountryMenuOpen(false);
-                                  }}
-                                  style={[
-                                    styles.countryOption,
-                                    index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
-                                  ]}
-                                >
-                                  <Text style={styles.countryLabel}>{country.label}</Text>
-                                  <Text style={styles.countryCode}>{country.callingCode}</Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          ) : null}
-                        </View>
-                      </FieldBlock>
-                    </View>
+                    <Text style={styles.registerHint}>
+                      Primero crea tu cuenta. Nombre, celular, foto y seguridad van en el paso a paso siguiente.
+                    </Text>
                   </View>
                 ) : null}
 
@@ -617,6 +541,11 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  registerHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    lineHeight: 22,
   },
   phoneField: {
     position: 'relative',

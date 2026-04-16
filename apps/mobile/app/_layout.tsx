@@ -13,6 +13,7 @@ import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
+import { buildSetupAccountHref } from '@/lib/setup-account';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
@@ -290,7 +291,7 @@ function SessionOverlay() {
 }
 
 function SessionRouteGuard() {
-  const { profileCompletionState, status } = useSession();
+  const { profileCompletionState, setupState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
   const router = useRouter();
   const segments = useSegments();
@@ -306,18 +307,10 @@ function SessionRouteGuard() {
       const currentRootSegment = String(segments[0] ?? '');
       const inAuthGroup = currentRootSegment === '(auth)';
       const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
+      const isSetupAccountRoute = currentRootSegment === 'setup-account' || isCompleteProfileRoute;
       const isInviteLinkRoute = currentRootSegment === 'invite';
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
       const isPublicInviteRoute = isInviteLinkRoute;
-      const isBasicReadableRoute =
-        isCompleteProfileRoute ||
-        isResetPasswordRoute ||
-        isPublicInviteRoute ||
-        currentRootSegment === '(tabs)' ||
-        currentRootSegment === 'activity' ||
-        currentRootSegment === 'profile' ||
-        currentRootSegment === 'person' ||
-        currentRootSegment === 'settlements';
 
       if (status === 'signed_out') {
         if (!inAuthGroup && !isPublicInviteRoute && !isResetPasswordRoute && !cancelled) {
@@ -326,9 +319,14 @@ function SessionRouteGuard() {
         return;
       }
 
-      if (profileCompletionState === 'incomplete' && !isBasicReadableRoute) {
+      if (
+        !setupState.requiredComplete &&
+        !isSetupAccountRoute &&
+        !isResetPasswordRoute &&
+        !isPublicInviteRoute
+      ) {
         if (!cancelled) {
-          router.replace('/complete-profile' as Href);
+          router.replace(buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile'));
         }
         return;
       }
@@ -339,7 +337,7 @@ function SessionRouteGuard() {
 
       if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
         if (!cancelled) {
-          router.replace(nextSignedInHref);
+          router.replace(buildSetupAccountHref('profile'));
         }
         return;
       }
@@ -350,7 +348,11 @@ function SessionRouteGuard() {
 
       if (inAuthGroup && !cancelled) {
         router.replace(
-          (profileCompletionState === 'incomplete' ? '/complete-profile' : nextSignedInHref) as Href,
+          (
+            !setupState.requiredComplete
+              ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
+              : nextSignedInHref
+          ) as Href,
         );
       }
     }
@@ -360,7 +362,7 @@ function SessionRouteGuard() {
     return () => {
       cancelled = true;
     };
-  }, [profileCompletionState, rootNavigationState?.key, router, segments, status]);
+  }, [profileCompletionState, rootNavigationState?.key, router, segments, setupState, status]);
 
   return null;
 }

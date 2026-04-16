@@ -31,8 +31,22 @@ import {
   authenticateWithBiometricsResult,
   type BiometricAuthResult,
 } from '@/lib/security';
+import {
+  getContactsPermissionStatus,
+  requestContactsPermissionStatus,
+  type ContactsPermissionStatus,
+} from '@/lib/contacts-permissions';
+import {
+  derivePendingRequiredSetupSteps,
+  type SetupStep,
+} from '@/lib/setup-account';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
+import {
+  getLocalNotificationPermissionStatus,
+  requestLocalNotificationPermissionStatus,
+  type NotificationPermissionStatus,
+} from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -47,6 +61,7 @@ type AuthMode = 'supabase';
 type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
 type DeviceTrustState = 'loading' | 'unknown' | 'pending' | 'trusted' | 'revoked';
 type IdentityProvider = 'email' | 'google' | 'apple' | 'phone' | 'unknown';
+type SetupPermissionStatus = 'loading' | ContactsPermissionStatus | NotificationPermissionStatus;
 
 type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
 type TrustedDeviceRow = Database['public']['Tables']['trusted_devices']['Row'];
@@ -79,11 +94,7 @@ interface EmailPasswordCredentials {
 }
 
 interface RegistrationInput extends EmailPasswordCredentials {
-  readonly fullName: string;
   readonly confirmPassword: string;
-  readonly phoneCountryIso2: string;
-  readonly phoneCountryCallingCode: string;
-  readonly phoneNationalNumber: string;
 }
 
 interface CompleteProfileInput {
@@ -107,6 +118,15 @@ interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
 
+interface SetupState {
+  readonly requiredComplete: boolean;
+  readonly pendingRequiredSteps: readonly SetupStep[];
+  readonly securityPending: boolean;
+  readonly biometricsEligible: boolean;
+  readonly contactsPermissionStatus: SetupPermissionStatus;
+  readonly notificationsPermissionStatus: SetupPermissionStatus;
+}
+
 interface SessionContextValue {
   readonly authMode: AuthMode;
   readonly status: SessionStatus;
@@ -116,6 +136,7 @@ interface SessionContextValue {
   readonly profile: UserProfileRow | null;
   readonly linkedMethods: LinkedMethods;
   readonly profileCompletionState: ProfileCompletionState;
+  readonly setupState: SetupState;
   readonly deviceTrustState: DeviceTrustState;
   readonly trustedDevices: readonly TrustedDeviceRow[];
   readonly currentDeviceId: string | null;
@@ -148,6 +169,8 @@ interface SessionContextValue {
   stepUpAuth(force?: boolean): Promise<BiometricAuthResult>;
   setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
+  requestContactsPermission(): Promise<string>;
+  requestNotificationsPermission(): Promise<string>;
 }
 
 const BIOMETRICS_KEY = 'happy_circles.biometrics_enabled';
@@ -160,6 +183,14 @@ const EMPTY_LINKED_METHODS: LinkedMethods = {
   hasApple: false,
   hasPhone: false,
   providers: [],
+};
+const EMPTY_SETUP_STATE: SetupState = {
+  requiredComplete: false,
+  pendingRequiredSteps: [],
+  securityPending: false,
+  biometricsEligible: false,
+  contactsPermissionStatus: 'loading',
+  notificationsPermissionStatus: 'loading',
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -296,27 +327,12 @@ function normalizeIdentityProvider(value: string | null | undefined): IdentityPr
   return normalized ? 'unknown' : 'unknown';
 }
 
-function isLowQualityDisplayName(
-  displayName: string | null | undefined,
-): boolean {
-  const normalized = displayName?.trim() ?? '';
-  if (normalized.length < 3) {
-    return true;
-  }
-
-  return normalized.includes('@');
-}
-
 function deriveProfileCompletionState(profile: UserProfileRow | null): ProfileCompletionState {
   if (!profile) {
     return 'loading';
   }
 
-  if (
-    isLowQualityDisplayName(profile.display_name) ||
-    !profile.phone_e164 ||
-    !profile.avatar_path
-  ) {
+  if (derivePendingRequiredSetupSteps(profile).length > 0) {
     return 'incomplete';
   }
 
@@ -488,6 +504,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [stepUpFreshUntil, setStepUpFreshUntil] = useState<number | null>(null);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
+  const [contactsPermissionStatus, setContactsPermissionStatus] =
+    useState<SetupPermissionStatus>('loading');
+  const [notificationsPermissionStatus, setNotificationsPermissionStatus] =
+    useState<SetupPermissionStatus>('loading');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('biometria');
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
@@ -508,6 +528,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setCurrentDeviceId(null);
     setAuthProvider(null);
     setStepUpFreshUntil(null);
+  }, []);
+
+  const refreshNativePermissionStatuses = useCallback(async () => {
+    const [nextContactsPermissionStatus, nextNotificationsPermissionStatus] = await Promise.all([
+      getContactsPermissionStatus(),
+      getLocalNotificationPermissionStatus(),
+    ]);
+
+    setContactsPermissionStatus(nextContactsPermissionStatus);
+    setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
   }, []);
 
   const applySessionFromUrl = useCallback(async (url: string | null) => {
@@ -702,13 +732,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
     let active = true;
 
     async function hydrate() {
-      const [biometricValue, notificationValue, support, appleAvailable] = await Promise.all([
+      const [
+        biometricValue,
+        notificationValue,
+        support,
+        appleAvailable,
+        nextContactsPermissionStatus,
+        nextNotificationsPermissionStatus,
+      ] = await Promise.all([
         getStoredItem(BIOMETRICS_KEY),
         getStoredItem(NOTIFICATIONS_KEY),
         getBiometricSupport(),
         Platform.OS === 'ios'
           ? AppleAuthentication.isAvailableAsync().catch(() => false)
           : Promise.resolve(false),
+        getContactsPermissionStatus(),
+        getLocalNotificationPermissionStatus(),
       ]);
 
       if (!active) {
@@ -723,6 +762,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setBiometricAvailable(support.available);
       setBiometricLabel(support.label);
       setAppleSignInAvailable(appleAvailable);
+      setContactsPermissionStatus(nextContactsPermissionStatus);
+      setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
 
       if (!supabase) {
         clearSignedInState();
@@ -826,6 +867,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       if (nextState === 'active') {
+        void refreshNativePermissionStatuses();
         const backgroundedAt = backgroundedAtRef.current;
         backgroundedAtRef.current = null;
 
@@ -844,7 +886,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.remove();
     };
-  }, [biometricsEnabled, status]);
+  }, [biometricsEnabled, refreshNativePermissionStatuses, status]);
 
   const performGoogleOAuthFlow = useCallback(
     async (mode: 'sign-in' | 'link'): Promise<string> => {
@@ -1073,27 +1115,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
     try {
       const parsed = registrationSchema.parse(input);
       const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
-      const phoneCountryCallingCode = normalizeCallingCode(parsed.phoneCountryCallingCode);
-      const phoneNationalNumber = normalizePhoneDigits(parsed.phoneNationalNumber);
-      const phoneE164 = buildPhoneE164(phoneCountryCallingCode, phoneNationalNumber);
 
       if (!supabase) {
         return 'Supabase no esta configurado en esta app.';
       }
 
-      const redirectTo = buildEmailAuthRedirect('/home');
+      const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: parsed.password,
         options: {
           emailRedirectTo: redirectTo,
-          data: {
-            display_name: parsed.fullName.trim(),
-            phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
-            phone_country_calling_code: phoneCountryCallingCode,
-            phone_national_number: phoneNationalNumber,
-            phone_e164: phoneE164,
-          },
         },
       });
 
@@ -1102,10 +1134,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       if (data.session) {
-        return 'Cuenta creada. Ya puedes empezar a usar Happy Circles.';
+        return 'Cuenta creada. Ahora termina tu setup.';
       }
 
-      return 'Cuenta creada. Revisa tu correo para confirmar y luego entra con tu clave.';
+      return 'Cuenta creada. Revisa tu correo para confirmar y luego sigue con tu setup.';
     } catch (error) {
       return formatValidationMessage(error);
     }
@@ -1310,6 +1342,41 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     await removeStoredItem(NOTIFICATIONS_KEY);
+  }, []);
+
+  const requestContactsPermission = useCallback(async () => {
+    const nextStatus = await requestContactsPermissionStatus();
+    setContactsPermissionStatus(nextStatus);
+
+    if (nextStatus === 'granted') {
+      return 'Contactos activados.';
+    }
+
+    if (nextStatus === 'unavailable') {
+      return 'Contactos no disponibles en este entorno.';
+    }
+
+    return 'Puedes seguir sin contactos por ahora.';
+  }, []);
+
+  const requestNotificationsPermission = useCallback(async () => {
+    const nextStatus = await requestLocalNotificationPermissionStatus();
+    setNotificationsPermissionStatus(nextStatus);
+
+    if (nextStatus !== 'granted') {
+      await removeStoredItem(NOTIFICATIONS_KEY);
+      setNotificationsEnabledState(false);
+
+      if (nextStatus === 'unavailable') {
+        return 'Notificaciones no disponibles en este entorno.';
+      }
+
+      return 'Puedes seguir sin notificaciones por ahora.';
+    }
+
+    await setStoredItem(NOTIFICATIONS_KEY, 'true');
+    setNotificationsEnabledState(true);
+    return 'Recordatorios activados.';
   }, []);
 
   const completeProfile = useCallback(
@@ -1586,6 +1653,33 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [biometricLabel, currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
   );
 
+  const setupState = useMemo<SetupState>(() => {
+    if (!profile) {
+      return {
+        ...EMPTY_SETUP_STATE,
+        contactsPermissionStatus,
+        notificationsPermissionStatus,
+      };
+    }
+
+    const pendingRequiredSteps = derivePendingRequiredSetupSteps(profile);
+
+    return {
+      requiredComplete: pendingRequiredSteps.length === 0,
+      pendingRequiredSteps,
+      securityPending: deviceTrustState !== 'trusted',
+      biometricsEligible: biometricAvailable && deviceTrustState === 'trusted',
+      contactsPermissionStatus,
+      notificationsPermissionStatus,
+    };
+  }, [
+    biometricAvailable,
+    contactsPermissionStatus,
+    deviceTrustState,
+    notificationsPermissionStatus,
+    profile,
+  ]);
+
   const value = useMemo<SessionContextValue>(
     () => ({
       authMode,
@@ -1596,6 +1690,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       profile,
       linkedMethods,
       profileCompletionState,
+      setupState,
       deviceTrustState,
       trustedDevices,
       currentDeviceId,
@@ -1611,7 +1706,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         status === 'signed_in_untrusted',
       isLocked: status === 'signed_in_locked',
       isTrustedDevice: deviceTrustState === 'trusted',
-      requiresProfileCompletion: profileCompletionState === 'incomplete',
+      requiresProfileCompletion: !setupState.requiredComplete,
       requestPasswordReset,
       updatePassword,
       signInWithPassword,
@@ -1631,6 +1726,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       stepUpAuth,
       setBiometricsEnabled,
       setNotificationsEnabled,
+      requestContactsPermission,
+      requestNotificationsPermission,
     }),
     [
       attachEmailPassword,
@@ -1640,6 +1737,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       biometricLabel,
       biometricsEnabled,
       completeProfile,
+      contactsPermissionStatus,
       currentDeviceId,
       deviceTrustState,
       appleSignInAvailable,
@@ -1648,15 +1746,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
       linkedMethods,
       lock,
       notificationsEnabled,
+      notificationsPermissionStatus,
       profile,
       profileCompletionState,
       requestPasswordReset,
+      requestContactsPermission,
+      requestNotificationsPermission,
       refreshAccountState,
       registerAccount,
       revokeTrustedDevice,
       session,
       setBiometricsEnabled,
       setNotificationsEnabled,
+      setupState,
       signInWithApple,
       signInWithGoogle,
       signInWithPassword,

@@ -2135,7 +2135,7 @@ function useSensitiveMutationGuard() {
     }
 
     if (session.deviceTrustState !== 'trusted') {
-      throw new Error('Este dispositivo aun no es confiable. Validalo primero desde Perfil.');
+      throw new Error('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
     }
 
     const result = await session.stepUpAuth();

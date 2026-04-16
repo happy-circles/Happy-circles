@@ -12,6 +12,8 @@ interface NotificationSupport {
   readonly reason?: string;
 }
 
+export type NotificationPermissionStatus = 'unavailable' | 'undetermined' | 'denied' | 'granted';
+
 function isExpoGo(): boolean {
   return Constants.appOwnership === 'expo';
 }
@@ -43,6 +45,30 @@ async function loadNotificationsModule(): Promise<NotificationsModule | null> {
   return import('expo-notifications');
 }
 
+function mapNotificationPermissionStatus(
+  permission: {
+    readonly granted: boolean;
+    readonly canAskAgain?: boolean;
+    readonly ios?: {
+      readonly status?: number;
+    };
+  },
+  Notifications: NotificationsModule,
+): NotificationPermissionStatus {
+  if (
+    permission.granted ||
+    permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+  ) {
+    return 'granted';
+  }
+
+  if (permission.canAskAgain === false) {
+    return 'denied';
+  }
+
+  return 'undetermined';
+}
+
 export async function configureNotifications(): Promise<void> {
   if (configured) {
     return;
@@ -65,19 +91,36 @@ export async function configureNotifications(): Promise<void> {
   configured = true;
 }
 
-export async function requestLocalNotificationPermission(): Promise<boolean> {
+export async function getLocalNotificationPermissionStatus(): Promise<NotificationPermissionStatus> {
   const Notifications = await loadNotificationsModule();
   if (!Notifications) {
-    return false;
+    return 'unavailable';
   }
 
   const current = await Notifications.getPermissionsAsync();
-  if (current.granted || current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
-    return true;
+  return mapNotificationPermissionStatus(current, Notifications);
+}
+
+export async function requestLocalNotificationPermissionStatus(): Promise<NotificationPermissionStatus> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return 'unavailable';
+  }
+
+  const current = await Notifications.getPermissionsAsync();
+  if (
+    current.granted ||
+    current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+  ) {
+    return 'granted';
   }
 
   const next = await Notifications.requestPermissionsAsync();
-  return next.granted || next.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  return mapNotificationPermissionStatus(next, Notifications);
+}
+
+export async function requestLocalNotificationPermission(): Promise<boolean> {
+  return (await requestLocalNotificationPermissionStatus()) === 'granted';
 }
 
 export async function cancelScheduledReminders(): Promise<void> {

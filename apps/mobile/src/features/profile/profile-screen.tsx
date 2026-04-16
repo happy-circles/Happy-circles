@@ -13,10 +13,9 @@ import { ScreenShell } from '@/components/screen-shell';
 import { useAppSnapshot, useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import {
   cancelScheduledReminders,
-  getNotificationSupport,
-  requestLocalNotificationPermission,
   scheduleDailyPendingReminder,
 } from '@/lib/notifications';
+import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
@@ -90,17 +89,8 @@ export function ProfileScreen() {
     session.linkedMethods.hasEmailPassword,
     session.linkedMethods.hasGoogle,
   ]);
-  const nextCompleteProfileFocus = !session.profile?.avatar_path
-    ? 'avatar'
-    : !session.profile?.phone_e164
-      ? 'phone'
-      : 'fullName';
-  const completeProfileHref = {
-    pathname: '/complete-profile',
-    params: {
-      focus: nextCompleteProfileFocus,
-    },
-  } as Href;
+  const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'security';
+  const completeProfileHref = buildSetupAccountHref(setupEntryStep);
 
   const clearFocusTimers = useCallback(() => {
     if (pendingScrollTimeoutRef.current) {
@@ -269,25 +259,18 @@ export function ProfileScreen() {
 
   async function handleNotifications(nextValue: boolean) {
     if (nextValue) {
-      const support = getNotificationSupport();
-      if (!support.supported) {
-        setMessage(support.reason ?? 'Notificaciones no disponibles en este entorno.');
+      const result = await session.requestNotificationsPermission();
+      if (result !== 'Recordatorios activados.') {
+        setMessage(result);
         return;
       }
 
-      const granted = await requestLocalNotificationPermission();
-      if (!granted) {
-        setMessage('Notificaciones no disponibles. Revisa permisos del sistema.');
-        return;
-      }
-
-      await session.setNotificationsEnabled(true);
       await cancelScheduledReminders();
       if (pendingCount > 0) {
         await scheduleDailyPendingReminder();
       }
 
-      setMessage('Recordatorios diarios activados.');
+      setMessage('Recordatorios activados.');
       return;
     }
 
@@ -388,15 +371,15 @@ export function ProfileScreen() {
 
       {message ? <MessageBanner message={message} /> : null}
 
-      {session.profileCompletionState === 'incomplete' ? (
+      {!session.setupState.requiredComplete ? (
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Perfil minimo pendiente</Text>
+          <Text style={styles.panelTitle}>Setup pendiente</Text>
           <Text style={styles.panelBody}>
-            Antes de mover dinero necesitamos nombre usable y celular unico.
+            Antes de usar todo Happy Circles te faltan algunos pasos basicos del setup.
           </Text>
           <Link href={completeProfileHref} asChild>
             <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
-              <Text style={styles.inlineButtonText}>Completar ahora</Text>
+              <Text style={styles.inlineButtonText}>Abrir setup</Text>
             </Pressable>
           </Link>
         </View>
@@ -552,7 +535,7 @@ export function ProfileScreen() {
             <Text style={styles.rowTitle}>Celular</Text>
             <Text style={styles.rowSubtitle}>{phoneLabel}</Text>
           </View>
-          <Link href={{ pathname: '/complete-profile', params: { focus: 'phone' } } as Href} asChild>
+          <Link href={buildSetupAccountHref('profile') as Href} asChild>
             <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
               <Text style={styles.inlineButtonText}>{session.profile?.phone_e164 ? 'Editar' : 'Completar'}</Text>
             </Pressable>

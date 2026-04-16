@@ -240,6 +240,7 @@ export function RegisterFlowScreen() {
         showBlockedActionAlert(nextMessage, router, {
           hasEmailPassword: session.linkedMethods.hasEmailPassword,
           profile: {
+            displayName: session.profile?.display_name ?? null,
             avatarPath: session.profile?.avatar_path ?? null,
             phoneE164: session.profile?.phone_e164 ?? null,
           },

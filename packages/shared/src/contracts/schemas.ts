@@ -131,11 +131,7 @@ export const passwordResetRequestSchema = z.object({
 
 export const registrationSchema = emailPasswordSignInSchema
   .extend({
-    fullName: z.string().trim().min(3).max(120),
     confirmPassword: z.string().min(8).max(72),
-    phoneCountryIso2: z.string().trim().length(2),
-    phoneCountryCallingCode: z.string().trim().min(2).max(6),
-    phoneNationalNumber: z.string().trim().min(6).max(20),
   })
   .superRefine((value, context) => {
     if (value.password !== value.confirmPassword) {

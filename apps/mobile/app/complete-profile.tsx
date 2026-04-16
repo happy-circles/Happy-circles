@@ -1,5 +1,10 @@
-import { CompleteProfileScreen } from '@/features/profile/complete-profile-screen';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+
+import { buildSetupAccountHref, resolveLegacyCompleteProfileStep } from '@/lib/setup-account';
 
 export default function CompleteProfileRoute() {
-  return <CompleteProfileScreen />;
+  const params = useLocalSearchParams<{ focus?: string | string[] }>();
+  const rawFocus = Array.isArray(params.focus) ? params.focus[0] : params.focus;
+
+  return <Redirect href={buildSetupAccountHref(resolveLegacyCompleteProfileStep(rawFocus ?? null))} />;
 }
