@@ -130,7 +130,7 @@ begin
   insert into public.app_settings (key, value_json, updated_at)
   values
     ('currency', '{"code":"COP"}'::jsonb, v_now),
-    ('app_web_origin', jsonb_build_object('value', 'https://app.happycircles.com'), v_now),
+    ('app_web_origin', jsonb_build_object('value', 'https://app.happy-circles.com'), v_now),
     (
       'mobile_min_supported_version',
       jsonb_build_object(

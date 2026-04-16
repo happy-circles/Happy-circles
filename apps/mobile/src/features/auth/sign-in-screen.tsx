@@ -25,7 +25,7 @@ import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
-type SignInScreenMode = 'sign-in' | 'register';
+type SignInScreenMode = 'sign-in' | 'register' | 'recover';
 
 export interface SignInScreenProps {
   readonly initialMode?: SignInScreenMode | null;
@@ -54,6 +54,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
   const isRegister = activeMode === 'register';
+  const isRecovery = activeMode === 'recover';
   const brandStateStyle = keyboardVisible
     ? styles.brandWrapKeyboard
     : activeMode
@@ -145,10 +146,12 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
             phoneCountryCallingCode: selectedCountry.callingCode,
             phoneNationalNumber,
           })
-        : await session.signInWithPassword({
-            email,
-            password,
-          });
+        : isRecovery
+          ? await session.requestPasswordReset(email)
+          : await session.signInWithPassword({
+              email,
+              password,
+            });
 
       setMessage(result);
     } finally {
@@ -240,37 +243,66 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
               </Pressable>
             </View>
 
-            <View style={activeMode ? null : styles.idleFootSpacer} />
-
-            <View style={styles.socialActions}>
+            <View style={styles.inlineActions}>
               <Pressable
-                onPress={() => void handleGoogleSignIn()}
+                onPress={() => switchMode('recover')}
                 style={({ pressed }) => [
-                  styles.googleButton,
-                  pressed ? styles.googleButtonPressed : null,
+                  styles.inlineActionButton,
+                  activeMode === 'recover' ? styles.inlineActionButtonActive : null,
+                  pressed ? styles.inlineActionButtonPressed : null,
                 ]}
               >
-                <Ionicons color={theme.colors.text} name="logo-google" size={18} />
-                <Text style={styles.googleButtonLabel}>
-                  {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
+                <Text
+                  style={[
+                    styles.inlineActionLabel,
+                    activeMode === 'recover' ? styles.inlineActionLabelActive : null,
+                  ]}
+                >
+                  Olvide mi contrasena
                 </Text>
               </Pressable>
-
-              {session.appleSignInAvailable ? (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                  cornerRadius={18}
-                  onPress={() => void handleAppleButtonPress()}
-                  style={styles.appleButton}
-                />
-              ) : null}
             </View>
+
+            <View style={activeMode ? null : styles.idleFootSpacer} />
+
+            {!isRecovery ? (
+              <View style={styles.socialActions}>
+                <Pressable
+                  onPress={() => void handleGoogleSignIn()}
+                  style={({ pressed }) => [
+                    styles.googleButton,
+                    pressed ? styles.googleButtonPressed : null,
+                  ]}
+                >
+                  <Ionicons color={theme.colors.text} name="logo-google" size={18} />
+                  <Text style={styles.googleButtonLabel}>
+                    {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
+                  </Text>
+                </Pressable>
+
+                {session.appleSignInAvailable ? (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                    cornerRadius={18}
+                    onPress={() => void handleAppleButtonPress()}
+                    style={styles.appleButton}
+                  />
+                ) : null}
+              </View>
+            ) : null}
 
             {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
             {activeMode ? (
               <View style={styles.formArea}>
+                {isRecovery ? (
+                  <MessageBanner
+                    message="Escribe tu correo y te enviaremos un enlace para definir una nueva clave."
+                    tone="neutral"
+                  />
+                ) : null}
+
                 <View onLayout={handleFieldLayout('email')}>
                   <FieldBlock label="Correo">
                     <AppTextInput
@@ -288,22 +320,24 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   </FieldBlock>
                 </View>
 
-                <View onLayout={handleFieldLayout('password')}>
-                  <FieldBlock label="Contrasena">
-                    <AppTextInput
-                      autoCapitalize="none"
-                      autoComplete="password"
-                      chrome="glass"
-                      onChangeText={setPassword}
-                      onFocus={() => focusField('password')}
-                      placeholder="Tu contrasena"
-                      placeholderTextColor={theme.colors.muted}
-                      secureTextEntry
-                      style={styles.input}
-                      value={password}
-                    />
-                  </FieldBlock>
-                </View>
+                {!isRecovery ? (
+                  <View onLayout={handleFieldLayout('password')}>
+                    <FieldBlock label="Contrasena">
+                      <AppTextInput
+                        autoCapitalize="none"
+                        autoComplete="password"
+                        chrome="glass"
+                        onChangeText={setPassword}
+                        onFocus={() => focusField('password')}
+                        placeholder="Tu contrasena"
+                        placeholderTextColor={theme.colors.muted}
+                        secureTextEntry
+                        style={styles.input}
+                        value={password}
+                      />
+                    </FieldBlock>
+                  </View>
+                ) : null}
 
                 {isRegister ? (
                   <View style={styles.extraGlass}>
@@ -380,9 +414,26 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                 ) : null}
 
                 <PrimaryAction
-                  label={busy ? 'Procesando...' : isRegister ? 'Crear cuenta' : 'Ingresar'}
+                  label={
+                    busy
+                      ? 'Procesando...'
+                      : isRegister
+                        ? 'Crear cuenta'
+                        : isRecovery
+                          ? 'Enviar enlace'
+                          : 'Ingresar'
+                  }
                   onPress={busy ? undefined : () => void handleSubmit()}
                 />
+
+                {isRecovery ? (
+                  <PrimaryAction
+                    compact
+                    href="/sign-in?mode=sign-in"
+                    label="Volver a ingresar"
+                    variant="ghost"
+                  />
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -455,6 +506,29 @@ const styles = StyleSheet.create({
   },
   tabBarIdle: {
     marginTop: theme.spacing.sm,
+  },
+  inlineActions: {
+    alignItems: 'flex-end',
+    marginTop: -4,
+  },
+  inlineActionButton: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  inlineActionButtonActive: {
+    backgroundColor: theme.colors.primaryGhost,
+  },
+  inlineActionButtonPressed: {
+    opacity: 0.84,
+  },
+  inlineActionLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  inlineActionLabelActive: {
+    color: theme.colors.primary,
   },
   tabButton: {
     alignItems: 'center',

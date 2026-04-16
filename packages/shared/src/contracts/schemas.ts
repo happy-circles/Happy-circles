@@ -125,6 +125,10 @@ export const emailPasswordSignInSchema = z.object({
   password: z.string().min(8).max(72),
 });
 
+export const passwordResetRequestSchema = z.object({
+  email: z.string().trim().email(),
+});
+
 export const registrationSchema = emailPasswordSignInSchema
   .extend({
     fullName: z.string().trim().min(3).max(120),
@@ -151,6 +155,21 @@ export const completeProfileSchema = z.object({
 });
 
 export const attachEmailPasswordSchema = z
+  .object({
+    password: z.string().min(8).max(72),
+    confirmPassword: z.string().min(8).max(72),
+  })
+  .superRefine((value, context) => {
+    if (value.password !== value.confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Las claves no coinciden.',
+        path: ['confirmPassword'],
+      });
+    }
+  });
+
+export const passwordResetSchema = z
   .object({
     password: z.string().min(8).max(72),
     confirmPassword: z.string().min(8).max(72),

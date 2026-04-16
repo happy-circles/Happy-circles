@@ -1,11 +1,11 @@
 import type { ExpoConfig } from 'expo/config';
 
-const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happycircles.com';
+const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
 const appWebHost = (() => {
   try {
     return new URL(appWebOrigin).host;
   } catch {
-    return 'app.happycircles.com';
+    return 'app.happy-circles.com';
   }
 })();
 

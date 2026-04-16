@@ -17,6 +17,7 @@ The core outcome is debt-circle closure. Users negotiate bilateral debts, confir
 - `supabase`: SQL migrations, Edge Functions, and seed/test fixtures.
 - `docs/adr`: architectural decision records.
 - `docs/authentication-roadmap.md`: auth state, pending setup, and identity strategy.
+- `docs/auth-email-setup.md`: Supabase + Resend + domain setup for auth email delivery.
 
 ## Financial design
 

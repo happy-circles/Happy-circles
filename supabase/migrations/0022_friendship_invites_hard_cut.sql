@@ -370,7 +370,7 @@ insert into public.app_settings (key, value_json)
 values
   (
     'app_web_origin',
-    jsonb_build_object('value', 'https://app.happycircles.com')
+    jsonb_build_object('value', 'https://app.happy-circles.com')
   ),
   (
     'mobile_min_supported_version',

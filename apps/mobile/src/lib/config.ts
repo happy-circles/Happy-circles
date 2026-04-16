@@ -18,5 +18,5 @@ export const appConfig = {
   appWebOrigin:
     extra?.appWebOrigin ??
     process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ??
-    'https://app.happycircles.com',
+    'https://app.happy-circles.com',
 };

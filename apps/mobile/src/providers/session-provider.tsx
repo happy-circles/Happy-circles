@@ -17,6 +17,8 @@ import {
   attachEmailPasswordSchema,
   completeProfileSchema,
   emailPasswordSignInSchema,
+  passwordResetRequestSchema,
+  passwordResetSchema,
   registrationSchema,
   type Database,
 } from '@happy-circles/shared';
@@ -95,6 +97,11 @@ interface AttachEmailPasswordInput {
   readonly confirmPassword: string;
 }
 
+interface PasswordResetInput {
+  readonly password: string;
+  readonly confirmPassword: string;
+}
+
 interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
@@ -121,6 +128,8 @@ interface SessionContextValue {
   readonly isLocked: boolean;
   readonly isTrustedDevice: boolean;
   readonly requiresProfileCompletion: boolean;
+  requestPasswordReset(email: string): Promise<string>;
+  updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
   signInWithGoogle(): Promise<string>;
@@ -1103,6 +1112,53 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return result.message;
   }, [performAppleAuth]);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    try {
+      const parsed = passwordResetRequestSchema.parse({ email });
+      const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      const redirectTo = Linking.createURL('/reset-password');
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo,
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      return 'Si el correo existe, enviamos un enlace para restablecer la clave.';
+    } catch (error) {
+      return formatValidationMessage(error);
+    }
+  }, []);
+
+  const updatePassword = useCallback(async (input: PasswordResetInput) => {
+    try {
+      const parsed = passwordResetSchema.parse(input);
+
+      if (!supabase || !sessionRef.current) {
+        return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: parsed.password,
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      await refreshAccountState();
+      return 'Clave actualizada.';
+    } catch (error) {
+      return formatValidationMessage(error);
+    }
+  }, [refreshAccountState]);
+
   const signOut = useCallback(async () => {
     if (supabase) {
       await supabase.auth.signOut();
@@ -1548,6 +1604,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       isLocked: status === 'signed_in_locked',
       isTrustedDevice: deviceTrustState === 'trusted',
       requiresProfileCompletion: profileCompletionState === 'incomplete',
+      requestPasswordReset,
+      updatePassword,
       signInWithPassword,
       registerAccount,
       signInWithGoogle,
@@ -1584,6 +1642,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       notificationsEnabled,
       profile,
       profileCompletionState,
+      requestPasswordReset,
       refreshAccountState,
       registerAccount,
       revokeTrustedDevice,
@@ -1595,6 +1654,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       signInWithPassword,
       signOut,
       status,
+      updatePassword,
       stepUpAuth,
       stepUpFreshUntil,
       trustCurrentDevice,

@@ -10,6 +10,8 @@ export default function SignInRoute() {
       ? 'sign-in'
       : rawMode === 'register' || rawMode === 'create-account'
         ? 'register'
+        : rawMode === 'recover' || rawMode === 'forgot-password'
+          ? 'recover'
         : null;
 
   return <SignInScreen initialMode={initialMode} />;

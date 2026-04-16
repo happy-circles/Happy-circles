@@ -8,6 +8,7 @@ The mobile app already has these auth flows wired in code:
 
 - Email + password sign-in
 - Email + password registration
+- Password reset request and in-app password update via recovery link
 - Google sign-in via Supabase OAuth
 - Apple sign-in for iOS via native Apple Authentication and `signInWithIdToken()`
 - Deep-link callback handling for Supabase auth redirects

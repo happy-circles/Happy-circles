@@ -307,9 +307,11 @@ function SessionRouteGuard() {
       const inAuthGroup = currentRootSegment === '(auth)';
       const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
       const isInviteLinkRoute = currentRootSegment === 'invite';
+      const isResetPasswordRoute = currentRootSegment === 'reset-password';
       const isPublicInviteRoute = isInviteLinkRoute;
       const isBasicReadableRoute =
         isCompleteProfileRoute ||
+        isResetPasswordRoute ||
         isPublicInviteRoute ||
         currentRootSegment === '(tabs)' ||
         currentRootSegment === 'activity' ||
@@ -318,7 +320,7 @@ function SessionRouteGuard() {
         currentRootSegment === 'settlements';
 
       if (status === 'signed_out') {
-        if (!inAuthGroup && !isPublicInviteRoute && !cancelled) {
+        if (!inAuthGroup && !isPublicInviteRoute && !isResetPasswordRoute && !cancelled) {
           router.replace('/sign-in');
         }
         return;
@@ -339,6 +341,10 @@ function SessionRouteGuard() {
         if (!cancelled) {
           router.replace(nextSignedInHref);
         }
+        return;
+      }
+
+      if (isResetPasswordRoute) {
         return;
       }
 
