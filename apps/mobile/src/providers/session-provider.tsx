@@ -31,6 +31,7 @@ import {
   authenticateWithBiometricsResult,
   type BiometricAuthResult,
 } from '@/lib/security';
+import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 
@@ -234,6 +235,13 @@ function formatSupabaseAuthErrorMessage(message: string): string {
     normalized.includes('over_email_send_rate_limit')
   ) {
     return 'Supabase bloqueo temporalmente el envio de correos por exceso de intentos. Espera antes de volver a probar o revisa los limites de Auth y tu proveedor SMTP.';
+  }
+
+  if (
+    normalized.includes('error sending recovery email') ||
+    normalized.includes('error sending confirmation email')
+  ) {
+    return 'Supabase no pudo enviar el correo. Revisa en Supabase que Email use el SMTP de Resend, que el remitente pertenezca a un dominio verificado y que las URLs permitidas incluyan happycircles://reset-password y happycircles://home.';
   }
 
   if (
@@ -1073,7 +1081,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Supabase no esta configurado en esta app.';
       }
 
-      const redirectTo = Linking.createURL('/home');
+      const redirectTo = buildEmailAuthRedirect('/home');
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: parsed.password,
@@ -1121,7 +1129,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Supabase no esta configurado en esta app.';
       }
 
-      const redirectTo = Linking.createURL('/reset-password');
+      const redirectTo = buildEmailAuthRedirect('/reset-password');
       const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo,
       });

@@ -6,12 +6,14 @@ declare
   v_internal jsonb;
   v_external_remote_share jsonb;
   v_external_remote_copy jsonb;
+  v_external_manual_review jsonb;
   v_external_qr_1 jsonb;
   v_external_qr_2 jsonb;
   v_external_remote_changed jsonb;
   v_cancelable jsonb;
   v_preview jsonb;
   v_claim jsonb;
+  v_manual_claim jsonb;
   v_review jsonb;
   v_cancel jsonb;
   v_delivery_count integer;
@@ -249,8 +251,22 @@ begin
     v_external_remote_share ->> 'deliveryToken'
   );
 
-  if (v_claim ->> 'status') <> 'pending_sender_review' then
-    raise exception 'expected pending_sender_review after external claim, got %', v_claim;
+  if (v_claim ->> 'status') <> 'accepted' then
+    raise exception 'expected accepted after exact phone match claim, got %', v_claim;
+  end if;
+
+  v_active_relationship := (v_claim ->> 'relationshipId')::uuid;
+  if v_active_relationship is null then
+    raise exception 'expected relationship id after auto-accept claim';
+  end if;
+
+  if not exists (
+    select 1
+    from public.relationships
+    where id = v_active_relationship
+      and status = 'active'
+  ) then
+    raise exception 'expected active relationship after auto-accept claim';
   end if;
 
   select count(*)
@@ -263,16 +279,36 @@ begin
     raise exception 'expected claim to revoke every other issued delivery';
   end if;
 
+  v_external_manual_review := public.create_external_friendship_invite(
+    v_user_felipe,
+    'verify-friendship-manual-review',
+    'remote',
+    'sql_verify_manual_review',
+    'Lina trabajo',
+    '+573001111104',
+    'work'
+  );
+
+  v_manual_claim := public.claim_external_friendship_invite(
+    v_user_gina,
+    'verify-friendship-manual-claim',
+    v_external_manual_review ->> 'deliveryToken'
+  );
+
+  if (v_manual_claim ->> 'status') <> 'pending_sender_review' then
+    raise exception 'expected pending_sender_review after mismatched phone claim, got %', v_manual_claim;
+  end if;
+
   v_review := public.review_external_friendship_invite(
-    v_user_elena,
+    v_user_felipe,
     'verify-friendship-review-approve',
-    (v_external_remote_share ->> 'inviteId')::uuid,
+    (v_external_manual_review ->> 'inviteId')::uuid,
     'approve'
   );
 
   v_active_relationship := (v_review ->> 'relationshipId')::uuid;
   if v_active_relationship is null then
-    raise exception 'expected relationship id after approving external invite';
+    raise exception 'expected relationship id after approving manual-review invite';
   end if;
 
   v_cancelable := public.create_external_friendship_invite(

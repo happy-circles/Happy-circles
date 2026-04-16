@@ -144,9 +144,13 @@ export function InviteLinkScreen() {
     setMessage(null);
 
     try {
-      await claimInvite.mutateAsync(deliveryToken);
+      const response = await claimInvite.mutateAsync(deliveryToken);
       await clearPendingInviteIntent();
-      setMessage('Reclamaste esta invitacion. Ahora la otra persona debe validar que si eres tu.');
+      setMessage(
+        response.status === 'accepted'
+          ? 'Conexion confirmada. La amistad ya quedo creada.'
+          : 'Reclamaste esta invitacion. Ahora falta la validacion final del otro lado.',
+      );
       await previewQuery.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo reclamar la invitacion.');
@@ -191,7 +195,7 @@ export function InviteLinkScreen() {
         </View>
       }
       largeTitle={false}
-      subtitle="El token solo abre el flujo. La amistad se crea despues del claim y la validacion final."
+      subtitle="El token abre la invitacion. Si tu celular coincide con el contacto esperado, la amistad puede quedar creada al reclamar; si no, pasa a validacion final."
       title="Invitacion de amistad"
     >
       {message ? <MessageBanner message={message} /> : null}
@@ -277,7 +281,7 @@ export function InviteLinkScreen() {
             <PrimaryAction
               label={busyAction === 'claim' ? 'Reclamando...' : 'Quiero conectar'}
               onPress={busyAction ? undefined : () => void handleClaim()}
-              subtitle="Todavia no crea la amistad; primero se valida en el otro lado."
+              subtitle="Si tu celular coincide con el contacto esperado, puede quedar lista de una vez."
             />
           ) : null}
 

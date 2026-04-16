@@ -1184,14 +1184,20 @@ function buildFriendshipInviteItems(input: {
       }
     } else {
       const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
+      const autoAcceptedByPhoneMatch =
+        invite.resolution_reason === 'claim_phone_match_auto_accepted' && invite.flow === 'external';
       title =
         invite.status === 'accepted'
           ? actorRole === 'sender'
             ? invite.flow === 'external'
-              ? `Confirmaste a ${claimantName}`
+              ? autoAcceptedByPhoneMatch
+                ? `${claimantName} entro con el telefono esperado`
+                : `Confirmaste a ${claimantName}`
               : `${targetName} acepto tu invitacion`
             : actorRole === 'claimant'
-              ? `${inviterName} confirmo esta conexion`
+              ? autoAcceptedByPhoneMatch
+                ? `Tu telefono coincidio y la conexion quedo creada`
+                : `${inviterName} confirmo esta conexion`
               : `Aceptaste la invitacion de ${inviterName}`
           : invite.status === 'rejected'
             ? actorRole === 'sender'

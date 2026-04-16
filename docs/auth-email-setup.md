@@ -93,6 +93,8 @@ That means `supabase.auth.resetPasswordForEmail()` now points users back into:
 
 - `happycircles://reset-password`
 
+For native email auth flows, the app now forces the stable custom scheme instead of relying on Expo runtime URLs. That keeps the Supabase allow-list fixed for password recovery and email confirmation.
+
 ## Verification checklist
 
 1. Request password reset from the sign-in screen.
