@@ -18,6 +18,8 @@ The core outcome is debt-circle closure. Users negotiate bilateral debts, confir
 - `docs/adr`: architectural decision records.
 - `docs/authentication-roadmap.md`: auth state, pending setup, and identity strategy.
 - `docs/auth-email-setup.md`: Supabase + Resend + domain setup for auth email delivery.
+- `docs/figma/app-house-blueprint.md`: APP-HOUSE contract, Figma topology, foundations, components, screens, and prototype map.
+- `docs/figma/system-flows.md`: Mermaid system flows that back the Figma-first UX process.
 
 ## Financial design
 
