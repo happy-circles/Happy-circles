@@ -1,12 +1,21 @@
 import * as Contacts from 'expo-contacts';
 import { Platform } from 'react-native';
 
-export type ContactsPermissionStatus = 'unavailable' | 'undetermined' | 'denied' | 'granted';
+export type ContactsPermissionStatus =
+  | 'unavailable'
+  | 'undetermined'
+  | 'denied'
+  | 'limited'
+  | 'granted';
 
 function mapContactsPermissionStatus(
-  permission: Pick<Contacts.PermissionResponse, 'granted' | 'canAskAgain'>,
+  permission: Pick<Contacts.ContactsPermissionResponse, 'granted' | 'canAskAgain' | 'accessPrivileges'>,
 ): ContactsPermissionStatus {
   if (permission.granted) {
+    if (permission.accessPrivileges === 'limited') {
+      return 'limited';
+    }
+
     return 'granted';
   }
 
@@ -38,4 +47,16 @@ export async function requestContactsPermissionStatus(): Promise<ContactsPermiss
 
   const next = await Contacts.requestPermissionsAsync();
   return mapContactsPermissionStatus(next);
+}
+
+export function canReadContactsPermissionStatus(status: ContactsPermissionStatus): boolean {
+  return status === 'granted' || status === 'limited';
+}
+
+export async function presentLimitedContactsAccessPicker(): Promise<readonly string[]> {
+  if (Platform.OS === 'web' || typeof Contacts.presentAccessPickerAsync !== 'function') {
+    return [];
+  }
+
+  return Contacts.presentAccessPickerAsync();
 }

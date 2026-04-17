@@ -8,7 +8,7 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [studio]
 enabled = true
@@ -40,6 +40,24 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.create-internal-friendship-invite]
+verify_jwt = false
+
+[functions.create-account-invite]
+verify_jwt = false
+
+[functions.create-people-outreach]
+verify_jwt = false
+
+[functions.resolve-people-targets]
+verify_jwt = false
+
+[functions.get-account-invite-preview-public]
+verify_jwt = false
+
+[functions.activate-account-from-invite]
+verify_jwt = false
+
+[functions.review-account-invite]
 verify_jwt = false
 
 [functions.get-friendship-invite-preview]

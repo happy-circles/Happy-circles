@@ -1480,6 +1480,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       return 'Contactos activados.';
     }
 
+    if (nextStatus === 'limited') {
+      return 'El sistema compartio solo algunos contactos. Puedes ampliar el acceso despues desde Personas.';
+    }
+
     if (nextStatus === 'unavailable') {
       return 'Contactos no disponibles en este entorno.';
     }

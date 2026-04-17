@@ -13,7 +13,9 @@ import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import {
+  canReadContactsPermissionStatus,
   getContactsPermissionStatus,
+  presentLimitedContactsAccessPicker,
   requestContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
@@ -236,41 +238,31 @@ function buildContactPhoneOptions(contact: Contacts.Contact | Contacts.ExistingC
 }
 
 async function readContactsFromDevice(): Promise<readonly ContactCandidate[]> {
+  const response = await Contacts.getContactsAsync({
+    fields: [
+      Contacts.Fields.Name,
+      Contacts.Fields.FirstName,
+      Contacts.Fields.MiddleName,
+      Contacts.Fields.LastName,
+      Contacts.Fields.PhoneNumbers,
+    ],
+  });
+
   const records: ContactCandidate[] = [];
-  let pageOffset = 0;
-  let hasNextPage = true;
-
-  while (hasNextPage) {
-    const response = await Contacts.getContactsAsync({
-      fields: [
-        Contacts.Fields.Name,
-        Contacts.Fields.FirstName,
-        Contacts.Fields.MiddleName,
-        Contacts.Fields.LastName,
-        Contacts.Fields.PhoneNumbers,
-      ],
-      pageOffset,
-      pageSize: 250,
-    });
-
-    for (const contact of response.data) {
-      const alias = resolveContactName(contact);
-      const phoneOptions = buildContactPhoneOptions(contact);
-      if (phoneOptions.length === 0) {
-        continue;
-      }
-
-      records.push({
-        contactId: contact.id,
-        alias,
-        phoneOptions,
-        primaryPhone: phoneOptions[0],
-        searchKey: `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase('es-CO'),
-      });
+  for (const contact of response.data) {
+    const alias = resolveContactName(contact);
+    const phoneOptions = buildContactPhoneOptions(contact);
+    if (phoneOptions.length === 0) {
+      continue;
     }
 
-    hasNextPage = Boolean(response.hasNextPage && response.data.length > 0);
-    pageOffset += response.data.length;
+    records.push({
+      contactId: contact.id,
+      alias,
+      phoneOptions,
+      primaryPhone: phoneOptions[0],
+      searchKey: `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase('es-CO'),
+    });
   }
 
   return records.sort((left, right) => left.alias.localeCompare(right.alias, 'es-CO'));
@@ -398,6 +390,23 @@ export function InvitePersonScreen() {
     () => filteredContacts.slice(0, searchValue.trim().length > 0 ? 60 : 28),
     [filteredContacts, searchValue],
   );
+  const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
+  const contactsStatusLabel =
+    contactsPermissionStatus === 'granted'
+      ? 'Badges activos'
+      : contactsPermissionStatus === 'limited'
+        ? 'Agenda parcial'
+        : 'Sin agenda todavia';
+  const contactsStatusTone =
+    contactsPermissionStatus === 'granted'
+      ? 'success'
+      : contactsPermissionStatus === 'limited'
+        ? 'warning'
+        : 'warning';
+  const contactsHelperMessage =
+    contactsPermissionStatus === 'limited'
+      ? 'Tu telefono solo compartio los contactos seleccionados. Si quieres ver mas, amplia el acceso desde aqui.'
+      : 'Verde significa que ya existe una cuenta activa en Happy Circles. Naranja significa que todavia necesita acceso.';
 
   const manualPhoneE164 = useMemo(() => buildManualPhoneE164(manualPhone), [manualPhone]);
 
@@ -427,7 +436,7 @@ export function InvitePersonScreen() {
       const nextStatus = await getContactsPermissionStatus();
       setContactsPermissionStatus(nextStatus);
 
-      if (nextStatus !== 'granted') {
+      if (!canReadContactsPermissionStatus(nextStatus)) {
         setContacts([]);
         return;
       }
@@ -446,7 +455,7 @@ export function InvitePersonScreen() {
   }, [loadContacts]);
 
   useEffect(() => {
-    if (contactsPermissionStatus !== 'granted' || displayedContacts.length === 0) {
+    if (!canReadContacts || displayedContacts.length === 0) {
       return;
     }
 
@@ -471,7 +480,7 @@ export function InvitePersonScreen() {
         setMessage(error instanceof Error ? error.message : 'No se pudo revisar esta parte de tu agenda.');
       });
   }, [
-    contactsPermissionStatus,
+    canReadContacts,
     displayedContacts,
     mergeTargetResolutions,
     resolvePeopleTargets,
@@ -490,7 +499,7 @@ export function InvitePersonScreen() {
       const nextStatus = await requestContactsPermissionStatus();
       setContactsPermissionStatus(nextStatus);
 
-      if (nextStatus !== 'granted') {
+      if (!canReadContactsPermissionStatus(nextStatus)) {
         setContacts([]);
         setMessage('Puedes seguir invitando por celular, aunque no usemos tu agenda todavia.');
         return;
@@ -498,9 +507,48 @@ export function InvitePersonScreen() {
 
       const nextContacts = await readContactsFromDevice();
       setContacts(nextContacts);
-      setMessage('Tu agenda ya quedo lista para revisar quien ya esta en Happy Circles.');
+      setMessage(
+        nextStatus === 'limited'
+          ? `Tu telefono compartio ${nextContacts.length} contactos con numero. Si quieres ver mas, amplia el acceso.`
+          : 'Tu agenda ya quedo lista para revisar quien ya esta en Happy Circles.',
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleExpandLimitedContactsAccess() {
+    if (busyKey || contactsPermissionStatus !== 'limited') {
+      return;
+    }
+
+    setBusyKey('expand-contacts');
+    setMessage(null);
+
+    try {
+      await presentLimitedContactsAccessPicker();
+      const nextStatus = await getContactsPermissionStatus();
+      setContactsPermissionStatus(nextStatus);
+
+      if (!canReadContactsPermissionStatus(nextStatus)) {
+        setContacts([]);
+        setMessage('La agenda dejo de estar disponible. Puedes seguir invitando por celular.');
+        return;
+      }
+
+      const nextContacts = await readContactsFromDevice();
+      setContacts(nextContacts);
+      setMessage(
+        nextStatus === 'limited'
+          ? `Seguimos con acceso parcial. Ahora vemos ${nextContacts.length} contactos con numero.`
+          : `Listo. Ahora vemos ${nextContacts.length} contactos con numero en tu agenda.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'No se pudo ampliar el acceso a tus contactos.',
+      );
     } finally {
       setBusyKey(null);
     }
@@ -798,19 +846,21 @@ export function InvitePersonScreen() {
       <SurfaceCard padding="md" variant="elevated">
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tu agenda</Text>
-          {contactsPermissionStatus === 'granted' ? (
-            <StatusChip label="Badges activos" tone="success" />
-          ) : (
-            <StatusChip label="Sin agenda todavia" tone="warning" />
-          )}
+          <StatusChip label={contactsStatusLabel} tone={contactsStatusTone} />
         </View>
 
-        <Text style={styles.helper}>
-          Verde significa que ya existe una cuenta activa en Happy Circles. Naranja significa que todavia necesita acceso.
-        </Text>
+        <Text style={styles.helper}>{contactsHelperMessage}</Text>
 
-        {contactsPermissionStatus === 'granted' ? (
+        {canReadContacts ? (
           <View style={styles.stack}>
+            {contactsPermissionStatus === 'limited' ? (
+              <PrimaryAction
+                label={busyKey === 'expand-contacts' ? 'Abriendo agenda...' : 'Ver mas contactos'}
+                onPress={busyKey ? undefined : () => void handleExpandLimitedContactsAccess()}
+                variant="secondary"
+              />
+            ) : null}
+
             <AppTextInput
               autoCapitalize="words"
               autoCorrect={false}
@@ -861,7 +911,9 @@ export function InvitePersonScreen() {
               <Text style={styles.helper}>
                 {searchValue.trim().length > 0
                   ? 'No encontramos contactos con ese filtro.'
-                  : 'No encontramos contactos con numeros utiles en esta agenda.'}
+                  : contactsPermissionStatus === 'limited'
+                    ? 'No encontramos mas contactos compartidos con numeros utiles. Amplia el acceso para ver el resto.'
+                    : 'No encontramos contactos con numeros utiles en esta agenda.'}
               </Text>
             )}
           </View>

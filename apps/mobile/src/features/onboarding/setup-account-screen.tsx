@@ -32,6 +32,10 @@ function formatPermissionLabel(status: string) {
     return 'Listo';
   }
 
+  if (status === 'limited') {
+    return 'Parcial';
+  }
+
   if (status === 'denied') {
     return 'Sin permiso';
   }
