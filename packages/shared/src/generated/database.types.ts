@@ -15,6 +15,10 @@ export interface Database {
           email: string;
           display_name: string;
           avatar_path: string | null;
+          account_access_state: string;
+          invited_by_user_id: string | null;
+          activated_via_account_invite_id: string | null;
+          activated_at: string | null;
           phone_country_iso2: string | null;
           phone_country_calling_code: string | null;
           phone_national_number: string | null;
@@ -76,6 +80,47 @@ export interface Database {
           claimed_at: string | null;
           claimed_by_user_id: string | null;
           revoked_at: string | null;
+        };
+      };
+      account_invites: {
+        Row: {
+          id: string;
+          inviter_user_id: string;
+          activated_user_id: string | null;
+          linked_relationship_id: string | null;
+          status: string;
+          resolution_actor: string | null;
+          resolution_reason: string | null;
+          intended_recipient_alias: string | null;
+          intended_recipient_phone_e164: string | null;
+          intended_recipient_phone_label: string | null;
+          source_context: string | null;
+          expires_at: string;
+          activated_at: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      account_invite_deliveries: {
+        Row: {
+          id: string;
+          invite_id: string;
+          token: string;
+          channel: string;
+          source_context: string | null;
+          status: string;
+          expires_at: string;
+          revoked_at: string | null;
+          first_opened_at: string | null;
+          last_opened_at: string | null;
+          open_count: number;
+          first_app_opened_at: string | null;
+          authenticated_user_id: string | null;
+          authenticated_at: string | null;
+          activation_completed_at: string | null;
+          created_at: string;
+          updated_at: string;
         };
       };
       relationships: {
@@ -311,6 +356,47 @@ export interface Database {
           claimed_at: string | null;
           claimed_by_user_id: string | null;
           revoked_at: string | null;
+        };
+      };
+      v_account_invites_live: {
+        Row: {
+          id: string;
+          inviter_user_id: string;
+          activated_user_id: string | null;
+          linked_relationship_id: string | null;
+          status: string;
+          resolution_actor: string | null;
+          resolution_reason: string | null;
+          intended_recipient_alias: string | null;
+          intended_recipient_phone_e164: string | null;
+          intended_recipient_phone_label: string | null;
+          source_context: string | null;
+          expires_at: string;
+          activated_at: string | null;
+          resolved_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      v_account_invite_deliveries_live: {
+        Row: {
+          id: string;
+          invite_id: string;
+          token: string;
+          channel: string;
+          source_context: string | null;
+          status: string;
+          expires_at: string;
+          revoked_at: string | null;
+          first_opened_at: string | null;
+          last_opened_at: string | null;
+          open_count: number;
+          first_app_opened_at: string | null;
+          authenticated_user_id: string | null;
+          authenticated_at: string | null;
+          activation_completed_at: string | null;
+          created_at: string;
+          updated_at: string;
         };
       };
     };

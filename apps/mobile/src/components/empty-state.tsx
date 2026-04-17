@@ -1,3 +1,4 @@
+import type { Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
@@ -9,7 +10,7 @@ export interface EmptyStateProps {
   readonly title: string;
   readonly description: string;
   readonly actionLabel?: string;
-  readonly actionHref?: string;
+  readonly actionHref?: Href;
 }
 
 export function EmptyState({ title, description, actionLabel, actionHref }: EmptyStateProps) {

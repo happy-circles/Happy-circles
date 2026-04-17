@@ -64,8 +64,34 @@ export type FriendshipInviteStatus = (typeof FRIENDSHIP_INVITE_STATUSES)[number]
 export const FRIENDSHIP_INVITE_CHANNELS = ['internal', 'remote', 'qr'] as const;
 export type FriendshipInviteChannel = (typeof FRIENDSHIP_INVITE_CHANNELS)[number];
 
+export const ACCOUNT_ACCESS_STATES = ['needs_invite', 'needs_activation', 'active'] as const;
+export type AccountAccessState = (typeof ACCOUNT_ACCESS_STATES)[number];
+
+export const ACCOUNT_INVITE_STATUSES = [
+  'pending_activation',
+  'pending_inviter_review',
+  'accepted',
+  'rejected',
+  'canceled',
+  'expired',
+] as const;
+export type AccountInviteStatus = (typeof ACCOUNT_INVITE_STATUSES)[number];
+
+export const ACCOUNT_INVITE_CHANNELS = ['remote', 'qr'] as const;
+export type AccountInviteChannel = (typeof ACCOUNT_INVITE_CHANNELS)[number];
+
+export const PEOPLE_TARGET_STATUSES = [
+  'active_user',
+  'pending_activation',
+  'no_account',
+  'already_related',
+  'pending_friendship',
+] as const;
+export type PeopleTargetStatus = (typeof PEOPLE_TARGET_STATUSES)[number];
+
 export const AUDIT_ENTITY_TYPES = [
   'friendship_invite',
+  'account_invite',
   'relationship',
   'financial_request',
   'ledger_transaction',
@@ -84,6 +110,17 @@ export const AUDIT_EVENT_NAMES = [
   'friendship_invite_rejected',
   'friendship_invite_canceled',
   'friendship_invite_expired',
+  'account_invite_created',
+  'account_invite_delivery_created',
+  'account_invite_opened',
+  'account_invite_authenticated',
+  'account_invite_activated',
+  'account_invite_sender_approved',
+  'account_invite_sender_rejected',
+  'account_invite_accepted',
+  'account_invite_rejected',
+  'account_invite_canceled',
+  'account_invite_expired',
   'financial_request_created',
   'financial_request_rejected',
   'financial_request_amended',

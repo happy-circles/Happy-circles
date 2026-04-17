@@ -291,7 +291,7 @@ function SessionOverlay() {
 }
 
 function SessionRouteGuard() {
-  const { profileCompletionState, setupState, status } = useSession();
+  const { accountAccessState, profileCompletionState, setupState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
   const router = useRouter();
   const segments = useSegments();
@@ -309,12 +309,24 @@ function SessionRouteGuard() {
       const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
       const isSetupAccountRoute = currentRootSegment === 'setup-account' || isCompleteProfileRoute;
       const isInviteLinkRoute = currentRootSegment === 'invite';
+      const isJoinRoute = currentRootSegment === 'join';
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
-      const isPublicInviteRoute = isInviteLinkRoute;
+      const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
 
       if (status === 'signed_out') {
         if (!inAuthGroup && !isPublicInviteRoute && !isResetPasswordRoute && !cancelled) {
           router.replace('/sign-in');
+        }
+        return;
+      }
+
+      const pendingIntent = await readPendingInviteIntent();
+      const inviteAwareHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : null;
+      const joinRootHref = '/join' as unknown as Href;
+
+      if (accountAccessState === 'needs_invite') {
+        if (!isJoinRoute && !inAuthGroup && !cancelled) {
+          router.replace((inviteAwareHref ?? joinRootHref) as Href);
         }
         return;
       }
@@ -331,9 +343,17 @@ function SessionRouteGuard() {
         return;
       }
 
-      const pendingIntent =
-        profileCompletionState === 'complete' ? await readPendingInviteIntent() : null;
-      const nextSignedInHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home';
+      if (accountAccessState === 'needs_activation' && !isJoinRoute && !isSetupAccountRoute && !cancelled) {
+        router.replace((inviteAwareHref ?? joinRootHref) as Href);
+        return;
+      }
+
+      const nextSignedInHref =
+        accountAccessState === 'active'
+          ? profileCompletionState === 'complete'
+            ? (inviteAwareHref ?? '/home')
+            : buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
+          : (inviteAwareHref ?? joinRootHref);
 
       if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
         if (!cancelled) {
@@ -349,9 +369,7 @@ function SessionRouteGuard() {
       if (inAuthGroup && !cancelled) {
         router.replace(
           (
-            !setupState.requiredComplete
-              ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
-              : nextSignedInHref
+            nextSignedInHref
           ) as Href,
         );
       }
@@ -362,7 +380,7 @@ function SessionRouteGuard() {
     return () => {
       cancelled = true;
     };
-  }, [profileCompletionState, rootNavigationState?.key, router, segments, setupState, status]);
+  }, [accountAccessState, profileCompletionState, rootNavigationState?.key, router, segments, setupState, status]);
 
   return null;
 }

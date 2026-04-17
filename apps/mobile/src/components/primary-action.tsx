@@ -9,7 +9,7 @@ export interface PrimaryActionProps {
   readonly label: string;
   readonly subtitle?: string;
   readonly onPress?: () => void;
-  readonly href?: string;
+  readonly href?: Href;
   readonly variant?: 'primary' | 'secondary' | 'ghost';
   readonly compact?: boolean;
   readonly loading?: boolean;
@@ -82,7 +82,7 @@ export function PrimaryAction({
 
   if (href) {
     return (
-      <Link href={href as Href} asChild>
+      <Link href={href} asChild>
         {content}
       </Link>
     );

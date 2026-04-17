@@ -17,10 +17,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text-input';
+import { AppAvatar } from '@/components/app-avatar';
 import { BrandMark } from '@/components/brand-mark';
 import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { SurfaceCard } from '@/components/surface-card';
+import { readPendingInviteIntent } from '@/lib/invite-intent';
+import { resolveAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
@@ -30,6 +34,20 @@ export interface SignInScreenProps {
   readonly initialMode?: SignInScreenMode | null;
 }
 
+function maskEmail(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const [localPart, domain] = value.trim().split('@');
+  if (!localPart || !domain) {
+    return value;
+  }
+
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${localPart.length > 2 ? '***' : ''}@${domain}`;
+}
+
 function animateModeChange() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 }
@@ -37,6 +55,7 @@ function animateModeChange() {
 export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   const session = useSession();
   const [activeMode, setActiveMode] = useState<SignInScreenMode | null>(initialMode);
+  const [allowsRegistration, setAllowsRegistration] = useState(initialMode === 'register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -63,6 +82,32 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   useEffect(() => {
     setActiveMode((currentMode) => (currentMode === initialMode ? currentMode : initialMode));
   }, [initialMode]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function syncInviteIntent() {
+      const pendingIntent = await readPendingInviteIntent();
+      if (!active) {
+        return;
+      }
+
+      setAllowsRegistration(pendingIntent?.type === 'account_invite');
+    }
+
+    void syncInviteIntent();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!allowsRegistration && activeMode === 'register') {
+      animateModeChange();
+      setActiveMode('sign-in');
+    }
+  }, [activeMode, allowsRegistration]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -104,6 +149,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   }
 
   function switchMode(nextMode: SignInScreenMode) {
+    if (nextMode === 'register' && !allowsRegistration) {
+      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
+      return;
+    }
+
     if (nextMode === activeMode && activeMode !== null) {
       return;
     }
@@ -201,6 +251,34 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
             <View style={activeMode ? null : styles.idleBottomSpacer} />
 
+            {!activeMode && session.rememberedAccount ? (
+              <SurfaceCard padding="md" style={styles.rememberedCard} variant="elevated">
+                <View style={styles.rememberedLeading}>
+                  <AppAvatar
+                    imageUrl={resolveAvatarUrl(session.rememberedAccount.avatarPath)}
+                    label={session.rememberedAccount.displayName}
+                    size={46}
+                  />
+                  <View style={styles.rememberedCopy}>
+                    <Text style={styles.rememberedTitle}>Continuar como {session.rememberedAccount.displayName}</Text>
+                    <Text style={styles.rememberedMeta}>
+                      {maskEmail(session.rememberedAccount.email) ??
+                        (session.rememberedAccount.accountAccessState === 'active'
+                          ? 'Tu ultima cuenta usada en este telefono.'
+                          : 'Tu acceso sigue pendiente de invitacion o activacion.')}
+                    </Text>
+                  </View>
+                </View>
+                <PrimaryAction
+                  compact
+                  label="Seguir con esta cuenta"
+                  onPress={() => switchMode('sign-in')}
+                  subtitle="Usaremos el ingreso rapido de este telefono si tu sesion sigue viva."
+                  variant="secondary"
+                />
+              </SurfaceCard>
+            ) : null}
+
             <View style={[styles.tabBar, activeMode ? null : styles.tabBarIdle]}>
               <Pressable
                 onPress={() => switchMode('sign-in')}
@@ -214,20 +292,28 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   Ingresar
                 </Text>
               </Pressable>
-              <View style={styles.tabDivider} />
-              <Pressable
-                onPress={() => switchMode('register')}
-                style={({ pressed }) => [
-                  styles.tabButton,
-                  activeMode === 'register' ? styles.tabButtonActive : null,
-                  pressed ? styles.tabButtonPressed : null,
-                ]}
-              >
-                <Text style={[styles.tabLabel, activeMode === 'register' ? styles.tabLabelActive : null]}>
-                  Crear cuenta
-                </Text>
-              </Pressable>
+              {allowsRegistration ? <View style={styles.tabDivider} /> : null}
+              {allowsRegistration ? (
+                <Pressable
+                  onPress={() => switchMode('register')}
+                  style={({ pressed }) => [
+                    styles.tabButton,
+                    activeMode === 'register' ? styles.tabButtonActive : null,
+                    pressed ? styles.tabButtonPressed : null,
+                  ]}
+                >
+                  <Text style={[styles.tabLabel, activeMode === 'register' ? styles.tabLabelActive : null]}>
+                    Crear cuenta
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
+
+            {!allowsRegistration ? (
+              <Text style={styles.inviteOnlyHint}>
+                Happy Circles abre cuentas nuevas solo con una invitacion valida.
+              </Text>
+            ) : null}
 
             <View style={styles.inlineActions}>
               <Pressable
@@ -329,10 +415,10 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   <View style={styles.extraGlass}>
                     <View style={styles.extraGlassHeader}>
                       <View style={styles.extraGlassDot} />
-                      <Text style={styles.extraGlassLabel}>Despues sigues con tu setup</Text>
+                      <Text style={styles.extraGlassLabel}>Esta invitacion ya te abrio el registro</Text>
                     </View>
                     <Text style={styles.registerHint}>
-                      Primero crea tu cuenta. Nombre, celular, foto y seguridad van en el paso a paso siguiente.
+                      Crea tu acceso aqui. Luego terminas nombre, celular, foto y seguridad desde la activacion.
                     </Text>
                   </View>
                 ) : null}
@@ -390,6 +476,28 @@ const styles = StyleSheet.create({
   contentWidthIdle: {
     flex: 1,
   },
+  rememberedCard: {
+    gap: theme.spacing.md,
+  },
+  rememberedLeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  rememberedCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  rememberedTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+  },
+  rememberedMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
   brandWrap: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -430,6 +538,12 @@ const styles = StyleSheet.create({
   },
   tabBarIdle: {
     marginTop: theme.spacing.sm,
+  },
+  inviteOnlyHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+    marginTop: -6,
   },
   inlineActions: {
     alignItems: 'flex-end',

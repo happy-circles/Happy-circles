@@ -8,6 +8,10 @@ export type PendingInviteIntent =
   | {
       readonly type: 'friendship_invite';
       readonly token: string;
+    }
+  | {
+      readonly type: 'account_invite';
+      readonly token: string;
     };
 
 function isPendingInviteIntent(value: unknown): value is PendingInviteIntent {
@@ -19,11 +23,20 @@ function isPendingInviteIntent(value: unknown): value is PendingInviteIntent {
   const token = (value as Record<string, unknown>)['token'];
 
   return (
-    type === 'friendship_invite' && typeof token === 'string' && token.trim().length >= 12
+    (type === 'friendship_invite' || type === 'account_invite') &&
+    typeof token === 'string' &&
+    token.trim().length >= 12
   );
 }
 
 export function hrefForPendingInviteIntent(intent: PendingInviteIntent): Href {
+  if (intent.type === 'account_invite') {
+    return {
+      pathname: '/join/[token]',
+      params: { token: intent.token },
+    } as unknown as Href;
+  }
+
   return {
     pathname: '/invite/[token]',
     params: { token: intent.token },
@@ -46,7 +59,7 @@ export async function readPendingInviteIntent(): Promise<PendingInviteIntent | n
     return {
       type: parsed.type,
       token: parsed.token.trim(),
-    };
+    } as PendingInviteIntent;
   } catch {
     await removeStoredItem(INVITE_INTENT_KEY);
     return null;

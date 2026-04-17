@@ -83,3 +83,21 @@ export async function handleRpc(
     return jsonResponse(status, { error: message });
   }
 }
+
+export async function handlePublicRpc(
+  request: Request,
+  handler: (body: Record<string, unknown>) => Promise<unknown>,
+): Promise<Response> {
+  try {
+    if (request.method !== 'POST') {
+      return jsonResponse(405, { error: 'Method not allowed' });
+    }
+
+    const body = await readJsonBody(request);
+    const response = await handler(body);
+    return jsonResponse(200, response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return jsonResponse(400, { error: message });
+  }
+}

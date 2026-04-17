@@ -11,8 +11,10 @@ import type {
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import {
+  activateAccountFromInviteSchema,
   amendFinancialRequestSchema,
   createBalanceRequestSchema,
+  createPeopleOutreachSchema,
   cancelFriendshipInviteSchema,
   claimExternalFriendshipInviteSchema,
   createExternalFriendshipInviteSchema,
@@ -21,6 +23,9 @@ import {
   cycleSettlementExecutionSchema,
   friendshipInviteDecisionSchema,
   friendshipInvitePreviewSchema,
+  accountInvitePreviewSchema,
+  resolvePeopleTargetsSchema,
+  reviewAccountInviteSchema,
   reviewExternalFriendshipInviteSchema,
   requestDecisionSchema,
   type Database,
@@ -207,6 +212,96 @@ export interface FriendshipInvitePreviewResult {
   readonly canReject: boolean;
   readonly canRespond: boolean;
   readonly reason: string;
+}
+
+export interface PeopleTargetResolution {
+  readonly phoneE164: string;
+  readonly status:
+    | 'active_user'
+    | 'pending_activation'
+    | 'no_account'
+    | 'already_related'
+    | 'pending_friendship';
+  readonly matchedUserId: string | null;
+  readonly displayName: string | null;
+  readonly avatarPath: string | null;
+  readonly relationshipId: string | null;
+  readonly friendshipInviteId: string | null;
+  readonly accountInviteId: string | null;
+  readonly accountInviteStatus: string | null;
+}
+
+export interface AccountInviteDeliveryResult {
+  readonly inviteId: string;
+  readonly deliveryId: string;
+  readonly deliveryToken: string;
+  readonly status: string;
+  readonly channel: 'remote' | 'qr';
+  readonly originChannel: 'remote' | 'qr';
+  readonly expiresAt: string;
+  readonly inviteExpiresAt: string;
+  readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
+}
+
+export interface AccountInvitePreviewResult {
+  readonly inviteId: string;
+  readonly deliveryId: string;
+  readonly status:
+    | 'pending_activation'
+    | 'pending_inviter_review'
+    | 'accepted'
+    | 'rejected'
+    | 'canceled'
+    | 'expired';
+  readonly deliveryStatus: 'issued' | 'authenticated' | 'activated' | 'revoked' | 'expired';
+  readonly channel: 'remote' | 'qr';
+  readonly expiresAt: string;
+  readonly inviteExpiresAt: string;
+  readonly resolvedAt: string | null;
+  readonly inviterUserId: string;
+  readonly inviterDisplayName: string;
+  readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
+  readonly activatedUserId: string | null;
+  readonly activatedDisplayName: string | null;
+  readonly linkedRelationshipId: string | null;
+  readonly reason:
+    | 'delivery_revoked'
+    | 'delivery_expired'
+    | 'pending_activation'
+    | 'pending_inviter_review'
+    | 'accepted'
+    | 'rejected'
+    | 'canceled'
+    | 'expired';
+}
+
+export interface AccountInviteActionResult {
+  readonly inviteId: string;
+  readonly deliveryId?: string;
+  readonly status: string;
+  readonly resolvedAt?: string | null;
+  readonly activatedAt?: string | null;
+  readonly relationshipId?: string | null;
+  readonly actorRole?: 'claimant';
+}
+
+export interface PeopleOutreachResult {
+  readonly kind: 'friendship' | 'account_invite' | 'already_related';
+  readonly status:
+    | 'active_user'
+    | 'pending_activation'
+    | 'no_account'
+    | 'already_related'
+    | 'pending_friendship';
+  readonly matchedUserId: string | null;
+  readonly displayName: string | null;
+  readonly relationshipId?: string | null;
+  readonly inviteId?: string | null;
+  readonly result?: FriendshipInviteActionResult | AccountInviteDeliveryResult;
 }
 
 interface ActionableItem {
@@ -1917,7 +2012,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('user_profiles')
       .select(
-        'id, display_name, email, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+        'id, display_name, email, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
       ),
     client
       .from('v_friendship_invites_live')
@@ -2241,6 +2336,109 @@ export function useFriendshipInvitePreviewQuery(deliveryToken: string | null) {
         payload,
       );
     },
+  });
+}
+
+export function useResolvePeopleTargetsMutation() {
+  return useMutation({
+    mutationFn: async (phoneE164List: readonly string[]) => {
+      const payload = resolvePeopleTargetsSchema.parse({
+        phoneE164List,
+      });
+
+      return invokeSupabaseFunction<typeof payload, PeopleTargetResolution[]>(
+        'resolve-people-targets',
+        payload,
+      );
+    },
+  });
+}
+
+export function useCreatePeopleOutreachMutation() {
+  return useMutation({
+    mutationFn: async (input: {
+      readonly channel: 'remote' | 'qr';
+      readonly sourceContext?: string;
+      readonly intendedRecipientAlias: string;
+      readonly intendedRecipientPhoneE164: string;
+      readonly intendedRecipientPhoneLabel?: string;
+    }) => {
+      const payload = createPeopleOutreachSchema.parse({
+        idempotencyKey: createIdempotencyKey(`create_people_outreach_${input.channel}`),
+        channel: input.channel,
+        sourceContext: input.sourceContext,
+        intendedRecipientAlias: input.intendedRecipientAlias,
+        intendedRecipientPhoneE164: input.intendedRecipientPhoneE164,
+        intendedRecipientPhoneLabel: input.intendedRecipientPhoneLabel,
+      });
+
+      return invokeSupabaseFunction<typeof payload, PeopleOutreachResult>(
+        'create-people-outreach',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useAccountInvitePreviewQuery(deliveryToken: string | null) {
+  const { userId } = useSession();
+
+  return useQuery({
+    queryKey: ['account-invite-preview', userId ?? 'signed-out', deliveryToken ?? 'missing'],
+    enabled: Boolean(deliveryToken),
+    queryFn: async () => {
+      const payload = accountInvitePreviewSchema.parse({
+        deliveryToken,
+      });
+
+      return invokeSupabaseFunction<typeof payload, AccountInvitePreviewResult>(
+        'get-account-invite-preview-public',
+        payload,
+      );
+    },
+  });
+}
+
+export function useActivateAccountFromInviteMutation() {
+  return useMutation({
+    mutationFn: async (input: {
+      readonly deliveryToken: string;
+      readonly currentDeviceId: string;
+    }) => {
+      const payload = activateAccountFromInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('activate_account_from_invite'),
+        deliveryToken: input.deliveryToken,
+        currentDeviceId: input.currentDeviceId,
+      });
+
+      return invokeSupabaseFunction<typeof payload, AccountInviteActionResult>(
+        'activate-account-from-invite',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useReviewAccountInviteMutation() {
+  return useMutation({
+    mutationFn: async (input: {
+      readonly inviteId: string;
+      readonly decision: 'approve' | 'reject';
+    }) => {
+      const payload = reviewAccountInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey(`review_account_invite_${input.decision}`),
+        inviteId: input.inviteId,
+        decision: input.decision,
+      });
+
+      return invokeSupabaseFunction<typeof payload, AccountInviteActionResult>(
+        'review-account-invite',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
   });
 }
 

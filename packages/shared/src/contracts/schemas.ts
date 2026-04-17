@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 import {
   ACCOUNT_KINDS,
+  ACCOUNT_ACCESS_STATES,
+  ACCOUNT_INVITE_CHANNELS,
+  ACCOUNT_INVITE_STATUSES,
   AUDIT_ENTITY_TYPES,
   AUDIT_EVENT_NAMES,
   CURRENCY_CODE,
@@ -10,6 +13,7 @@ import {
   FRIENDSHIP_INVITE_FLOWS,
   FRIENDSHIP_INVITE_STATUSES,
   PARTICIPANT_DECISIONS,
+  PEOPLE_TARGET_STATUSES,
   PROPOSAL_STATUSES,
   REQUEST_STATUSES,
   REQUEST_TYPES,
@@ -34,6 +38,10 @@ export const auditEventNameSchema = z.enum(AUDIT_EVENT_NAMES);
 export const friendshipInviteFlowSchema = z.enum(FRIENDSHIP_INVITE_FLOWS);
 export const friendshipInviteStatusSchema = z.enum(FRIENDSHIP_INVITE_STATUSES);
 export const friendshipInviteChannelSchema = z.enum(FRIENDSHIP_INVITE_CHANNELS);
+export const accountAccessStateSchema = z.enum(ACCOUNT_ACCESS_STATES);
+export const accountInviteStatusSchema = z.enum(ACCOUNT_INVITE_STATUSES);
+export const accountInviteChannelSchema = z.enum(ACCOUNT_INVITE_CHANNELS);
+export const peopleTargetStatusSchema = z.enum(PEOPLE_TARGET_STATUSES);
 
 export const createBalanceRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
@@ -114,6 +122,38 @@ export const reviewExternalFriendshipInviteSchema = z.object({
 });
 
 export const friendshipInvitePreviewSchema = friendshipInviteTokenSchema;
+
+export const resolvePeopleTargetsSchema = z.object({
+  phoneE164List: z.array(z.string().trim().min(8).max(24)).min(1).max(60),
+});
+
+export const createAccountInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  channel: accountInviteChannelSchema,
+  sourceContext: z.string().trim().min(1).max(80).optional(),
+  intendedRecipientAlias: z.string().trim().min(1).max(120),
+  intendedRecipientPhoneE164: z.string().trim().min(8).max(24),
+  intendedRecipientPhoneLabel: z.string().trim().min(1).max(40).optional(),
+});
+
+export const createPeopleOutreachSchema = createAccountInviteSchema;
+
+export const accountInviteTokenSchema = z.object({
+  deliveryToken: z.string().trim().min(12).max(128),
+});
+
+export const accountInvitePreviewSchema = accountInviteTokenSchema;
+
+export const activateAccountFromInviteSchema = accountInviteTokenSchema.extend({
+  idempotencyKey: idempotencyKeySchema,
+  currentDeviceId: z.string().trim().min(6).max(200),
+});
+
+export const reviewAccountInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
+  decision: z.enum(['approve', 'reject']),
+});
 
 export const cancelFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,

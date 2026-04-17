@@ -41,6 +41,7 @@ import {
   type SetupStep,
 } from '@/lib/setup-account';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
+import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import {
   getLocalNotificationPermissionStatus,
@@ -58,6 +59,7 @@ type SessionStatus =
   | 'signed_in_unlocked'
   | 'signed_in_locked';
 type AuthMode = 'supabase';
+type AccountAccessState = 'loading' | 'needs_invite' | 'needs_activation' | 'active';
 type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
 type DeviceTrustState = 'loading' | 'unknown' | 'pending' | 'trusted' | 'revoked';
 type IdentityProvider = 'email' | 'google' | 'apple' | 'phone' | 'unknown';
@@ -118,6 +120,15 @@ interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
 
+interface RememberedAccountSnapshot {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly email: string | null;
+  readonly avatarPath: string | null;
+  readonly accountAccessState: Exclude<AccountAccessState, 'loading'>;
+  readonly lastUsedAt: string;
+}
+
 interface SetupState {
   readonly requiredComplete: boolean;
   readonly pendingRequiredSteps: readonly SetupStep[];
@@ -134,6 +145,8 @@ interface SessionContextValue {
   readonly email: string | null;
   readonly authProvider: IdentityProvider | null;
   readonly profile: UserProfileRow | null;
+  readonly accountAccessState: AccountAccessState;
+  readonly rememberedAccount: RememberedAccountSnapshot | null;
   readonly linkedMethods: LinkedMethods;
   readonly profileCompletionState: ProfileCompletionState;
   readonly setupState: SetupState;
@@ -150,6 +163,8 @@ interface SessionContextValue {
   readonly isLocked: boolean;
   readonly isTrustedDevice: boolean;
   readonly requiresProfileCompletion: boolean;
+  readonly requiresInvite: boolean;
+  readonly requiresAccountActivation: boolean;
   requestPasswordReset(email: string): Promise<string>;
   updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
@@ -171,10 +186,12 @@ interface SessionContextValue {
   setNotificationsEnabled(enabled: boolean): Promise<void>;
   requestContactsPermission(): Promise<string>;
   requestNotificationsPermission(): Promise<string>;
+  clearRememberedAccount(): Promise<void>;
 }
 
 const BIOMETRICS_KEY = 'happy_circles.biometrics_enabled';
 const NOTIFICATIONS_KEY = 'happy_circles.notifications_enabled';
+const REMEMBERED_ACCOUNT_KEY = 'happy_circles.remembered_account';
 const LOCK_AFTER_MS = 5 * 60 * 1000;
 const STEP_UP_WINDOW_MS = 5 * 60 * 1000;
 const EMPTY_LINKED_METHODS: LinkedMethods = {
@@ -194,6 +211,85 @@ const EMPTY_SETUP_STATE: SetupState = {
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+
+function deriveAccountAccessState(profile: UserProfileRow | null): AccountAccessState {
+  if (!profile) {
+    return 'loading';
+  }
+
+  if (profile.account_access_state === 'needs_invite') {
+    return 'needs_invite';
+  }
+
+  if (profile.account_access_state === 'needs_activation') {
+    return 'needs_activation';
+  }
+
+  return 'active';
+}
+
+function isRememberedAccountSnapshot(value: unknown): value is RememberedAccountSnapshot {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const snapshot = value as Record<string, unknown>;
+  return (
+    typeof snapshot.userId === 'string' &&
+    snapshot.userId.length > 0 &&
+    typeof snapshot.displayName === 'string' &&
+    snapshot.displayName.length > 0 &&
+    (snapshot.email === null || typeof snapshot.email === 'string') &&
+    (snapshot.avatarPath === null || typeof snapshot.avatarPath === 'string') &&
+    (snapshot.accountAccessState === 'needs_invite' ||
+      snapshot.accountAccessState === 'needs_activation' ||
+      snapshot.accountAccessState === 'active') &&
+    typeof snapshot.lastUsedAt === 'string' &&
+    snapshot.lastUsedAt.length > 0
+  );
+}
+
+async function readRememberedAccountSnapshot(): Promise<RememberedAccountSnapshot | null> {
+  const stored = await getStoredItem(REMEMBERED_ACCOUNT_KEY);
+  if (!stored) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as unknown;
+    if (!isRememberedAccountSnapshot(parsed)) {
+      await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
+    return null;
+  }
+}
+
+async function persistRememberedAccountSnapshot(
+  profile: UserProfileRow | null,
+): Promise<RememberedAccountSnapshot | null> {
+  if (!profile) {
+    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
+    return null;
+  }
+
+  const derivedAccessState = deriveAccountAccessState(profile);
+  const snapshot: RememberedAccountSnapshot = {
+    userId: profile.id,
+    displayName: profile.display_name,
+    email: profile.email,
+    avatarPath: profile.avatar_path,
+    accountAccessState: derivedAccessState === 'loading' ? 'needs_invite' : derivedAccessState,
+    lastUsedAt: new Date().toISOString(),
+  };
+
+  await setStoredItem(REMEMBERED_ACCOUNT_KEY, JSON.stringify(snapshot));
+  return snapshot;
+}
 
 function extractAuthCallbackTokens(url: string): AuthCallbackTokens | null {
   const hashIndex = url.indexOf('#');
@@ -494,6 +590,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<SessionStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfileRow | null>(null);
+  const [accountAccessState, setAccountAccessState] = useState<AccountAccessState>('loading');
+  const [rememberedAccount, setRememberedAccount] =
+    useState<RememberedAccountSnapshot | null>(null);
   const [linkedMethods, setLinkedMethods] = useState<LinkedMethods>(EMPTY_LINKED_METHODS);
   const [profileCompletionState, setProfileCompletionState] =
     useState<ProfileCompletionState>('loading');
@@ -521,6 +620,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     sessionRef.current = null;
     setSession(null);
     setProfile(null);
+    setAccountAccessState('loading');
     setLinkedMethods(EMPTY_LINKED_METHODS);
     setProfileCompletionState('loading');
     setDeviceTrustState('unknown');
@@ -608,11 +708,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
         last_seen_at: timestamp,
       };
 
-      const [profileResult, identities, maybeDeviceResult] = await Promise.all([
+      const [profileResult, identities, maybeDeviceResult, pendingInviteIntent] = await Promise.all([
         supabase
           .from('user_profiles')
           .select(
-            'id, email, display_name, avatar_path, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+            'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
           )
           .eq('id', nextSession.user.id)
           .single(),
@@ -623,6 +723,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           .eq('user_id', nextSession.user.id)
           .eq('device_id', deviceId)
           .maybeSingle(),
+        readPendingInviteIntent(),
       ]);
 
       if (profileResult.error) {
@@ -679,6 +780,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       const nextProfile = profileResult.data;
+      const nextAccountAccessState =
+        deriveAccountAccessState(nextProfile) === 'needs_invite' &&
+        pendingInviteIntent?.type === 'account_invite'
+          ? 'needs_activation'
+          : deriveAccountAccessState(nextProfile);
       const nextLinkedMethods = deriveLinkedMethods({
         session: nextSession,
         profile: nextProfile,
@@ -689,11 +795,24 @@ export function SessionProvider({ children }: PropsWithChildren) {
       sessionRef.current = nextSession;
       setSession(nextSession);
       setProfile(nextProfile);
+      setAccountAccessState(nextAccountAccessState);
       setLinkedMethods(nextLinkedMethods);
       setProfileCompletionState(deriveProfileCompletionState(nextProfile));
       setDeviceTrustState(nextDeviceTrustState);
       setTrustedDevices(devicesResult.data ?? []);
       setCurrentDeviceId(deviceId);
+      void persistRememberedAccountSnapshot(nextProfile).then((snapshot) => {
+        if (loadId === accountLoadIdRef.current) {
+          setRememberedAccount(
+            snapshot
+              ? {
+                  ...snapshot,
+                  accountAccessState: nextAccountAccessState === 'loading' ? 'needs_invite' : nextAccountAccessState,
+                }
+              : null,
+          );
+        }
+      });
       setStatus(
         resolveStatusAfterAccountLoad({
           hasSession: true,
@@ -739,6 +858,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         appleAvailable,
         nextContactsPermissionStatus,
         nextNotificationsPermissionStatus,
+        rememberedSnapshot,
       ] = await Promise.all([
         getStoredItem(BIOMETRICS_KEY),
         getStoredItem(NOTIFICATIONS_KEY),
@@ -748,6 +868,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           : Promise.resolve(false),
         getContactsPermissionStatus(),
         getLocalNotificationPermissionStatus(),
+        readRememberedAccountSnapshot(),
       ]);
 
       if (!active) {
@@ -764,6 +885,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setAppleSignInAvailable(appleAvailable);
       setContactsPermissionStatus(nextContactsPermissionStatus);
       setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
+      setRememberedAccount(rememberedSnapshot);
 
       if (!supabase) {
         clearSignedInState();
@@ -780,6 +902,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       const nextSession = data.session;
       if (!nextSession) {
         clearSignedInState();
+        setRememberedAccount(rememberedSnapshot);
         setStatus('signed_out');
         setHydrated(true);
         return;
@@ -1115,9 +1238,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
     try {
       const parsed = registrationSchema.parse(input);
       const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+      const pendingIntent = await readPendingInviteIntent();
 
       if (!supabase) {
         return 'Supabase no esta configurado en esta app.';
+      }
+
+      if (pendingIntent?.type !== 'account_invite') {
+        return 'Necesitas una invitacion valida para crear una cuenta nueva.';
       }
 
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
@@ -1653,6 +1781,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [biometricLabel, currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
   );
 
+  const clearRememberedAccount = useCallback(async () => {
+    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
+    setRememberedAccount(null);
+  }, []);
+
   const setupState = useMemo<SetupState>(() => {
     if (!profile) {
       return {
@@ -1688,6 +1821,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       email: session?.user.email ?? null,
       authProvider,
       profile,
+      accountAccessState,
+      rememberedAccount,
       linkedMethods,
       profileCompletionState,
       setupState,
@@ -1707,6 +1842,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       isLocked: status === 'signed_in_locked',
       isTrustedDevice: deviceTrustState === 'trusted',
       requiresProfileCompletion: !setupState.requiredComplete,
+      requiresInvite: accountAccessState === 'needs_invite',
+      requiresAccountActivation: accountAccessState === 'needs_activation',
       requestPasswordReset,
       updatePassword,
       signInWithPassword,
@@ -1728,9 +1865,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setNotificationsEnabled,
       requestContactsPermission,
       requestNotificationsPermission,
+      clearRememberedAccount,
     }),
     [
       attachEmailPassword,
+      accountAccessState,
       authMode,
       authProvider,
       biometricAvailable,
@@ -1741,6 +1880,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       currentDeviceId,
       deviceTrustState,
       appleSignInAvailable,
+      clearRememberedAccount,
       linkApple,
       linkGoogle,
       linkedMethods,
@@ -1752,6 +1892,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       requestPasswordReset,
       requestContactsPermission,
       requestNotificationsPermission,
+      rememberedAccount,
       refreshAccountState,
       registerAccount,
       revokeTrustedDevice,
