@@ -14,7 +14,7 @@ export default function IndexRoute() {
     <Redirect
       href={
         status === 'signed_out'
-          ? '/sign-in'
+          ? '/join'
           : !setupState.requiredComplete
             ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
             : '/home'

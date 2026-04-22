@@ -1,0 +1,15 @@
+
+> @happy-circles/mobile@0.1.0 web C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+> node ./scripts/start-expo.mjs --web
+
+Starting Expo on port 8092
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Starting project at C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+Starting Metro Bundler
+Waiting on http://localhost:8092
+Logs for your project will appear below.
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 39.9% (365/578)
+Web Bundled 6165ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1165 modules)
+ LOG  [web] Logs will appear in the browser console

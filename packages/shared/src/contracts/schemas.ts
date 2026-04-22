@@ -17,6 +17,7 @@ import {
   PROPOSAL_STATUSES,
   REQUEST_STATUSES,
   REQUEST_TYPES,
+  TRANSACTION_CATEGORIES,
   TRANSACTION_SOURCE_TYPES,
   TRANSACTION_TYPES,
 } from './enums';
@@ -28,6 +29,13 @@ export const moneyMinorSchema = z.number().int().positive().max(Number.MAX_SAFE_
 export const requestTypeSchema = z.enum(REQUEST_TYPES);
 export const requestStatusSchema = z.enum(REQUEST_STATUSES);
 export const transactionTypeSchema = z.enum(TRANSACTION_TYPES);
+export const transactionCategorySchema = z.enum(TRANSACTION_CATEGORIES);
+export const userTransactionCategorySchema = transactionCategorySchema.refine(
+  (value) => value !== 'cycle',
+  {
+    message: 'La categoria ciclo esta reservada para cierres automaticos.',
+  },
+);
 export const transactionSourceTypeSchema = z.enum(TRANSACTION_SOURCE_TYPES);
 export const accountKindSchema = z.enum(ACCOUNT_KINDS);
 export const entrySideSchema = z.enum(ENTRY_SIDES);
@@ -50,6 +58,7 @@ export const createBalanceRequestSchema = z.object({
   creditorUserId: uuidSchema,
   amountMinor: moneyMinorSchema,
   description: z.string().trim().min(1).max(240),
+  category: userTransactionCategorySchema.default('other'),
   currencyCode: z.literal(CURRENCY_CODE).default(CURRENCY_CODE),
   requestKind: z.literal('balance_increase'),
 });
@@ -59,6 +68,7 @@ export const amendFinancialRequestSchema = z.object({
   requestId: uuidSchema,
   amountMinor: moneyMinorSchema,
   description: z.string().trim().min(1).max(240),
+  category: userTransactionCategorySchema.default('other'),
 });
 
 export const requestDecisionSchema = z.object({
@@ -169,9 +179,16 @@ export const passwordResetRequestSchema = z.object({
   email: z.string().trim().email(),
 });
 
+const phoneProfileFields = {
+  phoneCountryIso2: z.string().trim().length(2),
+  phoneCountryCallingCode: z.string().trim().min(2).max(6),
+  phoneNationalNumber: z.string().trim().min(6).max(20),
+};
+
 export const registrationSchema = emailPasswordSignInSchema
   .extend({
     confirmPassword: z.string().min(8).max(72),
+    ...phoneProfileFields,
   })
   .superRefine((value, context) => {
     if (value.password !== value.confirmPassword) {
@@ -185,9 +202,7 @@ export const registrationSchema = emailPasswordSignInSchema
 
 export const completeProfileSchema = z.object({
   fullName: z.string().trim().min(3).max(120),
-  phoneCountryIso2: z.string().trim().length(2),
-  phoneCountryCallingCode: z.string().trim().min(2).max(6),
-  phoneNationalNumber: z.string().trim().min(6).max(20),
+  ...phoneProfileFields,
 });
 
 export const attachEmailPasswordSchema = z

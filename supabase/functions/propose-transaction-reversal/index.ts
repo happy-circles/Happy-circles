@@ -1,5 +1,26 @@
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
 
+const TRANSACTION_CATEGORIES = new Set([
+  'food_drinks',
+  'transport',
+  'entertainment',
+  'services',
+  'home',
+  'other',
+]);
+
+function readTransactionCategory(value: unknown) {
+  if (typeof value === 'undefined' || value === null) {
+    return 'other';
+  }
+
+  if (typeof value !== 'string' || !TRANSACTION_CATEGORIES.has(value)) {
+    throw new Error('Invalid category');
+  }
+
+  return value;
+}
+
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId) => {
     const client = createServiceRoleClient();
@@ -17,6 +38,7 @@ Deno.serve((request) =>
       p_creditor_user_id: requireString(body.creditorUserId, 'creditorUserId'),
       p_amount_minor: amountMinor,
       p_description: requireString(body.description, 'description'),
+      p_category: readTransactionCategory(body.category),
       p_parent_request_id: null,
       p_target_ledger_transaction_id: requireString(body.targetLedgerTransactionId, 'targetLedgerTransactionId'),
     });

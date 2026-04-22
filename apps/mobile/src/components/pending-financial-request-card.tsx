@@ -2,11 +2,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  type UserTransactionCategory,
+  isUserTransactionCategory,
+  transactionCategoryLabel,
+} from '@/lib/transaction-categories';
 
 import { AppTextInput } from './app-text-input';
 import { FieldBlock } from './field-block';
 import { PendingSnippetCard } from './pending-snippet-card';
 import { PrimaryAction } from './primary-action';
+import { TransactionCategoryPicker } from './transaction-category-picker';
 
 export interface PendingFinancialRequestCardProps {
   readonly counterpartyName: string;
@@ -14,6 +21,7 @@ export interface PendingFinancialRequestCardProps {
   readonly amountTone?: 'positive' | 'negative' | 'neutral' | 'danger';
   readonly title: string;
   readonly description: string;
+  readonly category?: string | null;
   readonly amountMinor: number;
   readonly createdByLabel: string;
   readonly createdAtLabel: string;
@@ -23,6 +31,7 @@ export interface PendingFinancialRequestCardProps {
   readonly showAmendment?: boolean;
   readonly amendmentAmount?: string;
   readonly amendmentDescription?: string;
+  readonly amendmentCategory?: UserTransactionCategory;
   readonly amendmentAmountError?: string | null;
   readonly amendmentDescriptionError?: string | null;
   readonly onAccept?: () => void;
@@ -30,6 +39,7 @@ export interface PendingFinancialRequestCardProps {
   readonly onToggleAmendment?: () => void;
   readonly onChangeAmendmentAmount?: (value: string) => void;
   readonly onChangeAmendmentDescription?: (value: string) => void;
+  readonly onChangeAmendmentCategory?: (value: UserTransactionCategory) => void;
   readonly onSubmitAmendment?: () => void;
   readonly onPress?: () => void;
 }
@@ -40,6 +50,7 @@ export function PendingFinancialRequestCard({
   amountTone = 'neutral',
   title,
   description,
+  category = DEFAULT_TRANSACTION_CATEGORY,
   amountMinor,
   createdByLabel,
   createdAtLabel,
@@ -49,6 +60,7 @@ export function PendingFinancialRequestCard({
   showAmendment = false,
   amendmentAmount = '',
   amendmentDescription = '',
+  amendmentCategory = DEFAULT_TRANSACTION_CATEGORY,
   amendmentAmountError = null,
   amendmentDescriptionError = null,
   onAccept,
@@ -56,10 +68,12 @@ export function PendingFinancialRequestCard({
   onToggleAmendment,
   onChangeAmendmentAmount,
   onChangeAmendmentDescription,
+  onChangeAmendmentCategory,
   onSubmitAmendment,
   onPress,
 }: PendingFinancialRequestCardProps) {
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
+  const safeCategory = isUserTransactionCategory(category) ? category : DEFAULT_TRANSACTION_CATEGORY;
 
   return (
     <PendingSnippetCard
@@ -67,7 +81,7 @@ export function PendingFinancialRequestCard({
       amountTone={amountTone}
       detail={description}
       eyebrow={`Pendiente con ${counterpartyName}`}
-      meta={`Creado por ${createdByLabel} | ${createdAtLabel}`}
+      meta={`Creado por ${createdByLabel} | ${createdAtLabel} · ${transactionCategoryLabel(safeCategory)}`}
       onPress={onPress}
       statusLabel={
         responseState === 'requires_you' ? 'Requiere tu respuesta' : 'Esperando respuesta'
@@ -138,6 +152,13 @@ export function PendingFinancialRequestCard({
                   placeholderTextColor={theme.colors.muted}
                   style={[styles.input, styles.textarea]}
                   value={amendmentDescription}
+                />
+              </FieldBlock>
+
+              <FieldBlock hint="Puedes cambiarla si el contexto nuevo lo necesita." label="Categoria">
+                <TransactionCategoryPicker
+                  onChange={onChangeAmendmentCategory ?? (() => undefined)}
+                  value={amendmentCategory}
                 />
               </FieldBlock>
 

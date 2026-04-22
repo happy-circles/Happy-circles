@@ -1,0 +1,10 @@
+Error while reading cache, falling back to a full crawl:
+ Error: Unable to deserialize cloned data due to invalid or unsupported version.
+    at deserialize (node:v8:468:7)
+    at DiskCacheManager.read (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro-file-map@0.83.3\node_modules\metro-file-map\src\cache\DiskCacheManager.js:60:33)
+    at FileMap.read (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro-file-map@0.83.3\node_modules\metro-file-map\src\index.js:284:14)
+    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro-file-map@0.83.3\node_modules\metro-file-map\src\index.js:202:25
+    at DependencyGraph.ready (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\node-haste\DependencyGraph.js:88:5)
+    at Bundler.ready (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\Bundler.js:62:5)
+    at IncrementalBundler.ready (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\IncrementalBundler.js:302:5)
+    at Server.ready (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\Server.js:1305:5)

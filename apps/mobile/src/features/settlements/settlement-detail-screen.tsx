@@ -9,7 +9,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { Snackbar } from '@/components/snackbar';
-import { StatusChip } from '@/components/status-chip';
+import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import {
@@ -19,6 +19,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 
 export interface SettlementDetailScreenProps {
@@ -61,6 +62,46 @@ function readNestedProposalId(value: unknown, key: string): string | null {
   return typeof proposalId === 'string' ? proposalId : null;
 }
 
+function settlementStatusLabel(status: string): string {
+  if (status === 'pending_approvals') {
+    return 'Happy Circle pendiente';
+  }
+
+  if (status === 'approved') {
+    return 'Happy Circle listo';
+  }
+
+  if (status === 'executed') {
+    return 'Completado';
+  }
+
+  if (status === 'rejected') {
+    return 'No completado';
+  }
+
+  if (status === 'stale') {
+    return 'Reemplazado';
+  }
+
+  return status;
+}
+
+function settlementStatusTone(status: string): StatusChipProps['tone'] {
+  if (status === 'rejected') {
+    return 'danger';
+  }
+
+  if (status === 'stale') {
+    return 'neutral';
+  }
+
+  if (status === 'pending_approvals') {
+    return 'warning';
+  }
+
+  return 'cycle';
+}
+
 export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenProps) {
   const router = useRouter();
   const session = useSession();
@@ -82,10 +123,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     }
 
     Alert.alert(
-      status === 'approved' ? 'Cierre listo para ejecutar' : 'Cierre de circulo pendiente',
+      status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
       status === 'approved'
-        ? 'Todos ya aprobaron este cierre. Quieres abrirlo ahora para ejecutarlo?'
-        : 'Se detecto otro cierre automatico en tu circulo. Quieres revisarlo ahora?',
+        ? 'Todos ya aprobaron este Circle. Quieres abrirlo ahora para completarlo?'
+        : 'Se detecto otro Happy Circle automatico. Quieres revisarlo ahora?',
       [
         {
           text: 'Luego',
@@ -111,20 +152,20 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         const nextStatus = readResultStatus(response);
         if (nextStatus === 'stale') {
           setBanner({
-            message: 'La propuesta ya no coincide con el grafo actual y quedo obsoleta.',
+            message: 'Este Circle fue reemplazado porque el grafo cambio.',
             tone: 'warning',
           });
         } else {
           showSnackbar(
             nextStatus === 'approved'
-              ? 'Todos aceptaron. El cierre ya quedo aprobado.'
+              ? 'Todos aceptaron. El Happy Circle quedo listo.'
               : 'Tu aprobacion quedo registrada.',
             'success',
           );
         }
       } else if (action === 'reject') {
         await rejectSettlement.mutateAsync(proposalId);
-        showSnackbar('Cierre rechazado.', 'neutral');
+        showSnackbar('Happy Circle no aprobado.', 'neutral');
       } else {
         const response = await executeSettlement.mutateAsync(proposalId);
         const nextStatus = readResultStatus(response);
@@ -132,11 +173,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         const nextAutoCycleProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
         if (nextStatus === 'stale') {
           setBanner({
-            message: 'La propuesta se volvio obsoleta antes de ejecutar.',
+            message: 'Este Circle fue reemplazado antes de completarlo.',
             tone: 'warning',
           });
         } else {
-          showSnackbar('Cierre ejecutado.', 'success');
+          showSnackbar('Happy Circle completado.', 'success');
         }
         showAutoCyclePrompt(nextAutoCycleProposalId, nextAutoCycleStatus);
       }
@@ -166,7 +207,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   if (snapshotQuery.isLoading) {
     return (
-      <ScreenShell eyebrow="Cierre" largeTitle={false} subtitle="Cargando el detalle de la propuesta." title={`Cierre ${proposalId}`}>
+      <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="Cargando el detalle de la propuesta." title="Happy Circle">
         <Text style={styles.supportText}>Estamos leyendo participantes, movimientos y estado.</Text>
       </ScreenShell>
     );
@@ -174,7 +215,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell eyebrow="Cierre" largeTitle={false} subtitle="No pudimos cargar esta propuesta." title={`Cierre ${proposalId}`}>
+      <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="No pudimos cargar esta propuesta." title="Happy Circle">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -182,7 +223,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   if (!settlement) {
     return (
-      <ScreenShell eyebrow="Cierre" largeTitle={false} subtitle="No encontramos esta propuesta." title={`Cierre ${proposalId}`}>
+      <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="No encontramos esta propuesta." title="Happy Circle">
         <EmptyState
           description="Confirma que sigas siendo participante o que el id exista en Supabase."
           title="Propuesta no visible"
@@ -197,28 +238,30 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const summaryText =
     settlement.status === 'pending_approvals'
       ? approvalsPending > 0
-        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para poder ejecutarlo.`
-        : 'Ya no faltan respuestas. Solo queda ejecutar el cierre.'
+        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para poder completarlo.`
+        : 'Ya no faltan respuestas. Solo queda completar el Circle.'
       : settlement.status === 'approved'
-        ? 'Todos aprobaron este cierre. Puedes ejecutarlo ahora.'
+        ? 'Todos aprobaron este Happy Circle. Puedes completarlo ahora.'
         : settlement.status === 'executed'
-          ? 'Este cierre ya fue aplicado al ledger.'
-          : 'Este cierre ya no esta activo en el estado actual del grafo.';
+          ? 'Completaste un Circle!'
+          : settlement.status === 'rejected'
+            ? 'Este Circle no se completo.'
+            : 'Este Circle fue reemplazado por cambios nuevos.';
   const primaryLines = settlement.impactLines.length > 0 ? settlement.impactLines : settlement.movements;
 
   return (
     <ScreenShell
-      eyebrow="Cierre"
+      eyebrow="Happy Circle"
       largeTitle={false}
       overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
-      subtitle="Lo esencial antes de aprobar o ejecutar."
-      title={`Cierre ${proposalId}`}
+      subtitle="Lo esencial antes de aprobar o completar."
+      title="Happy Circle"
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-      <SurfaceCard padding="lg" variant="elevated">
-        <StatusChip label={settlement.status} tone={settlement.status === 'approved' ? 'success' : 'primary'} />
-        <Text style={styles.summaryTitle}>Que pasa con este cierre</Text>
+      <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
+        <StatusChip label={settlementStatusLabel(settlement.status)} tone={settlementStatusTone(settlement.status)} />
+        <Text style={styles.summaryTitle}>Que pasa con este Happy Circle</Text>
         <Text style={styles.summaryBody}>{summaryText}</Text>
       </SurfaceCard>
 
@@ -230,7 +273,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         ))}
       </SectionBlock>
 
-      <SectionBlock title="Que cambiara" subtitle="Este es el efecto neto del cierre.">
+      <SectionBlock title="Que cambiara" subtitle="Este es el efecto neto del Happy Circle.">
         {primaryLines.length === 0 ? (
           <EmptyState
             description="La propuesta existe, pero no trajo un resumen legible para esta pantalla."
@@ -264,15 +307,15 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                     ? undefined
                     : () =>
                         Alert.alert(
-                          'Rechazar cierre',
-                          'Tu respuesta dejara claro que no apruebas este cierre.',
+                          'No aprobar Circle',
+                          'Tu respuesta dejara claro que no apruebas este Happy Circle.',
                           [
                             {
                               text: 'Cancelar',
                               style: 'cancel',
                             },
                             {
-                              text: 'Rechazar',
+                              text: 'No aprobar',
                               style: 'destructive',
                               onPress: () => void handleAction('reject'),
                             },
@@ -288,22 +331,22 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         {canExecute ? (
           <View style={styles.actionSlot}>
             <PrimaryAction
-              label={busyAction === 'execute' ? 'Ejecutando...' : 'Ejecutar cierre'}
+              label={busyAction === 'execute' ? 'Completando...' : 'Completar Circle'}
               loading={busyAction === 'execute'}
               onPress={
                 busyAction
                   ? undefined
                   : () =>
                       Alert.alert(
-                        'Ejecutar cierre',
-                        'Aplicaremos este cierre al ledger y ya no podras deshacerlo desde aqui.',
+                        'Completar Circle',
+                        'Aplicaremos este Happy Circle al historial y ya no podras deshacerlo desde aqui.',
                         [
                           {
                             text: 'Cancelar',
                             style: 'cancel',
                           },
                           {
-                            text: 'Ejecutar',
+                            text: 'Completar',
                             style: 'destructive',
                             onPress: () => void handleAction('execute'),
                           },
@@ -315,11 +358,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         ) : null}
 
         <View style={styles.actionSlot}>
-          <PrimaryAction href="/activity" label="Volver a alertas" variant="ghost" />
+          <PrimaryAction href="/activity" label="Volver a notificaciones" variant="ghost" />
         </View>
       </View>
       <LoadingOverlay
-        message="No cierres esta pantalla mientras registramos la decision."
+        message="No salgas de esta pantalla mientras registramos la decision."
         title="Procesando accion"
         visible={showBusyOverlay}
       />
@@ -332,6 +375,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+  },
+  summaryCard: {
+    borderLeftColor: transactionCategoryColor('cycle'),
+    borderLeftWidth: 3,
   },
   summaryTitle: {
     color: theme.colors.text,

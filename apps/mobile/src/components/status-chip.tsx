@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { transactionCategoryColor } from '@/lib/transaction-categories';
 
 export interface StatusChipProps {
   readonly label: string;
-  readonly tone?: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+  readonly tone?: 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'cycle';
 }
 
 export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
@@ -17,6 +18,7 @@ export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
         tone === 'warning' ? styles.warning : null,
         tone === 'danger' ? styles.danger : null,
         tone === 'neutral' ? styles.neutral : null,
+        tone === 'cycle' ? styles.cycle : null,
       ]}
     >
       <Text
@@ -27,6 +29,7 @@ export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
           tone === 'warning' ? styles.warningText : null,
           tone === 'danger' ? styles.dangerText : null,
           tone === 'neutral' ? styles.neutralText : null,
+          tone === 'cycle' ? styles.cycleText : null,
         ]}
       >
         {label}
@@ -61,6 +64,9 @@ const styles = StyleSheet.create({
   neutral: {
     backgroundColor: theme.colors.surfaceSoft,
   },
+  cycle: {
+    backgroundColor: '#eaf1ff',
+  },
   primaryText: {
     color: theme.colors.primary,
   },
@@ -75,5 +81,8 @@ const styles = StyleSheet.create({
   },
   neutralText: {
     color: theme.colors.textMuted,
+  },
+  cycleText: {
+    color: transactionCategoryColor('cycle'),
   },
 });

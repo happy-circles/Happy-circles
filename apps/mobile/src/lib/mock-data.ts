@@ -80,8 +80,8 @@ export const mockPersonDetails: readonly PersonDetailDto[] = [
         id: 'laura-2',
         kind: 'settlement',
         tone: 'neutral',
-        title: 'Cierre de ciclo del sistema: Laura -> Tu',
-        subtitle: 'Sistema | Laura -> Tu | Reduce lo que Laura te debia | hace 2 h',
+        title: 'Happy Circle completado',
+        subtitle: 'Happy Circle | Laura paga a Tu | Completaste un Circle! | hace 2 h',
         amountMinor: 20000,
         status: 'posted',
         sourceType: 'system',
@@ -189,7 +189,7 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
       {
         id: 'activity-settlement-1',
         kind: 'settlement_proposal',
-        title: 'Cierre sugerido entre Laura, Mateo y tu',
+        title: 'Happy Circle pendiente',
         subtitle: 'Solo falta tu aprobacion para continuar.',
         status: 'pending_approvals',
         href: '/settlements/settlement-1',
@@ -226,8 +226,8 @@ export const mockActivitySections: readonly ActivitySectionDto[] = [
       {
         id: 'history-3',
         kind: 'system_note',
-        title: 'Cierre de ciclo del sistema: Mateo -> Laura',
-        subtitle: 'Sistema | Mateo -> Laura | Ajusta saldo neto dentro del circulo.',
+        title: 'Happy Circle completado',
+        subtitle: 'Happy Circle | Mateo paga a Laura | Completaste un Circle!',
         status: 'info',
         href: '/settlements/settlement-1',
         amountMinor: 0,
@@ -244,17 +244,17 @@ export const mockSettlement = {
   participants: ['Tu', 'Laura', 'Mateo'],
   participantStatuses: ['Tu: pending', 'Laura: pending', 'Mateo: pending'],
   impactLines: [
-    'Ajusta el saldo neto Laura -> Tu en COP 20.000',
-    'Ajusta el saldo neto Tu -> Mateo en COP 20.000',
-    'Ajusta el saldo neto Mateo -> Laura en COP 20.000',
+    'Ajusta el saldo entre Laura y Tu por COP 20.000',
+    'Ajusta el saldo entre Tu y Mateo por COP 20.000',
+    'Ajusta el saldo entre Mateo y Laura por COP 20.000',
   ],
   movements: [
-    'Laura -> Tu: COP 20.000',
-    'Tu -> Mateo: COP 20.000',
-    'Mateo -> Laura: COP 20.000',
+    'Laura paga a Tu: COP 20.000',
+    'Tu paga a Mateo: COP 20.000',
+    'Mateo paga a Laura: COP 20.000',
   ],
   explainers: [
-    'El cierre solo aparece porque las tres personas ya tienen saldos confirmados.',
+    'El Happy Circle solo aparece porque las tres personas ya tienen saldos confirmados.',
     'No cambia historia previa: solo propone los siguientes movimientos.',
   ],
 };
@@ -268,7 +268,7 @@ export const mockAudit = [
   {
     id: 'audit-2',
     title: 'Settlement proposed',
-    subtitle: 'Se detecto un circulo elegible para cierre.',
+    subtitle: 'Se detecto un circulo elegible para Happy Circle.',
   },
   {
     id: 'audit-3',

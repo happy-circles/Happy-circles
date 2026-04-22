@@ -24,6 +24,7 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
+import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
@@ -55,8 +56,12 @@ function animateModeChange() {
 export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   const session = useSession();
   const [activeMode, setActiveMode] = useState<SignInScreenMode | null>(initialMode);
-  const [allowsRegistration, setAllowsRegistration] = useState(initialMode === 'register');
+  const [allowsRegistration, setAllowsRegistration] = useState(false);
+  const [inviteIntentChecked, setInviteIntentChecked] = useState(false);
   const [email, setEmail] = useState('');
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
+  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -67,6 +72,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
   const isRegister = activeMode === 'register';
   const isRecovery = activeMode === 'recover';
+  const canUseRegistration = isRegister && inviteIntentChecked && allowsRegistration;
+  const canShowSocialActions = activeMode === 'sign-in';
+  const canShowPasswordForm = activeMode === 'sign-in' || isRecovery || canUseRegistration;
+  const selectedCountry =
+    COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
   const brandStateStyle = keyboardVisible
     ? styles.brandWrapKeyboard
     : activeMode
@@ -93,6 +103,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       }
 
       setAllowsRegistration(pendingIntent?.type === 'account_invite');
+      setInviteIntentChecked(true);
     }
 
     void syncInviteIntent();
@@ -103,11 +114,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   }, []);
 
   useEffect(() => {
-    if (!allowsRegistration && activeMode === 'register') {
+    if (inviteIntentChecked && !allowsRegistration && activeMode === 'register') {
       animateModeChange();
       setActiveMode('sign-in');
     }
-  }, [activeMode, allowsRegistration]);
+  }, [activeMode, allowsRegistration, inviteIntentChecked]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -149,6 +160,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   }
 
   function switchMode(nextMode: SignInScreenMode) {
+    if (nextMode === 'register' && !inviteIntentChecked) {
+      setMessage('Estamos validando tu invitacion. Intenta otra vez en un momento.');
+      return;
+    }
+
     if (nextMode === 'register' && !allowsRegistration) {
       setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
       return;
@@ -160,6 +176,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
     animateModeChange();
     setMessage(null);
+    setCountryMenuOpen(false);
     setActiveMode(nextMode);
 
     requestAnimationFrame(() => {
@@ -175,6 +192,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       return;
     }
 
+    if (isRegister && !canUseRegistration) {
+      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -183,6 +205,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
             email,
             password,
             confirmPassword: password,
+            phoneCountryIso2: selectedCountry.iso2,
+            phoneCountryCallingCode: selectedCountry.callingCode,
+            phoneNationalNumber,
           })
         : isRecovery
           ? await session.requestPasswordReset(email)
@@ -202,6 +227,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       return;
     }
 
+    if (isRegister && !canUseRegistration) {
+      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
+      return;
+    }
+
     setMessage(null);
     setSocialBusyProvider('google');
 
@@ -215,6 +245,11 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
   async function handleAppleButtonPress() {
     if (socialBusyProvider) {
+      return;
+    }
+
+    if (isRegister && !canUseRegistration) {
+      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
       return;
     }
 
@@ -260,7 +295,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                     size={46}
                   />
                   <View style={styles.rememberedCopy}>
-                    <Text style={styles.rememberedTitle}>Continuar como {session.rememberedAccount.displayName}</Text>
+                    <Text style={styles.rememberedTitle}>
+                      Continuar como {session.rememberedAccount.displayName}
+                    </Text>
                     <Text style={styles.rememberedMeta}>
                       {maskEmail(session.rememberedAccount.email) ??
                         (session.rememberedAccount.accountAccessState === 'active'
@@ -288,7 +325,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   pressed ? styles.tabButtonPressed : null,
                 ]}
               >
-                <Text style={[styles.tabLabel, activeMode === 'sign-in' ? styles.tabLabelActive : null]}>
+                <Text
+                  style={[styles.tabLabel, activeMode === 'sign-in' ? styles.tabLabelActive : null]}
+                >
                   Ingresar
                 </Text>
               </Pressable>
@@ -302,7 +341,12 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                     pressed ? styles.tabButtonPressed : null,
                   ]}
                 >
-                  <Text style={[styles.tabLabel, activeMode === 'register' ? styles.tabLabelActive : null]}>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      activeMode === 'register' ? styles.tabLabelActive : null,
+                    ]}
+                  >
                     Crear cuenta
                   </Text>
                 </Pressable>
@@ -315,29 +359,45 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
               </Text>
             ) : null}
 
-            <View style={styles.inlineActions}>
-              <Pressable
-                onPress={() => switchMode('recover')}
-                style={({ pressed }) => [
-                  styles.inlineActionButton,
-                  activeMode === 'recover' ? styles.inlineActionButtonActive : null,
-                  pressed ? styles.inlineActionButtonPressed : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.inlineActionLabel,
-                    activeMode === 'recover' ? styles.inlineActionLabelActive : null,
+            {!isRegister ? (
+              <View style={styles.inlineActions}>
+                <Pressable
+                  onPress={() => switchMode('recover')}
+                  style={({ pressed }) => [
+                    styles.inlineActionButton,
+                    activeMode === 'recover' ? styles.inlineActionButtonActive : null,
+                    pressed ? styles.inlineActionButtonPressed : null,
                   ]}
                 >
-                  Olvide mi contrasena
-                </Text>
-              </Pressable>
-            </View>
+                  <Text
+                    style={[
+                      styles.inlineActionLabel,
+                      activeMode === 'recover' ? styles.inlineActionLabelActive : null,
+                    ]}
+                  >
+                    Olvide mi contrasena
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <View style={activeMode ? null : styles.idleFootSpacer} />
 
-            {!isRecovery ? (
+            {isRegister ? (
+              <View style={styles.extraGlass}>
+                <View style={styles.extraGlassHeader}>
+                  <View style={styles.extraGlassDot} />
+                  <Text style={styles.extraGlassLabel}>Invitacion validada</Text>
+                </View>
+                <Text style={styles.registerHint}>
+                  {canUseRegistration
+                    ? 'Crea tu acceso con correo, celular y contrasena. Luego terminas nombre, foto y seguridad.'
+                    : 'Estamos confirmando tu invitacion antes de abrir el registro.'}
+                </Text>
+              </View>
+            ) : null}
+
+            {canShowSocialActions ? (
               <View style={styles.socialActions}>
                 {session.appleSignInAvailable ? (
                   <AppleAuthentication.AppleAuthenticationButton
@@ -358,7 +418,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                 >
                   <Ionicons color={theme.colors.text} name="logo-google" size={18} />
                   <Text style={styles.googleButtonLabel}>
-                    {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
+                    {socialBusyProvider === 'google'
+                      ? 'Abriendo Google...'
+                      : 'Continuar con Google'}
                   </Text>
                 </Pressable>
               </View>
@@ -366,7 +428,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
             {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
-            {activeMode ? (
+            {activeMode && canShowPasswordForm ? (
               <View style={styles.formArea}>
                 {isRecovery ? (
                   <MessageBanner
@@ -392,6 +454,65 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   </FieldBlock>
                 </View>
 
+                {isRegister ? (
+                  <View onLayout={handleFieldLayout('phone')}>
+                    <FieldBlock label="Celular">
+                      <View style={styles.phoneField}>
+                        <View style={styles.phoneRow}>
+                          <Pressable
+                            onPress={() => setCountryMenuOpen((value) => !value)}
+                            style={({ pressed }) => [
+                              styles.callingCodeBox,
+                              pressed ? styles.pressed : null,
+                            ]}
+                          >
+                            <Text style={styles.callingCodeText}>
+                              {selectedCountry.callingCode}
+                            </Text>
+                          </Pressable>
+
+                          <AppTextInput
+                            chrome="glass"
+                            keyboardType="phone-pad"
+                            onChangeText={setPhoneNationalNumber}
+                            onFocus={() => {
+                              setCountryMenuOpen(false);
+                              focusField('phone');
+                            }}
+                            placeholder="3001234567"
+                            placeholderTextColor={theme.colors.muted}
+                            style={styles.phoneInput}
+                            value={phoneNationalNumber}
+                          />
+                        </View>
+
+                        {countryMenuOpen ? (
+                          <View style={styles.countryMenu}>
+                            {COUNTRY_OPTIONS.map((country, index) => (
+                              <Pressable
+                                key={country.iso2}
+                                onPress={() => {
+                                  setCountryIso(country.iso2);
+                                  setCountryMenuOpen(false);
+                                }}
+                                style={[
+                                  styles.countryOption,
+                                  index === COUNTRY_OPTIONS.length - 1
+                                    ? styles.countryOptionLast
+                                    : null,
+                                ]}
+                              >
+                                <Text style={styles.countryLabel}>{country.label}</Text>
+                                <Text style={styles.countryCode}>{country.callingCode}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                      </View>
+                    </FieldBlock>
+                  </View>
+                ) : null}
+
                 {!isRecovery ? (
                   <View onLayout={handleFieldLayout('password')}>
                     <FieldBlock label="Contrasena">
@@ -408,18 +529,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                         value={password}
                       />
                     </FieldBlock>
-                  </View>
-                ) : null}
-
-                {isRegister ? (
-                  <View style={styles.extraGlass}>
-                    <View style={styles.extraGlassHeader}>
-                      <View style={styles.extraGlassDot} />
-                      <Text style={styles.extraGlassLabel}>Esta invitacion ya te abrio el registro</Text>
-                    </View>
-                    <Text style={styles.registerHint}>
-                      Crea tu acceso aqui. Luego terminas nombre, celular, foto y seguridad desde la activacion.
-                    </Text>
                   </View>
                 ) : null}
 
@@ -724,5 +833,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
+  },
+  pressed: {
+    opacity: 0.9,
   },
 });

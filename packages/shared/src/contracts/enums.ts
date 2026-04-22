@@ -25,6 +25,17 @@ export const TRANSACTION_TYPES = [
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
+export const TRANSACTION_CATEGORIES = [
+  'food_drinks',
+  'transport',
+  'entertainment',
+  'services',
+  'home',
+  'other',
+  'cycle',
+] as const;
+export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
+
 export const TRANSACTION_SOURCE_TYPES = ['user', 'system'] as const;
 export type TransactionSourceType = (typeof TRANSACTION_SOURCE_TYPES)[number];
 

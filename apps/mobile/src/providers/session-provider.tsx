@@ -97,6 +97,9 @@ interface EmailPasswordCredentials {
 
 interface RegistrationInput extends EmailPasswordCredentials {
   readonly confirmPassword: string;
+  readonly phoneCountryIso2: string;
+  readonly phoneCountryCallingCode: string;
+  readonly phoneNationalNumber: string;
 }
 
 interface CompleteProfileInput {
@@ -1238,6 +1241,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
     try {
       const parsed = registrationSchema.parse(input);
       const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+      const phoneCountryCallingCode = normalizeCallingCode(parsed.phoneCountryCallingCode);
+      const phoneNationalNumber = normalizePhoneDigits(parsed.phoneNationalNumber);
+      const phoneE164 = buildPhoneE164(phoneCountryCallingCode, phoneNationalNumber);
       const pendingIntent = await readPendingInviteIntent();
 
       if (!supabase) {
@@ -1253,6 +1259,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
         email: normalizedEmail,
         password: parsed.password,
         options: {
+          data: {
+            phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
+            phone_country_calling_code: phoneCountryCallingCode,
+            phone_national_number: phoneNationalNumber,
+            phone_e164: phoneE164,
+          },
           emailRedirectTo: redirectTo,
         },
       });

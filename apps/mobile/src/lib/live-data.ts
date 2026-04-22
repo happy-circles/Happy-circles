@@ -28,6 +28,7 @@ import {
   reviewAccountInviteSchema,
   reviewExternalFriendshipInviteSchema,
   requestDecisionSchema,
+  type TransactionCategory,
   type Database,
 } from '@happy-circles/shared';
 
@@ -38,11 +39,15 @@ import { buildActivityHistoryItems, compareHistoryItems } from './history-cases'
 import { createIdempotencyKey } from './idempotency';
 import { queryClient } from './query-client';
 import { supabase } from './supabase';
+import { DEFAULT_TRANSACTION_CATEGORY, normalizeTransactionCategory } from './transaction-categories';
 
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
 type FriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
 type FriendshipInviteDeliveryRow =
   Database['public']['Views']['v_friendship_invite_deliveries_live']['Row'];
+type AccountInviteRow = Database['public']['Views']['v_account_invites_live']['Row'];
+type AccountInviteDeliveryRow =
+  Database['public']['Views']['v_account_invite_deliveries_live']['Row'];
 type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
 type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
 type SettlementProposalRow = Database['public']['Tables']['settlement_proposals']['Row'];
@@ -70,6 +75,7 @@ interface TimelineEventDraft {
   readonly title: string;
   readonly subtitle: string;
   readonly amountMinor: number;
+  readonly category?: TransactionCategory;
   readonly tone: PersonTimelineItemDto['tone'];
   readonly kind: PersonTimelineItemDto['kind'];
   readonly status: string;
@@ -166,6 +172,36 @@ export interface FriendshipSummary {
   readonly requiresReviewCount: number;
   readonly waitingSenderReviewCount: number;
   readonly sentOutsideCount: number;
+  readonly historyCount: number;
+}
+
+export interface AccountInviteListItem extends ActivityItemDto {
+  readonly kind: 'account_invite';
+  readonly inviteId: string;
+  readonly actorRole: 'inviter' | 'activated' | 'none';
+  readonly originChannel: 'remote' | 'qr';
+  readonly actionState:
+    | 'pending_activation'
+    | 'requires_you_review'
+    | 'waiting_sender_review'
+    | 'history';
+  readonly expiresAt: string | null;
+  readonly activatedAt: string | null;
+  readonly resolvedAt: string | null;
+  readonly intendedRecipientAlias: string | null;
+  readonly intendedRecipientPhoneE164: string | null;
+  readonly intendedRecipientPhoneLabel: string | null;
+  readonly activatedUserId: string | null;
+  readonly activatedUserDisplayName: string | null;
+  readonly activatedUserAvatarUrl: string | null;
+  readonly ctaLabel: string;
+  readonly createdAt: string;
+}
+
+export interface AccountInviteSummary {
+  readonly requiresReviewCount: number;
+  readonly pendingActivationCount: number;
+  readonly waitingInviterReviewCount: number;
   readonly historyCount: number;
 }
 
@@ -308,7 +344,7 @@ interface ActionableItem {
   readonly id: PendingActionDto['id'];
   readonly kind: Extract<
     PendingActionDto['kind'],
-    'financial_request' | 'settlement_proposal' | 'friendship_invite'
+    'financial_request' | 'settlement_proposal' | 'friendship_invite' | 'account_invite'
   >;
   readonly title: PendingActionDto['title'];
   readonly subtitle: PendingActionDto['subtitle'];
@@ -316,6 +352,7 @@ interface ActionableItem {
   readonly ctaLabel: PendingActionDto['ctaLabel'];
   readonly href: PendingActionDto['href'];
   readonly amountMinor?: PendingActionDto['amountMinor'];
+  readonly category?: TransactionCategory;
   readonly counterpartyLabel?: string;
   readonly tone?: ActivityItemDto['tone'];
   readonly participantUserIds?: readonly string[];
@@ -334,6 +371,9 @@ export interface AppSnapshot {
   readonly friendshipPendingItems: readonly FriendshipInviteListItem[];
   readonly friendshipHistoryItems: readonly FriendshipInviteListItem[];
   readonly friendshipSummary: FriendshipSummary;
+  readonly accountInvitePendingItems: readonly AccountInviteListItem[];
+  readonly accountInviteHistoryItems: readonly AccountInviteListItem[];
+  readonly accountInviteSummary: AccountInviteSummary;
   readonly activitySections: readonly ActivitySectionDto[];
   readonly pendingCount: number;
   readonly auditEvents: readonly AuditListItem[];
@@ -346,6 +386,7 @@ interface CreateRequestInput {
   readonly creditorUserId: string;
   readonly amountMinor: number;
   readonly description: string;
+  readonly category?: TransactionCategory;
 }
 
 const APP_SNAPSHOT_QUERY_KEY = 'app-snapshot';
@@ -475,6 +516,7 @@ function actionableItemToActivityItem(item: ActionableItem): ActivityItemDto {
     status: item.status,
     href: item.href,
     amountMinor: item.amountMinor,
+    category: item.category,
     counterpartyLabel: item.counterpartyLabel,
     tone: item.tone,
   };
@@ -525,10 +567,7 @@ function buildPendingRequestImpactTitle(input: {
   return direction === 'owes_me' ? 'Entrada propuesta' : 'Salida propuesta';
 }
 
-function formatPendingRequestTitle(
-  request: FinancialRequestRow,
-  currentUserId: string,
-): string {
+function formatPendingRequestTitle(request: FinancialRequestRow, currentUserId: string): string {
   return buildPendingRequestImpactTitle({
     request,
     currentUserId,
@@ -540,7 +579,11 @@ function formatPendingRequestSubtitle(
   names: Map<string, string>,
 ): string {
   const creatorName = names.get(request.creator_user_id) ?? 'Persona';
-  return [creatorName, request.description ?? 'Sin descripcion', formatRelativeLabel(request.created_at)].join(' | ');
+  return [
+    creatorName,
+    request.description ?? 'Sin descripcion',
+    formatRelativeLabel(request.created_at),
+  ].join(' | ');
 }
 
 function buildPersonPendingRequest(input: {
@@ -557,8 +600,10 @@ function buildPersonPendingRequest(input: {
   return {
     id: request.id,
     requestKind,
-    responseState: request.responder_user_id === currentUserId ? 'requires_you' : 'waiting_other_side',
+    responseState:
+      request.responder_user_id === currentUserId ? 'requires_you' : 'waiting_other_side',
     tone: requestDirectionForUser(request, currentUserId) === 'owes_me' ? 'positive' : 'negative',
+    category: normalizeTransactionCategory(request.category),
     title: buildPendingRequestImpactTitle({
       request,
       currentUserId,
@@ -566,7 +611,8 @@ function buildPersonPendingRequest(input: {
     description: request.description ?? 'Sin descripcion',
     amountMinor: request.amount_minor,
     createdAtLabel: formatRelativeLabel(request.created_at),
-    createdByLabel: names.get(request.creator_user_id) ?? (createdByCurrentUser ? 'Tu' : counterpartyName),
+    createdByLabel:
+      names.get(request.creator_user_id) ?? (createdByCurrentUser ? 'Tu' : counterpartyName),
   };
 }
 
@@ -656,7 +702,9 @@ function inferOriginRequestIdFromLedgerRow(input: {
         return false;
       }
 
-      const resolvedAt = Date.parse(request.resolved_at ?? request.updated_at ?? request.created_at);
+      const resolvedAt = Date.parse(
+        request.resolved_at ?? request.updated_at ?? request.created_at,
+      );
       if (Number.isNaN(resolvedAt) || Math.abs(resolvedAt - happenedAt) > 60_000) {
         return false;
       }
@@ -764,6 +812,14 @@ function buildRequestResolutionTitle(
     return `${responder} no acepto la propuesta`;
   }
 
+  if (request.status === 'canceled') {
+    return 'La propuesta fue cancelada';
+  }
+
+  if (request.status === 'expired') {
+    return 'La propuesta expiro';
+  }
+
   if (request.status === 'amended') {
     return `${responder} propuso un nuevo monto`;
   }
@@ -776,7 +832,7 @@ function requestToneForStatus(
   currentUserId: string,
   status: FinancialRequestRow['status'],
 ): PersonTimelineItemDto['tone'] {
-  if (status === 'rejected' || status === 'amended') {
+  if (status === 'rejected' || status === 'amended' || status === 'canceled' || status === 'expired') {
     return 'neutral';
   }
 
@@ -808,7 +864,9 @@ function buildPersonTimeline(input: {
 }): PersonTimelineItemDto[] {
   const requestById = new Map(input.requests.map((request) => [request.id, request]));
   const requestIdsWithChildren = new Set(
-    input.requests.flatMap((request) => (request.parent_request_id ? [request.parent_request_id] : [])),
+    input.requests.flatMap((request) =>
+      request.parent_request_id ? [request.parent_request_id] : [],
+    ),
   );
   const drafts: TimelineEventDraft[] = [];
 
@@ -831,6 +889,7 @@ function buildPersonTimeline(input: {
       ),
       subtitle: buildRequestEventSubtitle(flowLabel, request.description, request.created_at),
       amountMinor: request.amount_minor,
+      category: normalizeTransactionCategory(request.category),
       tone: requestToneForStatus(request, input.currentUserId, 'pending'),
       kind: 'request',
       status: 'pending',
@@ -857,13 +916,18 @@ function buildPersonTimeline(input: {
     if (
       resolutionTitle &&
       resolutionAt &&
-      (request.status === 'accepted' || request.status === 'rejected' || shouldAddAmendedFallback)
+      (request.status === 'accepted' ||
+        request.status === 'rejected' ||
+        request.status === 'canceled' ||
+        request.status === 'expired' ||
+        shouldAddAmendedFallback)
     ) {
       drafts.push({
         id: `${request.id}:${request.status}`,
         title: resolutionTitle,
         subtitle: buildRequestEventSubtitle(flowLabel, request.description, resolutionAt),
         amountMinor: request.amount_minor,
+        category: normalizeTransactionCategory(request.category),
         tone: requestToneForStatus(request, input.currentUserId, request.status),
         kind: 'request',
         status: request.status,
@@ -894,19 +958,10 @@ function buildPersonTimeline(input: {
 
     drafts.push({
       id: row.item_id,
-      title: buildTimelineStepTitle(
-        row,
-        input.currentUserId,
-        input.counterpartyName,
-        input.names,
-      ),
-      subtitle: buildHistorySubtitle(
-        row,
-        input.currentUserId,
-        input.counterpartyName,
-        input.names,
-      ),
+      title: buildTimelineStepTitle(row, input.currentUserId, input.counterpartyName, input.names),
+      subtitle: buildHistorySubtitle(row, input.currentUserId, input.counterpartyName, input.names),
       amountMinor: row.amount_minor,
+      category: normalizeTransactionCategory(row.category),
       tone: historyToneForRow(row, input.currentUserId),
       kind: historyKindForTimeline(row),
       status: row.status,
@@ -940,6 +995,7 @@ function buildPersonTimeline(input: {
         title: event.title,
         subtitle: event.subtitle,
         amountMinor: event.amountMinor,
+        category: event.category,
         tone: event.tone,
         kind: event.kind,
         status: event.status,
@@ -1020,17 +1076,20 @@ function buildPendingSettlementItems(
     );
     const others = participantNames.filter((name) => name !== 'Tu');
     const titleBase =
-      others.length > 0 ? `Ajustaria saldos con ${others.join(', ')}` : 'Ajustaria saldos en tu circulo';
+      others.length > 0
+        ? `Ajusta saldos con ${others.join(', ')}`
+        : 'Ajusta saldos en tu circulo';
 
     pendingProposalIds.add(proposal.id);
     items.push({
       id: proposal.id,
       kind: 'settlement_proposal',
-      title: 'Cierre de ciclo propuesto',
+      title: 'Happy Circle pendiente',
       subtitle: `${titleBase} | ${formatRelativeLabel(proposal.created_at)}`,
       status: 'pending_approvals',
       ctaLabel: 'Revisar',
       href: `/settlements/${proposal.id}`,
+      category: 'cycle',
       participantUserIds: participants.map((participant) => participant.participant_user_id),
       createdAt: proposal.created_at,
     });
@@ -1050,7 +1109,9 @@ function buildPendingSettlementItems(
     );
     const others = participantNames.filter((name) => name !== 'Tu');
     const titleBase =
-      others.length > 0 ? `Ajustaria saldos con ${others.join(', ')}` : 'Ajustaria saldos en tu circulo';
+      others.length > 0
+        ? `Ajusta saldos con ${others.join(', ')}`
+        : 'Ajusta saldos en tu circulo';
 
     if (proposal.status === 'pending_approvals' && actorParticipant?.decision === 'approved') {
       const approvalsPending = participants.filter(
@@ -1060,11 +1121,12 @@ function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: 'Cierre de ciclo esperando a otros',
+        title: 'Happy Circle esperando aprobaciones',
         subtitle: `${titleBase} | faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}`,
         status: 'waiting_other_side',
         ctaLabel: 'Revisar',
         href: `/settlements/${proposal.id}`,
+        category: 'cycle',
         participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
       });
@@ -1074,11 +1136,12 @@ function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: 'Cierre de ciclo listo',
-        subtitle: `${titleBase} | ya puedes ejecutarlo`,
+        title: 'Happy Circle listo',
+        subtitle: `${titleBase} | ya puedes completarlo`,
         status: 'approved',
-        ctaLabel: 'Ejecutar',
+        ctaLabel: 'Completar',
         href: `/settlements/${proposal.id}`,
+        category: 'cycle',
         participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
       });
@@ -1088,7 +1151,72 @@ function buildPendingSettlementItems(
   return items;
 }
 
-function parseFriendshipClaimantSnapshot(value: Database['public']['Tables']['friendship_invites']['Row']['claimant_snapshot']): FriendshipClaimantSnapshot | null {
+function settlementProposalTotalAmount(proposal: SettlementProposalRow): number {
+  return parseSettlementMovements(proposal.movements_json).reduce(
+    (total, movement) => total + movement.amount_minor,
+    0,
+  );
+}
+
+function buildSettlementProposalHistoryTimelineItems(input: {
+  readonly proposals: readonly SettlementProposalRow[];
+  readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
+  readonly currentUserId: string;
+  readonly counterpartyUserId: string;
+  readonly names: Map<string, string>;
+}): PersonTimelineItemDto[] {
+  return input.proposals.flatMap((proposal): PersonTimelineItemDto[] => {
+    if (proposal.status !== 'rejected' && proposal.status !== 'stale') {
+      return [];
+    }
+
+    const participants = input.participantsByProposalId.get(proposal.id) ?? [];
+    const participantIds = new Set(
+      participants.map((participant) => participant.participant_user_id),
+    );
+    if (!participantIds.has(input.currentUserId) || !participantIds.has(input.counterpartyUserId)) {
+      return [];
+    }
+
+    const happenedAt = proposal.updated_at ?? proposal.created_at;
+    const otherNames = participants
+      .map((participant) => input.names.get(participant.participant_user_id) ?? 'Persona')
+      .filter((name) => name !== 'Tu');
+    const detail =
+      proposal.status === 'rejected'
+        ? 'Este Circle no se completo'
+        : 'Este Circle fue reemplazado';
+    const peopleLabel = otherNames.length > 0 ? `Con ${otherNames.join(', ')}` : 'Happy Circle';
+
+    return [
+      {
+        id: `${proposal.id}:${proposal.status}`,
+        title:
+          proposal.status === 'rejected'
+            ? 'Happy Circle no completado'
+            : 'Happy Circle reemplazado',
+        subtitle: [peopleLabel, detail, formatRelativeLabel(happenedAt)].join(' | '),
+        amountMinor: settlementProposalTotalAmount(proposal),
+        category: 'cycle',
+        tone: 'neutral',
+        kind: 'settlement',
+        status: proposal.status,
+        sourceType: 'system',
+        sourceLabel: 'Happy Circle',
+        originRequestId: undefined,
+        originSettlementProposalId: proposal.id,
+        flowLabel: peopleLabel,
+        detail,
+        happenedAt,
+        happenedAtLabel: formatRelativeLabel(happenedAt),
+      },
+    ];
+  });
+}
+
+function parseFriendshipClaimantSnapshot(
+  value: Database['public']['Tables']['friendship_invites']['Row']['claimant_snapshot'],
+): FriendshipClaimantSnapshot | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
@@ -1134,16 +1262,30 @@ function maskInvitePhone(value: string | null | undefined): string | null {
   return `***${digits.slice(-4)}`;
 }
 
-function buildIntendedRecipientReference(invite: FriendshipInviteRow): string | null {
-  const parts = [
-    invite.intended_recipient_alias?.trim() || null,
-    maskInvitePhone(invite.intended_recipient_phone_e164),
-  ].filter(Boolean);
+function buildIntendedRecipientReferenceFromParts(input: {
+  readonly alias: string | null;
+  readonly phoneE164: string | null;
+}): string | null {
+  const parts = [input.alias?.trim() || null, maskInvitePhone(input.phoneE164)].filter(Boolean);
 
   return parts.length > 0 ? parts.join(' | ') : null;
 }
 
-function channelLabel(channel: FriendshipInviteRow['origin_channel'] | FriendshipInviteDeliveryRow['channel']) {
+function buildIntendedRecipientReference(invite: FriendshipInviteRow): string | null {
+  return buildIntendedRecipientReferenceFromParts({
+    alias: invite.intended_recipient_alias,
+    phoneE164: invite.intended_recipient_phone_e164,
+  });
+}
+
+function buildAccountIntendedRecipientReference(invite: AccountInviteRow): string | null {
+  return buildIntendedRecipientReferenceFromParts({
+    alias: invite.intended_recipient_alias,
+    phoneE164: invite.intended_recipient_phone_e164,
+  });
+}
+
+function channelLabel(channel: string | null | undefined) {
   if (channel === 'internal') {
     return 'Interna';
   }
@@ -1217,7 +1359,7 @@ function buildFriendshipInviteItems(input: {
         : (input.names.get(invite.inviter_user_id) ?? 'Persona');
     const targetName = invite.target_user_id
       ? (input.names.get(invite.target_user_id) ?? 'Persona')
-      : invite.intended_recipient_alias ?? 'Persona';
+      : (invite.intended_recipient_alias ?? 'Persona');
     const claimantName = claimantSnapshot?.displayName ?? 'Persona';
     const intendedRecipientReference = buildIntendedRecipientReference(invite);
     const pieces = [channelLabel(latestDelivery?.channel ?? invite.origin_channel)];
@@ -1252,7 +1394,9 @@ function buildFriendshipInviteItems(input: {
       subtitle = [
         channelLabel(latestDelivery?.channel ?? invite.origin_channel),
         intendedRecipientReference,
-        latestDelivery?.expires_at ? `vence ${formatRelativeLabel(latestDelivery.expires_at)}` : null,
+        latestDelivery?.expires_at
+          ? `vence ${formatRelativeLabel(latestDelivery.expires_at)}`
+          : null,
       ]
         .filter(Boolean)
         .join(' | ');
@@ -1280,7 +1424,8 @@ function buildFriendshipInviteItems(input: {
     } else {
       const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
       const autoAcceptedByPhoneMatch =
-        invite.resolution_reason === 'claim_phone_match_auto_accepted' && invite.flow === 'external';
+        invite.resolution_reason === 'claim_phone_match_auto_accepted' &&
+        invite.flow === 'external';
       title =
         invite.status === 'accepted'
           ? actorRole === 'sender'
@@ -1333,7 +1478,9 @@ function buildFriendshipInviteItems(input: {
         happenedAtLabel: formatRelativeLabel(happenedAt),
         counterpartyLabel:
           actorRole === 'sender'
-            ? (invite.flow === 'external' ? claimantSnapshot?.displayName ?? invite.intended_recipient_alias ?? undefined : targetName)
+            ? invite.flow === 'external'
+              ? (claimantSnapshot?.displayName ?? invite.intended_recipient_alias ?? undefined)
+              : targetName
             : inviterName !== 'Tu'
               ? inviterName
               : undefined,
@@ -1383,10 +1530,241 @@ function buildFriendshipInviteItems(input: {
     pendingItems: sortByNewest(pendingItems),
     historyItems: sortHistoryItems(historyItems),
     summary: {
-      requiresResponseCount: pendingItems.filter((item) => item.actionState === 'requires_you_response').length,
-      requiresReviewCount: pendingItems.filter((item) => item.actionState === 'requires_you_review').length,
-      waitingSenderReviewCount: pendingItems.filter((item) => item.actionState === 'waiting_sender_review').length,
+      requiresResponseCount: pendingItems.filter(
+        (item) => item.actionState === 'requires_you_response',
+      ).length,
+      requiresReviewCount: pendingItems.filter((item) => item.actionState === 'requires_you_review')
+        .length,
+      waitingSenderReviewCount: pendingItems.filter(
+        (item) => item.actionState === 'waiting_sender_review',
+      ).length,
       sentOutsideCount: pendingItems.filter((item) => item.actionState === 'pending_claim').length,
+      historyCount: historyItems.length,
+    },
+  };
+}
+
+function normalizeAccountInviteChannel(
+  value: string | null | undefined,
+): AccountInviteListItem['originChannel'] {
+  return value === 'qr' ? 'qr' : 'remote';
+}
+
+function getAccountInviteActorRole(
+  invite: AccountInviteRow,
+  currentUserId: string,
+): AccountInviteListItem['actorRole'] {
+  if (invite.inviter_user_id === currentUserId) {
+    return 'inviter';
+  }
+
+  if (invite.activated_user_id === currentUserId) {
+    return 'activated';
+  }
+
+  return 'none';
+}
+
+function buildLatestAccountDeliveryByInviteId(
+  deliveries: readonly AccountInviteDeliveryRow[],
+): ReadonlyMap<string, AccountInviteDeliveryRow> {
+  const map = new Map<string, AccountInviteDeliveryRow>();
+
+  for (const delivery of deliveries) {
+    const current = map.get(delivery.invite_id);
+    if (!current || delivery.created_at > current.created_at) {
+      map.set(delivery.invite_id, delivery);
+    }
+  }
+
+  return map;
+}
+
+function buildAccountInviteItems(input: {
+  readonly invites: readonly AccountInviteRow[];
+  readonly deliveries: readonly AccountInviteDeliveryRow[];
+  readonly names: Map<string, string>;
+  readonly profiles: Map<string, UserProfileRow>;
+  readonly currentUserId: string;
+}): {
+  readonly pendingItems: readonly AccountInviteListItem[];
+  readonly historyItems: readonly AccountInviteListItem[];
+  readonly summary: AccountInviteSummary;
+} {
+  const latestDeliveryByInviteId = buildLatestAccountDeliveryByInviteId(input.deliveries);
+  const pendingItems: AccountInviteListItem[] = [];
+  const historyItems: AccountInviteListItem[] = [];
+
+  for (const invite of input.invites) {
+    const actorRole = getAccountInviteActorRole(invite, input.currentUserId);
+    if (actorRole === 'none') {
+      continue;
+    }
+
+    const latestDelivery = latestDeliveryByInviteId.get(invite.id);
+    const originChannel = normalizeAccountInviteChannel(latestDelivery?.channel);
+    const inviterName =
+      invite.inviter_user_id === input.currentUserId
+        ? 'Tu'
+        : (input.names.get(invite.inviter_user_id) ?? 'Persona');
+    const activatedUserProfile = invite.activated_user_id
+      ? input.profiles.get(invite.activated_user_id)
+      : undefined;
+    const activatedUserDisplayName = invite.activated_user_id
+      ? (input.names.get(invite.activated_user_id) ?? 'Persona')
+      : null;
+    const activatedUserAvatarUrl = activatedUserProfile
+      ? resolveAvatarUrl(activatedUserProfile.avatar_path, activatedUserProfile.updated_at)
+      : null;
+    const intendedRecipientReference = buildAccountIntendedRecipientReference(invite);
+    const targetName = activatedUserDisplayName ?? invite.intended_recipient_alias ?? 'tu contacto';
+    const expiryLabel = invite.expires_at
+      ? `vence ${formatRelativeLabel(invite.expires_at)}`
+      : null;
+    const deliveryMeta =
+      latestDelivery?.status === 'authenticated'
+        ? 'link abierto'
+        : latestDelivery?.status === 'activated'
+          ? 'cuenta activada'
+          : null;
+
+    let title = 'Invitacion de acceso';
+    let subtitle = [
+      channelLabel(originChannel),
+      intendedRecipientReference,
+      deliveryMeta,
+      expiryLabel,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+    let actionState: AccountInviteListItem['actionState'] = 'history';
+    let status = invite.status;
+    let ctaLabel = 'Ver';
+
+    if (invite.status === 'pending_activation') {
+      if (actorRole !== 'inviter') {
+        continue;
+      }
+
+      title = `Acceso privado para ${targetName}`;
+      actionState = 'pending_activation';
+      status = 'pending_activation';
+      ctaLabel = originChannel === 'qr' ? 'QR activo' : 'Compartir';
+    } else if (invite.status === 'pending_inviter_review') {
+      if (actorRole === 'inviter') {
+        title = `Verifica a ${targetName}`;
+        subtitle = [
+          channelLabel(originChannel),
+          intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
+          invite.activated_at ? `activada ${formatRelativeLabel(invite.activated_at)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        actionState = 'requires_you_review';
+        status = 'requires_you_review';
+        ctaLabel = 'Verificar';
+      } else {
+        title = `Esperando validacion de ${inviterName}`;
+        subtitle = `${channelLabel(originChannel)} | ya activaste este acceso`;
+        actionState = 'waiting_sender_review';
+        status = 'waiting_sender_review';
+      }
+    } else {
+      const happenedAt = invite.resolved_at ?? invite.updated_at ?? invite.created_at;
+      const autoAcceptedByPhoneMatch =
+        invite.resolution_reason === 'activation_phone_match_auto_accepted';
+      title =
+        invite.status === 'accepted'
+          ? actorRole === 'inviter'
+            ? autoAcceptedByPhoneMatch
+              ? `${targetName} entro con el telefono esperado`
+              : `Confirmaste a ${targetName}`
+            : `${inviterName} confirmo tu acceso`
+          : invite.status === 'rejected'
+            ? actorRole === 'inviter'
+              ? `Rechazaste a ${targetName}`
+              : `${inviterName} rechazo este acceso`
+            : invite.status === 'expired'
+              ? actorRole === 'inviter'
+                ? `El acceso para ${targetName} vencio`
+                : 'Este acceso vencio'
+              : 'Invitacion de acceso cancelada';
+      subtitle = [
+        channelLabel(originChannel),
+        actorRole === 'inviter' ? intendedRecipientReference : null,
+        formatRelativeLabel(happenedAt),
+      ]
+        .filter(Boolean)
+        .join(' | ');
+      historyItems.push({
+        id: invite.id,
+        inviteId: invite.id,
+        kind: 'account_invite',
+        actorRole,
+        originChannel,
+        actionState: 'history',
+        title,
+        subtitle,
+        status: invite.status,
+        ctaLabel: 'Ver',
+        href: '/activity?domain=friendships',
+        sourceType: 'user',
+        createdAt: invite.created_at,
+        happenedAt,
+        happenedAtLabel: formatRelativeLabel(happenedAt),
+        counterpartyLabel: actorRole === 'inviter' ? targetName : inviterName,
+        expiresAt: invite.expires_at,
+        activatedAt: invite.activated_at,
+        resolvedAt: invite.resolved_at,
+        intendedRecipientAlias: invite.intended_recipient_alias,
+        intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
+        intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+        activatedUserId: invite.activated_user_id,
+        activatedUserDisplayName,
+        activatedUserAvatarUrl,
+      });
+      continue;
+    }
+
+    pendingItems.push({
+      id: invite.id,
+      inviteId: invite.id,
+      kind: 'account_invite',
+      actorRole,
+      originChannel,
+      actionState,
+      title,
+      subtitle,
+      status,
+      ctaLabel,
+      href: '/activity?domain=friendships',
+      sourceType: 'user',
+      createdAt: invite.created_at,
+      counterpartyLabel: actorRole === 'inviter' ? targetName : inviterName,
+      expiresAt: invite.expires_at,
+      activatedAt: invite.activated_at,
+      resolvedAt: invite.resolved_at,
+      intendedRecipientAlias: invite.intended_recipient_alias,
+      intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
+      intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+      activatedUserId: invite.activated_user_id,
+      activatedUserDisplayName,
+      activatedUserAvatarUrl,
+    });
+  }
+
+  return {
+    pendingItems: sortByNewest(pendingItems),
+    historyItems: sortHistoryItems(historyItems),
+    summary: {
+      requiresReviewCount: pendingItems.filter((item) => item.actionState === 'requires_you_review')
+        .length,
+      pendingActivationCount: pendingItems.filter(
+        (item) => item.actionState === 'pending_activation',
+      ).length,
+      waitingInviterReviewCount: pendingItems.filter(
+        (item) => item.actionState === 'waiting_sender_review',
+      ).length,
       historyCount: historyItems.length,
     },
   };
@@ -1493,8 +1871,8 @@ function buildHistoryTitle(
 
   if (row.subtype === 'cycle_settlement') {
     return movementFlow
-      ? `Cierre de ciclo del sistema: ${movementFlow}`
-      : `Cierre de ciclo con ${counterpartyName}`;
+      ? `Happy Circle completado: ${movementFlow}`
+      : `Happy Circle con ${counterpartyName}`;
   }
 
   return movementFlow
@@ -1524,11 +1902,15 @@ function buildTimelineStepTitle(
   const creator =
     row.creator_user_id === currentUserId
       ? 'Tu'
-      : (row.creator_user_id ? (names.get(row.creator_user_id) ?? counterpartyName) : 'Sistema');
+      : row.creator_user_id
+        ? (names.get(row.creator_user_id) ?? counterpartyName)
+        : 'Sistema';
   const responder =
     row.responder_user_id === currentUserId
       ? 'Tu'
-      : (row.responder_user_id ? (names.get(row.responder_user_id) ?? counterpartyName) : 'La otra persona');
+      : row.responder_user_id
+        ? (names.get(row.responder_user_id) ?? counterpartyName)
+        : 'La otra persona';
 
   if (row.item_kind === 'financial_request') {
     if (row.status === 'pending') {
@@ -1575,7 +1957,7 @@ function buildTimelineStepTitle(
   }
 
   if (row.subtype === 'cycle_settlement') {
-    return 'Sistema ejecuto un cierre de ciclo';
+    return 'Completaste un Circle!';
   }
 
   return buildHistoryTitle(row, counterpartyName, names);
@@ -1590,7 +1972,7 @@ function buildCycleSettlementImpactLabel(
     return null;
   }
 
-  return `Ajuste neto con ${counterpartyName}`;
+  return 'Completaste un Circle!';
 }
 
 function buildHistorySubtitle(
@@ -1599,7 +1981,14 @@ function buildHistorySubtitle(
   counterpartyName: string,
   names: Map<string, string>,
 ): string {
-  const pieces = [sourceTypeForRow(row) === 'system' ? 'Sistema' : 'Usuario'];
+  const isCycleSettlement = row.subtype === 'cycle_settlement';
+  const pieces = [
+    isCycleSettlement
+      ? 'Happy Circle'
+      : sourceTypeForRow(row) === 'system'
+        ? 'Sistema'
+        : 'Usuario',
+  ];
 
   const movementFlow = buildMovementFlowLabel(row, names);
   if (movementFlow) {
@@ -1627,12 +2016,12 @@ function buildSettlementDetail(
   const movements = parseSettlementMovements(proposal.movements_json).map((movement) => {
     const debtor = names.get(movement.debtor_user_id) ?? 'Deudor';
     const creditor = names.get(movement.creditor_user_id) ?? 'Acreedor';
-    return `${debtor} -> ${creditor}: ${formatCop(movement.amount_minor)}`;
+    return `${debtor} paga a ${creditor}: ${formatCop(movement.amount_minor)}`;
   });
   const impactLines = parseSettlementMovements(proposal.movements_json).map((movement) => {
     const debtor = names.get(movement.debtor_user_id) ?? 'Deudor';
     const creditor = names.get(movement.creditor_user_id) ?? 'Acreedor';
-    return `Ajusta el saldo neto ${debtor} -> ${creditor} en ${formatCop(movement.amount_minor)}`;
+    return `Ajusta el saldo entre ${debtor} y ${creditor} por ${formatCop(movement.amount_minor)}`;
   });
   const participantStatuses = participants.map((participant) => {
     const name = names.get(participant.participant_user_id) ?? 'Persona';
@@ -1647,20 +2036,20 @@ function buildSettlementDetail(
       ? [
           approvalsPending > 0
             ? `Faltan ${approvalsPending} aprobacion${approvalsPending > 1 ? 'es' : ''} para que quede aprobado.`
-            : 'Todos aprobaron, solo falta ejecutar.',
-          'El snapshot hash evita ejecutar un cierre sobre un grafo viejo.',
+            : 'Todos aprobaron, solo falta completar el Circle.',
+          'Happy Circles evita aplicar una propuesta sobre saldos que ya cambiaron.',
         ]
       : proposal.status === 'approved'
         ? [
             'La propuesta ya fue aprobada por todos.',
-            'El siguiente paso es ejecutar los movimientos.',
+            'El siguiente paso es completar el Circle.',
           ]
         : proposal.status === 'executed'
           ? [
-              'El ledger ya recibio los movimientos de este cierre.',
-              'El saldo neto fue recalculado despues de ejecutar.',
+              'Completaste un Circle!',
+              'El saldo neto ya fue actualizado.',
             ]
-          : ['Revisa el estado tecnico antes de volver a proponer un cierre.'];
+          : ['Este Circle ya no esta activo. Puedes crear otro si los saldos cambiaron.'];
 
   return {
     id: proposal.id,
@@ -1689,6 +2078,8 @@ function buildLiveSnapshot(input: {
   readonly profiles: readonly UserProfileRow[];
   readonly friendshipInvites: readonly FriendshipInviteRow[];
   readonly friendshipInviteDeliveries: readonly FriendshipInviteDeliveryRow[];
+  readonly accountInvites: readonly AccountInviteRow[];
+  readonly accountInviteDeliveries: readonly AccountInviteDeliveryRow[];
   readonly relationships: readonly RelationshipRow[];
   readonly openDebts: readonly OpenDebtRow[];
   readonly financialRequests: readonly FinancialRequestRow[];
@@ -1720,7 +2111,9 @@ function buildLiveSnapshot(input: {
     }
   }
 
-  const visibleRelationshipIds = new Set(input.relationships.map((relationship) => relationship.id));
+  const visibleRelationshipIds = new Set(
+    input.relationships.map((relationship) => relationship.id),
+  );
   const history = input.history.filter((row) =>
     isHistoryRowVisibleToCurrentUser(row, input.currentUserId, visibleRelationshipIds),
   );
@@ -1737,6 +2130,13 @@ function buildLiveSnapshot(input: {
     invites: input.friendshipInvites,
     deliveries: input.friendshipInviteDeliveries,
     names: nameByUserId,
+    currentUserId: input.currentUserId,
+  });
+  const accountInviteState = buildAccountInviteItems({
+    invites: input.accountInvites,
+    deliveries: input.accountInviteDeliveries,
+    names: nameByUserId,
+    profiles: profileByUserId,
     currentUserId: input.currentUserId,
   });
   const pendingSettlements = buildPendingSettlementItems(
@@ -1758,7 +2158,8 @@ function buildLiveSnapshot(input: {
       const direction = deriveDirection(input.currentUserId, edge);
       const timeline = historyByRelationshipId.get(relationship.id) ?? [];
       const latestHistory = timeline[0];
-      const pendingCount = requests.filter((row) => row.status === 'pending').length + relatedSettlements.length;
+      const pendingCount =
+        requests.filter((row) => row.status === 'pending').length + relatedSettlements.length;
       const lastActivityLabel =
         latestRequest && (!latestHistory || latestRequest.created_at >= latestHistory.happened_at)
           ? `Propuesta pendiente ${formatRelativeLabel(latestRequest.created_at)}`
@@ -1788,25 +2189,28 @@ function buildLiveSnapshot(input: {
       const latestPendingRequest = requests.find((request) => request.status === 'pending');
       const personPendingRequests = requests
         .filter((request) => request.status === 'pending')
-        .map((request): ActionableItem => ({
-          id: request.id,
-          kind: 'financial_request',
-          title: formatPendingRequestTitle(request, input.currentUserId),
-          subtitle: formatPendingRequestSubtitle(request, nameByUserId),
-          status:
-            request.responder_user_id === input.currentUserId
-              ? 'requires_you'
-              : 'waiting_other_side',
-          ctaLabel: 'Responder',
-          href: `/person/${person.userId}`,
-          amountMinor: request.amount_minor,
-          counterpartyLabel: person.displayName,
-          tone:
-            requestDirectionForUser(request, input.currentUserId) === 'owes_me'
-              ? 'positive'
-              : 'negative',
-          createdAt: request.created_at,
-        }));
+        .map(
+          (request): ActionableItem => ({
+            id: request.id,
+            kind: 'financial_request',
+            title: formatPendingRequestTitle(request, input.currentUserId),
+            subtitle: formatPendingRequestSubtitle(request, nameByUserId),
+            status:
+              request.responder_user_id === input.currentUserId
+                ? 'requires_you'
+                : 'waiting_other_side',
+            ctaLabel: 'Responder',
+            href: `/person/${person.userId}`,
+            amountMinor: request.amount_minor,
+            category: normalizeTransactionCategory(request.category),
+            counterpartyLabel: person.displayName,
+            tone:
+              requestDirectionForUser(request, input.currentUserId) === 'owes_me'
+                ? 'positive'
+                : 'negative',
+            createdAt: request.created_at,
+          }),
+        );
       const personPendingSettlements = pendingSettlements.filter((item) =>
         item.participantUserIds?.includes(person.userId),
       );
@@ -1815,13 +2219,22 @@ function buildLiveSnapshot(input: {
         ...personPendingSettlements,
       ]).map(actionableItemToActivityItem);
       const historyRows = relationship ? (historyByRelationshipId.get(relationship.id) ?? []) : [];
-      const timeline = buildPersonTimeline({
-        requests,
-        historyRows,
-        currentUserId: input.currentUserId,
-        counterpartyName: person.displayName,
-        names: nameByUserId,
-      });
+      const timeline = [
+        ...buildPersonTimeline({
+          requests,
+          historyRows,
+          currentUserId: input.currentUserId,
+          counterpartyName: person.displayName,
+          names: nameByUserId,
+        }),
+        ...buildSettlementProposalHistoryTimelineItems({
+          proposals: input.settlementProposals,
+          participantsByProposalId: settlementParticipantsByProposalId,
+          currentUserId: input.currentUserId,
+          counterpartyUserId: person.userId,
+          names: nameByUserId,
+        }),
+      ].sort(compareHistoryItems);
 
       const headline =
         person.netAmountMinor === 0
@@ -1874,12 +2287,11 @@ function buildLiveSnapshot(input: {
         title: formatPendingRequestTitle(request, input.currentUserId),
         subtitle: formatPendingRequestSubtitle(request, nameByUserId),
         status:
-          request.responder_user_id === input.currentUserId
-            ? 'requires_you'
-            : 'waiting_other_side',
+          request.responder_user_id === input.currentUserId ? 'requires_you' : 'waiting_other_side',
         ctaLabel: 'Responder',
         href: counterparty ? `/person/${counterparty.userId}` : '/activity',
         amountMinor: request.amount_minor,
+        category: normalizeTransactionCategory(request.category),
         counterpartyLabel: counterparty?.displayName,
         tone:
           requestDirectionForUser(request, input.currentUserId) === 'owes_me'
@@ -1893,11 +2305,13 @@ function buildLiveSnapshot(input: {
     ...pendingRequests,
     ...pendingSettlements,
     ...friendshipState.pendingItems,
+    ...accountInviteState.pendingItems,
   ]);
 
   const historyItems = sortHistoryItems([
     ...buildActivityHistoryItems(peopleById),
     ...friendshipState.historyItems,
+    ...accountInviteState.historyItems,
   ]);
 
   const summary = input.openDebts.reduce(
@@ -1953,6 +2367,7 @@ function buildLiveSnapshot(input: {
             ctaLabel: pendingItems[0].ctaLabel,
             href: pendingItems[0].href ?? '/activity',
             amountMinor: pendingItems[0].amountMinor,
+            category: pendingItems[0].category,
           }
         : null,
       activePeople: people,
@@ -1972,6 +2387,9 @@ function buildLiveSnapshot(input: {
     friendshipPendingItems: friendshipState.pendingItems,
     friendshipHistoryItems: friendshipState.historyItems,
     friendshipSummary: friendshipState.summary,
+    accountInvitePendingItems: accountInviteState.pendingItems,
+    accountInviteHistoryItems: accountInviteState.historyItems,
+    accountInviteSummary: accountInviteState.summary,
     activitySections: [
       {
         key: 'pending',
@@ -2000,6 +2418,8 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     profilesResult,
     friendshipInvitesResult,
     friendshipInviteDeliveriesResult,
+    accountInvitesResult,
+    accountInviteDeliveriesResult,
     relationshipsResult,
     openDebtsResult,
     requestsResult,
@@ -2027,6 +2447,18 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
       )
       .order('created_at', { ascending: false }),
     client
+      .from('v_account_invites_live')
+      .select(
+        'id, inviter_user_id, activated_user_id, linked_relationship_id, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, source_context, expires_at, activated_at, resolved_at, created_at, updated_at',
+      )
+      .order('created_at', { ascending: false }),
+    client
+      .from('v_account_invite_deliveries_live')
+      .select(
+        'id, invite_id, token, channel, source_context, status, expires_at, revoked_at, first_opened_at, last_opened_at, open_count, first_app_opened_at, authenticated_user_id, authenticated_at, activation_completed_at, created_at, updated_at',
+      )
+      .order('created_at', { ascending: false }),
+    client
       .from('relationships')
       .select('id, user_low_id, user_high_id, status, created_at, updated_at')
       .eq('status', 'active')
@@ -2035,7 +2467,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('financial_requests')
       .select(
-        'id, relationship_id, request_type, status, creator_user_id, responder_user_id, debtor_user_id, creditor_user_id, amount_minor, currency_code, description, parent_request_id, target_ledger_transaction_id, created_at, updated_at, resolved_at',
+        'id, relationship_id, request_type, status, creator_user_id, responder_user_id, debtor_user_id, creditor_user_id, amount_minor, currency_code, description, category, parent_request_id, target_ledger_transaction_id, created_at, updated_at, resolved_at',
       )
       .order('created_at', { ascending: false }),
     client.from('v_relationship_history').select('*').order('happened_at', { ascending: false }),
@@ -2072,6 +2504,14 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
 
   if (friendshipInviteDeliveriesResult.error) {
     throw new Error(friendshipInviteDeliveriesResult.error.message);
+  }
+
+  if (accountInvitesResult.error) {
+    throw new Error(accountInvitesResult.error.message);
+  }
+
+  if (accountInviteDeliveriesResult.error) {
+    throw new Error(accountInviteDeliveriesResult.error.message);
   }
 
   if (relationshipsResult.error) {
@@ -2111,6 +2551,8 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     profiles: profilesResult.data ?? [],
     friendshipInvites: friendshipInvitesResult.data ?? [],
     friendshipInviteDeliveries: friendshipInviteDeliveriesResult.data ?? [],
+    accountInvites: accountInvitesResult.data ?? [],
+    accountInviteDeliveries: accountInviteDeliveriesResult.data ?? [],
     relationships: relationshipsResult.data ?? [],
     openDebts: openDebtsResult.data ?? [],
     financialRequests: requestsResult.data ?? [],
@@ -2240,7 +2682,9 @@ function useSensitiveMutationGuard() {
         result.error === 'not_enrolled' ||
         result.error === 'passcode_not_set'
       ) {
-        throw new Error(`Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`);
+        throw new Error(
+          `Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`,
+        );
       }
 
       if (result.error === 'lockout') {
@@ -2460,13 +2904,11 @@ export function useClaimExternalFriendshipInviteMutation() {
 }
 
 export function useUpdateProfileAvatarMutation() {
-  const { refreshAccountState, userId } = useSession();
+  const session = useSession();
 
   return useMutation({
-    mutationFn: async (input: {
-      readonly uri: string;
-      readonly contentType?: string | null;
-    }) => {
+    mutationFn: async (input: { readonly uri: string; readonly contentType?: string | null }) => {
+      const userId = session.userId;
       if (!userId) {
         throw new Error('No hay una sesion activa.');
       }
@@ -2475,14 +2917,13 @@ export function useUpdateProfileAvatarMutation() {
       const response = await fetch(input.uri);
       const arrayBuffer = await response.arrayBuffer();
       const normalizedContentType = input.contentType?.toLocaleLowerCase('en-US') ?? '';
-      const fileExtension =
-        normalizedContentType.includes('png')
-          ? 'png'
-          : normalizedContentType.includes('heic')
-            ? 'heic'
-            : normalizedContentType.includes('webp')
-              ? 'webp'
-              : 'jpg';
+      const fileExtension = normalizedContentType.includes('png')
+        ? 'png'
+        : normalizedContentType.includes('heic')
+          ? 'heic'
+          : normalizedContentType.includes('webp')
+            ? 'webp'
+            : 'jpg';
       const avatarPath = `${userId}/${Date.now()}.${fileExtension}`;
 
       const uploadResult = await client.storage
@@ -2508,7 +2949,7 @@ export function useUpdateProfileAvatarMutation() {
       return avatarPath;
     },
     onSuccess: async () => {
-      await refreshAccountState();
+      await session.refreshAccountState();
       await invalidateAppSnapshot();
     },
   });
@@ -2542,7 +2983,9 @@ export function useRespondInternalFriendshipInviteMutation() {
       readonly decision: 'accept' | 'reject';
     }) => {
       const payload = friendshipInviteDecisionSchema.parse({
-        idempotencyKey: createIdempotencyKey(`respond_internal_friendship_invite_${input.decision}`),
+        idempotencyKey: createIdempotencyKey(
+          `respond_internal_friendship_invite_${input.decision}`,
+        ),
         inviteId: input.inviteId,
         decision: input.decision,
       });
@@ -2587,6 +3030,7 @@ export function useCreateRequestMutation() {
         creditorUserId: input.creditorUserId,
         amountMinor: input.amountMinor,
         description: input.description,
+        category: input.category ?? DEFAULT_TRANSACTION_CATEGORY,
         requestKind: 'balance_increase',
       });
 
@@ -2642,6 +3086,7 @@ export function useAmendFinancialRequestMutation() {
       readonly requestId: string;
       readonly amountMinor: number;
       readonly description: string;
+      readonly category?: TransactionCategory;
     }) => {
       await guardSensitiveAction('proponer un nuevo monto');
 
@@ -2650,6 +3095,7 @@ export function useAmendFinancialRequestMutation() {
         requestId: input.requestId,
         amountMinor: input.amountMinor,
         description: input.description,
+        category: input.category ?? DEFAULT_TRANSACTION_CATEGORY,
       });
 
       return invokeSupabaseFunction('amend-financial-request', payload);
@@ -2663,7 +3109,7 @@ export function useApproveSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('aprobar el cierre');
+      await guardSensitiveAction('aprobar el Happy Circle');
 
       const payload = cycleSettlementDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('approve_settlement'),
@@ -2681,7 +3127,7 @@ export function useRejectSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('rechazar el cierre');
+      await guardSensitiveAction('no aprobar el Happy Circle');
 
       const payload = cycleSettlementDecisionSchema.parse({
         idempotencyKey: createIdempotencyKey('reject_settlement'),
@@ -2699,7 +3145,7 @@ export function useExecuteSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('ejecutar el cierre');
+      await guardSensitiveAction('completar el Happy Circle');
 
       const payload = cycleSettlementExecutionSchema.parse({
         idempotencyKey: createIdempotencyKey('execute_settlement'),

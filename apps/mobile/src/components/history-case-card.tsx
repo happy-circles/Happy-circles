@@ -2,10 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import {
+  transactionCategoryBackgroundColor,
+  transactionCategoryColor,
+  transactionCategoryIcon,
+} from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 
-export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger';
+export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle';
 
 export interface HistoryCaseStepViewModel {
   readonly id: string;
@@ -18,11 +23,12 @@ export interface HistoryCaseStepViewModel {
 
 export interface HistoryCaseCardProps {
   readonly eyebrow?: string | null;
+  readonly category?: string | null;
   readonly title: string;
   readonly impact?: string | null;
   readonly meta?: string | null;
   readonly statusLabel: string;
-  readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
+  readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
   readonly tone: HistoryCaseTone;
   readonly isCycleSnippet?: boolean;
   readonly isExpanded: boolean;
@@ -32,6 +38,7 @@ export interface HistoryCaseCardProps {
 
 export function HistoryCaseCard({
   eyebrow,
+  category,
   title,
   impact,
   meta,
@@ -43,6 +50,8 @@ export function HistoryCaseCard({
   onToggle,
   steps,
 }: HistoryCaseCardProps) {
+  const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+
   return (
     <SurfaceCard
       padding="md"
@@ -52,6 +61,7 @@ export function HistoryCaseCard({
         tone === 'negative' ? styles.cardNegative : null,
         tone === 'neutral' ? styles.cardNeutral : null,
         tone === 'danger' ? styles.cardDanger : null,
+        tone === 'cycle' ? styles.cardCycle : null,
         isCycleSnippet ? styles.cycleSnippet : null,
         tone === 'danger' ? styles.rejectedSnippet : null,
       ]}
@@ -60,7 +70,27 @@ export function HistoryCaseCard({
       <Pressable onPress={onToggle} style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}>
         <View style={styles.text}>
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          <Text style={styles.title}>{title}</Text>
+          <View style={styles.titleLine}>
+            {isCycleSnippet ? (
+              <View style={styles.cycleIconBadge}>
+                <Ionicons
+                  color={transactionCategoryColor('cycle')}
+                  name="happy-outline"
+                  size={14}
+                />
+              </View>
+            ) : category ? (
+              <View
+                style={[
+                  styles.categoryIconBadge,
+                  { backgroundColor: transactionCategoryBackgroundColor(category) },
+                ]}
+              >
+                <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={14} />
+              </View>
+            ) : null}
+            <Text style={styles.title}>{title}</Text>
+          </View>
           {impact ? <Text style={[styles.impact, toneStyles[tone]]}>{impact}</Text> : null}
           {meta ? <Text style={styles.meta}>{meta}</Text> : null}
         </View>
@@ -68,7 +98,11 @@ export function HistoryCaseCard({
           <StatusChip label={statusLabel} tone={statusTone} />
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
-            <Ionicons color={theme.colors.textMuted} name={isExpanded ? 'chevron-up' : 'chevron-forward'} size={16} />
+            <Ionicons
+              color={theme.colors.textMuted}
+              name={isExpanded ? 'chevron-up' : 'chevron-forward'}
+              size={16}
+            />
           </View>
         </View>
       </Pressable>
@@ -85,6 +119,7 @@ export function HistoryCaseCard({
                     step.tone === 'negative' ? styles.stepMarkerNegative : null,
                     step.tone === 'neutral' ? styles.stepMarkerNeutral : null,
                     step.tone === 'danger' ? styles.stepMarkerDanger : null,
+                    step.tone === 'cycle' ? styles.stepMarkerCycle : null,
                   ]}
                 />
                 {index < steps.length - 1 ? <View style={styles.stepLine} /> : null}
@@ -92,7 +127,11 @@ export function HistoryCaseCard({
               <View style={styles.stepBody}>
                 <View style={styles.stepTop}>
                   <Text style={styles.stepTitle}>{step.title}</Text>
-                  {step.amountLabel ? <Text style={[styles.stepAmount, toneStyles[step.tone]]}>{step.amountLabel}</Text> : null}
+                  {step.amountLabel ? (
+                    <Text style={[styles.stepAmount, toneStyles[step.tone]]}>
+                      {step.amountLabel}
+                    </Text>
+                  ) : null}
                 </View>
                 {step.impact ? <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text> : null}
                 {step.meta ? <Text style={styles.stepMeta}>{step.meta}</Text> : null}
@@ -118,6 +157,9 @@ const toneStyles = StyleSheet.create({
   danger: {
     color: theme.colors.danger,
   },
+  cycle: {
+    color: transactionCategoryColor('cycle'),
+  },
 });
 
 const styles = StyleSheet.create({
@@ -126,7 +168,9 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.xxs,
   },
   cycleSnippet: {
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(37, 99, 235, 0.16)',
+    borderLeftColor: transactionCategoryColor('cycle'),
+    borderLeftWidth: 3,
   },
   rejectedSnippet: {
     backgroundColor: 'rgba(178, 67, 56, 0.07)',
@@ -146,6 +190,10 @@ const styles = StyleSheet.create({
   },
   cardDanger: {
     borderLeftColor: theme.colors.danger,
+    borderLeftWidth: 3,
+  },
+  cardCycle: {
+    borderLeftColor: transactionCategoryColor('cycle'),
     borderLeftWidth: 3,
   },
   header: {
@@ -173,10 +221,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   title: {
+    flex: 1,
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 22,
+  },
+  titleLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  cycleIconBadge: {
+    alignItems: 'center',
+    backgroundColor: '#eaf1ff',
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  categoryIconBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
   },
   impact: {
     fontSize: theme.typography.footnote,
@@ -231,6 +300,9 @@ const styles = StyleSheet.create({
   },
   stepMarkerDanger: {
     backgroundColor: theme.colors.danger,
+  },
+  stepMarkerCycle: {
+    backgroundColor: transactionCategoryColor('cycle'),
   },
   stepLine: {
     backgroundColor: theme.colors.hairline,

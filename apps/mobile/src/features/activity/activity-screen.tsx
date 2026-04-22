@@ -1,29 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  Alert,
+  InteractionManager,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { ActivityItemDto } from '@happy-circles/application';
+import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { EmptyState } from '@/components/empty-state';
-import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
+import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
-import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
-import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
-import { SectionBlock } from '@/components/section-block';
-import { SegmentedControl } from '@/components/segmented-control';
+import { TransactionEventCard } from '@/components/transaction-event-card';
+import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
+import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
 import {
-  buildHistoryCases,
-  friendlyHistoryStepLabel,
-  historyCardTitle,
-  historyCaseEyebrow,
-  historyCaseImpactLabel,
-  historyCaseMeta,
-  historyImpactLabel,
-  historyImpactTone,
-  isHistoryCaseItem,
   historyStatusLabel,
   historyStatusTone,
 } from '@/lib/history-cases';
@@ -35,16 +35,46 @@ import {
   useCancelFriendshipInviteMutation,
   useExecuteSettlementMutation,
   useRespondInternalFriendshipInviteMutation,
+  useReviewAccountInviteMutation,
   useReviewExternalFriendshipInviteMutation,
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  type UserTransactionCategory,
+  isUserTransactionCategory,
+  transactionCategoryLabel,
+} from '@/lib/transaction-categories';
+import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
+import {
+  transactionAccentColor,
+  transactionAmountIsVoided,
+  transactionAmountLabel,
+  transactionContextLabel,
+  transactionDirectionLabel,
+  transactionFocusId,
+  transactionMetaLabel,
+  transactionStatusLabel,
+  transactionStatusTone,
+  transactionToneColor,
+  transactionVisualCategory,
+  isPendingTransactionItem,
+} from '@/lib/transaction-presentation';
 
-type AlertLane = 'urgent' | 'resolve' | 'follow_up';
 type ActivityDomainKey = 'transactions' | 'friendships';
-type ActivitySegmentKey = 'pending' | 'history';
+type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'reminders';
 type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute' | 'cancel';
+type RouterHref = Parameters<ReturnType<typeof useRouter>['push']>[0];
+
+interface NotificationTarget {
+  readonly href: RouterHref;
+  readonly homeIntent?: {
+    readonly kind: 'open_invite_requests';
+    readonly tab: 'received' | 'sent';
+  };
+}
 
 interface PendingCardPresentation {
   readonly eyebrow: string;
@@ -61,7 +91,6 @@ interface PendingCardPresentation {
 interface PendingSnippetContent {
   readonly detail?: string;
   readonly meta?: string;
-  readonly variant: 'default' | 'accent';
 }
 
 interface FinancialRequestPendingContent {
@@ -70,38 +99,319 @@ interface FinancialRequestPendingContent {
   readonly createdAtLabel: string;
 }
 
-interface PendingGroup {
-  readonly key: AlertLane;
-  readonly title: string;
-  readonly items: readonly ActivityItemDto[];
+interface NotificationCategoryMeta {
+  readonly key: NotificationCategoryKey;
+  readonly label: string;
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly color: string;
+  readonly backgroundColor: string;
 }
 
-function isUrgentAlert(item: ActivityItemDto): boolean {
+interface NotificationActor {
+  readonly label: string;
+  readonly avatarUrl: string | null;
+}
+
+const NOTIFICATION_AVATAR_COLORS = [
+  '#0f8a5f',
+  '#2563eb',
+  '#a35f19',
+  '#7c3aed',
+  '#b24338',
+  '#141e33',
+];
+
+const NOTIFICATION_CATEGORIES: readonly NotificationCategoryMeta[] = [
+  {
+    key: 'all',
+    label: 'Todas',
+    icon: 'notifications-outline',
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
+  },
+  {
+    key: 'transactions',
+    label: 'Transacciones',
+    icon: 'cash-outline',
+    color: theme.colors.warning,
+    backgroundColor: theme.colors.warningSoft,
+  },
+  {
+    key: 'friends',
+    label: 'Amigos',
+    icon: 'person-add-outline',
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
+  },
+  {
+    key: 'reminders',
+    label: 'Recordatorios',
+    icon: 'alarm-outline',
+    color: theme.colors.success,
+    backgroundColor: theme.colors.successSoft,
+  },
+];
+
+function avatarColorForLabel(label: string): string {
+  let hash = 0;
+
+  for (let index = 0; index < label.length; index += 1) {
+    hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
+  }
+
   return (
-    item.kind === 'settlement_proposal' &&
-    (item.status === 'pending_approvals' || item.status === 'approved')
+    NOTIFICATION_AVATAR_COLORS[hash % NOTIFICATION_AVATAR_COLORS.length] ?? theme.colors.primary
   );
 }
 
-function matchesActivityDomain(
-  item: ActivityItemDto,
-  domain: ActivityDomainKey,
-): boolean {
-  return domain === 'friendships'
-    ? item.kind === 'friendship_invite'
-    : item.kind !== 'friendship_invite';
+function parseActivityDomainParam(value: string | string[] | undefined): ActivityDomainKey | null {
+  const normalized = Array.isArray(value) ? value[0] : value;
+
+  if (normalized === 'friendships' || normalized === 'transactions') {
+    return normalized;
+  }
+
+  return null;
 }
 
-function classifyAlertLane(item: ActivityItemDto): AlertLane {
-  if (isUrgentAlert(item)) {
-    return 'urgent';
+function parseNotificationCategoryParam(
+  value: string | string[] | undefined,
+): NotificationCategoryKey | null {
+  const normalized = Array.isArray(value) ? value[0] : value;
+
+  if (
+    normalized === 'all' ||
+    normalized === 'transactions' ||
+    normalized === 'friends' ||
+    normalized === 'reminders'
+  ) {
+    return normalized;
   }
 
-  if (item.status === 'requires_you') {
-    return 'resolve';
+  return null;
+}
+
+function initialCategoryFromDomain(domain: ActivityDomainKey | null): NotificationCategoryKey {
+  if (domain === 'friendships') {
+    return 'friends';
   }
 
-  return 'follow_up';
+  if (domain === 'transactions') {
+    return 'transactions';
+  }
+
+  return 'all';
+}
+
+function notificationCategoryForItem(
+  item: ActivityItemDto,
+): Exclude<NotificationCategoryKey, 'all'> {
+  const kind = String(item.kind);
+
+  if (kind === 'friendship_invite' || kind === 'account_invite') {
+    return 'friends';
+  }
+
+  if (kind === 'system' || kind === 'system_note' || kind === 'reminder') {
+    return 'reminders';
+  }
+
+  return 'transactions';
+}
+
+function matchesNotificationCategory(
+  item: ActivityItemDto,
+  category: NotificationCategoryKey,
+): boolean {
+  return category === 'all' || notificationCategoryForItem(item) === category;
+}
+
+function notificationCategoryMeta(item: ActivityItemDto): NotificationCategoryMeta {
+  const category = notificationCategoryForItem(item);
+  return (
+    NOTIFICATION_CATEGORIES.find((option) => option.key === category) ?? NOTIFICATION_CATEGORIES[0]
+  );
+}
+
+function readStringField(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === 'string' && field.trim().length > 0 ? field.trim() : null;
+}
+
+function readNullableStringField(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === 'string' ? field : null;
+}
+
+function readObjectField(value: unknown, key: string): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === 'object' && field !== null && !Array.isArray(field)
+    ? (field as Record<string, unknown>)
+    : null;
+}
+
+function nameFromInviteTitle(title: string): string | null {
+  const patterns = [
+    /^(.+) quiere conectar contigo$/i,
+    /^Esperando a (.+)$/i,
+    /^Verifica a (.+)$/i,
+    /^Invitacion lista para (.+)$/i,
+    /^QR temporal para (.+)$/i,
+    /^Esperando validacion de (.+)$/i,
+    /^Acceso privado para (.+)$/i,
+    /^Confirmaste a (.+)$/i,
+    /^Rechazaste a (.+)$/i,
+    /^(.+) acepto tu invitacion$/i,
+    /^(.+) rechazo tu invitacion$/i,
+    /^(.+) entro con el telefono esperado$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = title.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function personByLabel(
+  people: readonly PersonCardDto[],
+  label: string | null | undefined,
+): PersonCardDto | null {
+  const normalized = label?.trim().toLocaleLowerCase('es-CO') ?? '';
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    people.find((person) => person.displayName.trim().toLocaleLowerCase('es-CO') === normalized) ??
+    null
+  );
+}
+
+function personIdFromHref(href: string | undefined): string | null {
+  const match = href?.match(/^\/person\/([^/?#]+)/);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function notificationActorForItem(
+  item: ActivityItemDto,
+  people: readonly PersonCardDto[],
+): NotificationActor {
+  const claimantSnapshot = readObjectField(item, 'claimantSnapshot');
+  const claimantName = readStringField(claimantSnapshot, 'displayName');
+  const claimantAvatarPath = readNullableStringField(claimantSnapshot, 'avatarPath');
+  const activatedUserDisplayName = readStringField(item, 'activatedUserDisplayName');
+  const activatedUserAvatarUrl = readNullableStringField(item, 'activatedUserAvatarUrl');
+  const intendedRecipientAlias = readStringField(item, 'intendedRecipientAlias');
+  const label =
+    item.counterpartyLabel ??
+    activatedUserDisplayName ??
+    claimantName ??
+    intendedRecipientAlias ??
+    nameFromInviteTitle(item.title) ??
+    (notificationCategoryForItem(item) === 'reminders' ? 'Happy Circles' : 'Persona');
+  const matchedPerson = personByLabel(people, label);
+
+  return {
+    label,
+    avatarUrl:
+      matchedPerson?.avatarUrl ?? activatedUserAvatarUrl ?? resolveAvatarUrl(claimantAvatarPath),
+  };
+}
+
+function notificationTitleForDisplay(title: string, actorLabel: string): string {
+  const trimmedTitle = title.trim();
+  const trimmedActor = actorLabel.trim();
+
+  if (!trimmedActor) {
+    return trimmedTitle;
+  }
+
+  if (
+    !trimmedTitle.toLocaleLowerCase('es-CO').startsWith(trimmedActor.toLocaleLowerCase('es-CO'))
+  ) {
+    return trimmedTitle;
+  }
+
+  const withoutActor = trimmedTitle.slice(trimmedActor.length).trim();
+  if (!withoutActor) {
+    return trimmedTitle;
+  }
+
+  return `${withoutActor.charAt(0).toLocaleUpperCase('es-CO')}${withoutActor.slice(1)}`;
+}
+
+function NotificationCategoryTab({
+  count,
+  meta,
+  selected,
+  onPress,
+}: {
+  readonly count: number;
+  readonly meta: NotificationCategoryMeta;
+  readonly selected: boolean;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.notificationTab,
+        selected ? styles.notificationTabActive : null,
+        pressed ? styles.tabButtonPressed : null,
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[styles.notificationTabLabel, selected ? styles.notificationTabLabelActive : null]}
+      >
+        {meta.label}
+      </Text>
+      {count > 0 ? (
+        <View style={styles.notificationTabBadge}>
+          <Text style={styles.notificationTabBadgeText}>{count > 99 ? '99+' : count}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function NotificationSection({
+  children,
+  title,
+}: {
+  readonly children: ReactNode;
+  readonly title: string;
+}) {
+  return (
+    <View style={styles.notificationSection}>
+      <Text style={styles.notificationSectionTitle}>{title}</Text>
+      <View style={styles.notificationSectionContent}>{children}</View>
+    </View>
+  );
 }
 
 function readResultStatus(value: unknown): string | null {
@@ -171,10 +481,10 @@ function buildPendingCardPresentation(
 
   if (item.kind === 'settlement_proposal' && item.status === 'pending_approvals') {
     return {
-      eyebrow: 'Revision compartida',
+      eyebrow: 'Happy Circle',
       primaryAction: {
         key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Aprobar cierre', 'Aprobando...'),
+        label: actionLabel(item.id, busyKey, 'approve', 'Aprobar Circle', 'Aprobando...'),
       },
       secondaryAction: {
         key: 'reject',
@@ -185,16 +495,16 @@ function buildPendingCardPresentation(
 
   if (item.kind === 'settlement_proposal' && item.status === 'waiting_other_side') {
     return {
-      eyebrow: 'Esperando a otros',
+      eyebrow: 'Esperando aprobaciones',
     };
   }
 
   if (item.kind === 'settlement_proposal' && item.status === 'approved') {
     return {
-      eyebrow: 'Listo para cerrar',
+      eyebrow: 'Happy Circle listo',
       primaryAction: {
         key: 'execute',
-        label: actionLabel(item.id, busyKey, 'execute', 'Ejecutar cierre', 'Ejecutando...'),
+        label: actionLabel(item.id, busyKey, 'execute', 'Completar Circle', 'Completando...'),
       },
     };
   }
@@ -249,6 +559,32 @@ function buildPendingCardPresentation(
     };
   }
 
+  if (item.kind === 'account_invite' && item.status === 'requires_you_review') {
+    return {
+      eyebrow: 'Por verificar',
+      primaryAction: {
+        key: 'approve',
+        label: actionLabel(item.id, busyKey, 'approve', 'Si es esta persona', 'Confirmando...'),
+      },
+      secondaryAction: {
+        key: 'reject',
+        label: actionLabel(item.id, busyKey, 'reject', 'No es', 'Cerrando...'),
+      },
+    };
+  }
+
+  if (item.kind === 'account_invite' && item.status === 'pending_activation') {
+    return {
+      eyebrow: 'Acceso enviado',
+    };
+  }
+
+  if (item.kind === 'account_invite' && item.status === 'waiting_sender_review') {
+    return {
+      eyebrow: 'Esperando validacion',
+    };
+  }
+
   return {
     eyebrow: 'Seguimiento',
   };
@@ -261,10 +597,7 @@ function splitSubtitleSegments(value: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-function buildPendingSnippetContent(
-  item: ActivityItemDto,
-  lane: AlertLane,
-): PendingSnippetContent {
+function buildPendingSnippetContent(item: ActivityItemDto): PendingSnippetContent {
   const parts = splitSubtitleSegments(item.subtitle);
 
   if (item.kind === 'financial_request') {
@@ -275,25 +608,22 @@ function buildPendingSnippetContent(
     return {
       detail: detail ?? item.subtitle,
       meta: [createdByLabel, createdAtLabel ?? null].filter(Boolean).join(' | '),
-      variant: 'default',
     };
   }
 
   if (item.kind === 'settlement_proposal') {
     const [detail, meta] = parts;
     return {
-      detail: detail ?? item.subtitle,
+      detail: detail ?? transactionContextLabel(item, 'Happy Circle'),
       meta: meta ?? null,
-      variant: 'default',
     };
   }
 
-  if (item.kind === 'friendship_invite') {
+  if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
     const [detail, meta] = parts;
     return {
       detail: detail ?? item.subtitle,
       meta: meta ?? null,
-      variant: 'default',
     };
   }
 
@@ -301,44 +631,64 @@ function buildPendingSnippetContent(
   return {
     detail: detail ?? item.subtitle,
     meta: meta ?? null,
-    variant: 'default',
   };
-}
-
-function pendingSnippetTone(
-  item: ActivityItemDto,
-): 'primary' | 'success' | 'warning' | 'neutral' | 'danger' {
-  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
-    return 'warning';
-  }
-
-  if (item.status === 'requires_you_response' || item.status === 'requires_you_review') {
-    return 'warning';
-  }
-
-  if (item.status === 'approved') {
-    return 'primary';
-  }
-
-  if (item.status === 'pending_claim') {
-    return 'primary';
-  }
-
-  if (item.status === 'rejected') {
-    return 'danger';
-  }
-
-  return 'neutral';
 }
 
 function pendingDetailHref(
   item: ActivityItemDto,
-): Parameters<ReturnType<typeof useRouter>['push']>[0] | null {
-  if (!item.href) {
+  people: readonly PersonCardDto[],
+): NotificationTarget | null {
+  if (item.kind === 'settlement_proposal') {
+    return { href: `/settlements/${item.id}` as RouterHref };
+  }
+
+  if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
+    return {
+      href: '/home' as RouterHref,
+      homeIntent: {
+        kind: 'open_invite_requests',
+        tab: inviteRequestTabForNotification(item),
+      },
+    };
+  }
+
+  if (notificationCategoryForItem(item) !== 'transactions') {
     return null;
   }
 
-  return item.href as Parameters<ReturnType<typeof useRouter>['push']>[0];
+  const hrefPersonId = personIdFromHref(item.href);
+  const matchedPerson =
+    (hrefPersonId ? people.find((person) => person.userId === hrefPersonId) : null) ??
+    personByLabel(people, item.counterpartyLabel);
+  const personId = matchedPerson?.userId ?? hrefPersonId;
+
+  if (!personId) {
+    return null;
+  }
+
+  const panel = isPendingTransactionItem(item) ? 'pending' : 'history';
+  return {
+    href: `/person/${personId}?panel=${panel}&focus=${encodeURIComponent(
+      transactionFocusId(item),
+    )}` as RouterHref,
+  };
+}
+
+function inviteRequestTabForNotification(item: ActivityItemDto): 'received' | 'sent' {
+  const actorRole = readStringField(item, 'actorRole');
+
+  if (
+    item.status === 'pending_claim' ||
+    item.status === 'pending_activation' ||
+    item.status === 'waiting_other_side' ||
+    (item.kind === 'friendship_invite' &&
+      item.status === 'waiting_sender_review' &&
+      actorRole === 'sender')
+  ) {
+    return 'sent';
+  }
+
+  return 'received';
 }
 
 function buildFinancialRequestPendingContent(
@@ -356,11 +706,15 @@ function buildFinancialRequestPendingContent(
 
 export function ActivityScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ category?: string; domain?: string }>();
+  const requestedDomain = parseActivityDomainParam(params.domain);
+  const requestedCategory = parseNotificationCategoryParam(params.category);
   const snapshotQuery = useAppSnapshot();
   const acceptRequest = useAcceptFinancialRequestMutation();
   const amendRequest = useAmendFinancialRequestMutation();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
+  const reviewAccountInvite = useReviewAccountInviteMutation();
   const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
   const cancelFriendshipInvite = useCancelFriendshipInviteMutation();
   const approveSettlement = useApproveSettlementMutation();
@@ -369,117 +723,66 @@ export function ActivityScreen() {
 
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
   const [amendmentAmount, setAmendmentAmount] = useState('');
   const [amendmentDescription, setAmendmentDescription] = useState('');
-  const [domainSegment, setDomainSegment] = useState<ActivityDomainKey>('transactions');
-  const [panelSegment, setPanelSegment] = useState<ActivitySegmentKey>('pending');
+  const [amendmentCategory, setAmendmentCategory] = useState<UserTransactionCategory>(
+    DEFAULT_TRANSACTION_CATEGORY,
+  );
+  const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>(
+    requestedCategory ?? initialCategoryFromDomain(requestedDomain),
+  );
 
   const sections = snapshotQuery.data?.activitySections ?? [];
-  const pendingSection = useMemo(
-    () => sections.find((item) => item.key === 'pending'),
-    [sections],
+  const pendingSection = useMemo(() => sections.find((item) => item.key === 'pending'), [sections]);
+  const allPendingItems = pendingSection?.items ?? [];
+  const people = snapshotQuery.data?.people ?? [];
+  const activePendingItems = useMemo(
+    () => allPendingItems.filter((item) => matchesNotificationCategory(item, activeCategory)),
+    [activeCategory, allPendingItems],
   );
-  const historySection = useMemo(
-    () => sections.find((item) => item.key === 'history'),
-    [sections],
-  );
-  const transactionPendingItems = useMemo(
-    () => (pendingSection?.items ?? []).filter((item) => matchesActivityDomain(item, 'transactions')),
-    [pendingSection?.items],
-  );
-  const transactionHistoryItems = useMemo(
-    () => (historySection?.items ?? []).filter((item) => matchesActivityDomain(item, 'transactions')),
-    [historySection?.items],
-  );
-  const friendshipPendingItems = snapshotQuery.data?.friendshipPendingItems ?? [];
-  const friendshipHistoryItems = snapshotQuery.data?.friendshipHistoryItems ?? [];
-  const pendingItems = domainSegment === 'friendships' ? friendshipPendingItems : transactionPendingItems;
-  const historyItems = domainSegment === 'friendships' ? friendshipHistoryItems : transactionHistoryItems;
-  const historyCases = useMemo(
-    () => buildHistoryCases(historyItems.filter(isHistoryCaseItem)),
-    [historyItems],
-  );
-  const urgentItems = useMemo(
-    () => pendingItems.filter((item) => classifyAlertLane(item) === 'urgent'),
-    [pendingItems],
-  );
-  const resolveItems = useMemo(
-    () => pendingItems.filter((item) => classifyAlertLane(item) === 'resolve'),
-    [pendingItems],
-  );
-  const followUpItems = useMemo(
-    () => pendingItems.filter((item) => classifyAlertLane(item) === 'follow_up'),
-    [pendingItems],
-  );
-  const pendingCount = pendingItems.length;
-  const pendingGroups = useMemo<PendingGroup[]>(
-    () => {
-      const groups: PendingGroup[] = [];
+  const categoryCounts = useMemo(() => {
+    const counts: Record<NotificationCategoryKey, number> = {
+      all: allPendingItems.length,
+      transactions: 0,
+      friends: 0,
+      reminders: 0,
+    };
 
-      if (urgentItems.length > 0) {
-        groups.push({ key: 'urgent', title: 'Urgentes', items: urgentItems });
-      }
+    for (const item of allPendingItems) {
+      const category = notificationCategoryForItem(item);
+      counts[category] += 1;
+    }
 
-      if (resolveItems.length > 0) {
-        groups.push({ key: 'resolve', title: 'Por resolver', items: resolveItems });
-      }
-
-      if (followUpItems.length > 0) {
-        groups.push({ key: 'follow_up', title: 'En seguimiento', items: followUpItems });
-      }
-
-      return groups;
-    },
-    [followUpItems, resolveItems, urgentItems],
-  );
-  const friendshipPendingGroups = useMemo<PendingGroup[]>(
-    () =>
-      [
-        {
-          key: 'resolve' as const,
-          title: 'Por verificar',
-          items: friendshipPendingItems.filter((item) => item.status === 'requires_you_review'),
-        },
-        {
-          key: 'resolve' as const,
-          title: 'Por responder',
-          items: friendshipPendingItems.filter((item) => item.status === 'requires_you_response'),
-        },
-        {
-          key: 'follow_up' as const,
-          title: 'Esperando validacion',
-          items: friendshipPendingItems.filter((item) => item.status === 'waiting_sender_review'),
-        },
-        {
-          key: 'follow_up' as const,
-          title: 'Enviadas afuera',
-          items: friendshipPendingItems.filter((item) => item.status === 'pending_claim'),
-        },
-        {
-          key: 'follow_up' as const,
-          title: 'Esperando a la otra persona',
-          items: friendshipPendingItems.filter((item) => item.status === 'waiting_other_side'),
-        },
-      ].filter((group) => group.items.length > 0),
-    [friendshipPendingItems],
-  );
+    return counts;
+  }, [allPendingItems]);
+  const activeCategoryMeta =
+    NOTIFICATION_CATEGORIES.find((option) => option.key === activeCategory) ??
+    NOTIFICATION_CATEGORIES[0];
+  const hasVisibleNotifications = activePendingItems.length > 0;
 
   useEffect(() => {
-    setPanelSegment(pendingCount > 0 ? 'pending' : 'history');
-  }, [domainSegment, pendingCount]);
+    if (requestedCategory) {
+      setActiveCategory(requestedCategory);
+      return;
+    }
+
+    if (requestedDomain) {
+      setActiveCategory(initialCategoryFromDomain(requestedDomain));
+    }
+  }, [requestedCategory, requestedDomain]);
 
   useEffect(() => {
     if (
       activeAmendmentItemId &&
-      !pendingItems.some((item) => item.id === activeAmendmentItemId)
+      !allPendingItems.some((item) => item.id === activeAmendmentItemId)
     ) {
       setActiveAmendmentItemId(null);
       setAmendmentAmount('');
       setAmendmentDescription('');
+      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
     }
-  }, [activeAmendmentItemId, pendingItems]);
+  }, [activeAmendmentItemId, allPendingItems]);
 
   function showAutoCyclePrompt(proposalId: string | null, status: string | null) {
     if (status !== 'pending_approvals' && status !== 'approved') {
@@ -487,10 +790,10 @@ export function ActivityScreen() {
     }
 
     Alert.alert(
-      status === 'approved' ? 'Cierre listo para ejecutar' : 'Cierre de circulo pendiente',
+      status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
       status === 'approved'
-        ? 'Todos ya aprobaron este cierre. Quieres abrirlo ahora para ejecutarlo?'
-        : 'Se detecto un cierre automatico en tu circulo. Quieres revisarlo ahora?',
+        ? 'Todos ya aprobaron este Circle. Quieres abrirlo ahora para completarlo?'
+        : 'Se detecto un Happy Circle automatico en tu circulo. Quieres revisarlo ahora?',
       [
         {
           text: 'Luego',
@@ -499,179 +802,312 @@ export function ActivityScreen() {
         {
           text: 'Abrir',
           onPress: () => {
-            router.push(proposalId ? `/settlements/${proposalId}` : '/activity');
+            openNotificationTarget({
+              href: (proposalId ? `/settlements/${proposalId}` : '/activity') as RouterHref,
+            });
           },
         },
       ],
     );
   }
 
-  function renderPendingCard(item: ActivityItemDto, lane: AlertLane) {
+  function closeNotifications() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/home');
+  }
+
+  function openNotificationTarget(target: NotificationTarget) {
+    if (target.homeIntent) {
+      const homeIntent = target.homeIntent;
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(target.href);
+      }
+
+      InteractionManager.runAfterInteractions(() => {
+        publishHomeNavigationIntent(homeIntent);
+      });
+      return;
+    }
+
+    if (typeof router.dismissTo === 'function') {
+      router.dismissTo(target.href);
+      return;
+    }
+
+    router.replace(target.href);
+  }
+
+  function renderPendingCard(item: ActivityItemDto) {
+    const category = notificationCategoryMeta(item);
+    const actor = notificationActorForItem(item, people);
+    const detailHref = pendingDetailHref(item, people);
+
     if (item.kind === 'financial_request') {
       const financialRequestContent = buildFinancialRequestPendingContent(item);
-      const detailHref = pendingDetailHref(item);
+      const responseState = item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side';
+      const creatorLabel =
+        financialRequestContent.createdByLabel === 'Tu'
+          ? 'Creado por ti'
+          : `Creado por ${financialRequestContent.createdByLabel}`;
+      const transactionMeta = [
+        creatorLabel,
+        financialRequestContent.createdAtLabel
+          ? `${financialRequestContent.createdAtLabel} · ${transactionCategoryLabel(item.category)}`
+          : transactionCategoryLabel(item.category),
+      ].filter(Boolean).join(' | ');
+
       return (
-        <PendingFinancialRequestCard
-          amendmentAmount={amendmentAmount}
-          amendmentDescription={amendmentDescription}
-          amountMinor={item.amountMinor ?? 0}
-          amountTone={
-            item.tone === 'positive' || item.tone === 'negative'
-              ? item.tone
-              : 'neutral'
-          }
-          busyAccept={busyKey === `${item.id}:accept`}
-          busyAmendment={busyKey === `${item.id}:amendment`}
-          busyReject={busyKey === `${item.id}:reject`}
-          counterpartyName={item.counterpartyLabel ?? 'Persona'}
-          createdAtLabel={financialRequestContent.createdAtLabel}
-          createdByLabel={financialRequestContent.createdByLabel}
-          description={financialRequestContent.detail}
+        <TransactionEventCard
+          accentColor={transactionAccentColor(item)}
+          actorAvatarUrl={actor.avatarUrl}
+          actorFallbackColor={avatarColorForLabel(actor.label)}
+          actorLabel={actor.label}
+          amountColor={transactionToneColor(item)}
+          amountLabel={transactionAmountLabel(item) ?? formatCop(item.amountMinor ?? 0)}
+          amountStruckThrough={transactionAmountIsVoided(item)}
+          category={transactionVisualCategory(item)}
+          context={financialRequestContent.detail}
+          directionLabel={transactionDirectionLabel(item)}
           key={item.id}
-          onAccept={
-            busyKey
-              ? undefined
-              : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')
-          }
-          onChangeAmendmentAmount={setAmendmentAmount}
-          onChangeAmendmentDescription={setAmendmentDescription}
-          onPress={
-            detailHref
-              ? () => router.push(detailHref)
-              : undefined
-          }
-          onReject={
-            busyKey
-              ? undefined
-              : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')
-          }
-          onSubmitAmendment={
-            busyKey
-              ? undefined
-              : () => void handleAmendment(item.id)
-          }
-          onToggleAmendment={
-            busyKey
-              ? undefined
-              : () => toggleAmendment(item)
-          }
-          responseState={
-            item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'
-          }
-          showAmendment={activeAmendmentItemId === item.id}
-          title={item.title}
-        />
+          meta={transactionMeta}
+          onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
+          pending
+          statusLabel={transactionStatusLabel(item)}
+          statusTone={transactionStatusTone(item)}
+          unread
+        >
+          {responseState === 'requires_you' ? (
+            <>
+              <View style={styles.actionRow}>
+                <View style={styles.primaryActionSlot}>
+                  <PrimaryAction
+                    compact
+                    label={busyKey === `${item.id}:accept` ? 'Aceptando...' : 'Aceptar'}
+                    loading={busyKey === `${item.id}:accept`}
+                    onPress={
+                      busyKey
+                        ? undefined
+                        : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')
+                    }
+                  />
+                </View>
+              </View>
+              <View style={styles.inlineActionRow}>
+                <Pressable
+                  onPress={
+                    busyKey
+                      ? undefined
+                      : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')
+                  }
+                  style={({ pressed }) => [
+                    styles.inlineAction,
+                    pressed ? styles.inlineActionPressed : null,
+                  ]}
+                >
+                  <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+                    {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aceptar'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={busyKey ? undefined : () => toggleAmendment(item)}
+                  style={({ pressed }) => [
+                    styles.inlineAction,
+                    pressed ? styles.inlineActionPressed : null,
+                  ]}
+                >
+                  <Text style={styles.inlineActionText}>
+                    {activeAmendmentItemId === item.id ? 'Ocultar cambio' : 'Cambiar monto'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {activeAmendmentItemId === item.id ? (
+                <View style={styles.amendmentPanel}>
+                  <FieldBlock hint="Escribe el valor en pesos." label="Monto">
+                    <AppTextInput
+                      keyboardType="number-pad"
+                      onChangeText={setAmendmentAmount}
+                      placeholder="45000"
+                      placeholderTextColor={theme.colors.muted}
+                      value={amendmentAmount}
+                    />
+                    {Number.parseInt(amendmentAmount || '0', 10) > 0 ? (
+                      <Text style={styles.amountPreview}>
+                        {formatCop(Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0))}
+                      </Text>
+                    ) : null}
+                  </FieldBlock>
+
+                  <FieldBlock hint="Ajusta el concepto antes de enviarlo." label="Concepto">
+                    <AppTextInput
+                      multiline
+                      onChangeText={setAmendmentDescription}
+                      placeholder="Explica el nuevo monto"
+                      placeholderTextColor={theme.colors.muted}
+                      style={styles.textarea}
+                      value={amendmentDescription}
+                    />
+                  </FieldBlock>
+
+                  <FieldBlock hint="Tambien quedara guardada en el historial." label="Categoria">
+                    <TransactionCategoryPicker
+                      onChange={setAmendmentCategory}
+                      value={amendmentCategory}
+                    />
+                  </FieldBlock>
+
+                  <View style={styles.actionRow}>
+                    <View style={styles.primaryActionSlot}>
+                      <PrimaryAction
+                        compact
+                        label={
+                          busyKey === `${item.id}:amendment` ? 'Enviando...' : 'Enviar nuevo monto'
+                        }
+                        loading={busyKey === `${item.id}:amendment`}
+                        onPress={busyKey ? undefined : () => void handleAmendment(item.id)}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+        </TransactionEventCard>
       );
     }
 
     const cardPresentation = buildPendingCardPresentation(item, busyKey);
-    const snippetContent = buildPendingSnippetContent(item, lane);
-    const hasInlineActions = Boolean(cardPresentation.primaryAction || cardPresentation.secondaryAction);
-    const detailHref = pendingDetailHref(item);
-
-    return (
-      <PendingSnippetCard
-        amountLabel={
-          typeof item.amountMinor === 'number' && item.amountMinor > 0
-            ? formatCop(item.amountMinor)
-            : null
-        }
-        detail={snippetContent.detail}
-        eyebrow={cardPresentation.eyebrow}
-        key={item.id}
-        meta={snippetContent.meta}
-        onPress={
-          detailHref
-            ? () => router.push(detailHref)
-            : undefined
-        }
-        statusLabel={historyStatusLabel(item.status)}
-        statusTone={historyStatusTone(item.status)}
-        tone={pendingSnippetTone(item)}
-        title={item.title}
-        variant={snippetContent.variant}
-      >
-        {hasInlineActions ? (
-          <View style={styles.cardActionStack}>
-            {cardPresentation.primaryAction ? (
-              <View style={styles.primaryActionSlot}>
-                <PrimaryAction
-                  compact
-                  label={cardPresentation.primaryAction.label}
-                  onPress={
-                    busyKey
-                      ? undefined
-                      : () =>
-                          void handlePendingAction(
-                            item.id,
-                            item.kind,
-                            item.status,
-                            cardPresentation.primaryAction!.key,
-                          )
-                  }
-                />
-              </View>
-            ) : null}
-
-            {cardPresentation.secondaryAction ? (
-              <Pressable
-                onPress={
-                  busyKey
-                    ? undefined
-                    : () =>
-                        void handlePendingAction(
-                          item.id,
-                          item.kind,
-                          item.status,
-                          cardPresentation.secondaryAction!.key,
-                        )
-                }
-                style={({ pressed }) => [
-                  styles.inlineAction,
-                  styles.inlineActionDanger,
-                  pressed ? styles.inlineActionPressed : null,
-                ]}
-              >
-                <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-                  {cardPresentation.secondaryAction.label}
-                </Text>
-              </Pressable>
-            ) : null}
+    const snippetContent = buildPendingSnippetContent(item);
+    const hasInlineActions = Boolean(
+      cardPresentation.primaryAction || cardPresentation.secondaryAction,
+    );
+    const actionContent = hasInlineActions ? (
+      <View style={styles.cardActionStack}>
+        {cardPresentation.primaryAction ? (
+          <View style={styles.primaryActionSlot}>
+            <PrimaryAction
+              compact
+              label={cardPresentation.primaryAction.label}
+              onPress={
+                busyKey
+                  ? undefined
+                  : () =>
+                      void handlePendingAction(
+                        item.id,
+                        item.kind,
+                        item.status,
+                        cardPresentation.primaryAction!.key,
+                      )
+              }
+            />
           </View>
         ) : null}
-      </PendingSnippetCard>
+
+        {cardPresentation.secondaryAction ? (
+          <Pressable
+            onPress={
+              busyKey
+                ? undefined
+                : () =>
+                    void handlePendingAction(
+                      item.id,
+                      item.kind,
+                      item.status,
+                      cardPresentation.secondaryAction!.key,
+                    )
+            }
+            style={({ pressed }) => [
+              styles.inlineAction,
+              pressed ? styles.inlineActionPressed : null,
+            ]}
+          >
+            <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+              {cardPresentation.secondaryAction.label}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ) : null;
+
+    if (notificationCategoryForItem(item) === 'transactions') {
+      const transactionActorLabel =
+        item.kind === 'settlement_proposal' || item.kind === 'settlement' || item.category === 'cycle'
+          ? 'Happy Circle'
+          : actor.label;
+
+      return (
+        <TransactionEventCard
+          accentColor={transactionAccentColor(item)}
+          actorAvatarUrl={item.category === 'cycle' ? null : actor.avatarUrl}
+          actorFallbackColor={
+            item.category === 'cycle' ? transactionToneColor(item) : avatarColorForLabel(actor.label)
+          }
+          actorLabel={transactionActorLabel}
+          amountColor={transactionToneColor(item)}
+          amountLabel={transactionAmountLabel(item)}
+          amountStruckThrough={transactionAmountIsVoided(item)}
+          category={transactionVisualCategory(item)}
+          context={transactionContextLabel(item, transactionActorLabel)}
+          directionLabel={transactionDirectionLabel(item)}
+          key={item.id}
+          meta={transactionMetaLabel(item)}
+          onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
+          pending
+          statusLabel={transactionStatusLabel(item) ?? historyStatusLabel(item.status)}
+          statusTone={transactionStatusTone(item)}
+          unread
+        >
+          {actionContent}
+        </TransactionEventCard>
+      );
+    }
+
+    return (
+      <TransactionEventCard
+        accentColor={category.color}
+        actorAvatarUrl={actor.avatarUrl}
+        actorFallbackColor={avatarColorForLabel(actor.label)}
+        actorLabel={actor.label}
+        amountColor={category.color}
+        badgeBackgroundColor={category.backgroundColor}
+        badgeColor={category.color}
+        badgeIcon={category.icon}
+        context={notificationTitleForDisplay(item.title, actor.label)}
+        directionLabel={category.label}
+        key={item.id}
+        meta={snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow}
+        onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
+        pending
+        statusLabel={historyStatusLabel(item.status)}
+        statusTone={historyStatusTone(item.status)}
+        unread
+      >
+        {actionContent}
+      </TransactionEventCard>
     );
   }
 
   function toggleAmendment(item: ActivityItemDto) {
     if (activeAmendmentItemId === item.id) {
       setActiveAmendmentItemId(null);
+      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
       return;
     }
 
     const financialRequestContent = buildFinancialRequestPendingContent(item);
+    const category = isUserTransactionCategory(item.category)
+      ? item.category
+      : DEFAULT_TRANSACTION_CATEGORY;
     setActiveAmendmentItemId(item.id);
     setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
     setAmendmentDescription(financialRequestContent.detail);
-  }
-
-  function renderFriendshipHistoryCard(item: ActivityItemDto) {
-    const snippetContent = buildPendingSnippetContent(item, 'follow_up');
-
-    return (
-      <PendingSnippetCard
-        amountLabel={null}
-        detail={snippetContent.detail}
-        eyebrow="Historial"
-        key={item.id}
-        meta={snippetContent.meta}
-        statusLabel={historyStatusLabel(item.status)}
-        statusTone={historyStatusTone(item.status)}
-        title={item.title}
-        tone={pendingSnippetTone(item)}
-        variant="default"
-      />
-    );
+    setAmendmentCategory(category);
   }
 
   async function handleAmendment(requestId: string) {
@@ -691,10 +1127,12 @@ export function ActivityScreen() {
         requestId,
         amountMinor,
         description: trimmedDescription,
+        category: amendmentCategory,
       });
       setActiveAmendmentItemId(null);
       setAmendmentAmount('');
       setAmendmentDescription('');
+      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
       setMessage('Nuevo monto enviado.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
@@ -721,7 +1159,7 @@ export function ActivityScreen() {
           const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
           setMessage(
             autoCycleStatus === 'pending_approvals'
-              ? 'Propuesta aceptada. Tambien quedo un cierre de ciclo listo para revisar.'
+              ? 'Propuesta aceptada. Tambien quedo un Happy Circle listo para revisar.'
               : 'Propuesta aceptada.',
           );
           showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
@@ -738,14 +1176,14 @@ export function ActivityScreen() {
           const nextStatus = readResultStatus(response);
           setMessage(
             nextStatus === 'approved'
-              ? 'Todos aceptaron. El cierre quedo aprobado.'
+              ? 'Todos aceptaron. El Happy Circle quedo listo.'
               : nextStatus === 'stale'
-                ? 'La propuesta quedo obsoleta porque el grafo cambio.'
+                ? 'Este Circle fue reemplazado porque el grafo cambio.'
                 : 'Tu aprobacion quedo registrada.',
           );
         } else {
           await rejectSettlement.mutateAsync(itemId);
-          setMessage('Cierre no aprobado.');
+          setMessage('Happy Circle no aprobado.');
         }
         return;
       }
@@ -756,8 +1194,8 @@ export function ActivityScreen() {
         const nextProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
         setMessage(
           nextStatus === 'pending_approvals'
-            ? 'Cierre ejecutado. Ya quedo otro cierre de ciclo pendiente.'
-            : 'Cierre ejecutado.',
+            ? 'Happy Circle completado. Ya quedo otro Circle pendiente.'
+            : 'Happy Circle completado.',
         );
         showAutoCyclePrompt(nextProposalId, nextStatus);
         return;
@@ -800,6 +1238,15 @@ export function ActivityScreen() {
       if (kind === 'friendship_invite' && status === 'pending_claim' && action === 'cancel') {
         await cancelFriendshipInvite.mutateAsync(itemId);
         setMessage('Invitacion cancelada.');
+        return;
+      }
+
+      if (kind === 'account_invite' && status === 'requires_you_review') {
+        await reviewAccountInvite.mutateAsync({
+          inviteId: itemId,
+          decision: action === 'approve' ? 'approve' : 'reject',
+        });
+        setMessage(action === 'approve' ? 'Acceso confirmado.' : 'Invitacion de acceso cerrada.');
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
@@ -808,19 +1255,13 @@ export function ActivityScreen() {
     }
   }
 
-  function toggleHistoryCase(caseId: string) {
-    setExpandedCaseIds((current) =>
-      current.includes(caseId)
-        ? current.filter((item) => item !== caseId)
-        : [...current, caseId],
-    );
-  }
-
   if (snapshotQuery.isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <View style={styles.loadingState}>
-          <Text style={styles.supportText}>Estamos leyendo las acciones reales desde Supabase.</Text>
+          <Text style={styles.supportText}>
+            Estamos leyendo las acciones reales desde Supabase.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -828,7 +1269,7 @@ export function ActivityScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <View style={styles.loadingState}>
           <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
         </View>
@@ -837,61 +1278,40 @@ export function ActivityScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+      <Pressable onPress={closeNotifications} style={styles.backdropTapTarget} />
       <View style={styles.layout}>
         <View style={styles.fixedTop}>
-          <View style={styles.heroBlock}>
-            <Text style={styles.heroTitle}>Alertas</Text>
+          <View style={styles.heroRow}>
+            <Text style={styles.heroTitle}>Notificaciones</Text>
+            <Pressable
+              onPress={closeNotifications}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed ? styles.tabButtonPressed : null,
+              ]}
+            >
+              <Ionicons color={theme.colors.text} name="close" size={22} />
+            </Pressable>
           </View>
         </View>
 
         <View style={styles.panelArea}>
-          <SegmentedControl
-            onChange={setDomainSegment}
-            options={[
-              { label: 'Transacciones', value: 'transactions' },
-              { label: 'Amistades', value: 'friendships' },
-            ]}
-            value={domainSegment}
-          />
-
-          <View style={styles.tabBar}>
-            <Pressable
-              onPress={() => setPanelSegment('pending')}
-              style={({ pressed }) => [
-                styles.tabButton,
-                panelSegment === 'pending' ? styles.tabButtonActive : null,
-                pressed ? styles.tabButtonPressed : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabLabel,
-                  panelSegment === 'pending' ? styles.tabLabelActive : null,
-                ]}
-              >
-                Pendientes
-              </Text>
-            </Pressable>
-            <View style={styles.tabDivider} />
-            <Pressable
-              onPress={() => setPanelSegment('history')}
-              style={({ pressed }) => [
-                styles.tabButton,
-                panelSegment === 'history' ? styles.tabButtonActive : null,
-                pressed ? styles.tabButtonPressed : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabLabel,
-                  panelSegment === 'history' ? styles.tabLabelActive : null,
-                ]}
-              >
-                Historial
-              </Text>
-            </Pressable>
-          </View>
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.notificationTabs}
+            showsHorizontalScrollIndicator={false}
+          >
+            {NOTIFICATION_CATEGORIES.map((category) => (
+              <NotificationCategoryTab
+                count={categoryCounts[category.key]}
+                key={category.key}
+                meta={category}
+                onPress={() => setActiveCategory(category.key)}
+                selected={activeCategory === category.key}
+              />
+            ))}
+          </ScrollView>
 
           {message ? <MessageBanner message={message} /> : null}
 
@@ -901,92 +1321,29 @@ export function ActivityScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {panelSegment === 'pending' ? (
-                pendingCount === 0 ? (
-                  <EmptyState
-                    description={
-                      domainSegment === 'friendships'
-                        ? 'Cuando haya invitaciones de amistad por responder o seguir, apareceran aqui.'
-                        : pendingSection?.emptyMessage ??
-                          'Cuando haya algo por responder o seguir, aparecera aqui.'
-                    }
-                    title={
-                      domainSegment === 'friendships'
-                        ? 'Sin amistades pendientes'
-                        : 'Nada pendiente'
-                    }
-                  />
-                ) : (
-                  domainSegment === 'friendships' ? (
-                    friendshipPendingGroups.map((group) => (
-                      <SectionBlock key={group.title} title={group.title}>
-                        {group.items.map((item) => renderPendingCard(item, group.key))}
-                      </SectionBlock>
-                    ))
-                  ) : pendingGroups.length === 1 ? (
-                    pendingGroups[0]!.items.map((item) =>
-                      renderPendingCard(item, pendingGroups[0]!.key),
-                    )
-                  ) : (
-                    pendingGroups.map((group) => (
-                      <SectionBlock key={group.key} title={group.title}>
-                        {group.items.map((item) => renderPendingCard(item, group.key))}
-                      </SectionBlock>
-                    ))
-                  )
-                )
-              ) : domainSegment === 'friendships' ? (
-                historyItems.length === 0 ? (
-                  <EmptyState
-                    description="Cuando una invitacion de amistad se resuelva, quedara registrada aqui."
-                    title="Sin historial de amistades"
-                  />
-                ) : (
-                  historyItems.map((item) => renderFriendshipHistoryCard(item))
-                )
-              ) : historyCases.length === 0 ? (
+              {!hasVisibleNotifications ? (
                 <EmptyState
                   description={
-                    historySection?.emptyMessage ??
-                    'Cuando haya actividad registrada, aparecera aqui.'
+                    activeCategory === 'all'
+                      ? 'Cuando haya algo por responder o revisar, aparecera aqui.'
+                      : `Cuando haya actividad de ${activeCategoryMeta.label.toLocaleLowerCase(
+                          'es-CO',
+                        )}, aparecera aqui.`
                   }
-                  title="Sin historial reciente"
+                  title={
+                    activeCategory === 'all'
+                      ? 'Sin notificaciones'
+                      : `Sin ${activeCategoryMeta.label.toLocaleLowerCase('es-CO')}`
+                  }
                 />
               ) : (
-                historyCases.map((itemCase) => {
-                  const isExpanded = expandedCaseIds.includes(itemCase.id);
-                  const latest = itemCase.latest;
-                  const caseMeta = historyCaseMeta(itemCase) || null;
-                  const caseImpact = historyCaseImpactLabel(itemCase);
-                  const caseTone = historyImpactTone(latest) as HistoryCaseTone;
-
-                  return (
-                    <HistoryCaseCard
-                      eyebrow={historyCaseEyebrow(itemCase)}
-                      impact={caseImpact}
-                      isCycleSnippet={itemCase.isCycleSnippet}
-                      isExpanded={isExpanded}
-                      key={itemCase.id}
-                      meta={caseMeta}
-                      onToggle={() => toggleHistoryCase(itemCase.id)}
-                      statusLabel={historyStatusLabel(latest.status)}
-                      statusTone={historyStatusTone(latest.status)}
-                      steps={itemCase.steps.map((step) => ({
-                        id: step.id,
-                        title: friendlyHistoryStepLabel(step),
-                        amountLabel:
-                          typeof step.amountMinor === 'number' && step.amountMinor > 0
-                            ? formatCop(step.amountMinor)
-                            : null,
-                        impact: historyImpactLabel(step),
-                        meta: step.happenedAtLabel ?? null,
-                        tone: historyImpactTone(step) as HistoryCaseTone,
-                      }))}
-                      title={historyCardTitle(itemCase)}
-                      tone={caseTone}
-                    />
-                  );
-                })
+                <>
+                  {activePendingItems.length > 0 ? (
+                    <NotificationSection title="No leidas">
+                      {activePendingItems.map((item) => renderPendingCard(item))}
+                    </NotificationSection>
+                  ) : null}
+                </>
               )}
             </ScrollView>
           </View>
@@ -998,78 +1355,119 @@ export function ActivityScreen() {
 
 const styles = StyleSheet.create({
   safeArea: {
+    backgroundColor: theme.colors.overlay,
     flex: 1,
-    backgroundColor: theme.colors.background,
+    justifyContent: 'flex-end',
+  },
+  backdropTapTarget: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   layout: {
-    alignSelf: 'center',
-    flex: 1,
-    gap: theme.spacing.sm,
-    maxWidth: 560,
-    paddingBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.large,
+    borderTopRightRadius: theme.radius.large,
+    gap: theme.spacing.md,
+    maxHeight: '88%',
+    paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
     width: '100%',
   },
   fixedTop: {
     gap: theme.spacing.xs,
   },
-  heroBlock: {
-    paddingBottom: theme.spacing.xs,
-    paddingTop: theme.spacing.sm,
+  heroRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  closeButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.title1,
+    flex: 1,
+    fontSize: theme.typography.body,
     fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 34,
   },
   panelArea: {
-    flex: 1,
+    flexShrink: 1,
     gap: theme.spacing.md,
-    paddingTop: theme.spacing.xs,
   },
-  tabBar: {
+  notificationTabs: {
     alignItems: 'stretch',
     borderBottomColor: theme.colors.hairline,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: theme.spacing.md,
     flexDirection: 'row',
+    minWidth: '100%',
   },
-  tabButton: {
+  notificationTab: {
     alignItems: 'center',
-    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 42,
     paddingBottom: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
   },
-  tabButtonActive: {
+  notificationTabActive: {
     borderBottomColor: theme.colors.primary,
     borderBottomWidth: 2,
   },
   tabButtonPressed: {
     opacity: 0.88,
   },
-  tabDivider: {
-    backgroundColor: theme.colors.hairline,
-    marginBottom: theme.spacing.sm,
-    width: StyleSheet.hairlineWidth,
-  },
-  tabLabel: {
+  notificationTabLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
-  tabLabelActive: {
+  notificationTabLabelActive: {
     color: theme.colors.text,
     fontWeight: '800',
   },
+  notificationTabBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.danger,
+    borderRadius: theme.radius.pill,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 5,
+  },
+  notificationTabBadgeText: {
+    color: theme.colors.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
   sheetScrollWrap: {
-    flex: 1,
+    flexShrink: 1,
   },
   sheetScrollContent: {
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
+  },
+  notificationSection: {
     gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
+  },
+  notificationSectionTitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  notificationSectionContent: {
+    gap: theme.spacing.sm,
   },
   supportText: {
     color: theme.colors.textMuted,
@@ -1077,14 +1475,27 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   loadingState: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.large,
+    borderTopRightRadius: theme.radius.large,
+    padding: theme.spacing.lg,
+    width: '100%',
   },
   cardActionStack: {
     gap: theme.spacing.xs,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
   primaryActionSlot: {
     width: '100%',
+  },
+  inlineActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
   },
   inlineAction: {
     paddingVertical: 4,
@@ -1102,5 +1513,22 @@ const styles = StyleSheet.create({
   },
   inlineActionDangerText: {
     color: theme.colors.danger,
+  },
+  amendmentPanel: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.medium,
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  textarea: {
+    minHeight: 96,
+    paddingTop: theme.spacing.sm,
+    textAlignVertical: 'top',
+  },
+  amountPreview: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
   },
 });

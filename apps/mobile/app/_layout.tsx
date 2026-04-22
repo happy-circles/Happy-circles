@@ -315,7 +315,7 @@ function SessionRouteGuard() {
 
       if (status === 'signed_out') {
         if (!inAuthGroup && !isPublicInviteRoute && !isResetPasswordRoute && !cancelled) {
-          router.replace('/sign-in');
+          router.replace('/join');
         }
         return;
       }
@@ -406,7 +406,18 @@ function RootNavigator() {
           },
           headerTintColor: theme.colors.text,
         }}
-      />
+      >
+        <Stack.Screen
+          name="activity"
+          options={{
+            animation: 'slide_from_bottom',
+            contentStyle: {
+              backgroundColor: 'transparent',
+            },
+            presentation: 'transparentModal',
+          }}
+        />
+      </Stack>
       <MandatoryUpdateGate />
       <SessionOverlay />
     </>

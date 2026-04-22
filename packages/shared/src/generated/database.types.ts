@@ -146,6 +146,7 @@ export interface Database {
           amount_minor: number;
           currency_code: string;
           description: string | null;
+          category: string;
           parent_request_id: string | null;
           target_ledger_transaction_id: string | null;
           created_at: string;
@@ -173,6 +174,7 @@ export interface Database {
           origin_settlement_proposal_id: string | null;
           reverses_transaction_id: string | null;
           description: string | null;
+          category: string;
           created_by_user_id: string | null;
           created_at: string;
         };
@@ -304,6 +306,7 @@ export interface Database {
           creditor_user_id: string | null;
           amount_minor: number;
           description: string | null;
+          category: string | null;
           origin_request_id: string | null;
           origin_settlement_proposal_id: string | null;
           happened_at: string;

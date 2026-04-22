@@ -1,3 +1,5 @@
+import type { TransactionCategory } from '@happy-circles/shared';
+
 export interface HomeSummaryDto {
   readonly netBalanceMinor: number;
   readonly totalIOweMinor: number;
@@ -16,13 +18,19 @@ export interface PersonCardDto {
 
 export interface PendingActionDto {
   readonly id: string;
-  readonly kind: 'financial_request' | 'settlement_proposal' | 'friendship_invite' | 'reminder';
+  readonly kind:
+    | 'financial_request'
+    | 'settlement_proposal'
+    | 'friendship_invite'
+    | 'account_invite'
+    | 'reminder';
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
   readonly ctaLabel: string;
   readonly href: string;
   readonly amountMinor?: number;
+  readonly category?: TransactionCategory;
 }
 
 export interface ActivityItemDto {
@@ -32,6 +40,7 @@ export interface ActivityItemDto {
   readonly status: string;
   readonly href?: string;
   readonly amountMinor?: number;
+  readonly category?: TransactionCategory;
   readonly sourceType?: 'user' | 'system';
   readonly detail?: string;
   readonly happenedAt?: string;
@@ -45,6 +54,7 @@ export interface ActivityItemDto {
     | 'financial_request'
     | 'settlement_proposal'
     | 'friendship_invite'
+    | 'account_invite'
     | 'accepted_request'
     | 'manual_payment'
     | 'system_note'
@@ -67,6 +77,7 @@ export interface PersonTimelineItemDto {
   readonly title: string;
   readonly subtitle: string;
   readonly amountMinor: number;
+  readonly category?: TransactionCategory;
   readonly tone: 'positive' | 'negative' | 'neutral';
   readonly kind: 'request' | 'payment' | 'settlement' | 'system';
   readonly status: string;
@@ -87,6 +98,7 @@ export interface PersonPendingRequestDto {
   readonly tone: 'positive' | 'negative';
   readonly title: string;
   readonly description: string;
+  readonly category?: TransactionCategory;
   readonly amountMinor: number;
   readonly createdAtLabel: string;
   readonly createdByLabel: string;

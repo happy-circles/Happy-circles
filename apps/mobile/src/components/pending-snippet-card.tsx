@@ -3,18 +3,19 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 
 type PendingSnippetVariant = 'default' | 'muted' | 'accent' | 'elevated';
-type PendingSnippetTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
+type PendingSnippetTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 type PendingSnippetAmountTone = 'positive' | 'negative' | 'neutral' | 'danger';
 
 export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly eyebrow: string;
   readonly title: string;
   readonly statusLabel: string;
-  readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
+  readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
   readonly amountLabel?: string | null;
   readonly amountTone?: PendingSnippetAmountTone;
   readonly detail?: string | null;
@@ -81,6 +82,7 @@ export function PendingSnippetCard({
         tone === 'warning' ? styles.cardWarning : null,
         tone === 'neutral' ? styles.cardNeutral : null,
         tone === 'danger' ? styles.cardDanger : null,
+        tone === 'cycle' ? styles.cardCycle : null,
         style,
       ]}
       variant={variant}
@@ -190,6 +192,10 @@ const styles = StyleSheet.create({
   },
   cardDanger: {
     borderLeftColor: theme.colors.danger,
+    borderLeftWidth: 3,
+  },
+  cardCycle: {
+    borderLeftColor: transactionCategoryColor('cycle'),
     borderLeftWidth: 3,
   },
 });

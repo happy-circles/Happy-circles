@@ -70,6 +70,11 @@ const config: ExpoConfig = {
             host: appWebHost,
             pathPrefix: '/invite/',
           },
+          {
+            scheme: 'https',
+            host: appWebHost,
+            pathPrefix: '/join/',
+          },
         ],
       },
     ],

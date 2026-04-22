@@ -1,8 +1,13 @@
-import type { ActivityItemDto, PersonDetailDto, PersonTimelineItemDto } from '@happy-circles/application';
+import type {
+  ActivityItemDto,
+  PersonDetailDto,
+  PersonTimelineItemDto,
+} from '@happy-circles/application';
 
 import { formatCop } from './data';
+import { transactionCategoryLabel } from './transaction-categories';
 
-type HistoryStatusTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
+type HistoryStatusTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 type HistoryDirection = 'i_owe' | 'owes_me' | 'neutral';
 
 export interface HistoryCaseItem {
@@ -12,6 +17,7 @@ export interface HistoryCaseItem {
   readonly status: string;
   readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'friendship_invite';
   readonly amountMinor?: number;
+  readonly category?: ActivityItemDto['category'];
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
   readonly detail?: string;
@@ -107,7 +113,7 @@ function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): st
   }
 
   if (item.kind === 'settlement') {
-    return 'Cierre de ciclo';
+    return 'Happy Circle';
   }
 
   if (item.kind === 'payment') {
@@ -134,7 +140,12 @@ function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): st
 }
 
 function historyDirectionFromItem(item: HistoryCaseItem): HistoryDirection {
-  if (item.status === 'rejected') {
+  if (
+    item.status === 'rejected' ||
+    item.status === 'canceled' ||
+    item.status === 'expired' ||
+    item.status === 'stale'
+  ) {
     return 'neutral';
   }
 
@@ -204,7 +215,9 @@ export function compareHistoryItems<T extends ComparableHistoryItem>(left: T, ri
   return right.id.localeCompare(left.id);
 }
 
-export function buildHistoryCases<T extends HistoryCaseItem>(items: readonly T[]): HistoryCase<T>[] {
+export function buildHistoryCases<T extends HistoryCaseItem>(
+  items: readonly T[],
+): HistoryCase<T>[] {
   const sortedItems = [...items].sort(compareHistoryItems);
 
   const groups = new Map<string, T[]>();
@@ -252,6 +265,7 @@ export function toHistoryFeedItem(
     status: item.status,
     kind: item.kind,
     amountMinor: item.amountMinor,
+    category: item.category,
     tone: item.tone,
     flowLabel: item.flowLabel,
     detail: item.detail,
@@ -268,24 +282,27 @@ export function buildActivityHistoryItems(
 ): ActivityItemDto[] {
   return Object.values(peopleById)
     .flatMap((person) =>
-      person.timeline.map((item): ActivityItemDto => ({
-        id: item.id,
-        title: item.title,
-        subtitle: item.subtitle,
-        status: item.status,
-        href: `/person/${person.userId}`,
-        amountMinor: item.amountMinor,
-        sourceType: item.sourceType,
-        detail: item.detail,
-        happenedAt: item.happenedAt,
-        happenedAtLabel: item.happenedAtLabel,
-        tone: item.tone,
-        flowLabel: item.flowLabel,
-        originRequestId: item.originRequestId,
-        originSettlementProposalId: item.originSettlementProposalId,
-        counterpartyLabel: person.displayName,
-        kind: item.kind,
-      })),
+      person.timeline.map(
+        (item): ActivityItemDto => ({
+          id: item.id,
+          title: item.title,
+          subtitle: item.subtitle,
+          status: item.status,
+          href: `/person/${person.userId}`,
+          amountMinor: item.amountMinor,
+          category: item.category,
+          sourceType: item.sourceType,
+          detail: item.detail,
+          happenedAt: item.happenedAt,
+          happenedAtLabel: item.happenedAtLabel,
+          tone: item.tone,
+          flowLabel: item.flowLabel,
+          originRequestId: item.originRequestId,
+          originSettlementProposalId: item.originSettlementProposalId,
+          counterpartyLabel: person.displayName,
+          kind: item.kind,
+        }),
+      ),
     )
     .sort(compareHistoryItems);
 }
@@ -295,8 +312,28 @@ export function historyStatusLabel(status: string): string {
     return 'Por responder';
   }
 
+  if (status === 'requires_you_response') {
+    return 'Por responder';
+  }
+
+  if (status === 'requires_you_review') {
+    return 'Por verificar';
+  }
+
   if (status === 'waiting_other_side') {
     return 'En espera';
+  }
+
+  if (status === 'waiting_sender_review') {
+    return 'En validacion';
+  }
+
+  if (status === 'pending_claim') {
+    return 'Pendiente';
+  }
+
+  if (status === 'pending_activation') {
+    return 'Pendiente';
   }
 
   if (status === 'pending_approvals') {
@@ -331,6 +368,14 @@ export function historyStatusLabel(status: string): string {
     return 'Cancelada';
   }
 
+  if (status === 'stale') {
+    return 'Reemplazada';
+  }
+
+  if (status === 'executed') {
+    return 'Completado';
+  }
+
   if (status === 'posted') {
     return 'Registrado';
   }
@@ -339,11 +384,17 @@ export function historyStatusLabel(status: string): string {
 }
 
 export function historyStatusTone(status: string): HistoryStatusTone {
-  if (status === 'requires_you' || status === 'pending' || status === 'amended') {
+  if (
+    status === 'requires_you' ||
+    status === 'requires_you_response' ||
+    status === 'requires_you_review' ||
+    status === 'pending' ||
+    status === 'amended'
+  ) {
     return 'warning';
   }
 
-  if (status === 'accepted' || status === 'posted') {
+  if (status === 'accepted' || status === 'posted' || status === 'executed') {
     return 'success';
   }
 
@@ -364,7 +415,15 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
   }
 
   if (item.kind === 'settlement') {
-    return item.counterpartyLabel ? `Ajuste con ${item.counterpartyLabel}` : 'Ajuste registrado';
+    if (item.status === 'rejected') {
+      return 'Este Circle no se completo';
+    }
+
+    if (item.status === 'stale') {
+      return 'Este Circle fue reemplazado';
+    }
+
+    return 'Completaste un Circle!';
   }
 
   if (item.kind === 'payment') {
@@ -405,7 +464,7 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
 
 export function historyImpactTone(
   item: HistoryCaseItem,
-): 'positive' | 'negative' | 'neutral' | 'danger' {
+): 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle' {
   if (
     item.kind === 'friendship_invite' &&
     (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled')
@@ -413,11 +472,23 @@ export function historyImpactTone(
     return 'danger';
   }
 
+  if (item.kind === 'settlement' && item.status === 'stale') {
+    return 'neutral';
+  }
+
   if (item.status === 'rejected') {
     return 'danger';
   }
 
-  if (item.kind === 'settlement' || item.kind === 'friendship_invite') {
+  if (item.status === 'expired' || item.status === 'canceled') {
+    return 'danger';
+  }
+
+  if (item.kind === 'settlement') {
+    return 'cycle';
+  }
+
+  if (item.kind === 'friendship_invite') {
     return 'neutral';
   }
 
@@ -447,15 +518,27 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
     return null;
   }
 
-  if (item.status === 'rejected') {
+  if (item.kind === 'settlement') {
+    if (item.status === 'rejected') {
+      return 'Este Circle no se completo';
+    }
+
+    if (item.status === 'stale') {
+      return 'Este Circle fue reemplazado';
+    }
+
+    if (item.status === 'posted' || item.status === 'executed') {
+      return 'Completaste un Circle!';
+    }
+
+    return null;
+  }
+
+  if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
     return 'No cambio el saldo';
   }
 
   if (typeof item.amountMinor !== 'number' || item.amountMinor <= 0) {
-    return null;
-  }
-
-  if (item.kind === 'settlement') {
     return null;
   }
 
@@ -465,13 +548,16 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
   }
 
   const amountLabel = formatCop(item.amountMinor);
-  const isProposal = item.kind === 'request' && (item.status === 'pending' || item.status === 'amended');
+  const isProposal =
+    item.kind === 'request' && (item.status === 'pending' || item.status === 'amended');
   const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
 
   return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
 }
 
-export function historyCaseEyebrow<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
+export function historyCaseEyebrow<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): string | null {
   if (itemCase.isCycleSnippet) {
     return null;
   }
@@ -483,22 +569,35 @@ export function historyCaseEyebrow<T extends HistoryCaseItem>(itemCase: HistoryC
   return itemCase.latest.counterpartyLabel ?? null;
 }
 
-export function historyCaseImpactLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
+export function historyCaseImpactLabel<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): string | null {
   if (!itemCase.isCycleSnippet) {
     return historyImpactLabel(itemCase.latest);
   }
 
-  const movementCount = itemCase.steps.length;
-  if (movementCount <= 0) {
-    return null;
+  if (itemCase.latest.status === 'rejected') {
+    return 'Este Circle no se completo';
   }
 
-  return `${movementCount} ajuste${movementCount === 1 ? '' : 's'} aplicado${movementCount === 1 ? '' : 's'}`;
+  if (itemCase.latest.status === 'stale') {
+    return 'Este Circle fue reemplazado';
+  }
+
+  return 'Completaste un Circle!';
 }
 
 export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
   if (itemCase.isCycleSnippet) {
-    return 'Cierre de ciclo';
+    if (itemCase.latest.status === 'rejected') {
+      return 'Happy Circle no completado';
+    }
+
+    if (itemCase.latest.status === 'stale') {
+      return 'Happy Circle reemplazado';
+    }
+
+    return 'Happy Circle completado';
   }
 
   for (const step of itemCase.steps) {
@@ -509,6 +608,76 @@ export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCas
   }
 
   return compactHistoryLabel(itemCase.latest);
+}
+
+export function historyCaseStatusLabel<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): string {
+  if (!itemCase.isCycleSnippet) {
+    return historyStatusLabel(itemCase.latest.status);
+  }
+
+  if (itemCase.latest.status === 'rejected') {
+    return 'No completado';
+  }
+
+  if (itemCase.latest.status === 'stale') {
+    return 'Reemplazado';
+  }
+
+  if (itemCase.latest.status === 'pending_approvals') {
+    return 'Pendiente';
+  }
+
+  if (itemCase.latest.status === 'approved') {
+    return 'Listo';
+  }
+
+  return 'Completado';
+}
+
+export function historyCaseStatusTone<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): HistoryStatusTone {
+  if (!itemCase.isCycleSnippet) {
+    return historyStatusTone(itemCase.latest.status);
+  }
+
+  if (itemCase.latest.status === 'rejected') {
+    return 'danger';
+  }
+
+  if (itemCase.latest.status === 'stale') {
+    return 'neutral';
+  }
+
+  if (
+    itemCase.latest.status === 'pending_approvals' ||
+    itemCase.latest.status === 'waiting_other_side'
+  ) {
+    return 'warning';
+  }
+
+  return 'cycle';
+}
+
+export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
+  if (
+    item.status === 'rejected' ||
+    item.status === 'expired' ||
+    item.status === 'canceled' ||
+    item.status === 'stale'
+  ) {
+    return null;
+  }
+
+  if (item.kind === 'settlement' && item.status !== 'posted' && item.status !== 'executed') {
+    return null;
+  }
+
+  return typeof item.amountMinor === 'number' && item.amountMinor > 0
+    ? formatCop(item.amountMinor)
+    : null;
 }
 
 export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
@@ -522,7 +691,9 @@ export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase
   }
 
   if (itemCase.latest.happenedAtLabel) {
-    pieces.push(itemCase.latest.happenedAtLabel);
+    pieces.push(
+      `${itemCase.latest.happenedAtLabel} · ${transactionCategoryLabel(itemCase.latest.category)}`,
+    );
   }
 
   return pieces.join(' | ');

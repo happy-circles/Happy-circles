@@ -12,11 +12,16 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
+import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  type UserTransactionCategory,
+} from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 
 type Direction = 'i_owe' | 'owes_me';
@@ -74,6 +79,7 @@ export function RegisterFlowScreen() {
   const [personId, setPersonId] = useState(contextualPersonId);
   const [direction, setDirection] = useState<Direction>(contextualDirection ?? 'owes_me');
   const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState<UserTransactionCategory>(DEFAULT_TRANSACTION_CATEGORY);
   const [description, setDescription] = useState('');
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [errors, setErrors] = useState<RegisterFormErrors>({});
@@ -110,6 +116,7 @@ export function RegisterFlowScreen() {
   const isDirty =
     query.trim().length > 0 ||
     amount.trim().length > 0 ||
+    category !== DEFAULT_TRANSACTION_CATEGORY ||
     description.trim().length > 0 ||
     personId !== contextualPersonId ||
     direction !== (contextualDirection ?? 'owes_me');
@@ -225,10 +232,12 @@ export function RegisterFlowScreen() {
         debtorUserId,
         creditorUserId,
         amountMinor,
+        category,
         description: description.trim(),
       });
 
       setAmount('');
+      setCategory(DEFAULT_TRANSACTION_CATEGORY);
       setDescription('');
       setQuery('');
       setErrors({});
@@ -393,6 +402,12 @@ export function RegisterFlowScreen() {
                 ))}
               </View>
               {amountMinor > 0 ? <Text style={styles.amountPreview}>{formatCop(amountMinor)}</Text> : null}
+            </FieldBlock>
+          </View>
+
+          <View style={styles.section}>
+            <FieldBlock label="Categoria">
+              <TransactionCategoryPicker onChange={setCategory} value={category} />
             </FieldBlock>
           </View>
 

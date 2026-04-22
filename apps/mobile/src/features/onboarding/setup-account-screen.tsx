@@ -12,7 +12,6 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
-import { cancelScheduledReminders } from '@/lib/notifications';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import {
@@ -26,30 +25,6 @@ import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invit
 import { useSession } from '@/providers/session-provider';
 
 const STEP_ORDER: readonly SetupStep[] = ['profile', 'photo', 'security'];
-
-function formatPermissionLabel(status: string) {
-  if (status === 'granted') {
-    return 'Listo';
-  }
-
-  if (status === 'limited') {
-    return 'Parcial';
-  }
-
-  if (status === 'denied') {
-    return 'Sin permiso';
-  }
-
-  if (status === 'unavailable') {
-    return 'No disponible';
-  }
-
-  if (status === 'loading') {
-    return 'Revisando...';
-  }
-
-  return 'Pendiente';
-}
 
 function resolveTrustActionLabel(session: ReturnType<typeof useSession>) {
   if (session.linkedMethods.hasEmailPassword) {
@@ -78,14 +53,18 @@ export function SetupAccountScreen() {
   const initialCountry = useMemo(
     () =>
       COUNTRY_OPTIONS.find((country) => country.iso2 === profile?.phone_country_iso2) ??
-      COUNTRY_OPTIONS.find((country) => country.callingCode === profile?.phone_country_calling_code) ??
+      COUNTRY_OPTIONS.find(
+        (country) => country.callingCode === profile?.phone_country_calling_code,
+      ) ??
       DEFAULT_COUNTRY,
     [profile?.phone_country_calling_code, profile?.phone_country_iso2],
   );
 
   const [fullName, setFullName] = useState(profile?.display_name ?? '');
   const [countryIso, setCountryIso] = useState(initialCountry.iso2);
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState(profile?.phone_national_number ?? '');
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState(
+    profile?.phone_national_number ?? '',
+  );
   const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
@@ -126,7 +105,11 @@ export function SetupAccountScreen() {
   }, [currentStep, rawStep, router]);
 
   useEffect(() => {
-    if (currentStep !== 'security' || !session.linkedMethods.hasEmailPassword || session.isTrustedDevice) {
+    if (
+      currentStep !== 'security' ||
+      !session.linkedMethods.hasEmailPassword ||
+      session.isTrustedDevice
+    ) {
       return;
     }
 
@@ -317,25 +300,6 @@ export function SetupAccountScreen() {
     setMessage(result.message);
   }
 
-  async function handleContactsPermission() {
-    const result = await runSecurityAction('contacts', async () => session.requestContactsPermission());
-    setMessage(result);
-  }
-
-  async function handleNotificationsToggle(nextValue: boolean) {
-    if (!nextValue) {
-      await session.setNotificationsEnabled(false);
-      await cancelScheduledReminders();
-      setMessage('Recordatorios desactivados.');
-      return;
-    }
-
-    const result = await runSecurityAction('notifications', async () =>
-      session.requestNotificationsPermission(),
-    );
-    setMessage(result);
-  }
-
   function renderProfileStep() {
     return (
       <View style={styles.stepBody}>
@@ -417,7 +381,9 @@ export function SetupAccountScreen() {
       <View style={styles.stepBody}>
         <View>
           <Text style={styles.stepTitle}>Tu foto</Text>
-          <Text style={styles.stepSubtitle}>Una foto clara hace la app mas personal y confiable.</Text>
+          <Text style={styles.stepSubtitle}>
+            Una foto clara hace la app mas personal y confiable.
+          </Text>
         </View>
 
         <View style={styles.photoCard}>
@@ -459,7 +425,9 @@ export function SetupAccountScreen() {
       <View style={styles.stepBody}>
         <View>
           <Text style={styles.stepTitle}>Seguridad y app nativa</Text>
-          <Text style={styles.stepSubtitle}>Asegura este telefono y activa accesos rapidos si quieres.</Text>
+          <Text style={styles.stepSubtitle}>
+            Asegura este telefono y activa el ingreso rapido si quieres.
+          </Text>
         </View>
 
         <View style={styles.sectionCard}>
@@ -467,7 +435,9 @@ export function SetupAccountScreen() {
             <View style={styles.sectionCopy}>
               <Text style={styles.sectionTitle}>Asegura este telefono</Text>
               <Text style={styles.sectionSubtitle}>
-                {session.isTrustedDevice ? 'Este telefono ya es confiable.' : 'Valida este telefono para acciones sensibles.'}
+                {session.isTrustedDevice
+                  ? 'Este telefono ya es confiable.'
+                  : 'Valida este telefono para acciones sensibles.'}
               </Text>
             </View>
             <Text style={styles.sectionStatus}>
@@ -492,9 +462,7 @@ export function SetupAccountScreen() {
               <PrimaryAction
                 compact
                 label={securityBusyKey === 'trust-device' ? 'Validando...' : trustActionLabel}
-                onPress={
-                  securityBusyKey ? undefined : () => void handleTrustDevice()
-                }
+                onPress={securityBusyKey ? undefined : () => void handleTrustDevice()}
               />
             </View>
           ) : null}
@@ -519,43 +487,6 @@ export function SetupAccountScreen() {
               value={session.biometricsEnabled}
             />
           </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionCopy}>
-              <Text style={styles.sectionTitle}>Contactos</Text>
-              <Text style={styles.sectionSubtitle}>Para encontrar amigos mas facil despues.</Text>
-            </View>
-            <Text style={styles.sectionStatus}>
-              {formatPermissionLabel(session.setupState.contactsPermissionStatus)}
-            </Text>
-          </View>
-          {session.setupState.contactsPermissionStatus !== 'granted' ? (
-            <PrimaryAction
-              compact
-              label={securityBusyKey === 'contacts' ? 'Pidiendo permiso...' : 'Permitir contactos'}
-              onPress={securityBusyKey ? undefined : () => void handleContactsPermission()}
-              variant="secondary"
-            />
-          ) : null}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionCopy}>
-              <Text style={styles.sectionTitle}>Notificaciones</Text>
-              <Text style={styles.sectionSubtitle}>Para recordatorios y movimientos pendientes.</Text>
-            </View>
-            <Switch
-              onValueChange={(nextValue) => void handleNotificationsToggle(nextValue)}
-              trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-              value={session.notificationsEnabled}
-            />
-          </View>
-          <Text style={styles.helperText}>
-            Estado del sistema: {formatPermissionLabel(session.setupState.notificationsPermissionStatus)}.
-          </Text>
         </View>
       </View>
     );
