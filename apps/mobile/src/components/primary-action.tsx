@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
 export interface PrimaryActionProps {
@@ -66,9 +67,11 @@ export function PrimaryAction({
         ) : null}
       </View>
       {loading ? (
-        <ActivityIndicator
+        <HappyCirclesMotion
           color={variant === 'primary' ? theme.colors.white : theme.colors.text}
-          size={compact ? 'small' : 'small'}
+          size={compact ? 30 : 36}
+          tone="mono"
+          variant="loading"
         />
       ) : variant !== 'ghost' ? (
         <Ionicons

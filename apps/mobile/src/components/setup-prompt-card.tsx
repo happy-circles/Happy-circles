@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
 type SetupKind = 'contacts' | 'notifications';
@@ -10,6 +11,7 @@ export interface SetupPromptCardProps {
   readonly needsContacts: boolean;
   readonly needsNotifications: boolean;
   readonly onContactsPress: () => void;
+  readonly onDismiss: () => void;
   readonly onNotificationsPress: () => void;
 }
 
@@ -58,7 +60,7 @@ function ActionRow({
       </View>
       <Text style={styles.actionLabel}>{isBusy ? action.loadingLabel : action.label}</Text>
       {isBusy ? (
-        <ActivityIndicator color={theme.colors.textMuted} size="small" />
+        <HappyCirclesMotion size={30} style={styles.actionMotion} variant="loading" />
       ) : (
         <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
       )}
@@ -71,6 +73,7 @@ export function SetupPromptCard({
   needsContacts,
   needsNotifications,
   onContactsPress,
+  onDismiss,
   onNotificationsPress,
 }: SetupPromptCardProps) {
   const actions: SetupAction[] = [];
@@ -113,6 +116,13 @@ export function SetupPromptCard({
           <Text style={styles.title}>Termina los ajustes de la app</Text>
           <Text style={styles.body}>{bodyCopy(needsContacts, needsNotifications)}</Text>
         </View>
+        <Pressable
+          disabled={Boolean(busyKind)}
+          onPress={onDismiss}
+          style={({ pressed }) => [styles.dismissButton, pressed ? styles.pressed : null]}
+        >
+          <Text style={styles.dismissText}>Omitir</Text>
+        </Pressable>
       </View>
 
       <View style={styles.actions}>
@@ -164,6 +174,17 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
+  dismissButton: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 6,
+  },
+  dismissText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
   actions: {
     borderColor: theme.colors.hairline,
     borderRadius: theme.radius.medium,
@@ -197,6 +218,9 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  actionMotion: {
+    marginRight: -3,
   },
   pressed: {
     opacity: 0.68,

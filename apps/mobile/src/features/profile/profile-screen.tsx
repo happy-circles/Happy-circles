@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocalSearchParams } from 'expo-router';
-import type { Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
@@ -17,6 +16,7 @@ import {
 } from '@/lib/notifications';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
 
 function formatDeviceTitle(deviceId: string, currentDeviceId: string | null, platform: string) {
@@ -40,6 +40,7 @@ export function ProfileScreen() {
   const params = useLocalSearchParams<{ focus?: string; section?: string }>();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const avatarMutation = useUpdateProfileAvatarMutation();
@@ -334,6 +335,7 @@ export function ProfileScreen() {
     <ScreenShell
       headerVariant="plain"
       largeTitle={false}
+      refresh={refresh}
       scrollViewRef={scrollViewRef}
       title="Perfil"
     >
@@ -535,7 +537,7 @@ export function ProfileScreen() {
             <Text style={styles.rowTitle}>Celular</Text>
             <Text style={styles.rowSubtitle}>{phoneLabel}</Text>
           </View>
-          <Link href={buildSetupAccountHref('profile') as Href} asChild>
+          <Link href={buildSetupAccountHref('profile')} asChild>
             <Pressable style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}>
               <Text style={styles.inlineButtonText}>{session.profile?.phone_e164 ? 'Editar' : 'Completar'}</Text>
             </Pressable>

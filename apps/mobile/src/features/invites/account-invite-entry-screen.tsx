@@ -258,7 +258,7 @@ function RememberedAccountEntry({ pendingToken }: { readonly pendingToken: strin
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.rememberedWidth}>
-          <BrandMark orientation="stacked" size="md" />
+          <BrandMark orientation="stacked" size="lg" />
 
           <Pressable
             disabled={authBusy}

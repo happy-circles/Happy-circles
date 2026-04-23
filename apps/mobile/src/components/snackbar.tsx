@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
 type SnackbarTone = 'success' | 'danger' | 'neutral';
@@ -52,6 +53,9 @@ export function Snackbar({ visible, message, tone = 'neutral' }: SnackbarProps) 
           tone === 'danger' ? styles.danger : null,
         ]}
       >
+        {tone === 'success' ? (
+          <HappyCirclesMotion color={theme.colors.white} size={42} tone="mono" variant="success" />
+        ) : null}
         <Text style={styles.text}>{message}</Text>
       </View>
     </Animated.View>
@@ -67,8 +71,12 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   snackbar: {
+    alignItems: 'center',
     backgroundColor: theme.colors.text,
     borderRadius: theme.radius.medium,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     ...theme.shadow.floating,

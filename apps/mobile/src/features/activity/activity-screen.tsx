@@ -15,18 +15,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
 import { AppTextInput } from '@/components/app-text-input';
+import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { FieldBlock } from '@/components/field-block';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
-import {
-  historyStatusLabel,
-  historyStatusTone,
-} from '@/lib/history-cases';
+import { historyStatusLabel, historyStatusTone } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
@@ -40,14 +39,16 @@ import {
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
+import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
+import { buildSetupReminderItem, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
   isUserTransactionCategory,
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
-import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import {
   transactionAccentColor,
   transactionAmountIsVoided,
@@ -62,6 +63,7 @@ import {
   transactionVisualCategory,
   isPendingTransactionItem,
 } from '@/lib/transaction-presentation';
+import { useSession } from '@/providers/session-provider';
 
 type ActivityDomainKey = 'transactions' | 'friendships';
 type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'reminders';
@@ -653,7 +655,7 @@ function pendingDetailHref(
   }
 
   if (notificationCategoryForItem(item) !== 'transactions') {
-    return null;
+    return item.href ? { href: item.href as RouterHref } : null;
   }
 
   const hrefPersonId = personIdFromHref(item.href);
@@ -705,11 +707,13 @@ function buildFinancialRequestPendingContent(
 }
 
 export function ActivityScreen() {
+  const session = useSession();
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string; domain?: string }>();
   const requestedDomain = parseActivityDomainParam(params.domain);
   const requestedCategory = parseNotificationCategoryParam(params.category);
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const acceptRequest = useAcceptFinancialRequestMutation();
   const amendRequest = useAmendFinancialRequestMutation();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
@@ -732,10 +736,27 @@ export function ActivityScreen() {
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>(
     requestedCategory ?? initialCategoryFromDomain(requestedDomain),
   );
+  const [setupPromptDismissed, setSetupPromptDismissed] = useState(false);
 
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = useMemo(() => sections.find((item) => item.key === 'pending'), [sections]);
-  const allPendingItems = pendingSection?.items ?? [];
+  const basePendingItems = pendingSection?.items ?? [];
+  const needsContacts = session.setupState.contactsPermissionStatus !== 'granted';
+  const needsNotifications = !session.notificationsEnabled;
+  const setupReminderItem = useMemo(
+    () =>
+      setupPromptDismissed
+        ? buildSetupReminderItem({
+            needsContacts,
+            needsNotifications,
+          })
+        : null,
+    [needsContacts, needsNotifications, setupPromptDismissed],
+  );
+  const allPendingItems = useMemo(
+    () => (setupReminderItem ? [setupReminderItem, ...basePendingItems] : basePendingItems),
+    [basePendingItems, setupReminderItem],
+  );
   const people = snapshotQuery.data?.people ?? [];
   const activePendingItems = useMemo(
     () => allPendingItems.filter((item) => matchesNotificationCategory(item, activeCategory)),
@@ -771,6 +792,20 @@ export function ActivityScreen() {
       setActiveCategory(initialCategoryFromDomain(requestedDomain));
     }
   }, [requestedCategory, requestedDomain]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void getSetupPromptDismissed(session.userId).then((dismissed) => {
+      if (isMounted) {
+        setSetupPromptDismissed(dismissed);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session.userId]);
 
   useEffect(() => {
     if (
@@ -860,7 +895,9 @@ export function ActivityScreen() {
         financialRequestContent.createdAtLabel
           ? `${financialRequestContent.createdAtLabel} · ${transactionCategoryLabel(item.category)}`
           : transactionCategoryLabel(item.category),
-      ].filter(Boolean).join(' | ');
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
       return (
         <TransactionEventCard
@@ -1037,7 +1074,9 @@ export function ActivityScreen() {
 
     if (notificationCategoryForItem(item) === 'transactions') {
       const transactionActorLabel =
-        item.kind === 'settlement_proposal' || item.kind === 'settlement' || item.category === 'cycle'
+        item.kind === 'settlement_proposal' ||
+        item.kind === 'settlement' ||
+        item.category === 'cycle'
           ? 'Happy Circle'
           : actor.label;
 
@@ -1046,7 +1085,9 @@ export function ActivityScreen() {
           accentColor={transactionAccentColor(item)}
           actorAvatarUrl={item.category === 'cycle' ? null : actor.avatarUrl}
           actorFallbackColor={
-            item.category === 'cycle' ? transactionToneColor(item) : avatarColorForLabel(actor.label)
+            item.category === 'cycle'
+              ? transactionToneColor(item)
+              : avatarColorForLabel(actor.label)
           }
           actorLabel={transactionActorLabel}
           amountColor={transactionToneColor(item)}
@@ -1259,6 +1300,9 @@ export function ActivityScreen() {
     return (
       <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <View style={styles.loadingState}>
+          <View style={styles.loadingMotion}>
+            <HappyCirclesMotion size={108} variant="loading" />
+          </View>
           <Text style={styles.supportText}>
             Estamos leyendo las acciones reales desde Supabase.
           </Text>
@@ -1316,9 +1360,11 @@ export function ActivityScreen() {
           {message ? <MessageBanner message={message} /> : null}
 
           <View style={styles.sheetScrollWrap}>
-            <ScrollView
+            <BrandedRefreshScrollView
               contentContainerStyle={styles.sheetScrollContent}
               keyboardShouldPersistTaps="handled"
+              refresh={refresh}
+              refreshIndicatorStyle={styles.sheetRefreshIndicator}
               showsVerticalScrollIndicator={false}
             >
               {!hasVisibleNotifications ? (
@@ -1345,7 +1391,7 @@ export function ActivityScreen() {
                   ) : null}
                 </>
               )}
-            </ScrollView>
+            </BrandedRefreshScrollView>
           </View>
         </View>
       </View>
@@ -1452,10 +1498,14 @@ const styles = StyleSheet.create({
   },
   sheetScrollWrap: {
     flexShrink: 1,
+    position: 'relative',
   },
   sheetScrollContent: {
     gap: theme.spacing.md,
     paddingBottom: theme.spacing.xs,
+  },
+  sheetRefreshIndicator: {
+    top: theme.spacing.xs,
   },
   notificationSection: {
     gap: theme.spacing.sm,
@@ -1473,6 +1523,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+  },
+  loadingMotion: {
+    alignItems: 'center',
   },
   loadingState: {
     alignSelf: 'center',

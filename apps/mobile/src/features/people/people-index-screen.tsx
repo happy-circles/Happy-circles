@@ -5,15 +5,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppTextInput } from '@/components/app-text-input';
 import { EmptyState } from '@/components/empty-state';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { PersonRow } from '@/components/person-row';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 
 export function PeopleIndexScreen() {
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const people = snapshotQuery.data?.dashboard.activePeople ?? [];
   const [personQuery, setPersonQuery] = useState('');
   const normalizedQuery = personQuery.trim().toLocaleLowerCase('es-CO');
@@ -30,6 +33,9 @@ export function PeopleIndexScreen() {
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} title="Personas">
+        <View style={styles.loadingMotion}>
+          <HappyCirclesMotion size={108} variant="loading" />
+        </View>
         <Text style={styles.supportText}>Estamos cargando tu red real.</Text>
       </ScreenShell>
     );
@@ -37,7 +43,7 @@ export function PeopleIndexScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} title="Personas">
+      <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Personas">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -54,6 +60,7 @@ export function PeopleIndexScreen() {
       }
       headerVariant="plain"
       largeTitle={false}
+      refresh={refresh}
       title="Personas"
     >
       {people.length > 0 ? (
@@ -101,6 +108,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+  },
+  loadingMotion: {
+    alignItems: 'center',
   },
   addButton: {
     alignItems: 'center',

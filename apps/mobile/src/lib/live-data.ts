@@ -1963,11 +1963,7 @@ function buildTimelineStepTitle(
   return buildHistoryTitle(row, counterpartyName, names);
 }
 
-function buildCycleSettlementImpactLabel(
-  row: RelationshipHistoryRow,
-  currentUserId: string,
-  counterpartyName: string,
-): string | null {
+function buildCycleSettlementImpactLabel(row: RelationshipHistoryRow): string | null {
   if (row.subtype !== 'cycle_settlement') {
     return null;
   }
@@ -1995,7 +1991,7 @@ function buildHistorySubtitle(
     pieces.push(movementFlow);
   }
 
-  const cycleImpact = buildCycleSettlementImpactLabel(row, currentUserId, counterpartyName);
+  const cycleImpact = buildCycleSettlementImpactLabel(row);
   if (cycleImpact) {
     pieces.push(cycleImpact);
   }

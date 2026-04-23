@@ -7,6 +7,8 @@ import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import type { Href } from 'expo-router';
 import type { Json } from '@happy-circles/shared';
 
+import { GlobalFeedbackOverlay } from '@/components/global-feedback-overlay';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
@@ -260,6 +262,9 @@ function SessionOverlay() {
     return (
       <View style={styles.overlay}>
         <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
+          <View style={styles.lockMotion}>
+            <HappyCirclesMotion size={236} variant="splash" />
+          </View>
           <Text style={styles.lockTitle}>Cargando Happy Circles</Text>
           <Text style={styles.lockSubtitle}>Preparando sesion y ajustes locales.</Text>
         </SurfaceCard>
@@ -420,6 +425,7 @@ function RootNavigator() {
       </Stack>
       <MandatoryUpdateGate />
       <SessionOverlay />
+      <GlobalFeedbackOverlay />
     </>
   );
 }
@@ -454,6 +460,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.title2,
     fontWeight: '800',
+  },
+  lockMotion: {
+    alignItems: 'center',
   },
   lockSubtitle: {
     color: theme.colors.textMuted,

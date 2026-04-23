@@ -1,11 +1,11 @@
 import Constants from 'expo-constants';
+import type * as ExpoNotifications from 'expo-notifications';
+import type { EventSubscription, NotificationResponse } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 let configured = false;
 
-type NotificationsModule = typeof import('expo-notifications');
-type NotificationResponse = import('expo-notifications').NotificationResponse;
-type EventSubscription = import('expo-notifications').EventSubscription;
+type NotificationsModule = typeof ExpoNotifications;
 
 interface NotificationSupport {
   readonly supported: boolean;
@@ -15,7 +15,7 @@ interface NotificationSupport {
 export type NotificationPermissionStatus = 'unavailable' | 'undetermined' | 'denied' | 'granted';
 
 function isExpoGo(): boolean {
-  return Constants.appOwnership === 'expo';
+  return String(Constants.appOwnership) === 'expo';
 }
 
 export function getNotificationSupport(): NotificationSupport {

@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import type { Href } from 'expo-router';
 import type { PersonCardDto } from '@happy-circles/application';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -22,7 +21,7 @@ function buildLastUpdateLabel(value: string): string {
 
   const relativeMatch = value.match(/(hace .+|hoy|ayer)$/i);
   if (relativeMatch) {
-    return relativeMatch[1]!;
+    return relativeMatch[1];
   }
 
   if (value.toLocaleLowerCase('es-CO') === 'sin movimientos todavia') {
@@ -39,7 +38,7 @@ export function PersonRow({ person }: PersonRowProps) {
   const lastUpdateLabel = buildLastUpdateLabel(person.lastActivityLabel);
 
   return (
-    <Link href={`/person/${person.userId}` as Href} asChild>
+    <Link href={`/person/${person.userId}`} asChild>
       <Pressable style={({ pressed }) => [pressed ? styles.pressed : null]}>
         <SurfaceCard
           padding="md"

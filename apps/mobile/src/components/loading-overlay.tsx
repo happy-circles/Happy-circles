@@ -1,19 +1,21 @@
-import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, Text, View } from 'react-native';
 
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
 export interface LoadingOverlayProps {
   readonly visible: boolean;
   readonly title: string;
   readonly message?: string;
+  readonly variant?: 'loading' | 'success';
 }
 
-export function LoadingOverlay({ visible, title, message }: LoadingOverlayProps) {
+export function LoadingOverlay({ message, title, variant = 'loading', visible }: LoadingOverlayProps) {
   return (
     <Modal animationType="fade" transparent visible={visible}>
       <View style={styles.scrim}>
         <View style={styles.card}>
-          <ActivityIndicator color={theme.colors.primary} size="small" />
+          <HappyCirclesMotion size={104} variant={variant} />
           <View style={styles.copy}>
             <Text style={styles.title}>{title}</Text>
             {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -39,7 +41,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.large,
     borderWidth: 1,
     gap: theme.spacing.md,
-    maxWidth: 320,
+    maxWidth: 360,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.lg,
     width: '100%',

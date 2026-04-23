@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { EmptyState } from '@/components/empty-state';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
 
 export interface SettlementDetailScreenProps {
@@ -106,6 +108,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const router = useRouter();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
@@ -208,6 +211,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="Cargando el detalle de la propuesta." title="Happy Circle">
+        <HappyCirclesMotion size={108} variant="loading" />
         <Text style={styles.supportText}>Estamos leyendo participantes, movimientos y estado.</Text>
       </ScreenShell>
     );
@@ -215,7 +219,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="No pudimos cargar esta propuesta." title="Happy Circle">
+      <ScreenShell eyebrow="Happy Circle" largeTitle={false} refresh={refresh} subtitle="No pudimos cargar esta propuesta." title="Happy Circle">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -223,7 +227,13 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   if (!settlement) {
     return (
-      <ScreenShell eyebrow="Happy Circle" largeTitle={false} subtitle="No encontramos esta propuesta." title="Happy Circle">
+      <ScreenShell
+        eyebrow="Happy Circle"
+        largeTitle={false}
+        refresh={refresh}
+        subtitle="No encontramos esta propuesta."
+        title="Happy Circle"
+      >
         <EmptyState
           description="Confirma que sigas siendo participante o que el id exista en Supabase."
           title="Propuesta no visible"
@@ -254,6 +264,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       eyebrow="Happy Circle"
       largeTitle={false}
       overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
+      refresh={refresh}
       subtitle="Lo esencial antes de aprobar o completar."
       title="Happy Circle"
     >

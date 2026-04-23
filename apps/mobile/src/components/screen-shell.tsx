@@ -1,8 +1,12 @@
 import type { PropsWithChildren, ReactNode, RefObject } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ScrollView, StyleProp, ViewStyle } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  BrandedRefreshScrollView,
+  type BrandedRefreshProps,
+} from '@/components/branded-refresh-control';
 import { theme } from '@/lib/theme';
 
 export interface ScreenShellProps extends PropsWithChildren {
@@ -17,8 +21,10 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly headerSlot?: ReactNode;
   readonly footer?: ReactNode;
   readonly overlay?: ReactNode;
+  readonly refresh?: BrandedRefreshProps;
   readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
+  readonly contentWidthStyle?: StyleProp<ViewStyle>;
 }
 
 export function ScreenShell({
@@ -33,9 +39,11 @@ export function ScreenShell({
   headerSlot,
   footer,
   overlay,
+  refresh,
   scrollViewRef,
   children,
   contentContainerStyle,
+  contentWidthStyle,
 }: ScreenShellProps) {
   const resolvedTitleStyle =
     titleSize === 'largeTitle'
@@ -50,15 +58,22 @@ export function ScreenShell({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
+      <BrandedRefreshScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, footer ? styles.contentWithFooter : null, contentContainerStyle]}
+        contentContainerStyle={[
+          styles.content,
+          footer ? styles.contentWithFooter : null,
+          contentContainerStyle,
+        ]}
         keyboardShouldPersistTaps="handled"
+        refresh={refresh}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.contentWidth}>
-          <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+        <View style={[styles.contentWidth, contentWidthStyle]}>
+          <View
+            style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}
+          >
             {eyebrow ? (
               <View style={styles.eyebrowBadge}>
                 <Text style={styles.eyebrowText}>{eyebrow}</Text>
@@ -81,7 +96,7 @@ export function ScreenShell({
           </View>
           {children}
         </View>
-      </ScrollView>
+      </BrandedRefreshScrollView>
       {footer ? (
         <View style={styles.footer}>
           <View style={styles.contentWidth}>{footer}</View>

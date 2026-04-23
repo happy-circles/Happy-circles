@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto } from '@happy-circles/application';
 
+import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
@@ -42,6 +44,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
@@ -196,6 +199,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const router = useRouter();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
   const amendRequest = useAmendFinancialRequestMutation();
@@ -665,6 +669,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} subtitle="Cargando esta relacion." title="Persona">
+        <HappyCirclesMotion size={108} variant="loading" />
         <Text style={styles.supportText}>Estamos leyendo el saldo y el historial real.</Text>
       </ScreenShell>
     );
@@ -672,7 +677,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} subtitle="No pudimos cargar esta relacion." title="Persona">
+      <ScreenShell
+        headerVariant="plain"
+        largeTitle={false}
+        refresh={refresh}
+        subtitle="No pudimos cargar esta relacion."
+        title="Persona"
+      >
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -680,7 +691,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   if (!person) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} subtitle="No encontramos esta relacion." title="Persona">
+      <ScreenShell
+        headerVariant="plain"
+        largeTitle={false}
+        refresh={refresh}
+        subtitle="No encontramos esta relacion."
+        title="Persona"
+      >
         <EmptyState
           description="Prueba desde la lista principal de personas o confirma que la relacion exista en Supabase."
           title="Sin relacion activa"
@@ -773,9 +790,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
           <View style={styles.sheetScrollWrap}>
-            <ScrollView
+            <BrandedRefreshScrollView
               contentContainerStyle={styles.sheetScrollContent}
               keyboardShouldPersistTaps="handled"
+              refresh={refresh}
+              refreshIndicatorStyle={styles.refreshIndicator}
               showsVerticalScrollIndicator={false}
             >
               {panelSegment === 'pending' ? (
@@ -827,7 +846,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   );
                 })
               )}
-            </ScrollView>
+            </BrandedRefreshScrollView>
           </View>
         </View>
       </View>
@@ -855,6 +874,9 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
     width: '100%',
+  },
+  refreshIndicator: {
+    top: theme.spacing.md,
   },
   fixedTop: {
     gap: theme.spacing.sm,

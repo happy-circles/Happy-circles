@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { AppAvatar } from '@/components/app-avatar';
 import { BalanceSummaryCard } from '@/components/balance-summary-card';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
 import { ScreenShell } from '@/components/screen-shell';
@@ -25,7 +26,9 @@ import {
   useReviewExternalFriendshipInviteMutation,
 } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
+import { dismissSetupPrompt, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   isConsolidatedTransactionItem,
   isPendingTransactionItem,
@@ -656,6 +659,7 @@ function InviteRequestsSheet({
 export function DashboardScreen() {
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const homeIntent = useHomeNavigationIntent();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
@@ -671,6 +675,7 @@ export function DashboardScreen() {
   const [inviteTab, setInviteTab] = useState<InviteRequestsTab>('received');
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [busyInviteKey, setBusyInviteKey] = useState<string | null>(null);
+  const [setupPromptDismissed, setSetupPromptDismissed] = useState<boolean | null>(null);
   const friendshipPendingItems = snapshotQuery.data?.friendshipPendingItems ?? [];
   const accountInvitePendingItems = snapshotQuery.data?.accountInvitePendingItems ?? [];
   const invitePendingItems = sortInviteRequestItems([
@@ -694,7 +699,7 @@ export function DashboardScreen() {
     .slice(0, RECENT_TRANSACTION_LIMIT);
   const needsContacts = session.setupState.contactsPermissionStatus !== 'granted';
   const needsNotifications = !session.notificationsEnabled;
-  const showNativeSetup = needsContacts || needsNotifications;
+  const showNativeSetup = (needsContacts || needsNotifications) && setupPromptDismissed === false;
 
   useEffect(() => {
     if (!homeIntent || homeIntent.kind !== 'open_invite_requests') {
@@ -710,6 +715,21 @@ export function DashboardScreen() {
     setInviteTab(homeIntent.tab);
     setInviteSheetVisible(true);
   }, [dashboard, homeIntent]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setSetupPromptDismissed(null);
+    void getSetupPromptDismissed(session.userId).then((dismissed) => {
+      if (isMounted) {
+        setSetupPromptDismissed(dismissed);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session.userId]);
 
   async function handleContactsPermission() {
     setBusyNativeSetup('contacts');
@@ -739,6 +759,12 @@ export function DashboardScreen() {
     } finally {
       setBusyNativeSetup(null);
     }
+  }
+
+  async function handleDismissNativeSetup() {
+    setSetupPromptDismissed(true);
+    setNativeSetupMessage(null);
+    await dismissSetupPrompt(session.userId);
   }
 
   function openInviteRequests() {
@@ -804,6 +830,9 @@ export function DashboardScreen() {
   if (snapshotQuery.isLoading || !dashboard) {
     return (
       <ScreenShell headerVariant="plain" title="Happy Circles" titleAlign="center">
+        <View style={styles.loadingMotion}>
+          <HappyCirclesMotion size={132} variant="splash" />
+        </View>
         <Text style={styles.supportText}>
           Estamos sincronizando el panorama general de tu cuenta.
         </Text>
@@ -813,7 +842,7 @@ export function DashboardScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell headerVariant="plain" title="Happy Circles" titleAlign="center">
+      <ScreenShell headerVariant="plain" refresh={refresh} title="Happy Circles" titleAlign="center">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -839,6 +868,8 @@ export function DashboardScreen() {
       }
       headerSlot={<NotificationBellButton count={dashboard.urgentCount} href="/activity" />}
       headerVariant="plain"
+      contentWidthStyle={styles.homeContent}
+      refresh={refresh}
       title="Happy Circles"
       titleAlign="center"
     >
@@ -857,6 +888,7 @@ export function DashboardScreen() {
           needsContacts={needsContacts}
           needsNotifications={needsNotifications}
           onContactsPress={() => void handleContactsPermission()}
+          onDismiss={() => void handleDismissNativeSetup()}
           onNotificationsPress={() => void handleNotificationsPermission()}
         />
       ) : null}
@@ -973,10 +1005,16 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  homeContent: {
+    gap: theme.spacing.xl,
+  },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+  },
+  loadingMotion: {
+    alignItems: 'center',
   },
   profileButton: {
     alignItems: 'center',

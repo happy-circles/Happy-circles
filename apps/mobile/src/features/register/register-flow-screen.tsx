@@ -7,17 +7,19 @@ import { AppTextInput } from '@/components/app-text-input';
 import { ChoiceChip } from '@/components/choice-chip';
 import { EmptyState } from '@/components/empty-state';
 import { FieldBlock } from '@/components/field-block';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { Snackbar } from '@/components/snackbar';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
-import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import { showBlockedActionAlert, useDelayedBusy } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
+import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
@@ -69,6 +71,7 @@ export function RegisterFlowScreen() {
   const session = useSession();
   const { userId } = session;
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const createRequest = useCreateRequestMutation();
 
   const contextualPersonId = typeof params.personId === 'string' ? params.personId : '';
@@ -86,7 +89,7 @@ export function RegisterFlowScreen() {
   const searchInputRef = useRef<TextInput | null>(null);
   const amountInputRef = useRef<TextInput | null>(null);
   const descriptionInputRef = useRef<TextInput | null>(null);
-  const { snackbar, showSnackbar } = useFeedbackSnackbar();
+  const completedSaveRef = useRef(false);
   const showBusyOverlay = useDelayedBusy(createRequest.isPending);
 
   const allPeople = snapshotQuery.data?.people ?? [];
@@ -127,6 +130,10 @@ export function RegisterFlowScreen() {
     }
 
     return navigation.addListener('beforeRemove', (event: { preventDefault(): void; data: { action: object } }) => {
+      if (completedSaveRef.current) {
+        return;
+      }
+
       event.preventDefault();
       Alert.alert('Tienes cambios sin guardar', 'Si sales ahora, perderas el movimiento que estas armando.', [
         {
@@ -241,7 +248,20 @@ export function RegisterFlowScreen() {
       setDescription('');
       setQuery('');
       setErrors({});
-      showSnackbar(`Movimiento creado con ${selectedPerson?.displayName ?? 'la otra persona'}.`, 'success');
+      completedSaveRef.current = true;
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/home');
+      }
+
+      setTimeout(() => {
+        showGlobalFeedback({
+          title: 'Movimiento creado',
+          message: `Con ${selectedPerson?.displayName ?? 'la otra persona'}.`,
+          tone: 'success',
+        });
+      }, 220);
     } catch (error) {
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo guardar el movimiento.';
@@ -278,13 +298,18 @@ export function RegisterFlowScreen() {
         ) : undefined
       }
       headerVariant="plain"
-      overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
+      refresh={refresh}
       title="Nuevo movimiento"
       titleSize="title1"
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-      {snapshotQuery.isLoading ? <Text style={styles.helper}>Cargando relaciones activas...</Text> : null}
+      {snapshotQuery.isLoading ? (
+        <View style={styles.inlineLoading}>
+          <HappyCirclesMotion size={76} variant="loading" />
+          <Text style={styles.helper}>Cargando relaciones activas...</Text>
+        </View>
+      ) : null}
 
       {snapshotQuery.error ? (
         <View style={styles.inlineState}>
@@ -455,7 +480,6 @@ export function RegisterFlowScreen() {
       ) : null}
 
       <LoadingOverlay
-        message="No cierres esta pantalla mientras confirmamos el movimiento."
         title="Guardando movimiento"
         visible={showBusyOverlay}
       />
@@ -466,6 +490,11 @@ export function RegisterFlowScreen() {
 const styles = StyleSheet.create({
   stack: {
     gap: theme.spacing.sm,
+  },
+  inlineLoading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
   },
   inlineState: {
     gap: theme.spacing.xs,

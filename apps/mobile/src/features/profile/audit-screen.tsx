@@ -1,20 +1,24 @@
 import { StyleSheet, Text } from 'react-native';
 
 import { EmptyState } from '@/components/empty-state';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 
 export function ProfileAuditScreen() {
   const snapshotQuery = useAppSnapshot();
+  const refresh = useSnapshotRefresh(snapshotQuery);
   const events = snapshotQuery.data?.auditEvents ?? [];
 
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell eyebrow="Auditoria" largeTitle={false} subtitle="Cargando eventos recientes del sistema." title="Auditoria">
+        <HappyCirclesMotion size={108} variant="loading" />
         <Text style={styles.supportText}>Leyendo auditoria visible para esta cuenta.</Text>
       </ScreenShell>
     );
@@ -22,7 +26,7 @@ export function ProfileAuditScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell eyebrow="Auditoria" largeTitle={false} subtitle="No pudimos cargar los eventos." title="Auditoria">
+      <ScreenShell eyebrow="Auditoria" largeTitle={false} refresh={refresh} subtitle="No pudimos cargar los eventos." title="Auditoria">
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -32,6 +36,7 @@ export function ProfileAuditScreen() {
     <ScreenShell
       eyebrow="Auditoria"
       largeTitle={false}
+      refresh={refresh}
       subtitle="Vista tecnica para revisar eventos y trazabilidad del sistema."
       title="Auditoria"
     >
