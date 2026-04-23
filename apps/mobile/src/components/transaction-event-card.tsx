@@ -11,6 +11,7 @@ import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
   transactionCategoryIcon,
+  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 
 export interface TransactionEventCardProps extends PropsWithChildren {
@@ -35,6 +36,11 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly statusTone?: StatusChipProps['tone'];
   readonly unread?: boolean;
   readonly variant?: 'default' | 'muted' | 'accent' | 'elevated';
+  readonly compact?: boolean;
+  readonly categoryPlacement?: 'avatar' | 'meta';
+  readonly contextVariant?: 'text' | 'badge';
+  readonly compactMetaLayout?: 'inline' | 'stacked';
+  readonly directionLayout?: 'stacked' | 'floating';
 }
 
 export function TransactionEventCard({
@@ -60,7 +66,18 @@ export function TransactionEventCard({
   statusTone = 'neutral',
   unread = false,
   variant = 'default',
+  compact = false,
+  categoryPlacement = 'avatar',
+  contextVariant = 'text',
+  compactMetaLayout = 'inline',
+  directionLayout = 'stacked',
 }: TransactionEventCardProps) {
+  type CompactMetaSegment = {
+    readonly key: 'context' | 'time' | 'category';
+    readonly kind: 'badge' | 'text' | 'category';
+    readonly label: string;
+  };
+
   const safeCategory = category ?? 'other';
   const categoryIcon =
     badgeIcon ?? (transactionCategoryIcon(safeCategory) as keyof typeof Ionicons.glyphMap);
@@ -68,75 +85,254 @@ export function TransactionEventCard({
     badgeBackgroundColor ?? transactionCategoryBackgroundColor(safeCategory);
   const resolvedBadgeColor = badgeColor ?? transactionCategoryColor(safeCategory);
   const hasAction = Boolean(href || onPress);
+  const metaParts =
+    meta
+      ?.split('|')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0) ?? [];
+  const metaPrimary = metaParts[0] ?? null;
+  const metaCategoryLabel =
+    categoryPlacement === 'meta'
+      ? metaParts[1] ?? transactionCategoryLabel(safeCategory)
+      : null;
+  const compactMetaSegments: CompactMetaSegment[] = [];
+
+  if (context) {
+    compactMetaSegments.push({
+      key: 'context',
+      kind: contextVariant === 'badge' ? 'badge' : 'text',
+      label: context,
+    });
+  }
+
+  if (metaPrimary) {
+    compactMetaSegments.push({
+      key: 'time',
+      kind: 'text',
+      label: metaPrimary,
+    });
+  }
+
+  if (metaCategoryLabel) {
+    compactMetaSegments.push({
+      key: 'category',
+      kind: 'category',
+      label: metaCategoryLabel,
+    });
+  }
   const card = (
     <SurfaceCard
-      padding="md"
+      padding={compact ? 'sm' : 'md'}
       style={[
         styles.card,
+        compact ? styles.cardCompact : null,
         pending ? styles.pendingCard : null,
         { borderLeftColor: accentColor },
       ]}
       variant={variant}
     >
-      <View style={styles.body}>
-        <View style={styles.leading}>
-          <View style={styles.avatarWrap}>
+      <View style={[styles.body, compact ? styles.bodyCompact : null]}>
+        <View style={[styles.leading, compact ? styles.leadingCompact : null]}>
+          <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
             <AppAvatar
               fallbackBackgroundColor={actorFallbackColor}
               fallbackTextColor={theme.colors.white}
               imageUrl={actorAvatarUrl}
               label={actorLabel}
               rounded={false}
-              size={44}
+              size={compact ? 38 : 44}
             />
-            <View
-              style={[
-                styles.categoryBadge,
-                {
-                  backgroundColor: resolvedBadgeBackgroundColor,
-                  borderColor: pending ? '#fff9ed' : theme.colors.surface,
-                },
-              ]}
-            >
-              <Ionicons color={resolvedBadgeColor} name={categoryIcon} size={13} />
-            </View>
+            {categoryPlacement === 'avatar' ? (
+              <View
+                style={[
+                  styles.categoryBadge,
+                  compact ? styles.categoryBadgeCompact : null,
+                  {
+                    backgroundColor: resolvedBadgeBackgroundColor,
+                    borderColor: pending ? '#fff9ed' : theme.colors.surface,
+                  },
+                ]}
+              >
+                <Ionicons color={resolvedBadgeColor} name={categoryIcon} size={compact ? 11 : 13} />
+              </View>
+            ) : null}
           </View>
-          <View style={styles.copy}>
-            <Text numberOfLines={1} style={styles.actor}>
+          <View style={[styles.copy, compact ? styles.copyCompact : null]}>
+            <Text numberOfLines={1} style={[styles.actor, compact ? styles.actorCompact : null]}>
               {actorLabel}
             </Text>
-            <Text numberOfLines={1} style={styles.context}>
-              {context}
-            </Text>
-            {meta ? (
-              <Text numberOfLines={1} style={styles.meta}>
-                {meta}
-              </Text>
-            ) : null}
+            {compact && categoryPlacement === 'meta' ? (
+              compactMetaLayout === 'stacked' ? (
+                <View style={styles.compactMetaStack}>
+                  {context ? (
+                    contextVariant === 'badge' ? (
+                      <View
+                        style={[
+                          styles.contextBadge,
+                          amountColor === theme.colors.success ? styles.contextBadgePositive : null,
+                          amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
+                          amountColor === transactionCategoryColor('cycle')
+                            ? styles.contextBadgeCycle
+                            : null,
+                        ]}
+                      >
+                        <Text style={styles.contextBadgeText}>{context}</Text>
+                      </View>
+                    ) : (
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.context, compact ? styles.contextCompact : null]}
+                      >
+                        {context}
+                      </Text>
+                    )
+                  ) : null}
+                  <View style={styles.compactMetaRow}>
+                    {compactMetaSegments
+                      .filter((segment) => segment.key !== 'context')
+                      .map((segment, index) => (
+                        <View key={segment.key} style={styles.compactMetaSegment}>
+                          {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+                          {segment.kind === 'category' ? (
+                            <View style={styles.compactMetaCategory}>
+                              <Ionicons
+                                color={theme.colors.textMuted}
+                                name={categoryIcon}
+                                size={11}
+                              />
+                              <Text numberOfLines={1} style={styles.compactMetaText}>
+                                {segment.label}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text numberOfLines={1} style={styles.compactMetaText}>
+                              {segment.label}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.compactMetaRow}>
+                  {compactMetaSegments.map((segment, index) => (
+                    <View key={segment.key} style={styles.compactMetaSegment}>
+                      {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+                      {segment.kind === 'badge' ? (
+                        <View
+                          style={[
+                            styles.contextBadge,
+                            amountColor === theme.colors.success
+                              ? styles.contextBadgePositive
+                              : null,
+                            amountColor === theme.colors.warning
+                              ? styles.contextBadgeNegative
+                              : null,
+                            amountColor === transactionCategoryColor('cycle')
+                              ? styles.contextBadgeCycle
+                              : null,
+                          ]}
+                        >
+                          <Text style={styles.contextBadgeText}>{segment.label}</Text>
+                        </View>
+                      ) : segment.kind === 'category' ? (
+                        <View style={styles.compactMetaCategory}>
+                          <Ionicons
+                            color={theme.colors.textMuted}
+                            name={categoryIcon}
+                            size={11}
+                          />
+                          <Text numberOfLines={1} style={styles.compactMetaText}>
+                            {segment.label}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text numberOfLines={1} style={styles.compactMetaText}>
+                          {segment.label}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )
+            ) : (
+              <>
+                {context ? (
+                  contextVariant === 'badge' ? (
+                    <View
+                      style={[
+                        styles.contextBadge,
+                        amountColor === theme.colors.success ? styles.contextBadgePositive : null,
+                        amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
+                        amountColor === transactionCategoryColor('cycle')
+                          ? styles.contextBadgeCycle
+                          : null,
+                      ]}
+                    >
+                      <Text style={styles.contextBadgeText}>{context}</Text>
+                    </View>
+                  ) : (
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.context, compact ? styles.contextCompact : null]}
+                    >
+                      {context}
+                    </Text>
+                  )
+                ) : null}
+                {meta ? (
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.meta, compact ? styles.metaCompact : null]}
+                  >
+                    {meta.replace(/\s*\|\s*/g, ' · ')}
+                  </Text>
+                ) : null}
+              </>
+            )}
           </View>
         </View>
 
-        <View style={styles.side}>
+        <View style={[styles.side, compact ? styles.sideCompact : null]}>
           {unread ? <View style={styles.unreadDot} /> : null}
-          {statusLabel ? <StatusChip label={statusLabel} tone={statusTone} /> : null}
-          {directionLabel ? (
-            <Text numberOfLines={1} style={[styles.direction, { color: amountColor }]}>
-              {directionLabel}
-            </Text>
-          ) : null}
-          <View style={styles.amountRow}>
-            {amountLabel ? (
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.amount,
-                  { color: amountColor },
-                  amountStruckThrough ? styles.amountStruckThrough : null,
-                ]}
-              >
-                {amountLabel}
-              </Text>
-            ) : null}
+          {statusLabel ? <StatusChip compact={compact} label={statusLabel} tone={statusTone} /> : null}
+          <View style={[styles.amountLine, compact ? styles.amountLineCompact : null]}>
+            <View
+              style={[
+                styles.amountStack,
+                directionLayout === 'floating' ? styles.amountStackFloating : null,
+              ]}
+            >
+              {directionLabel ? (
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.direction,
+                    compact ? styles.directionCompact : null,
+                    directionLayout === 'floating' ? styles.directionFloating : null,
+                    directionLayout === 'floating' && compact
+                      ? styles.directionFloatingCompact
+                      : null,
+                    { color: amountColor },
+                  ]}
+                >
+                  {directionLabel}
+                </Text>
+              ) : null}
+              {amountLabel ? (
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.amount,
+                    compact ? styles.amountCompact : null,
+                    { color: amountColor },
+                    amountStruckThrough ? styles.amountStruckThrough : null,
+                  ]}
+                >
+                  {amountLabel}
+                </Text>
+              ) : null}
+            </View>
             {hasAction ? (
               <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
             ) : null}
@@ -171,6 +367,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     minHeight: 92,
   },
+  cardCompact: {
+    borderRadius: theme.radius.medium,
+    minHeight: 76,
+  },
   pendingCard: {
     backgroundColor: '#fff9ed',
     borderColor: 'rgba(163, 95, 25, 0.14)',
@@ -182,6 +382,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 58,
   },
+  bodyCompact: {
+    minHeight: 48,
+  },
   leading: {
     alignItems: 'center',
     flex: 1,
@@ -189,11 +392,18 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     minWidth: 0,
   },
+  leadingCompact: {
+    gap: 10,
+  },
   avatarWrap: {
     height: 48,
     justifyContent: 'center',
     position: 'relative',
     width: 48,
+  },
+  avatarWrapCompact: {
+    height: 40,
+    width: 40,
   },
   categoryBadge: {
     alignItems: 'center',
@@ -206,10 +416,18 @@ const styles = StyleSheet.create({
     right: -1,
     width: 22,
   },
+  categoryBadgeCompact: {
+    borderWidth: 1.5,
+    height: 18,
+    width: 18,
+  },
   copy: {
     flex: 1,
     gap: 1,
     minWidth: 0,
+  },
+  copyCompact: {
+    gap: 2,
   },
   actor: {
     color: theme.colors.text,
@@ -217,21 +435,90 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 19,
   },
+  actorCompact: {
+    fontWeight: '800',
+    lineHeight: 18,
+  },
   context: {
     color: theme.colors.text,
     fontSize: theme.typography.footnote,
     fontWeight: '600',
     lineHeight: 17,
   },
+  contextCompact: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
   meta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 16,
   },
+  metaCompact: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  compactMetaStack: {
+    gap: 2,
+  },
+  compactMetaRow: {
+    alignItems: 'center',
+    columnGap: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 4,
+  },
+  compactMetaSegment: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    maxWidth: '100%',
+  },
+  compactMetaDot: {
+    backgroundColor: theme.colors.muted,
+    borderRadius: theme.radius.pill,
+    height: 3.5,
+    width: 3.5,
+  },
+  compactMetaCategory: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    maxWidth: '100%',
+  },
+  compactMetaText: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  contextBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  contextBadgePositive: {
+    backgroundColor: theme.colors.successSoft,
+  },
+  contextBadgeNegative: {
+    backgroundColor: theme.colors.warningSoft,
+  },
+  contextBadgeCycle: {
+    backgroundColor: '#eaf1ff',
+  },
+  contextBadgeText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
   side: {
     alignItems: 'flex-end',
     gap: 4,
     minWidth: 88,
+  },
+  sideCompact: {
+    gap: 3,
+    minWidth: 92,
   },
   unreadDot: {
     backgroundColor: '#2f80ed',
@@ -243,7 +530,38 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     fontWeight: '600',
     lineHeight: 16,
-    textAlign: 'right',
+    textAlign: 'center',
+  },
+  directionCompact: {
+    fontSize: 11,
+    lineHeight: 13,
+  },
+  directionFloating: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 1,
+  },
+  directionFloatingCompact: {
+    top: 0,
+  },
+  amountLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  amountLineCompact: {
+    gap: 4,
+  },
+  amountStack: {
+    alignItems: 'center',
+    minWidth: 0,
+    position: 'relative',
+  },
+  amountStackFloating: {
+    height: 32,
+    justifyContent: 'center',
+    minWidth: 72,
   },
   amountRow: {
     alignItems: 'center',
@@ -251,11 +569,19 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     minHeight: 20,
   },
+  amountRowCompact: {
+    gap: 4,
+    minHeight: 18,
+  },
   amount: {
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 20,
-    textAlign: 'right',
+    textAlign: 'center',
+  },
+  amountCompact: {
+    fontSize: 16,
+    lineHeight: 18,
   },
   amountStruckThrough: {
     opacity: 0.72,

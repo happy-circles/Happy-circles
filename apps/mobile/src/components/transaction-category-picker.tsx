@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   type UserTransactionCategory,
@@ -11,6 +11,7 @@ const CATEGORY_VISUALS: Record<
   UserTransactionCategory,
   {
     readonly label: string;
+    readonly compactLabel: string;
     readonly icon: keyof typeof Ionicons.glyphMap;
     readonly color: string;
     readonly backgroundColor: string;
@@ -18,36 +19,42 @@ const CATEGORY_VISUALS: Record<
 > = {
   food_drinks: {
     label: 'Comida & Bebidas',
+    compactLabel: 'Comida',
     icon: 'restaurant-outline',
     color: '#d33f2f',
     backgroundColor: '#fff0e8',
   },
   transport: {
     label: 'Transporte',
+    compactLabel: 'Transporte',
     icon: 'car-sport-outline',
     color: '#2563eb',
     backgroundColor: '#eaf1ff',
   },
   entertainment: {
     label: 'Entretenimiento',
+    compactLabel: 'Entretenimiento',
     icon: 'film-outline',
     color: '#7c3aed',
     backgroundColor: '#f0eaff',
   },
   services: {
     label: 'Servicios',
+    compactLabel: 'Servicios',
     icon: 'calculator-outline',
     color: '#a35f19',
     backgroundColor: '#fff4dd',
   },
   home: {
     label: 'Hogar',
+    compactLabel: 'Hogar',
     icon: 'home-outline',
     color: '#0f8a5f',
     backgroundColor: '#e6f7ef',
   },
   other: {
     label: 'Otra',
+    compactLabel: 'Otra',
     icon: 'ellipsis-horizontal-circle-outline',
     color: theme.colors.primary,
     backgroundColor: theme.colors.primarySoft,
@@ -57,45 +64,63 @@ const CATEGORY_VISUALS: Record<
 export interface TransactionCategoryPickerProps {
   readonly value: UserTransactionCategory;
   readonly onChange: (value: UserTransactionCategory) => void;
+  readonly variant?: 'grid' | 'carousel';
 }
 
-export function TransactionCategoryPicker({ value, onChange }: TransactionCategoryPickerProps) {
-  return (
-    <View style={styles.grid}>
-      {USER_TRANSACTION_CATEGORIES.map((category) => {
-        const item = CATEGORY_VISUALS[category];
-        const selected = category === value;
+export function TransactionCategoryPicker({
+  value,
+  onChange,
+  variant = 'grid',
+}: TransactionCategoryPickerProps) {
+  const content = USER_TRANSACTION_CATEGORIES.map((category) => {
+    const item = CATEGORY_VISUALS[category];
+    const selected = category === value;
 
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            key={category}
-            onPress={() => onChange(category)}
-            style={({ pressed }) => [
-              styles.option,
-              selected ? styles.optionSelected : null,
-              pressed ? styles.optionPressed : null,
-            ]}
-          >
-            <View
-              style={[
-                styles.iconBubble,
-                {
-                  backgroundColor: item.backgroundColor,
-                },
-              ]}
-            >
-              <Ionicons color={item.color} name={item.icon} size={22} />
-            </View>
-            <Text numberOfLines={2} style={[styles.label, selected ? styles.labelSelected : null]}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        key={category}
+        onPress={() => onChange(category)}
+        style={({ pressed }) => [
+          variant === 'carousel' ? styles.carouselOption : styles.option,
+          selected ? styles.optionSelected : null,
+          pressed ? styles.optionPressed : null,
+        ]}
+      >
+        <View
+          style={[
+            styles.iconBubble,
+            {
+              backgroundColor: item.backgroundColor,
+            },
+          ]}
+        >
+          <Ionicons color={item.color} name={item.icon} size={22} />
+        </View>
+        <Text
+          numberOfLines={variant === 'carousel' ? 1 : 2}
+          style={[styles.label, selected ? styles.labelSelected : null]}
+        >
+          {variant === 'carousel' ? item.compactLabel : item.label}
+        </Text>
+      </Pressable>
+    );
+  });
+
+  if (variant === 'carousel') {
+    return (
+      <ScrollView
+        horizontal
+        contentContainerStyle={styles.carouselContent}
+        showsHorizontalScrollIndicator={false}
+      >
+        {content}
+      </ScrollView>
+    );
+  }
+
+  return <View style={styles.grid}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -116,6 +141,22 @@ const styles = StyleSheet.create({
     minHeight: 88,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: theme.spacing.sm,
+  },
+  carouselContent: {
+    gap: theme.spacing.xs,
+    paddingRight: theme.spacing.sm,
+  },
+  carouselOption: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    minHeight: 82,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    width: 96,
   },
   optionSelected: {
     backgroundColor: theme.colors.primarySoft,

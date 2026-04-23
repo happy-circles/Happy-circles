@@ -51,10 +51,18 @@ export function HistoryCaseCard({
   steps,
 }: HistoryCaseCardProps) {
   const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+  const metaParts =
+    meta
+      ?.split('|')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0) ?? [];
+  const metaLabel = metaParts[0] ?? null;
+  const metaCategory = metaParts[1] ?? null;
+  const showCategoryIcon = isCycleSnippet || Boolean(category);
 
   return (
     <SurfaceCard
-      padding="md"
+      padding="sm"
       style={[
         styles.card,
         tone === 'positive' ? styles.cardPositive : null,
@@ -67,35 +75,56 @@ export function HistoryCaseCard({
       ]}
       variant={isCycleSnippet ? 'muted' : 'default'}
     >
-      <Pressable onPress={onToggle} style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}>
+      <Pressable
+        onPress={onToggle}
+        style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
+      >
         <View style={styles.text}>
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
           <View style={styles.titleLine}>
-            {isCycleSnippet ? (
-              <View style={styles.cycleIconBadge}>
-                <Ionicons
-                  color={transactionCategoryColor('cycle')}
-                  name="happy-outline"
-                  size={14}
-                />
-              </View>
-            ) : category ? (
-              <View
-                style={[
-                  styles.categoryIconBadge,
-                  { backgroundColor: transactionCategoryBackgroundColor(category) },
-                ]}
-              >
-                <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={14} />
-              </View>
-            ) : null}
             <Text style={styles.title}>{title}</Text>
           </View>
           {impact ? <Text style={[styles.impact, toneStyles[tone]]}>{impact}</Text> : null}
-          {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+          {metaLabel ? (
+            <View style={styles.metaRow}>
+              <Text numberOfLines={1} style={styles.meta}>
+                {metaLabel}
+              </Text>
+              {showCategoryIcon && metaCategory ? <View style={styles.metaDot} /> : null}
+              {showCategoryIcon && metaCategory ? (
+                <View style={styles.metaCategory}>
+                  {isCycleSnippet ? (
+                    <View style={styles.cycleIconBadge}>
+                      <Ionicons
+                        color={transactionCategoryColor('cycle')}
+                        name="happy-outline"
+                        size={11}
+                      />
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.categoryIconBadge,
+                        { backgroundColor: transactionCategoryBackgroundColor(category) },
+                      ]}
+                    >
+                      <Ionicons
+                        color={transactionCategoryColor(category)}
+                        name={categoryIcon}
+                        size={11}
+                      />
+                    </View>
+                  )}
+                  <Text numberOfLines={1} style={styles.meta}>
+                    {metaCategory}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         <View style={styles.headerMeta}>
-          <StatusChip label={statusLabel} tone={statusTone} />
+          <StatusChip compact label={statusLabel} tone={statusTone} />
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
             <Ionicons
@@ -164,7 +193,8 @@ const toneStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   card: {
-    gap: theme.spacing.sm,
+    borderRadius: theme.radius.medium,
+    gap: theme.spacing.xs,
     marginVertical: theme.spacing.xxs,
   },
   cycleSnippet: {
@@ -199,7 +229,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     justifyContent: 'space-between',
   },
   headerPressed: {
@@ -207,7 +237,7 @@ const styles = StyleSheet.create({
   },
   text: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   eyebrow: {
     color: theme.colors.primary,
@@ -218,53 +248,70 @@ const styles = StyleSheet.create({
   },
   headerMeta: {
     alignItems: 'flex-end',
-    gap: 6,
+    gap: 4,
+    minWidth: 92,
   },
   title: {
     flex: 1,
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
-    lineHeight: 22,
+    lineHeight: 19,
   },
   titleLine: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
+    minWidth: 0,
   },
   cycleIconBadge: {
     alignItems: 'center',
     backgroundColor: '#eaf1ff',
     borderRadius: theme.radius.pill,
-    height: 24,
+    height: 18,
     justifyContent: 'center',
-    width: 24,
+    width: 18,
   },
   categoryIconBadge: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 24,
+    height: 18,
     justifyContent: 'center',
-    width: 24,
+    width: 18,
   },
   impact: {
-    fontSize: theme.typography.footnote,
+    fontSize: theme.typography.caption,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 16,
+  },
+  metaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  metaDot: {
+    backgroundColor: theme.colors.muted,
+    borderRadius: theme.radius.pill,
+    height: 3.5,
+    width: 3.5,
+  },
+  metaCategory: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    maxWidth: '100%',
   },
   meta: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    fontSize: theme.typography.caption,
+    lineHeight: 15,
   },
   toggleRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: 4,
   },
   toggleText: {
     color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
+    fontSize: theme.typography.caption,
     fontWeight: '700',
   },
   steps: {

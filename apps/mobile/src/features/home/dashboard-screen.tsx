@@ -27,6 +27,7 @@ import {
 } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
 import { dismissSetupPrompt, getSetupPromptDismissed } from '@/lib/setup-reminder';
+import { transactionCategoryLabel } from '@/lib/transaction-categories';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -35,10 +36,8 @@ import {
   transactionAccentColor,
   transactionAmountIsVoided,
   transactionAmountLabel,
-  transactionContextLabel,
   transactionDirectionLabel,
   transactionFocusId,
-  transactionMetaLabel,
   transactionStatusLabel,
   transactionStatusTone,
   transactionToneColor,
@@ -124,6 +123,19 @@ function splitSubtitle(value: string): string[] {
     .split('|')
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+}
+
+function homeTransactionMeta(item: ActivityItemDto, actorLabel: string): string {
+  const subtitleParts = splitSubtitle(item.subtitle);
+  const creatorLabel =
+    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
+      ? 'Happy Circle'
+      : firstName(actorLabel);
+  const timeLabel = item.happenedAtLabel ?? subtitleParts[subtitleParts.length - 1] ?? 'Reciente';
+
+  return `Creado por ${creatorLabel} · ${timeLabel} | ${transactionCategoryLabel(
+    transactionVisualCategory(item),
+  )}`;
 }
 
 function personIdFromHref(href: string | undefined): string | null {
@@ -377,11 +389,12 @@ function TransactionPreviewCard({
     item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
       ? 'Happy Circle'
       : (item.counterpartyLabel ?? 'Persona');
-  const context = transactionContextLabel(item, name);
-  const meta = transactionMetaLabel(item);
+  const context = '';
+  const meta = homeTransactionMeta(item, name);
   const person = transactionPersonForItem(people, item);
   const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
   const href = transactionPersonHref(person, item, targetPanel);
+  const recentStatusLabel = !isPending && item.status === 'rejected' ? transactionStatusLabel(item) : null;
   const fallbackPerson: PersonCardDto = {
     userId: person?.userId ?? item.id,
     displayName: name,
@@ -402,12 +415,17 @@ function TransactionPreviewCard({
       amountLabel={transactionAmountLabel(item)}
       amountStruckThrough={transactionAmountIsVoided(item)}
       category={transactionVisualCategory(item)}
+      categoryPlacement="meta"
+      compact
+      compactMetaLayout={isPending ? 'inline' : 'stacked'}
       context={context}
-      directionLabel={transactionDirectionLabel(item)}
+      contextVariant={isPending ? 'badge' : 'text'}
+      directionLayout={isPending ? 'floating' : 'stacked'}
+      directionLabel={isPending ? transactionDirectionLabel(item) : null}
       href={href}
       meta={meta}
       pending={isPending}
-      statusLabel={isPending ? null : transactionStatusLabel(item)}
+      statusLabel={isPending ? null : recentStatusLabel}
       statusTone={transactionStatusTone(item)}
     />
   );
@@ -477,8 +495,8 @@ function InviteRequestRow({
   };
 
   const actionContent = (
-    <View style={styles.requestActions}>
-      {item.actionState === 'requires_you_response' ? (
+    item.actionState === 'requires_you_response' ? (
+      <View style={styles.requestActions}>
         <>
           <Pressable
             disabled={isBusy}
@@ -505,7 +523,9 @@ function InviteRequestRow({
             <Ionicons color={theme.colors.white} name="close" size={18} />
           </Pressable>
         </>
-      ) : item.actionState === 'requires_you_review' ? (
+      </View>
+    ) : item.actionState === 'requires_you_review' ? (
+      <View style={styles.requestActions}>
         <>
           <Pressable
             disabled={isBusy}
@@ -532,7 +552,9 @@ function InviteRequestRow({
             <Ionicons color={theme.colors.white} name="close" size={18} />
           </Pressable>
         </>
-      ) : item.kind === 'friendship_invite' && item.actionState === 'pending_claim' ? (
+      </View>
+    ) : item.kind === 'friendship_invite' && item.actionState === 'pending_claim' ? (
+      <View style={styles.requestActions}>
         <Pressable
           disabled={isBusy}
           onPress={() => onAction(item, 'cancel')}
@@ -544,12 +566,8 @@ function InviteRequestRow({
         >
           <Text style={styles.sentCancelText}>Cancelar</Text>
         </Pressable>
-      ) : (
-        <View style={styles.requestStatusPill}>
-          <Text style={styles.requestStatusText}>{statusLabelForInvite(item)}</Text>
-        </View>
-      )}
-    </View>
+      </View>
+    ) : null
   );
 
   return (
@@ -562,6 +580,9 @@ function InviteRequestRow({
       badgeBackgroundColor={theme.colors.primarySoft}
       badgeColor={theme.colors.primary}
       badgeIcon={item.kind === 'account_invite' ? 'key-outline' : 'person-add-outline'}
+      categoryPlacement="meta"
+      compact
+      compactMetaLayout="stacked"
       context={inviteContextForDisplay(item, displayName)}
       directionLabel="Solicitud"
       meta={meta || subtitle}
@@ -1184,13 +1205,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.xs,
+    justifyContent: 'flex-end',
   },
   requestIconButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 36,
+    height: 34,
     justifyContent: 'center',
-    width: 36,
+    width: 34,
   },
   requestAcceptButton: {
     backgroundColor: theme.colors.success,
@@ -1206,7 +1228,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   sentCancelText: {
     color: theme.colors.danger,

@@ -81,30 +81,9 @@ function extractHistoryConcept(detail?: string | null): string | null {
   return concept.length > 0 ? concept : null;
 }
 
-function formatNaturalList(values: readonly string[]): string {
-  if (values.length === 0) {
-    return '';
-  }
-
-  if (values.length === 1) {
-    return values[0];
-  }
-
-  if (values.length === 2) {
-    return `${values[0]} y ${values[1]}`;
-  }
-
-  return `${values[0]}, ${values[1]} y ${values.length - 2} mas`;
-}
-
-function uniqueCounterpartyLabels<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string[] {
-  return [
-    ...new Set(
-      itemCase.steps
-        .map((step) => step.counterpartyLabel?.trim())
-        .filter((label): label is string => Boolean(label)),
-    ),
-  ];
+function firstNameLabel(value: string): string {
+  const [firstPart] = value.trim().split(/\s+/);
+  return firstPart && firstPart.length > 0 ? firstPart : value;
 }
 
 function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): string {
@@ -681,20 +660,12 @@ export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
 }
 
 export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
-  const pieces: string[] = [];
+  const creatorLabel =
+    (itemCase.latest.counterpartyLabel ? firstNameLabel(itemCase.latest.counterpartyLabel) : null) ||
+    (itemCase.isCycleSnippet ? 'Happy Circle' : 'Usuario');
+  const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
 
-  if (itemCase.isCycleSnippet) {
-    const counterparties = uniqueCounterpartyLabels(itemCase);
-    if (counterparties.length > 0) {
-      pieces.push(`Con ${formatNaturalList(counterparties)}`);
-    }
-  }
-
-  if (itemCase.latest.happenedAtLabel) {
-    pieces.push(
-      `${itemCase.latest.happenedAtLabel} · ${transactionCategoryLabel(itemCase.latest.category)}`,
-    );
-  }
-
-  return pieces.join(' | ');
+  return `Creado por ${creatorLabel} · ${timeLabel} | ${transactionCategoryLabel(
+    itemCase.latest.category,
+  )}`;
 }

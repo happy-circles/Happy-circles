@@ -25,7 +25,7 @@ import { TransactionEventCard } from '@/components/transaction-event-card';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
-import { historyStatusLabel, historyStatusTone } from '@/lib/history-cases';
+import { historyStatusTone } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
@@ -57,7 +57,6 @@ import {
   transactionDirectionLabel,
   transactionFocusId,
   transactionMetaLabel,
-  transactionStatusLabel,
   transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
@@ -909,13 +908,15 @@ export function ActivityScreen() {
           amountLabel={transactionAmountLabel(item) ?? formatCop(item.amountMinor ?? 0)}
           amountStruckThrough={transactionAmountIsVoided(item)}
           category={transactionVisualCategory(item)}
+          categoryPlacement="meta"
+          compact
+          compactMetaLayout="stacked"
           context={financialRequestContent.detail}
           directionLabel={transactionDirectionLabel(item)}
           key={item.id}
           meta={transactionMeta}
           onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-          pending
-          statusLabel={transactionStatusLabel(item)}
+          statusLabel={null}
           statusTone={transactionStatusTone(item)}
           unread
         >
@@ -1094,13 +1095,15 @@ export function ActivityScreen() {
           amountLabel={transactionAmountLabel(item)}
           amountStruckThrough={transactionAmountIsVoided(item)}
           category={transactionVisualCategory(item)}
+          categoryPlacement="meta"
+          compact
+          compactMetaLayout="stacked"
           context={transactionContextLabel(item, transactionActorLabel)}
           directionLabel={transactionDirectionLabel(item)}
           key={item.id}
           meta={transactionMetaLabel(item)}
           onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-          pending
-          statusLabel={transactionStatusLabel(item) ?? historyStatusLabel(item.status)}
+          statusLabel={null}
           statusTone={transactionStatusTone(item)}
           unread
         >
@@ -1119,13 +1122,15 @@ export function ActivityScreen() {
         badgeBackgroundColor={category.backgroundColor}
         badgeColor={category.color}
         badgeIcon={category.icon}
+        categoryPlacement="meta"
+        compact
+        compactMetaLayout="stacked"
         context={notificationTitleForDisplay(item.title, actor.label)}
         directionLabel={category.label}
         key={item.id}
         meta={snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow}
         onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-        pending
-        statusLabel={historyStatusLabel(item.status)}
+        statusLabel={null}
         statusTone={historyStatusTone(item.status)}
         unread
       >

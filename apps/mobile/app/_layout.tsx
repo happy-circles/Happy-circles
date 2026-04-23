@@ -405,6 +405,7 @@ function RootNavigator() {
           fullScreenGestureEnabled: true,
           gestureDirection: 'horizontal',
           gestureEnabled: true,
+          headerBackButtonMenuEnabled: false,
           headerShown: false,
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -414,6 +415,16 @@ function RootNavigator() {
       >
         <Stack.Screen
           name="activity"
+          options={{
+            animation: 'slide_from_bottom',
+            contentStyle: {
+              backgroundColor: 'transparent',
+            },
+            presentation: 'transparentModal',
+          }}
+        />
+        <Stack.Screen
+          name="register"
           options={{
             animation: 'slide_from_bottom',
             contentStyle: {

@@ -6,13 +6,15 @@ import { transactionCategoryColor } from '@/lib/transaction-categories';
 export interface StatusChipProps {
   readonly label: string;
   readonly tone?: 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'cycle';
+  readonly compact?: boolean;
 }
 
-export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
+export function StatusChip({ label, tone = 'neutral', compact = false }: StatusChipProps) {
   return (
     <View
       style={[
         styles.chip,
+        compact ? styles.compactChip : null,
         tone === 'primary' ? styles.primary : null,
         tone === 'success' ? styles.success : null,
         tone === 'warning' ? styles.warning : null,
@@ -24,6 +26,7 @@ export function StatusChip({ label, tone = 'neutral' }: StatusChipProps) {
       <Text
         style={[
           styles.label,
+          compact ? styles.compactLabel : null,
           tone === 'primary' ? styles.primaryText : null,
           tone === 'success' ? styles.successText : null,
           tone === 'warning' ? styles.warningText : null,
@@ -45,9 +48,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 8,
   },
+  compactChip: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   label: {
     fontSize: theme.typography.caption,
     fontWeight: '700',
+  },
+  compactLabel: {
+    fontSize: 11,
+    lineHeight: 12,
   },
   primary: {
     backgroundColor: theme.colors.primarySoft,

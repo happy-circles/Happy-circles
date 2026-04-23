@@ -747,13 +747,42 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   pathname: '/register',
                   params: {
                     personId: person.userId,
+                    direction: 'i_owe',
                   },
                 })
               }
-              style={({ pressed }) => [styles.quickActionPill, pressed ? styles.quickActionPillPressed : null]}
+              style={({ pressed }) => [
+                styles.quickActionPill,
+                styles.quickActionPillNegative,
+                pressed ? styles.quickActionPillPressed : null,
+              ]}
             >
-              <Ionicons color={theme.colors.primary} name="add-circle-outline" size={18} />
-              <Text style={styles.quickActionPillLabel}>Nuevo movimiento</Text>
+              <Ionicons color={theme.colors.warning} name="arrow-up-circle-outline" size={18} />
+              <Text style={styles.quickActionPillLabel}>Debes</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/register',
+                  params: {
+                    personId: person.userId,
+                    direction: 'owes_me',
+                  },
+                })
+              }
+              style={({ pressed }) => [
+                styles.quickActionPill,
+                styles.quickActionPillPositive,
+                pressed ? styles.quickActionPillPressed : null,
+              ]}
+            >
+              <Ionicons
+                color={theme.colors.success}
+                name="arrow-down-circle-outline"
+                size={18}
+              />
+              <Text style={styles.quickActionPillLabel}>Te deben</Text>
             </Pressable>
           </View>
         </View>
@@ -931,6 +960,14 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+  },
+  quickActionPillPositive: {
+    backgroundColor: theme.colors.successSoft,
+    borderColor: 'rgba(15, 138, 95, 0.18)',
+  },
+  quickActionPillNegative: {
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: 'rgba(163, 95, 25, 0.18)',
   },
   quickActionPillPressed: {
     opacity: 0.94,
