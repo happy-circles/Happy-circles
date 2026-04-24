@@ -33,6 +33,8 @@ export interface ActiveSettlementPreviewDto {
 export interface BalanceProjectionDto {
   readonly pendingCount: number;
   readonly pendingAmountMinor: number;
+  readonly pendingIncomingMinor: number;
+  readonly pendingOutgoingMinor: number;
   readonly impactMinor: number;
   readonly projectedNetBalanceMinor: number;
 }

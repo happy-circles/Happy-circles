@@ -18,9 +18,9 @@ import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 
 const CYCLE_COLOR = transactionCategoryColor('cycle');
-const APPROVED_COLOR = '#0f8a5f';
-const PENDING_COLOR = '#94a3b8';
-const REJECTED_COLOR = '#f97316'; // Matches orange in image
+const APPROVED_COLOR = theme.colors.success;
+const PENDING_COLOR = theme.colors.muted;
+const REJECTED_COLOR = theme.colors.warning;
 
 function decisionColor(decision: 'approved' | 'pending' | 'rejected'): string {
   if (decision === 'approved') return APPROVED_COLOR;
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     lineHeight: 32,
   },
   savingsLabel: {
-    color: APPROVED_COLOR,
+    color: theme.colors.success,
     fontSize: theme.typography.footnote,
     fontWeight: '800',
     lineHeight: 18,

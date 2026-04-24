@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HappyCircleCard } from '@/components/happy-circle-card';
 import { MoneyHero } from '@/components/money-hero';
-import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
+import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SurfaceCard } from '@/components/surface-card';
@@ -171,29 +171,19 @@ export function BalanceOverviewScreen() {
         action={<SectionLinkAction href="/transactions" label="Ver pendientes" />}
         title="Proyeccion"
       >
-        <PendingSnippetCard
-          amountLabel={signedAmountLabel(overview.projection.impactMinor)}
-          amountTone={projectionTone === 'positive' ? 'positive' : projectionTone === 'negative' ? 'negative' : 'neutral'}
-          detail={`Balance proyectado: ${formatCop(overview.projection.projectedNetBalanceMinor)}`}
-          eyebrow="Pendientes"
-          helperText={`${overview.projection.pendingCount} movimiento${overview.projection.pendingCount === 1 ? '' : 's'}`}
-          meta={
-            overview.projection.pendingAmountMinor > 0
-              ? `Monto pendiente: ${formatCop(overview.projection.pendingAmountMinor)}`
-              : 'Sin monto pendiente'
-          }
-          statusLabel={overview.projection.pendingCount > 0 ? 'Con impacto' : 'Sin pendientes'}
-          statusTone={overview.projection.pendingCount > 0 ? 'warning' : 'neutral'}
-          title={
-            overview.projection.pendingCount > 0
-              ? 'Tu proyeccion puede moverse'
-              : 'Tu proyeccion esta en orden'
-          }
-          tone={overview.projection.pendingCount > 0 ? 'warning' : 'neutral'}
-          variant="elevated"
-        >
+        <ProjectionForecastCard
+          currentBalanceMinor={overview.summary.netBalanceMinor}
+          impactMinor={overview.projection.impactMinor}
+          pendingCount={overview.projection.pendingCount}
+          pendingIncomingMinor={overview.projection.pendingIncomingMinor}
+          pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}
+          projectedBalanceMinor={overview.projection.projectedNetBalanceMinor}
+          totalIOweMinor={overview.summary.totalIOweMinor}
+          totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
+        />
+        <View style={{ marginTop: 12 }}>
           <PrimaryAction href="/transactions" label="Abrir transacciones" variant="secondary" />
-        </PendingSnippetCard>
+        </View>
       </SectionBlock>
 
       {activeProposal ? (

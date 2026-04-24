@@ -1,5 +1,7 @@
 import type { TransactionCategory } from '@happy-circles/shared';
 
+import { theme } from './theme';
+
 export type UserTransactionCategory = Exclude<TransactionCategory, 'cycle'>;
 
 export const DEFAULT_TRANSACTION_CATEGORY: UserTransactionCategory = 'other';
@@ -63,8 +65,8 @@ const TRANSACTION_CATEGORY_VISUALS: Record<
   },
   cycle: {
     icon: 'happy-outline',
-    color: '#2563eb',
-    backgroundColor: '#eaf1ff',
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
   },
 };
 

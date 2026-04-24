@@ -3038,12 +3038,17 @@ function buildBalanceProjection(input: {
   readonly currentSummary: DashboardDto['summary'];
 }): BalanceOverviewDto['projection'] {
   const pendingRequests = input.financialRequests.filter((request) => request.status === 'pending');
+  let pendingIncomingMinor = 0;
+  let pendingOutgoingMinor = 0;
+
   const impactMinor = pendingRequests.reduce((total, request) => {
     if (request.creditor_user_id === input.currentUserId) {
+      pendingIncomingMinor += request.amount_minor;
       return total + request.amount_minor;
     }
 
     if (request.debtor_user_id === input.currentUserId) {
+      pendingOutgoingMinor += request.amount_minor;
       return total - request.amount_minor;
     }
 
@@ -3054,6 +3059,8 @@ function buildBalanceProjection(input: {
   return {
     pendingCount: pendingRequests.length,
     pendingAmountMinor,
+    pendingIncomingMinor,
+    pendingOutgoingMinor,
     impactMinor,
     projectedNetBalanceMinor: input.currentSummary.netBalanceMinor + impactMinor,
   };
