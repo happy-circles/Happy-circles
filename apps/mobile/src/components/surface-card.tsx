@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { theme } from '@/lib/theme';
 
 type SurfaceCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
-type SurfaceCardPadding = 'sm' | 'md' | 'lg';
+type SurfaceCardPadding = 'none' | 'sm' | 'md' | 'lg';
 
 export interface SurfaceCardProps extends PropsWithChildren {
   readonly style?: StyleProp<ViewStyle>;
@@ -27,6 +27,7 @@ export function SurfaceCard({
         variant === 'muted' ? styles.muted : null,
         variant === 'accent' ? styles.accent : null,
         variant === 'elevated' ? styles.elevated : null,
+        padding === 'none' ? styles.paddingNone : null,
         padding === 'sm' ? styles.paddingSm : null,
         padding === 'md' ? styles.paddingMd : null,
         padding === 'lg' ? styles.paddingLg : null,
@@ -60,6 +61,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.elevated,
     borderColor: 'rgba(255, 255, 255, 0.72)',
     ...theme.shadow.card,
+  },
+  paddingNone: {
+    padding: 0,
   },
   paddingSm: {
     padding: theme.spacing.sm,

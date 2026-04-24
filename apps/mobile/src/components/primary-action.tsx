@@ -15,6 +15,9 @@ export interface PrimaryActionProps {
   readonly compact?: boolean;
   readonly loading?: boolean;
   readonly disabled?: boolean;
+  readonly fullWidth?: boolean;
+  readonly color?: string;
+  readonly icon?: keyof typeof Ionicons.glyphMap;
 }
 
 export function PrimaryAction({
@@ -26,6 +29,9 @@ export function PrimaryAction({
   compact = false,
   loading = false,
   disabled = false,
+  fullWidth = true,
+  color,
+  icon,
 }: PrimaryActionProps) {
   const isDisabled = loading || disabled;
   const content = (
@@ -36,19 +42,22 @@ export function PrimaryAction({
         styles.base,
         compact ? styles.baseCompact : null,
         variant === 'primary' ? styles.primary : null,
+        variant === 'primary' && color ? { backgroundColor: color, borderColor: color } : null,
         variant === 'secondary' ? styles.secondary : null,
         variant === 'ghost' ? styles.ghost : null,
+        fullWidth ? styles.fullWidth : null,
         pressed && !isDisabled ? styles.pressed : null,
         isDisabled ? styles.disabled : null,
       ]}
     >
-      <View style={styles.copy}>
+      <View style={[styles.copy, fullWidth ? styles.copyFullWidth : null]}>
         <Text
           style={[
             styles.label,
             compact ? styles.labelCompact : null,
             variant === 'primary' ? styles.primaryText : null,
             variant !== 'primary' ? styles.secondaryText : null,
+            variant !== 'primary' && color ? { color } : null,
           ]}
         >
           {label}
@@ -68,15 +77,15 @@ export function PrimaryAction({
       </View>
       {loading ? (
         <HappyCirclesMotion
-          color={variant === 'primary' ? theme.colors.white : theme.colors.text}
+          color={variant === 'primary' ? theme.colors.white : color ?? theme.colors.text}
           size={compact ? 30 : 36}
           tone="mono"
           variant="loading"
         />
-      ) : variant !== 'ghost' ? (
+      ) : icon || variant !== 'ghost' ? (
         <Ionicons
-          color={variant === 'primary' ? theme.colors.white : theme.colors.text}
-          name="arrow-forward"
+          color={variant === 'primary' ? theme.colors.white : color ?? theme.colors.text}
+          name={icon ?? 'arrow-forward'}
           size={compact ? 16 : 18}
         />
       ) : null}
@@ -104,6 +113,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+  },
+  fullWidth: {
     width: '100%',
   },
   baseCompact: {
@@ -133,8 +144,10 @@ const styles = StyleSheet.create({
     opacity: 0.58,
   },
   copy: {
-    flex: 1,
     gap: 2,
+  },
+  copyFullWidth: {
+    flex: 1,
   },
   label: {
     fontSize: theme.typography.body,

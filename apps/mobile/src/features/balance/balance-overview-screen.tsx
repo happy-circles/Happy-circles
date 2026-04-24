@@ -49,12 +49,10 @@ function directionTone(amountMinor: number): 'positive' | 'negative' | 'neutral'
 }
 
 function AnalyticsTeaserCard({
-  description,
   href,
   icon,
   label,
 }: {
-  readonly description: string;
   readonly href: Href;
   readonly icon: keyof typeof Ionicons.glyphMap;
   readonly label: string;
@@ -67,7 +65,6 @@ function AnalyticsTeaserCard({
         </View>
         <View>
           <Text style={styles.analyticsTeaserLabel}>{label}</Text>
-          <Text style={styles.analyticsTeaserDescription}>{description}</Text>
         </View>
       </Pressable>
     </Link>
@@ -149,13 +146,11 @@ export function BalanceOverviewScreen() {
     <ScreenShell
       headerVariant="plain"
       refresh={refresh}
-      subtitle="Balance real, proyeccion y resolucion sin mezclar conceptos."
       title="Balance"
     >
       <MoneyHero
         amountMinor={overview.summary.netBalanceMinor}
         badgeLabel={overview.updatedAtLabel}
-        caption="Tu balance neto real usa te deben - debes."
         label="Balance neto"
         secondaryMetrics={[
           {
@@ -174,15 +169,14 @@ export function BalanceOverviewScreen() {
 
       <SectionBlock
         action={<SectionLinkAction href="/transactions" label="Ver pendientes" />}
-        subtitle="Los pendientes no cambian tu balance real; solo tu proyeccion."
         title="Proyeccion"
       >
         <PendingSnippetCard
           amountLabel={signedAmountLabel(overview.projection.impactMinor)}
           amountTone={projectionTone === 'positive' ? 'positive' : projectionTone === 'negative' ? 'negative' : 'neutral'}
-          detail={`Si todo se confirmara hoy, tu balance proyectado quedaria en ${formatCop(overview.projection.projectedNetBalanceMinor)}.`}
+          detail={`Balance proyectado: ${formatCop(overview.projection.projectedNetBalanceMinor)}`}
           eyebrow="Pendientes"
-          helperText={`${overview.projection.pendingCount} movimiento${overview.projection.pendingCount === 1 ? '' : 's'} por confirmar`}
+          helperText={`${overview.projection.pendingCount} movimiento${overview.projection.pendingCount === 1 ? '' : 's'}`}
           meta={
             overview.projection.pendingAmountMinor > 0
               ? `Monto pendiente: ${formatCop(overview.projection.pendingAmountMinor)}`
@@ -203,10 +197,7 @@ export function BalanceOverviewScreen() {
       </SectionBlock>
 
       {activeProposal ? (
-        <SectionBlock
-          subtitle="Happy Circle vive como capa de resolucion y aparece cuando hay una propuesta activa."
-          title="Happy Circle"
-        >
+        <SectionBlock title="Happy Circle">
           <HappyCircleCard proposal={activeProposal} />
         </SectionBlock>
       ) : null}
@@ -218,25 +209,21 @@ export function BalanceOverviewScreen() {
           contentContainerStyle={styles.analyticsRail}
         >
           <AnalyticsTeaserCard
-            description="Resumen, comparacion y waterfall del periodo."
             href={'/balance/analytics?segment=summary' as Href}
             icon="stats-chart"
             label="Resumen"
           />
           <AnalyticsTeaserCard
-            description="Impacto neto y movimientos por persona visible."
             href={'/balance/analytics?segment=people' as Href}
             icon="people"
             label="Personas"
           />
           <AnalyticsTeaserCard
-            description="Categorias, variacion y personas involucradas."
             href={'/balance/analytics?segment=categories' as Href}
             icon="pricetags"
             label="Categorias"
           />
           <AnalyticsTeaserCard
-            description="Happy Circle activo, ahorro de movimientos e historial."
             href={'/balance/analytics?segment=settlements' as Href}
             icon="sync-circle"
             label="Cierres"
@@ -269,7 +256,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.large,
     borderWidth: 1,
     padding: theme.spacing.md,
-    width: 220,
+    width: 140,
   },
   teaserIconBox: {
     alignItems: 'center',
@@ -284,12 +271,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
-    marginBottom: 4,
-  },
-  analyticsTeaserDescription: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
   },
   sectionLinkAction: {
     borderRadius: theme.radius.pill,

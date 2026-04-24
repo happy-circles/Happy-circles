@@ -1,6 +1,10 @@
+import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { Fragment, useMemo, useState } from 'react';
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
@@ -8,67 +12,56 @@ import { PrimaryAction } from '@/components/primary-action';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
+import { useApproveSettlementMutation, useRejectSettlementMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
+import { useSession } from '@/providers/session-provider';
 
 const CYCLE_COLOR = transactionCategoryColor('cycle');
 const APPROVED_COLOR = '#0f8a5f';
-const PENDING_COLOR = '#a35f19';
-const REJECTED_COLOR = '#b24338';
-
-const AVATAR_RING_COLORS = [
-  '#c026d3',
-  '#047857',
-  '#2563eb',
-  '#334155',
-  '#dc2626',
-  '#7c3aed',
-  '#0891b2',
-  '#ca8a04',
-];
-
-function initialsOf(label: string): string {
-  const parts = label.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toLocaleUpperCase('es-CO');
-  }
-
-  return (parts[0]?.slice(0, 2) ?? '??').toLocaleUpperCase('es-CO');
-}
-
-function avatarColor(userId: string, label: string): string {
-  const source = `${userId}:${label}`;
-  let hash = 0;
-
-  for (let index = 0; index < source.length; index += 1) {
-    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
-  }
-
-  return AVATAR_RING_COLORS[hash % AVATAR_RING_COLORS.length] ?? theme.colors.primary;
-}
+const PENDING_COLOR = '#94a3b8';
+const REJECTED_COLOR = '#f97316'; // Matches orange in image
 
 function decisionColor(decision: 'approved' | 'pending' | 'rejected'): string {
-  if (decision === 'approved') {
-    return APPROVED_COLOR;
-  }
-
-  if (decision === 'rejected') {
-    return REJECTED_COLOR;
-  }
-
+  if (decision === 'approved') return APPROVED_COLOR;
+  if (decision === 'rejected') return REJECTED_COLOR;
   return PENDING_COLOR;
 }
 
-function decisionIcon(decision: 'approved' | 'pending' | 'rejected'): keyof typeof Ionicons.glyphMap {
+function FaceIcon({ decision, size }: { readonly decision: 'approved' | 'pending' | 'rejected', readonly size: number }) {
+  const color = decisionColor(decision);
+  const strokeWidth = 1.5;
+
   if (decision === 'approved') {
-    return 'checkmark-circle';
+    return (
+      <Svg height={size} viewBox="0 0 24 24" width={size}>
+        <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+        <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
+        <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
+        <Path d="M 7 14 Q 12 19 17 14" fill="none" stroke={color} strokeLinecap="round" strokeWidth={strokeWidth} />
+      </Svg>
+    );
   }
 
   if (decision === 'rejected') {
-    return 'close-circle';
+    return (
+      <Svg height={size} viewBox="0 0 24 24" width={size}>
+        <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+        <Circle cx={8.5} cy={10} fill={color} r={1.5} />
+        <Circle cx={15.5} cy={10} fill={color} r={1.5} />
+        <Path d="M 7 17 Q 12 12 17 17" fill="none" stroke={color} strokeLinecap="round" strokeWidth={strokeWidth} />
+      </Svg>
+    );
   }
 
-  return 'ellipse-outline';
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+      <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
+      <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
+      <Path d="M 8 15 L 16 15" stroke={color} strokeLinecap="round" strokeWidth={strokeWidth} />
+    </Svg>
+  );
 }
 
 function ParticipantNode({
@@ -77,45 +70,57 @@ function ParticipantNode({
   label,
   totalCount,
   ringSize,
-  userId,
 }: {
   readonly decision: 'approved' | 'pending' | 'rejected';
   readonly index: number;
   readonly label: string;
   readonly totalCount: number;
   readonly ringSize: number;
-  readonly userId: string;
 }) {
-  const nodeSize = 44;
+  const nodeSize = 40;
   const radius = ringSize / 2;
-  // Start from top (-90deg), distribute evenly
+  const arcRadius = radius - 16;
   const angle = -Math.PI / 2 + (2 * Math.PI * index) / totalCount;
-  const centerX = radius + radius * Math.cos(angle) - nodeSize / 2;
-  const centerY = radius + radius * Math.sin(angle) - nodeSize / 2;
-  const borderColor = decisionColor(decision);
+  
+  const centerX = radius + arcRadius * Math.cos(angle) - nodeSize / 2;
+  const centerY = radius + arcRadius * Math.sin(angle) - nodeSize / 2;
+
+  const labelDistance = arcRadius + 36;
+  const labelX = radius + labelDistance * Math.cos(angle);
+  const labelY = radius + labelDistance * Math.sin(angle);
+
+  const displayLabel = label.split(/\s+/)[0] ?? label;
 
   return (
-    <View
-      style={[
-        styles.nodeContainer,
-        {
-          left: centerX,
-          top: centerY,
-          width: nodeSize,
-          height: nodeSize,
-        },
-      ]}
-    >
-      <View style={[styles.nodeAvatar, { borderColor, backgroundColor: avatarColor(userId, label) }]}>
-        <Text style={styles.nodeInitials}>{initialsOf(label)}</Text>
+    <Fragment>
+      <View
+        style={[
+          styles.nodeContainer,
+          {
+            left: centerX,
+            top: centerY,
+            width: nodeSize,
+            height: nodeSize,
+          },
+        ]}
+      >
+        <FaceIcon decision={decision} size={nodeSize} />
       </View>
-      <View style={[styles.nodeStatusBadge, { backgroundColor: borderColor }]}>
-        <Ionicons color={theme.colors.white} name={decisionIcon(decision)} size={12} />
+      <View
+        style={{
+          position: 'absolute',
+          left: labelX - 40,
+          top: labelY - 10,
+          width: 80,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text numberOfLines={1} style={styles.nodeLabel}>
+          {displayLabel}
+        </Text>
       </View>
-      <Text numberOfLines={1} style={styles.nodeLabel}>
-        {label.split(/\s+/)[0] ?? label}
-      </Text>
-    </View>
+    </Fragment>
   );
 }
 
@@ -135,12 +140,63 @@ function ApprovalDots({
   return (
     <View style={styles.dotsRow}>
       {dots.map((filled, index) => (
-        <View
-          key={index}
-          style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
-        />
+        <View key={index} style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]} />
       ))}
     </View>
+  );
+}
+
+function CircleArcs({
+  decisions,
+  ringSize,
+}: {
+  readonly decisions: readonly { readonly decision: 'approved' | 'pending' | 'rejected' }[];
+  readonly ringSize: number;
+}) {
+  const N = decisions.length;
+  if (N < 2) return null;
+
+  const radius = ringSize / 2;
+  const arcRadius = radius - 16;
+  const strokeWidth = 8;
+  const gap = 0.5; // Gap in radians
+
+  return (
+    <Svg height={ringSize} style={{ position: 'absolute' }} width={ringSize}>
+      {decisions.map((d, i) => {
+        const angle1 = -Math.PI / 2 + (2 * Math.PI * i) / N;
+        const angle2 = -Math.PI / 2 + (2 * Math.PI * (i + 1)) / N;
+
+        const startAngle = angle1 + gap;
+        const endAngle = angle2 - gap;
+
+        if (startAngle >= endAngle) return null;
+
+        const x1 = radius + arcRadius * Math.cos(startAngle);
+        const y1 = radius + arcRadius * Math.sin(startAngle);
+        const x2 = radius + arcRadius * Math.cos(endAngle);
+        const y2 = radius + arcRadius * Math.sin(endAngle);
+
+        const color1 = decisionColor(d.decision);
+        const color2 = decisionColor(decisions[(i + 1) % N]!.decision);
+
+        const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+        const path = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArc} 1 ${x2} ${y2}`;
+        const gradId = `grad-${i}`;
+
+        return (
+          <Fragment key={i}>
+            <Defs>
+              <LinearGradient gradientUnits="userSpaceOnUse" id={gradId} x1={x1} x2={x2} y1={y1} y2={y2}>
+                <Stop offset="0%" stopColor={color1} />
+                <Stop offset="100%" stopColor={color2} />
+              </LinearGradient>
+            </Defs>
+            <Path d={path} fill="none" stroke={`url(#${gradId})`} strokeLinecap="round" strokeWidth={strokeWidth} />
+          </Fragment>
+        );
+      })}
+    </Svg>
   );
 }
 
@@ -150,11 +206,44 @@ export interface HappyCircleCardProps {
 }
 
 export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardProps) {
+  const session = useSession();
+  const approveSettlement = useApproveSettlementMutation();
+  const rejectSettlement = useRejectSettlementMutation();
+  const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
+
   const ringSize = variant === 'full' ? 180 : 150;
   const approvedCount = proposal.participantCount - proposal.approvalsPending;
+  const myDecision = proposal.participantDecisions.find((p) => p.userId === session.userId)?.decision;
+  const canDecide = proposal.status === 'pending_approvals' && myDecision === 'pending';
+
+  const orderedDecisions = useMemo(() => {
+    const arr = [...proposal.participantDecisions];
+    const myIndex = arr.findIndex((p) => p.userId === session.userId);
+    if (myIndex > 0) {
+      return [...arr.slice(myIndex), ...arr.slice(0, myIndex)];
+    }
+    return arr;
+  }, [proposal.participantDecisions, session.userId]);
+
+  async function handleAction(action: 'approve' | 'reject') {
+    setBusyAction(action);
+    try {
+      if (action === 'approve') {
+        await approveSettlement.mutateAsync(proposal.proposalId);
+      } else {
+        await rejectSettlement.mutateAsync(proposal.proposalId);
+      }
+    } catch {
+      // Errors handled globally or ignored for this simplified inline view
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   return (
-    <SurfaceCard padding="lg" style={styles.card} variant="elevated">
+    <SurfaceCard padding="none" style={styles.card} variant="elevated">
+      <Link href={`/settlements/${proposal.proposalId}` as Href} asChild>
+        <Pressable style={styles.cardPressable}>
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderCopy}>
           <View style={styles.brandRow}>
@@ -163,7 +252,7 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
           </View>
           <StatusChip
             compact
-            label={proposal.status === 'approved' ? 'Listo' : 'Propuesta en curso'}
+            label={proposal.status === 'approved' ? 'Listo' : 'En curso'}
             tone={proposal.status === 'approved' ? 'cycle' : 'warning'}
           />
         </View>
@@ -188,59 +277,54 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
             </Text>
           </View>
 
-          <View style={styles.visibilityHint}>
-            <Ionicons color={theme.colors.muted} name="eye-off-outline" size={13} />
-            <Text style={styles.visibilityText}>
-              Solo ves a quien le debe{'\n'}y a quien debes
-            </Text>
-          </View>
+
         </View>
 
         {/* Right: Circle ring */}
         <View style={[styles.ringContainer, { width: ringSize, height: ringSize }]}>
-          {/* Arc ring background */}
-          <View
-            style={[
-              styles.ringCircle,
-              {
-                width: ringSize - 16,
-                height: ringSize - 16,
-                borderRadius: (ringSize - 16) / 2,
-                top: 8,
-                left: 8,
-              },
-            ]}
-          />
+          <CircleArcs decisions={orderedDecisions} ringSize={ringSize} />
 
           {/* Participant nodes */}
-          {proposal.participantDecisions.map((participant, index) => (
+          {orderedDecisions.map((participant, index) => (
             <ParticipantNode
               decision={participant.decision}
               index={index}
               key={participant.userId}
               label={participant.label}
               ringSize={ringSize}
-              totalCount={proposal.participantDecisions.length}
-              userId={participant.userId}
+              totalCount={orderedDecisions.length}
             />
           ))}
         </View>
       </View>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.footerCopy}>
-          <Text style={styles.footerTitle}>Mismo saldo, menos movimientos.</Text>
-          <Text style={styles.footerDetail}>
-            La propuesta reduce pagos sin cambiar tu balance.
-          </Text>
+        </Pressable>
+      </Link>
+
+      {canDecide ? (
+        <View style={styles.actionsFooter}>
+          <PrimaryAction
+            color={CYCLE_COLOR}
+            compact
+            disabled={busyAction !== null}
+            fullWidth={false}
+            icon="checkmark"
+            label={busyAction === 'approve' ? 'Aceptando...' : 'Aceptar'}
+            loading={busyAction === 'approve'}
+            onPress={() => void handleAction('approve')}
+          />
+          <PrimaryAction
+            compact
+            disabled={busyAction !== null}
+            fullWidth={false}
+            icon="close"
+            label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
+            loading={busyAction === 'reject'}
+            onPress={() => void handleAction('reject')}
+            variant="ghost"
+          />
         </View>
-        <PrimaryAction
-          href={`/settlements/${proposal.proposalId}` as Href}
-          label="Ver propuesta"
-          variant="secondary"
-        />
-      </View>
+      ) : null}
     </SurfaceCard>
   );
 }
@@ -249,8 +333,11 @@ const styles = StyleSheet.create({
   card: {
     borderLeftColor: CYCLE_COLOR,
     borderLeftWidth: 3,
-    gap: theme.spacing.md,
     overflow: 'visible',
+  },
+  cardPressable: {
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -262,7 +349,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   brandRow: {
     alignItems: 'center',
@@ -315,8 +402,8 @@ const styles = StyleSheet.create({
   },
   dot: {
     borderRadius: 999,
-    height: 8,
-    width: 8,
+    height: 6,
+    width: 24,
   },
   dotFilled: {
     backgroundColor: CYCLE_COLOR,
@@ -332,54 +419,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 16,
   },
-  visibilityHint: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 4,
-    marginTop: 2,
-  },
-  visibilityText: {
-    color: theme.colors.muted,
-    fontSize: 11,
-    lineHeight: 14,
-  },
+
   ringContainer: {
     position: 'relative',
   },
-  ringCircle: {
-    borderColor: theme.colors.surfaceSoft,
-    borderWidth: 2.5,
-    position: 'absolute',
-  },
   nodeContainer: {
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
     position: 'absolute',
   },
-  nodeAvatar: {
-    alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 2.5,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  nodeInitials: {
-    color: theme.colors.white,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  nodeStatusBadge: {
-    alignItems: 'center',
-    borderColor: theme.colors.white,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    height: 16,
-    justifyContent: 'center',
-    marginTop: -10,
-    width: 16,
-  },
+
   nodeLabel: {
     color: theme.colors.text,
     fontSize: 10,
@@ -388,24 +437,12 @@ const styles = StyleSheet.create({
     maxWidth: 56,
     textAlign: 'center',
   },
-  footer: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  actionsFooter: {
+    borderTopColor: theme.colors.border,
+    borderTopWidth: 1,
+    flexDirection: 'row',
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
-  },
-  footerCopy: {
-    gap: 2,
-  },
-  footerTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  footerDetail: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
+    justifyContent: 'center',
+    padding: theme.spacing.md,
   },
 });
