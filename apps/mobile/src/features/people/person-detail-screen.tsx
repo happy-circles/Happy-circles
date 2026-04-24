@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ActivityItemDto } from '@happy-circles/application';
 
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
+import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
@@ -43,6 +44,7 @@ import {
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
+import { toneVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -264,7 +266,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
   const historyItems = useMemo(
-    () => (person ? person.timeline.map((item) => toHistoryFeedItem(item, person.displayName)) : []),
+    () =>
+      person ? person.timeline.map((item) => toHistoryFeedItem(item, person.displayName)) : [],
     [person],
   );
   const historyCases = useMemo(() => {
@@ -475,7 +478,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         showAutoCyclePrompt(nextProposalId, nextStatus);
       }
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : 'No se pudo completar la accion.';
+      const nextMessage =
+        error instanceof Error ? error.message : 'No se pudo completar la accion.';
       if (
         showBlockedActionAlert(nextMessage, router, {
           hasEmailPassword: session.linkedMethods.hasEmailPassword,
@@ -536,11 +540,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           createdByLabel={financialRequestContent.createdByLabel}
           description={financialRequestContent.detail}
           key={item.id}
-          amendmentAmountError={activeAmendmentItemId === item.id ? amendmentErrors.amount ?? null : null}
-          amendmentDescriptionError={
-            activeAmendmentItemId === item.id ? amendmentErrors.description ?? null : null
+          amendmentAmountError={
+            activeAmendmentItemId === item.id ? (amendmentErrors.amount ?? null) : null
           }
-          onAccept={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')}
+          amendmentDescriptionError={
+            activeAmendmentItemId === item.id ? (amendmentErrors.description ?? null) : null
+          }
+          onAccept={
+            busyKey
+              ? undefined
+              : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')
+          }
           onChangeAmendmentAmount={(value) => {
             setAmendmentAmount(value);
             setAmendmentErrors((current) => ({
@@ -562,9 +572,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               : () =>
                   confirmPendingAction({
                     title: 'No aceptar propuesta',
-                    message: 'Avisaremos que no aceptas este movimiento y seguira pendiente de otra resolucion.',
+                    message:
+                      'Avisaremos que no aceptas este movimiento y seguira pendiente de otra resolucion.',
                     confirmLabel: 'No aceptar',
-                    onConfirm: () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
+                    onConfirm: () =>
+                      void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
                   })
           }
           onSubmitAmendment={busyKey ? undefined : () => void handleAmendment(item.id)}
@@ -578,11 +590,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
     return (
       <PendingSnippetCard
-        amountLabel={typeof item.amountMinor === 'number' && item.amountMinor > 0 ? formatCop(item.amountMinor) : null}
+        amountLabel={
+          typeof item.amountMinor === 'number' && item.amountMinor > 0
+            ? formatCop(item.amountMinor)
+            : null
+        }
         detail={
           item.kind === 'settlement_proposal'
             ? transactionContextLabel(item, person?.displayName ?? 'Persona')
-            : splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle
+            : (splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle)
         }
         eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : 'Pendiente'}
         key={item.id}
@@ -591,7 +607,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             ? transactionMetaLabel(item)
             : splitSubtitleSegments(item.subtitle).slice(1).join(' | ') || null
         }
-        onPress={item.href ? () => router.push(item.href as Parameters<typeof router.push>[0]) : undefined}
+        onPress={
+          item.href ? () => router.push(item.href as Parameters<typeof router.push>[0]) : undefined
+        }
         statusLabel={transactionStatusLabel(item) ?? pendingStatusLabel(item.status)}
         statusTone={transactionStatusTone(item)}
         tone={pendingSnippetTone(item)}
@@ -609,7 +627,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 compact
                 loading={busyKey === `${item.id}:approve`}
                 label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar Circle'}
-                onPress={busyKey ? undefined : () => void handlePendingItemAction(item.id, item.kind, item.status, 'approve')}
+                onPress={
+                  busyKey
+                    ? undefined
+                    : () => void handlePendingItemAction(item.id, item.kind, item.status, 'approve')
+                }
               />
             </View>
             <Pressable
@@ -619,12 +641,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   : () =>
                       confirmPendingAction({
                         title: 'No aprobar Circle',
-                        message: 'Tu respuesta dejara este Happy Circle como no aprobado para el resto del circulo.',
+                        message:
+                          'Tu respuesta dejara este Happy Circle como no aprobado para el resto del circulo.',
                         confirmLabel: 'No aprobar',
-                        onConfirm: () => void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
+                        onConfirm: () =>
+                          void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
                       })
               }
-              style={({ pressed }) => [styles.inlineAction, pressed ? styles.inlineActionPressed : null]}
+              style={({ pressed }) => [
+                styles.inlineAction,
+                pressed ? styles.inlineActionPressed : null,
+              ]}
             >
               <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
                 {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
@@ -653,7 +680,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                             {
                               text: 'Completar',
                               style: 'destructive',
-                              onPress: () => void handlePendingItemAction(item.id, item.kind, item.status, 'execute'),
+                              onPress: () =>
+                                void handlePendingItemAction(
+                                  item.id,
+                                  item.kind,
+                                  item.status,
+                                  'execute',
+                                ),
                             },
                           ],
                         )
@@ -668,7 +701,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   if (snapshotQuery.isLoading) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} subtitle="Cargando esta relacion." title="Persona">
+      <ScreenShell
+        headerVariant="plain"
+        largeTitle={false}
+        subtitle="Cargando esta relacion."
+        title="Persona"
+      >
         <HappyCirclesMotion size={108} variant="loading" />
         <Text style={styles.supportText}>Estamos leyendo el saldo y el historial real.</Text>
       </ScreenShell>
@@ -707,7 +745,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   }
 
   const balanceTone =
-    person.netAmountMinor === 0 ? 'neutral' : person.direction === 'owes_me' ? 'positive' : 'negative';
+    person.netAmountMinor === 0
+      ? 'neutral'
+      : person.direction === 'owes_me'
+        ? 'positive'
+        : 'negative';
+  const balanceVisual = toneVisual(balanceTone);
   const balanceSummary =
     person.netAmountMinor === 0
       ? 'Estan al dia'
@@ -725,8 +768,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <Text
               style={[
                 styles.balanceSummary,
-                balanceTone === 'positive' ? styles.positive : null,
-                balanceTone === 'negative' ? styles.negative : null,
+                balanceVisual ? { color: balanceVisual.accentColor } : null,
               ]}
             >
               {balanceSummary}
@@ -741,7 +783,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           </View>
 
           <View style={styles.quickActionRowFlat}>
-            <Pressable
+            <DirectionPill
+              direction="i_owe"
               onPress={() =>
                 router.push({
                   pathname: '/register',
@@ -751,17 +794,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   },
                 })
               }
-              style={({ pressed }) => [
-                styles.quickActionPill,
-                styles.quickActionPillNegative,
-                pressed ? styles.quickActionPillPressed : null,
-              ]}
-            >
-              <Ionicons color={theme.colors.warning} name="arrow-up-circle-outline" size={18} />
-              <Text style={styles.quickActionPillLabel}>Debes</Text>
-            </Pressable>
+              style={styles.quickActionPill}
+            />
 
-            <Pressable
+            <DirectionPill
+              direction="owes_me"
               onPress={() =>
                 router.push({
                   pathname: '/register',
@@ -771,19 +808,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   },
                 })
               }
-              style={({ pressed }) => [
-                styles.quickActionPill,
-                styles.quickActionPillPositive,
-                pressed ? styles.quickActionPillPressed : null,
-              ]}
-            >
-              <Ionicons
-                color={theme.colors.success}
-                name="arrow-down-circle-outline"
-                size={18}
-              />
-              <Text style={styles.quickActionPillLabel}>Te deben</Text>
-            </Pressable>
+              style={styles.quickActionPill}
+            />
           </View>
         </View>
 
@@ -797,7 +823,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
-              <Text style={[styles.tabLabel, panelSegment === 'pending' ? styles.tabLabelActive : null]}>
+              <Text
+                style={[styles.tabLabel, panelSegment === 'pending' ? styles.tabLabelActive : null]}
+              >
                 Pendientes
               </Text>
             </Pressable>
@@ -810,7 +838,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
-              <Text style={[styles.tabLabel, panelSegment === 'history' ? styles.tabLabelActive : null]}>
+              <Text
+                style={[styles.tabLabel, panelSegment === 'history' ? styles.tabLabelActive : null]}
+              >
                 Historial
               </Text>
             </Pressable>
@@ -947,36 +977,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quickActionPill: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
     flex: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    justifyContent: 'center',
     maxWidth: 240,
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  quickActionPillPositive: {
-    backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(15, 138, 95, 0.18)',
-  },
-  quickActionPillNegative: {
-    backgroundColor: theme.colors.warningSoft,
-    borderColor: 'rgba(163, 95, 25, 0.18)',
-  },
-  quickActionPillPressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.99 }],
-  },
-  quickActionPillLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
   },
   panelArea: {
     flex: 1,
@@ -1041,12 +1043,6 @@ const styles = StyleSheet.create({
   },
   inlineActionDangerText: {
     color: theme.colors.danger,
-  },
-  positive: {
-    color: theme.colors.success,
-  },
-  negative: {
-    color: theme.colors.warning,
   },
   neutral: {
     color: theme.colors.textMuted,

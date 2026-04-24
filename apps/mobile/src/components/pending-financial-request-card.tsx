@@ -74,6 +74,7 @@ export function PendingFinancialRequestCard({
 }: PendingFinancialRequestCardProps) {
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
   const safeCategory = isUserTransactionCategory(category) ? category : DEFAULT_TRANSACTION_CATEGORY;
+  const createdByText = createdByLabel === 'Tu' ? 'Creado por ti' : `Creado por ${createdByLabel}`;
 
   return (
     <PendingSnippetCard
@@ -81,7 +82,7 @@ export function PendingFinancialRequestCard({
       amountTone={amountTone}
       detail={description}
       eyebrow={`Pendiente con ${counterpartyName}`}
-      meta={`Creado por ${createdByLabel} | ${createdAtLabel} · ${transactionCategoryLabel(safeCategory)}`}
+      meta={`${createdByText} | ${createdAtLabel} · ${transactionCategoryLabel(safeCategory)}`}
       onPress={onPress}
       statusLabel={
         responseState === 'requires_you' ? 'Requiere tu respuesta' : 'Esperando respuesta'

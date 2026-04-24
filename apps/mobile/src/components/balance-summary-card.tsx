@@ -4,6 +4,7 @@ import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
+import { toneVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 
 type BalanceTone = 'positive' | 'negative' | 'neutral';
@@ -41,33 +42,28 @@ function formatSignedCop(amountMinor: number): string {
 
 function BalanceMetricItem({
   amountMinor,
-  icon,
-  label,
   tone,
 }: {
   readonly amountMinor: number;
-  readonly icon: keyof typeof Ionicons.glyphMap;
-  readonly label: string;
   readonly tone: Extract<BalanceTone, 'positive' | 'negative'>;
 }) {
+  const visual = toneVisual(tone);
+
+  if (!visual) {
+    return null;
+  }
+
   return (
     <View style={styles.metricItem}>
-      <Ionicons
-        color={tone === 'negative' ? theme.colors.warning : theme.colors.success}
-        name={icon}
-        size={20}
-      />
-      <Text
-        numberOfLines={1}
-        style={[styles.metricLabel, tone === 'negative' ? styles.warningText : styles.successText]}
-      >
-        {label}
+      <Ionicons color={visual.accentColor} name={visual.icon} size={20} />
+      <Text numberOfLines={1} style={[styles.metricLabel, { color: visual.accentColor }]}>
+        {visual.label}
       </Text>
       <Text
         adjustsFontSizeToFit
         minimumFontScale={0.82}
         numberOfLines={1}
-        style={[styles.metricAmount, tone === 'negative' ? styles.warningText : styles.successText]}
+        style={[styles.metricAmount, { color: visual.accentColor }]}
       >
         {formatCop(amountMinor)}
       </Text>
@@ -82,6 +78,7 @@ export function BalanceSummaryCard({
   detailsHref,
 }: BalanceSummaryCardProps) {
   const tone = balanceTone(netBalanceMinor);
+  const balanceVisual = toneVisual(tone);
   const detailContent = (
     <Pressable style={({ pressed }) => [styles.detailsLink, pressed ? styles.pressed : null]}>
       <View style={styles.detailsContent}>
@@ -101,28 +98,14 @@ export function BalanceSummaryCard({
         adjustsFontSizeToFit
         minimumFontScale={0.78}
         numberOfLines={1}
-        style={[
-          styles.amount,
-          tone === 'positive' ? styles.successText : null,
-          tone === 'negative' ? styles.warningText : null,
-        ]}
+        style={[styles.amount, balanceVisual ? { color: balanceVisual.accentColor } : null]}
       >
         {formatSignedCop(netBalanceMinor)}
       </Text>
 
       <View style={styles.metricsRow}>
-        <BalanceMetricItem
-          amountMinor={totalIOweMinor}
-          icon="arrow-down"
-          label="Debes"
-          tone="negative"
-        />
-        <BalanceMetricItem
-          amountMinor={totalOwedToMeMinor}
-          icon="arrow-up"
-          label="Te deben"
-          tone="positive"
-        />
+        <BalanceMetricItem amountMinor={totalIOweMinor} tone="negative" />
+        <BalanceMetricItem amountMinor={totalOwedToMeMinor} tone="positive" />
       </View>
 
       {detailsHref ? (
@@ -212,11 +195,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.62,
-  },
-  successText: {
-    color: theme.colors.success,
-  },
-  warningText: {
-    color: theme.colors.warning,
   },
 });

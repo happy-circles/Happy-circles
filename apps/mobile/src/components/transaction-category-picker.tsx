@@ -64,7 +64,7 @@ const CATEGORY_VISUALS: Record<
 export interface TransactionCategoryPickerProps {
   readonly value: UserTransactionCategory;
   readonly onChange: (value: UserTransactionCategory) => void;
-  readonly variant?: 'grid' | 'carousel';
+  readonly variant?: 'grid' | 'carousel' | 'inline-grid';
 }
 
 export function TransactionCategoryPicker({
@@ -83,7 +83,11 @@ export function TransactionCategoryPicker({
         key={category}
         onPress={() => onChange(category)}
         style={({ pressed }) => [
-          variant === 'carousel' ? styles.carouselOption : styles.option,
+          variant === 'carousel'
+            ? styles.carouselOption
+            : variant === 'inline-grid'
+              ? styles.inlineGridOption
+              : styles.option,
           selected ? styles.optionSelected : null,
           pressed ? styles.optionPressed : null,
         ]}
@@ -99,8 +103,12 @@ export function TransactionCategoryPicker({
           <Ionicons color={item.color} name={item.icon} size={22} />
         </View>
         <Text
-          numberOfLines={variant === 'carousel' ? 1 : 2}
-          style={[styles.label, selected ? styles.labelSelected : null]}
+          numberOfLines={variant === 'grid' ? 2 : 1}
+          style={[
+            styles.label,
+            variant === 'inline-grid' ? styles.inlineGridLabel : null,
+            selected ? styles.labelSelected : null,
+          ]}
         >
           {variant === 'carousel' ? item.compactLabel : item.label}
         </Text>
@@ -158,6 +166,20 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     width: 96,
   },
+  inlineGridOption: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexBasis: '31.5%',
+    flexDirection: 'row',
+    flexGrow: 1,
+    gap: theme.spacing.xs,
+    minHeight: 74,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
   optionSelected: {
     backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.primary,
@@ -178,6 +200,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 15,
     textAlign: 'center',
+  },
+  inlineGridLabel: {
+    flex: 1,
+    lineHeight: 17,
+    textAlign: 'left',
   },
   labelSelected: {
     color: theme.colors.primary,

@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,23 +21,28 @@ import {
   type BrandedRefreshProps,
 } from '@/components/branded-refresh-control';
 import { ChoiceChip } from '@/components/choice-chip';
+import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { SegmentedControl } from '@/components/segmented-control';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { showBlockedActionAlert, useDelayedBusy } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
+import { directionVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
+  transactionCategoryBackgroundColor,
+  transactionCategoryColor,
+  transactionCategoryIcon,
+  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 
@@ -46,13 +50,13 @@ type Direction = 'i_owe' | 'owes_me';
 
 const DEFAULT_DIRECTION: Direction = 'i_owe';
 
-const DIRECTION_OPTIONS = [
-  { label: 'Debes', value: 'i_owe' },
-  { label: 'Te deben', value: 'owes_me' },
-] as const;
-
 const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
-const DESCRIPTION_SUGGESTIONS = ['Comida', 'Mercado', 'Transporte', 'Salida'] as const;
+
+interface RegisterPerson {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly avatarUrl?: string | null;
+}
 
 interface RegisterFormErrors {
   readonly personId?: string;
@@ -63,6 +67,53 @@ interface RegisterFormErrors {
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+function activityRecencyScore(value: string): number {
+  const normalized = value.trim().toLocaleLowerCase('es-CO');
+
+  if (normalized.length === 0 || normalized === 'sin movimientos todavia') {
+    return 0;
+  }
+
+  if (normalized.includes('hoy')) {
+    return 120;
+  }
+
+  if (normalized.includes('ayer')) {
+    return 90;
+  }
+
+  const hoursMatch = normalized.match(/(\d+)\s+hora/);
+  if (hoursMatch) {
+    const hours = Number.parseInt(hoursMatch[1] ?? '0', 10);
+    return Math.max(0, 100 - hours);
+  }
+
+  const minutesMatch = normalized.match(/(\d+)\s+min/);
+  if (minutesMatch) {
+    return 140;
+  }
+
+  if (normalized.includes('semana')) {
+    return 20;
+  }
+
+  return 45;
+}
+
+function personRelevanceScore(
+  person: RegisterPerson & {
+    readonly pendingCount: number;
+    readonly netAmountMinor: number;
+    readonly lastActivityLabel: string;
+  },
+): number {
+  const pendingWeight = person.pendingCount * 1000;
+  const recencyWeight = activityRecencyScore(person.lastActivityLabel) * 10;
+  const balanceWeight = Math.min(person.netAmountMinor / 1000, 200);
+
+  return pendingWeight + recencyWeight + balanceWeight;
 }
 
 function buildDraftPreview(input: {
@@ -85,25 +136,43 @@ function buildDraftPreview(input: {
   };
 }
 
-function FlatSection({
-  children,
-  title,
-  trailing,
-  bordered = true,
+function sanitizeAmountInput(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function formatAmountInput(value: string): string {
+  if (value.trim().length === 0) {
+    return '';
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return '';
+  }
+
+  return parsed.toLocaleString('es-CO');
+}
+
+function QuickPersonChip({
+  person,
+  onPress,
 }: {
-  readonly children: ReactNode;
-  readonly title: string;
-  readonly trailing?: React.ReactNode;
-  readonly bordered?: boolean;
+  readonly person: RegisterPerson;
+  readonly onPress: (personId: string) => void;
 }) {
   return (
-    <View style={[styles.section, bordered ? styles.sectionBordered : null]}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {trailing}
-      </View>
-      {children}
-    </View>
+    <Pressable
+      onPress={() => onPress(person.userId)}
+      style={({ pressed }) => [
+        styles.quickPersonChip,
+        pressed ? styles.quickPersonChipPressed : null,
+      ]}
+    >
+      <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={30} />
+      <Text numberOfLines={1} style={styles.quickPersonLabel}>
+        {person.displayName}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -126,7 +195,7 @@ export function RegisterFlowScreen() {
   const initialDirection = contextualDirection ?? DEFAULT_DIRECTION;
 
   const [query, setQuery] = useState('');
-  const [personPickerVisible, setPersonPickerVisible] = useState(false);
+  const [personSearchExpanded, setPersonSearchExpanded] = useState(false);
   const [personId, setPersonId] = useState(contextualPersonId);
   const [direction, setDirection] = useState<Direction>(initialDirection);
   const [amount, setAmount] = useState('');
@@ -141,20 +210,69 @@ export function RegisterFlowScreen() {
   const showBusyOverlay = useDelayedBusy(createRequest.isPending);
 
   const allPeople = snapshotQuery.data?.people ?? [];
-  const people = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('es-CO');
-    if (normalizedQuery.length === 0) {
-      return allPeople;
+  const selectedPerson = allPeople.find((person) => person.userId === personId) ?? null;
+  const normalizedQuery = query.trim();
+  const normalizedQueryValue = normalizedQuery.toLocaleLowerCase('es-CO');
+  const personSearchResults = useMemo(() => {
+    if (normalizedQueryValue.length === 0) {
+      return [];
     }
 
-    return allPeople.filter((person) =>
-      person.displayName.toLocaleLowerCase('es-CO').includes(normalizedQuery),
-    );
-  }, [allPeople, query]);
+    return allPeople
+      .filter((person) => person.userId !== personId)
+      .filter((person) =>
+        person.displayName.toLocaleLowerCase('es-CO').includes(normalizedQueryValue),
+      )
+      .sort((left, right) => {
+        const leftStartsWith = left.displayName
+          .toLocaleLowerCase('es-CO')
+          .startsWith(normalizedQueryValue);
+        const rightStartsWith = right.displayName
+          .toLocaleLowerCase('es-CO')
+          .startsWith(normalizedQueryValue);
 
-  const selectedPerson = allPeople.find((person) => person.userId === personId) ?? null;
+        if (leftStartsWith !== rightStartsWith) {
+          return leftStartsWith ? -1 : 1;
+        }
+
+        const scoreDifference = personRelevanceScore(right) - personRelevanceScore(left);
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+
+        return left.displayName.localeCompare(right.displayName, 'es-CO');
+      })
+      .slice(0, 5);
+  }, [allPeople, normalizedQueryValue, personId]);
+  const quickPeople = useMemo(() => {
+    const source = selectedPerson
+      ? allPeople.filter((person) => person.userId !== selectedPerson.userId)
+      : allPeople;
+
+    return [...source]
+      .sort((left, right) => {
+        const scoreDifference = personRelevanceScore(right) - personRelevanceScore(left);
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+
+        return left.displayName.localeCompare(right.displayName, 'es-CO');
+      })
+      .slice(0, 6);
+  }, [allPeople, selectedPerson]);
   const amountMinor = Math.max(Number.parseInt(amount || '0', 10) * 100, 0);
-  const normalizedQuery = query.trim();
+  const amountDisplay = formatAmountInput(amount);
+  const activeDirectionVisual = directionVisual(direction);
+  const categoryIconName = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+  const categoryIconColor = transactionCategoryColor(category);
+  const categoryIconBackground = transactionCategoryBackgroundColor(category);
+  const summaryText = selectedPerson
+    ? `${
+        direction === 'owes_me'
+          ? `${selectedPerson.displayName} te debe`
+          : `Le debes a ${selectedPerson.displayName}`
+      } ${amountMinor > 0 ? formatCop(amountMinor) : 'sin monto'}`
+    : null;
   const draftPreview =
     selectedPerson && amountMinor > 0
       ? buildDraftPreview({
@@ -177,18 +295,22 @@ export function RegisterFlowScreen() {
       return;
     }
 
-    Alert.alert('Tienes cambios sin guardar', 'Si sales ahora, perderas el movimiento que estas armando.', [
-      {
-        text: 'Seguir editando',
-        style: 'cancel',
-      },
-      {
-        text: 'Descartar',
-        style: 'destructive',
-        onPress: () =>
-          navigation.dispatch(data.action as Parameters<typeof navigation.dispatch>[0]),
-      },
-    ]);
+    Alert.alert(
+      'Tienes cambios sin guardar',
+      'Si sales ahora, perderas el movimiento que estas armando.',
+      [
+        {
+          text: 'Seguir editando',
+          style: 'cancel',
+        },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () =>
+            navigation.dispatch(data.action as Parameters<typeof navigation.dispatch>[0]),
+        },
+      ],
+    );
   });
 
   function clearFieldError(field: keyof RegisterFormErrors) {
@@ -221,14 +343,23 @@ export function RegisterFlowScreen() {
     }, 160);
   }
 
-  function openPersonPicker() {
-    setPersonPickerVisible(true);
+  function openPersonSearch() {
+    setPersonSearchExpanded(true);
     focusPersonSearch();
   }
 
-  function closePersonPicker() {
-    setPersonPickerVisible(false);
+  function closePersonSearch() {
+    setPersonSearchExpanded(false);
     setQuery('');
+  }
+
+  function togglePersonSearch() {
+    if (personSearchExpanded) {
+      closePersonSearch();
+      return;
+    }
+
+    openPersonSearch();
   }
 
   function closeRegister() {
@@ -256,7 +387,7 @@ export function RegisterFlowScreen() {
     });
 
     if (nextErrors.personId) {
-      openPersonPicker();
+      openPersonSearch();
       return;
     }
 
@@ -271,7 +402,7 @@ export function RegisterFlowScreen() {
   }
 
   function openInviteFlow(suggestedName?: string) {
-    closePersonPicker();
+    closePersonSearch();
     router.push({
       pathname: '/invite',
       params: {
@@ -317,7 +448,7 @@ export function RegisterFlowScreen() {
       setDescription('');
       setQuery('');
       setErrors({});
-      setPersonPickerVisible(false);
+      setPersonSearchExpanded(false);
       completedSaveRef.current = true;
       closeRegister();
 
@@ -372,11 +503,6 @@ export function RegisterFlowScreen() {
               <Ionicons color={theme.colors.text} name="close" size={20} />
             </Pressable>
           </View>
-          <Text style={styles.heroSubtitle}>
-            {contextualPersonId || contextualDirection
-              ? 'Abriste este registro con datos precargados. Puedes cambiarlos.'
-              : 'Registro rapido y compacto.'}
-          </Text>
         </View>
 
         <View style={styles.panelArea}>
@@ -421,185 +547,248 @@ export function RegisterFlowScreen() {
 
               {canShowForm ? (
                 <>
-                  <FlatSection title="Monto">
+                  <View style={styles.formContent}>
                     <View
-                      style={[
-                        styles.amountInputRow,
-                        errors.amount ? styles.amountInputRowError : null,
-                      ]}
+                      style={[styles.amountCard, errors.amount ? styles.amountCardError : null]}
                     >
-                      <Text style={styles.currencySymbol}>$</Text>
-                      <NativeTextInput
-                        keyboardType="number-pad"
-                        onChangeText={(value) => {
-                          setAmount(value);
-                          clearFieldError('amount');
-                        }}
-                        placeholder="0"
-                        placeholderTextColor={theme.colors.muted}
-                        ref={amountInputRef}
-                        selectionColor={theme.colors.primary}
-                        style={styles.amountInput}
-                        value={amount}
-                      />
-                    </View>
-                    <View style={styles.inlineChipRow}>
-                      {AMOUNT_SUGGESTIONS.map((value) => (
-                        <ChoiceChip
-                          key={value}
-                          label={formatCop(value * 100)}
-                          onPress={() => {
-                            setAmount(String(value));
-                            clearFieldError('amount');
-                          }}
-                          selected={amount === String(value)}
-                        />
-                      ))}
-                    </View>
-                    <Text style={styles.amountCaption}>
-                      {amountMinor > 0 ? formatCop(amountMinor) : 'Ingresa un monto entero'}
-                    </Text>
-                  </FlatSection>
-
-                  <FlatSection
-                    title="Contexto"
-                    trailing={
-                      contextualPersonId || contextualDirection ? (
-                        <Text style={styles.contextHint}>Ya viene listo</Text>
-                      ) : undefined
-                    }
-                  >
-                    <View style={styles.contextStack}>
-                      <View style={styles.contextBlock}>
-                        <Text style={styles.compactLabel}>Tipo</Text>
-                        <SegmentedControl
-                          onChange={(value) => setDirection(value)}
-                          options={DIRECTION_OPTIONS}
-                          value={direction}
-                        />
-                      </View>
-
-                      <View style={styles.contextBlock}>
-                        <View style={styles.labelRow}>
-                          <Text style={styles.compactLabel}>Persona</Text>
-                          {errors.personId ? (
-                            <Text style={styles.inlineError}>Selecciona una persona</Text>
-                          ) : null}
-                        </View>
-                        <Pressable
-                          onPress={() => {
-                            clearFieldError('personId');
-                            openPersonPicker();
-                          }}
-                          style={({ pressed }) => [
-                            styles.personTrigger,
-                            selectedPerson ? styles.personTriggerFilled : null,
-                            errors.personId ? styles.personTriggerError : null,
-                            pressed ? styles.personTriggerPressed : null,
-                          ]}
-                        >
-                          {selectedPerson ? (
-                            <>
-                              <AppAvatar
-                                imageUrl={selectedPerson.avatarUrl ?? null}
-                                label={selectedPerson.displayName}
-                                rounded={false}
-                                size={40}
-                              />
-                              <View style={styles.personCopy}>
-                                <Text numberOfLines={1} style={styles.personName}>
-                                  {selectedPerson.displayName}
-                                </Text>
-                                <Text numberOfLines={1} style={styles.personMeta}>
-                                  {contextualPersonId === selectedPerson.userId
-                                    ? 'Seleccionada desde personas'
-                                    : 'Toca para cambiar'}
-                                </Text>
-                              </View>
-                            </>
-                          ) : (
-                            <View style={styles.personEmptyCopy}>
-                              <Text style={styles.personEmptyTitle}>Seleccionar persona</Text>
-                              <Text style={styles.personEmptyMeta}>Buscar o invitar</Text>
-                            </View>
-                          )}
-                          <Ionicons
-                            color={theme.colors.textMuted}
-                            name="chevron-forward"
-                            size={18}
-                          />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </FlatSection>
-
-                  <FlatSection
-                    title="Descripcion"
-                    trailing={
-                      errors.description ? (
-                        <Text style={styles.inlineError}>Es obligatoria</Text>
-                      ) : undefined
-                    }
-                  >
-                    <View style={styles.inlineChipRow}>
-                      {DESCRIPTION_SUGGESTIONS.map((item) => (
-                        <ChoiceChip
-                          key={item}
-                          label={item}
-                          onPress={() => {
-                            setDescription(item);
-                            clearFieldError('description');
-                          }}
-                          selected={
-                            description.trim().toLocaleLowerCase('es-CO') ===
-                            item.toLocaleLowerCase('es-CO')
-                          }
-                        />
-                      ))}
-                    </View>
-                    <AppTextInput
-                      hasError={Boolean(errors.description)}
-                      onChangeText={(value) => {
-                        setDescription(value);
-                        clearFieldError('description');
-                      }}
-                      placeholder="Ej. Pizza del viernes"
-                      placeholderTextColor={theme.colors.muted}
-                      ref={descriptionInputRef}
-                      returnKeyType="done"
-                      style={styles.descriptionInput}
-                      value={description}
-                    />
-                  </FlatSection>
-
-                  <FlatSection bordered={false} title="Categoria">
-                    <TransactionCategoryPicker
-                      onChange={setCategory}
-                      value={category}
-                      variant="carousel"
-                    />
-                    {draftPreview ? (
-                      <View
-                        style={[
-                          styles.previewPill,
-                          draftPreview.tone === 'owes_me'
-                            ? styles.previewPillPositive
-                            : styles.previewPillNegative,
-                        ]}
-                      >
+                      <View style={styles.amountDisplayRow}>
                         <Text
                           style={[
-                            styles.previewText,
-                            draftPreview.tone === 'owes_me'
-                              ? styles.previewTextPositive
-                              : styles.previewTextNegative,
+                            styles.currencySymbol,
+                            { color: activeDirectionVisual.accentColor },
                           ]}
                         >
-                          {draftPreview.summary}
+                          $
                         </Text>
+                        <NativeTextInput
+                          keyboardType="number-pad"
+                          onChangeText={(value) => {
+                            setAmount(sanitizeAmountInput(value));
+                            clearFieldError('amount');
+                          }}
+                          placeholder="0"
+                          placeholderTextColor={activeDirectionVisual.accentColor}
+                          ref={amountInputRef}
+                          selectionColor={activeDirectionVisual.accentColor}
+                          style={[styles.amountInput, { color: activeDirectionVisual.accentColor }]}
+                          value={amountDisplay}
+                        />
                       </View>
-                    ) : null}
-                  </FlatSection>
+                      <View style={styles.amountSuggestionRow}>
+                        {AMOUNT_SUGGESTIONS.map((value) => (
+                          <ChoiceChip
+                            key={value}
+                            label={`${value / 1000}k`}
+                            labelStyle={styles.amountSuggestionLabel}
+                            onPress={() => {
+                              setAmount(String(value));
+                              clearFieldError('amount');
+                            }}
+                            selected={amount === String(value)}
+                            style={styles.amountSuggestionChip}
+                          />
+                        ))}
+                        <ChoiceChip
+                          label="Otro"
+                          onPress={() => {
+                            setAmount('');
+                            clearFieldError('amount');
+                            amountInputRef.current?.focus();
+                          }}
+                          selected={
+                            amount.trim().length > 0 &&
+                            !AMOUNT_SUGGESTIONS.some((value) => amount === String(value))
+                          }
+                          style={styles.amountSuggestionChip}
+                        />
+                      </View>
+                      {errors.amount ? (
+                        <Text style={styles.inlineError}>Ingresa un monto valido</Text>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.directionRow}>
+                      <DirectionPill
+                        direction="i_owe"
+                        onPress={() => setDirection('i_owe')}
+                        selected={direction === 'i_owe'}
+                        style={styles.directionPill}
+                      />
+                      <DirectionPill
+                        direction="owes_me"
+                        onPress={() => setDirection('owes_me')}
+                        selected={direction === 'owes_me'}
+                        style={styles.directionPill}
+                      />
+                    </View>
+
+                    <View style={styles.fieldStack}>
+                      <View style={styles.labelRow}>
+                        <Text style={styles.sectionLabel}>Persona</Text>
+                        {errors.personId ? (
+                          <Text style={styles.inlineError}>Selecciona una persona</Text>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          clearFieldError('personId');
+                          togglePersonSearch();
+                        }}
+                        style={({ pressed }) => [
+                          styles.personPrimaryCard,
+                          errors.personId ? styles.personPrimaryCardError : null,
+                          pressed ? styles.personPrimaryCardPressed : null,
+                        ]}
+                      >
+                        {selectedPerson ? (
+                          <>
+                            <AppAvatar
+                              imageUrl={selectedPerson.avatarUrl ?? null}
+                              label={selectedPerson.displayName}
+                              size={42}
+                            />
+                            <View style={styles.personPrimaryCopy}>
+                              <Text numberOfLines={1} style={styles.personPrimaryName}>
+                                {selectedPerson.displayName}
+                              </Text>
+                              <Text numberOfLines={1} style={styles.personPrimaryMeta}>
+                                {contextualPersonId === selectedPerson.userId
+                                  ? 'Seleccionada desde personas'
+                                  : 'Toca para cambiar o invitar'}
+                              </Text>
+                            </View>
+                          </>
+                        ) : (
+                          <View style={styles.personPrimaryCopy}>
+                            <Text style={styles.personPrimaryName}>Seleccionar persona</Text>
+                            <Text style={styles.personPrimaryMeta}>Buscar o invitar</Text>
+                          </View>
+                        )}
+                        <Ionicons
+                          color={theme.colors.textMuted}
+                          name={personSearchExpanded ? 'chevron-up' : 'chevron-forward'}
+                          size={20}
+                        />
+                      </Pressable>
+                      {personSearchExpanded ? (
+                        <View style={styles.personSearchPanel}>
+                          <AppTextInput
+                            autoCapitalize="words"
+                            clearButtonMode="while-editing"
+                            onChangeText={setQuery}
+                            placeholder="Buscar otra persona"
+                            placeholderTextColor={theme.colors.muted}
+                            ref={searchInputRef}
+                            style={styles.searchInput}
+                            value={query}
+                          />
+                          {normalizedQuery.length > 0 ? (
+                            personSearchResults.length > 0 ? (
+                              <View style={styles.personSearchResults}>
+                                {personSearchResults.map((person) => (
+                                  <Pressable
+                                    key={person.userId}
+                                    onPress={() => {
+                                      setPersonId(person.userId);
+                                      clearFieldError('personId');
+                                      closePersonSearch();
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.personOption,
+                                      pressed ? styles.personOptionPressed : null,
+                                    ]}
+                                  >
+                                    <AppAvatar
+                                      imageUrl={person.avatarUrl ?? null}
+                                      label={person.displayName}
+                                      rounded={false}
+                                      size={40}
+                                    />
+                                    <View style={styles.personOptionCopy}>
+                                      <Text numberOfLines={1} style={styles.personOptionName}>
+                                        {person.displayName}
+                                      </Text>
+                                      <Text numberOfLines={1} style={styles.personOptionMeta}>
+                                        Relacion activa
+                                      </Text>
+                                    </View>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            ) : (
+                              <View style={styles.personSearchEmptyState}>
+                                <Text style={styles.supportTitle}>
+                                  No encontramos a esa persona.
+                                </Text>
+                                <Text style={styles.supportText}>
+                                  Puedes invitarla sin salir de este flujo.
+                                </Text>
+                                <PrimaryAction
+                                  label="Invitar persona"
+                                  onPress={() => openInviteFlow(normalizedQuery)}
+                                  variant="secondary"
+                                />
+                              </View>
+                            )
+                          ) : (
+                            <Text style={styles.personSearchHint}>
+                              Escribe un nombre y te mostraremos coincidencias aqui mismo.
+                            </Text>
+                          )}
+                        </View>
+                      ) : null}
+                      {quickPeople.length > 0 ? (
+                        <ScrollView
+                          horizontal
+                          contentContainerStyle={styles.quickPeopleCarouselContent}
+                          showsHorizontalScrollIndicator={false}
+                        >
+                          {quickPeople.map((person) => (
+                            <QuickPersonChip
+                              key={person.userId}
+                              onPress={(nextPersonId) => {
+                                setPersonId(nextPersonId);
+                                clearFieldError('personId');
+                                closePersonSearch();
+                              }}
+                              person={person}
+                            />
+                          ))}
+                        </ScrollView>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.fieldStack}>
+                      <Text style={styles.sectionLabel}>Categoria</Text>
+                      <TransactionCategoryPicker
+                        onChange={setCategory}
+                        value={category}
+                        variant="carousel"
+                      />
+                    </View>
+
+                    <View style={styles.fieldStack}>
+                      <View style={styles.labelRow}>
+                        <Text style={styles.sectionLabel}>Nota</Text>
+                        {errors.description ? (
+                          <Text style={styles.inlineError}>Es obligatoria</Text>
+                        ) : null}
+                      </View>
+                      <AppTextInput
+                        hasError={Boolean(errors.description)}
+                        onChangeText={(value) => {
+                          setDescription(value);
+                          clearFieldError('description');
+                        }}
+                        placeholder="Ej. Pizza del viernes"
+                        placeholderTextColor={theme.colors.muted}
+                        ref={descriptionInputRef}
+                        returnKeyType="done"
+                        style={styles.noteInput}
+                        value={description}
+                      />
+                    </View>
+                  </View>
                 </>
               ) : null}
             </BrandedRefreshScrollView>
@@ -608,115 +797,36 @@ export function RegisterFlowScreen() {
 
         {canShowForm ? (
           <View style={styles.footer}>
+            <View style={styles.footerSummary}>
+              <Text numberOfLines={1} style={styles.footerSummaryText}>
+                {summaryText
+                  ? summaryText
+                  : draftPreview
+                    ? draftPreview.summary
+                    : 'Completa el monto y la persona'}
+              </Text>
+              {summaryText ? (
+                <View style={styles.footerCategoryBadge}>
+                  <View
+                    style={[styles.footerCategoryIcon, { backgroundColor: categoryIconBackground }]}
+                  >
+                    <Ionicons color={categoryIconColor} name={categoryIconName} size={14} />
+                  </View>
+                  <Text numberOfLines={1} style={styles.footerCategoryText}>
+                    {transactionCategoryLabel(category)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
             <PrimaryAction
               disabled={createRequest.isPending}
-              label={createRequest.isPending ? 'Guardando...' : 'Registrar movimiento'}
+              label={createRequest.isPending ? 'Guardando...' : 'Registrar'}
               loading={createRequest.isPending}
               onPress={createRequest.isPending ? undefined : () => void handleSave()}
             />
           </View>
         ) : null}
       </View>
-
-      <Modal
-        animationType="slide"
-        onRequestClose={closePersonPicker}
-        transparent
-        visible={personPickerVisible}
-      >
-        <View style={styles.modalRoot}>
-          <Pressable onPress={closePersonPicker} style={styles.modalScrim} />
-          <View style={styles.sheetCard}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Seleccionar persona</Text>
-              <Pressable
-                onPress={closePersonPicker}
-                style={({ pressed }) => [
-                  styles.closeButton,
-                  pressed ? styles.closeButtonPressed : null,
-                ]}
-              >
-                <Ionicons color={theme.colors.text} name="close" size={18} />
-              </Pressable>
-            </View>
-
-            <AppTextInput
-              autoCapitalize="words"
-              clearButtonMode="while-editing"
-              onChangeText={setQuery}
-              placeholder="Buscar persona"
-              placeholderTextColor={theme.colors.muted}
-              ref={searchInputRef}
-              style={styles.searchInput}
-              value={query}
-            />
-
-            <ScrollView
-              contentContainerStyle={styles.sheetContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {people.map((person) => {
-                const isSelected = person.userId === personId;
-                return (
-                  <Pressable
-                    key={person.userId}
-                    onPress={() => {
-                      setPersonId(person.userId);
-                      clearFieldError('personId');
-                      closePersonPicker();
-                    }}
-                    style={({ pressed }) => [
-                      styles.personOption,
-                      isSelected ? styles.personOptionSelected : null,
-                      pressed ? styles.personOptionPressed : null,
-                    ]}
-                  >
-                    <AppAvatar
-                      imageUrl={person.avatarUrl ?? null}
-                      label={person.displayName}
-                      rounded={false}
-                      size={44}
-                    />
-                    <View style={styles.personOptionCopy}>
-                      <Text numberOfLines={1} style={styles.personOptionName}>
-                        {person.displayName}
-                      </Text>
-                      <Text numberOfLines={1} style={styles.personOptionMeta}>
-                        {person.userId === contextualPersonId
-                          ? 'Entrada contextual'
-                          : 'Relacion activa'}
-                      </Text>
-                    </View>
-                    {isSelected ? (
-                      <Ionicons
-                        color={theme.colors.primary}
-                        name="checkmark-circle"
-                        size={20}
-                      />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-
-              {normalizedQuery.length > 0 && people.length === 0 ? (
-                <View style={styles.emptyPickerState}>
-                  <Text style={styles.supportTitle}>No encontramos a esa persona.</Text>
-                  <Text style={styles.supportText}>
-                    Puedes invitarla sin salir de este flujo.
-                  </Text>
-                  <PrimaryAction
-                    label="Invitar persona"
-                    onPress={() => openInviteFlow(normalizedQuery)}
-                    variant="secondary"
-                  />
-                </View>
-              ) : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       <LoadingOverlay title="Guardando movimiento" visible={showBusyOverlay} />
     </SafeAreaView>
@@ -740,12 +850,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
-    gap: theme.spacing.md,
+    gap: theme.spacing.xs,
     maxHeight: '90%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xs,
     width: '100%',
+    ...theme.shadow.floating,
   },
   fixedTop: {
     gap: theme.spacing.xs,
@@ -766,34 +877,30 @@ const styles = StyleSheet.create({
   heroTitle: {
     color: theme.colors.text,
     flex: 1,
-    fontSize: theme.typography.body,
+    fontSize: theme.typography.title2,
     fontWeight: '800',
-  },
-  heroSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
   },
   closeButton: {
     alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.pill,
-    height: 36,
+    height: 42,
     justifyContent: 'center',
-    width: 36,
+    width: 42,
   },
   closeButtonPressed: {
-    opacity: 0.88,
+    opacity: 0.92,
   },
   panelArea: {
     flexShrink: 1,
-    gap: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   sheetScrollWrap: {
     flexShrink: 1,
     position: 'relative',
   },
   sheetScrollContent: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.sm,
     paddingBottom: theme.spacing.xs,
   },
   sheetRefreshIndicator: {
@@ -819,80 +926,58 @@ const styles = StyleSheet.create({
   emptyState: {
     gap: theme.spacing.sm,
   },
-  section: {
+  formContent: {
+    gap: theme.spacing.md,
+  },
+  amountCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.large,
+    borderWidth: 1,
     gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
-  sectionBordered: {
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  amountCardError: {
+    borderColor: theme.colors.danger,
   },
-  sectionHeader: {
+  amountDisplayRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  contextHint: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-  },
-  amountInputRow: {
-    alignItems: 'center',
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 82,
-    paddingBottom: theme.spacing.sm,
-  },
-  amountInputRowError: {
-    borderBottomColor: theme.colors.danger,
+    justifyContent: 'center',
   },
   currencySymbol: {
     color: theme.colors.text,
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: '300',
-    lineHeight: 54,
+    lineHeight: 64,
+    marginRight: theme.spacing.sm,
   },
   amountInput: {
     color: theme.colors.text,
-    flex: 1,
-    fontSize: 52,
-    fontWeight: '300',
-    lineHeight: 58,
-    minHeight: 72,
+    fontSize: 58,
+    fontWeight: '800',
+    lineHeight: 66,
+    minHeight: 76,
     paddingVertical: 0,
+    textAlign: 'center',
+    width: '72%',
   },
-  inlineChipRow: {
+  amountSuggestionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
+    justifyContent: 'flex-start',
   },
-  amountCaption: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
+  amountSuggestionChip: {
+    flex: 1,
+    minHeight: 44,
+    minWidth: 0,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 4,
   },
-  contextStack: {
-    gap: theme.spacing.md,
-  },
-  contextBlock: {
-    gap: theme.spacing.xs,
-  },
-  compactLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+  amountSuggestionLabel: {
+    fontSize: theme.typography.callout,
   },
   labelRow: {
     alignItems: 'center',
@@ -900,137 +985,154 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     justifyContent: 'space-between',
   },
+  fieldStack: {
+    gap: theme.spacing.xs,
+  },
+  sectionLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+  },
   inlineError: {
     color: theme.colors.danger,
     fontSize: theme.typography.caption,
     fontWeight: '700',
   },
-  personTrigger: {
+  directionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  directionPill: {
+    flex: 1,
+  },
+  personPrimaryCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.large,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 60,
+    gap: theme.spacing.xs,
+    minHeight: 66,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
-  personTriggerFilled: {
-    backgroundColor: theme.colors.surface,
-  },
-  personTriggerError: {
+  personPrimaryCardError: {
     borderColor: theme.colors.danger,
   },
-  personTriggerPressed: {
+  personPrimaryCardPressed: {
     opacity: 0.92,
   },
-  personCopy: {
+  personPrimaryCopy: {
     flex: 1,
-    gap: 3,
+    gap: theme.spacing.xxs,
   },
-  personName: {
+  personPrimaryName: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '700',
   },
-  personMeta: {
+  personPrimaryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 14,
+  },
+  quickPeopleCarouselContent: {
+    gap: theme.spacing.xs,
+    paddingRight: theme.spacing.sm,
+  },
+  personSearchPanel: {
+    gap: theme.spacing.xxs,
+  },
+  personSearchHint: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
+    paddingHorizontal: theme.spacing.xs,
   },
-  personEmptyCopy: {
-    flex: 1,
-    gap: 3,
+  personSearchResults: {
+    gap: theme.spacing.xs,
   },
-  personEmptyTitle: {
+  quickPersonChip: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 6,
+  },
+  quickPersonChipPressed: {
+    opacity: 0.92,
+  },
+  quickPersonLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '700',
+    maxWidth: 98,
   },
-  personEmptyMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
+  noteInput: {
+    fontSize: theme.typography.callout,
+    height: 48,
     lineHeight: 18,
-  },
-  descriptionInput: {
-    minHeight: 52,
-  },
-  previewPill: {
-    borderRadius: theme.radius.medium,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
-  },
-  previewPillPositive: {
-    backgroundColor: theme.colors.successSoft,
-  },
-  previewPillNegative: {
-    backgroundColor: theme.colors.warningSoft,
-  },
-  previewText: {
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  previewTextPositive: {
-    color: theme.colors.success,
-  },
-  previewTextNegative: {
-    color: theme.colors.warning,
+    minHeight: 48,
+    paddingBottom: 0,
+    paddingTop: 0,
+    textAlignVertical: 'center',
   },
   footer: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    paddingTop: 6,
   },
-  modalRoot: {
+  footerSummary: {
+    alignItems: 'center',
+    backgroundColor: '#f5f2fb',
+    borderRadius: theme.radius.medium,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minHeight: 46,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  footerSummaryText: {
+    color: theme.colors.primary,
     flex: 1,
-    justifyContent: 'flex-end',
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
   },
-  modalScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: theme.colors.overlay,
-  },
-  sheetCard: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radius.large,
-    borderTopRightRadius: theme.radius.large,
-    gap: theme.spacing.md,
-    maxHeight: '78%',
-    paddingBottom: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xs,
-    ...theme.shadow.floating,
-  },
-  sheetHeader: {
+  footerCategoryBadge: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 6,
   },
-  sheetTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
+  footerCategoryIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  footerCategoryText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
   },
   searchInput: {
-    minHeight: 48,
-  },
-  sheetContent: {
-    gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    minHeight: 44,
   },
   personOption: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 68,
+    gap: theme.spacing.xs,
+    minHeight: 60,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   personOptionSelected: {
     backgroundColor: theme.colors.primarySoft,
@@ -1051,9 +1153,9 @@ const styles = StyleSheet.create({
   personOptionMeta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    lineHeight: 16,
   },
-  emptyPickerState: {
+  personSearchEmptyState: {
     gap: theme.spacing.sm,
     paddingVertical: theme.spacing.sm,
   },

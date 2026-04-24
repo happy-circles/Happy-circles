@@ -17,7 +17,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         animationMatchesGesture: true,
-        fullScreenGestureEnabled: true,
+        fullScreenGestureEnabled: false,
         gestureDirection: 'horizontal',
         gestureEnabled: true,
         headerShown: false,

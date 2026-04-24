@@ -32,6 +32,7 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly meta?: string | null;
   readonly onPress?: () => void;
   readonly pending?: boolean;
+  readonly pendingHighlightColor?: string;
   readonly statusLabel?: string | null;
   readonly statusTone?: StatusChipProps['tone'];
   readonly unread?: boolean;
@@ -41,6 +42,27 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly contextVariant?: 'text' | 'badge';
   readonly compactMetaLayout?: 'inline' | 'stacked';
   readonly directionLayout?: 'stacked' | 'floating';
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const normalized = color.trim();
+  const compactHexMatch = normalized.match(/^#([\da-f]{3})$/i);
+  if (compactHexMatch) {
+    const [r, g, b] = compactHexMatch[1].split('').map((entry) => entry + entry);
+    return withAlpha(`#${r}${g}${b}`, alpha);
+  }
+
+  const hexMatch = normalized.match(/^#([\da-f]{6})$/i);
+  if (!hexMatch) {
+    return color;
+  }
+
+  const rawHex = hexMatch[1];
+  const red = Number.parseInt(rawHex.slice(0, 2), 16);
+  const green = Number.parseInt(rawHex.slice(2, 4), 16);
+  const blue = Number.parseInt(rawHex.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 export function TransactionEventCard({
@@ -62,6 +84,7 @@ export function TransactionEventCard({
   meta,
   onPress,
   pending = false,
+  pendingHighlightColor,
   statusLabel,
   statusTone = 'neutral',
   unread = false,
@@ -84,6 +107,12 @@ export function TransactionEventCard({
   const resolvedBadgeBackgroundColor =
     badgeBackgroundColor ?? transactionCategoryBackgroundColor(safeCategory);
   const resolvedBadgeColor = badgeColor ?? transactionCategoryColor(safeCategory);
+  const pendingSurfaceColor = pendingHighlightColor
+    ? withAlpha(pendingHighlightColor, 0.1)
+    : styles.pendingCard.backgroundColor;
+  const pendingBorderColor = pendingHighlightColor
+    ? withAlpha(pendingHighlightColor, 0.22)
+    : styles.pendingCard.borderColor;
   const hasAction = Boolean(href || onPress);
   const metaParts =
     meta
@@ -126,7 +155,12 @@ export function TransactionEventCard({
       style={[
         styles.card,
         compact ? styles.cardCompact : null,
-        pending ? styles.pendingCard : null,
+        pending
+          ? [
+              styles.pendingCard,
+              { backgroundColor: pendingSurfaceColor, borderColor: pendingBorderColor },
+            ]
+          : null,
         { borderLeftColor: accentColor },
       ]}
       variant={variant}
@@ -149,7 +183,7 @@ export function TransactionEventCard({
                   compact ? styles.categoryBadgeCompact : null,
                   {
                     backgroundColor: resolvedBadgeBackgroundColor,
-                    borderColor: pending ? '#fff9ed' : theme.colors.surface,
+                    borderColor: theme.colors.surface,
                   },
                 ]}
               >

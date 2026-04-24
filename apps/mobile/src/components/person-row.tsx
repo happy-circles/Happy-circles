@@ -4,11 +4,15 @@ import type { PersonCardDto } from '@happy-circles/application';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
+import { toneVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 
 import { AppAvatar } from './app-avatar';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
+
+const POSITIVE_VISUAL = toneVisual('positive');
+const NEGATIVE_VISUAL = toneVisual('negative');
 
 export interface PersonRowProps {
   readonly person: PersonCardDto;
@@ -33,8 +37,16 @@ function buildLastUpdateLabel(value: string): string {
 
 export function PersonRow({ person }: PersonRowProps) {
   const isSettled = person.direction === 'settled' || person.netAmountMinor === 0;
-  const amountTone = isSettled ? styles.neutral : person.direction === 'owes_me' ? styles.positive : styles.negative;
-  const amountLabel = isSettled ? 'Sin saldo' : person.direction === 'owes_me' ? 'Te deben' : 'Debes';
+  const amountTone = isSettled
+    ? styles.neutral
+    : person.direction === 'owes_me'
+      ? styles.positive
+      : styles.negative;
+  const amountLabel = isSettled
+    ? 'Sin saldo'
+    : person.direction === 'owes_me'
+      ? 'Te deben'
+      : 'Debes';
   const lastUpdateLabel = buildLastUpdateLabel(person.lastActivityLabel);
 
   return (
@@ -50,7 +62,12 @@ export function PersonRow({ person }: PersonRowProps) {
           variant="default"
         >
           <View style={styles.leading}>
-            <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} rounded={false} size={42} />
+            <AppAvatar
+              imageUrl={person.avatarUrl ?? null}
+              label={person.displayName}
+              rounded={false}
+              size={42}
+            />
             <View style={styles.textWrap}>
               <View style={styles.titleRow}>
                 <Text style={styles.name}>{person.displayName}</Text>
@@ -86,10 +103,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardPositive: {
-    borderLeftColor: theme.colors.success,
+    borderLeftColor: POSITIVE_VISUAL?.accentColor ?? theme.colors.brandGreen,
   },
   cardNegative: {
-    borderLeftColor: theme.colors.warning,
+    borderLeftColor: NEGATIVE_VISUAL?.accentColor ?? theme.colors.brandCoral,
   },
   pressed: {
     opacity: 0.92,
@@ -139,10 +156,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   positive: {
-    color: theme.colors.success,
+    color: POSITIVE_VISUAL?.accentColor ?? theme.colors.brandGreen,
   },
   negative: {
-    color: theme.colors.warning,
+    color: NEGATIVE_VISUAL?.accentColor ?? theme.colors.brandCoral,
   },
   neutral: {
     color: theme.colors.text,

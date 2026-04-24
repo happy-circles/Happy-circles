@@ -1390,7 +1390,7 @@ export function ActivityScreen() {
               ) : (
                 <>
                   {activePendingItems.length > 0 ? (
-                    <NotificationSection title="No leidas">
+                    <NotificationSection title="Pendientes">
                       {activePendingItems.map((item) => renderPendingCard(item))}
                     </NotificationSection>
                   ) : null}

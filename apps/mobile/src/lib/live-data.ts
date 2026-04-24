@@ -577,8 +577,16 @@ function formatPendingRequestTitle(request: FinancialRequestRow, currentUserId: 
 function formatPendingRequestSubtitle(
   request: FinancialRequestRow,
   names: Map<string, string>,
+  currentUserId: string,
+  counterpartyName: string,
 ): string {
-  const creatorName = names.get(request.creator_user_id) ?? 'Persona';
+  const creatorName = userLabelForRequest(
+    request.creator_user_id,
+    currentUserId,
+    counterpartyName,
+    names,
+    'Persona',
+  );
   return [
     creatorName,
     request.description ?? 'Sin descripcion',
@@ -593,7 +601,6 @@ function buildPersonPendingRequest(input: {
   readonly names: Map<string, string>;
 }): PersonPendingRequestDto {
   const { request, currentUserId, counterpartyName, names } = input;
-  const createdByCurrentUser = request.creator_user_id === currentUserId;
   const requestKind: PersonPendingRequestDto['requestKind'] =
     request.request_type === 'transaction_reversal' ? request.request_type : 'balance_increase';
 
@@ -611,8 +618,13 @@ function buildPersonPendingRequest(input: {
     description: request.description ?? 'Sin descripcion',
     amountMinor: request.amount_minor,
     createdAtLabel: formatRelativeLabel(request.created_at),
-    createdByLabel:
-      names.get(request.creator_user_id) ?? (createdByCurrentUser ? 'Tu' : counterpartyName),
+    createdByLabel: userLabelForRequest(
+      request.creator_user_id,
+      currentUserId,
+      counterpartyName,
+      names,
+      'Persona',
+    ),
   };
 }
 
@@ -2190,7 +2202,12 @@ function buildLiveSnapshot(input: {
             id: request.id,
             kind: 'financial_request',
             title: formatPendingRequestTitle(request, input.currentUserId),
-            subtitle: formatPendingRequestSubtitle(request, nameByUserId),
+            subtitle: formatPendingRequestSubtitle(
+              request,
+              nameByUserId,
+              input.currentUserId,
+              person.displayName,
+            ),
             status:
               request.responder_user_id === input.currentUserId
                 ? 'requires_you'
@@ -2281,7 +2298,12 @@ function buildLiveSnapshot(input: {
         id: request.id,
         kind: 'financial_request',
         title: formatPendingRequestTitle(request, input.currentUserId),
-        subtitle: formatPendingRequestSubtitle(request, nameByUserId),
+        subtitle: formatPendingRequestSubtitle(
+          request,
+          nameByUserId,
+          input.currentUserId,
+          counterparty?.displayName ?? 'Persona',
+        ),
         status:
           request.responder_user_id === input.currentUserId ? 'requires_you' : 'waiting_other_side',
         ctaLabel: 'Responder',

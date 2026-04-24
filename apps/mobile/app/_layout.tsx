@@ -402,7 +402,7 @@ function RootNavigator() {
           contentStyle: {
             backgroundColor: theme.colors.background,
           },
-          fullScreenGestureEnabled: true,
+          fullScreenGestureEnabled: false,
           gestureDirection: 'horizontal',
           gestureEnabled: true,
           headerBackButtonMenuEnabled: false,

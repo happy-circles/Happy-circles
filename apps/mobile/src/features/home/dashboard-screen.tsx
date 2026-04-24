@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +26,10 @@ import {
   useReviewExternalFriendshipInviteMutation,
 } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
+import {
+  getSeenPendingTransactionIds,
+  markPendingTransactionIdsSeen,
+} from '@/lib/pending-transaction-views';
 import { dismissSetupPrompt, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
 import { theme } from '@/lib/theme';
@@ -48,7 +52,7 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 const RECENT_TRANSACTION_LIMIT = 8;
-type InviteRequestsTab = 'received' | 'sent';
+type InviteRequestsTab = 'received' | 'sent' | 'history';
 type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel';
 type InviteRequestItem = FriendshipInviteListItem | AccountInviteListItem;
 type TransactionTargetPanel = 'pending' | 'history';
@@ -128,12 +132,17 @@ function splitSubtitle(value: string): string[] {
 function homeTransactionMeta(item: ActivityItemDto, actorLabel: string): string {
   const subtitleParts = splitSubtitle(item.subtitle);
   const creatorLabel =
-    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
-      ? 'Happy Circle'
-      : firstName(actorLabel);
+    item.kind === 'financial_request'
+      ? (subtitleParts[0] ?? 'Persona')
+      : item.category === 'cycle' ||
+          item.kind === 'settlement' ||
+          item.kind === 'settlement_proposal'
+        ? 'Happy Circle'
+        : firstName(actorLabel);
   const timeLabel = item.happenedAtLabel ?? subtitleParts[subtitleParts.length - 1] ?? 'Reciente';
+  const createdByText = creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
 
-  return `Creado por ${creatorLabel} · ${timeLabel} | ${transactionCategoryLabel(
+  return `${createdByText} · ${timeLabel} | ${transactionCategoryLabel(
     transactionVisualCategory(item),
   )}`;
 }
@@ -172,7 +181,7 @@ function transactionPersonHref(
   panel: TransactionTargetPanel,
 ): Href {
   if (!person) {
-    return (item.href ?? '/activity?category=transactions') as Href;
+    return (item.href ?? '/transactions') as Href;
   }
 
   return `/person/${person.userId}?panel=${panel}&focus=${encodeURIComponent(
@@ -182,6 +191,29 @@ function transactionPersonHref(
 
 function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
   return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function inviteHistoryTimestamp(item: InviteRequestItem): string {
+  if (typeof item.happenedAt === 'string' && item.happenedAt.length > 0) {
+    return item.happenedAt;
+  }
+
+  if (item.kind === 'friendship_invite' && item.resolvedAt) {
+    return item.resolvedAt;
+  }
+
+  if (item.kind === 'account_invite') {
+    return item.resolvedAt ?? item.activatedAt ?? item.createdAt;
+  }
+
+  return item.createdAt;
+}
+
+function sortInviteHistoryItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
+  return [...items].sort(
+    (left, right) =>
+      Date.parse(inviteHistoryTimestamp(right)) - Date.parse(inviteHistoryTimestamp(left)),
+  );
 }
 
 function isReceivedInvite(item: InviteRequestItem): boolean {
@@ -245,6 +277,26 @@ function displayNameForInvite(item: InviteRequestItem): string {
 }
 
 function statusLabelForInvite(item: InviteRequestItem): string {
+  if (item.actionState === 'history') {
+    if (item.status === 'accepted') {
+      return 'Aceptada';
+    }
+
+    if (item.status === 'rejected') {
+      return 'Rechazada';
+    }
+
+    if (item.status === 'expired') {
+      return 'Expirada';
+    }
+
+    if (item.status === 'canceled') {
+      return 'Cancelada';
+    }
+
+    return 'Historico';
+  }
+
   if (item.actionState === 'requires_you_response') {
     return 'Por responder';
   }
@@ -273,6 +325,18 @@ function statusLabelForInvite(item: InviteRequestItem): string {
 }
 
 function inviteStatusTone(item: InviteRequestItem): 'primary' | 'warning' | 'neutral' {
+  if (item.actionState === 'history') {
+    if (item.status === 'accepted') {
+      return 'primary';
+    }
+
+    if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
+      return 'neutral';
+    }
+
+    return 'neutral';
+  }
+
   if (item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review') {
     return 'warning';
   }
@@ -377,13 +441,17 @@ function PersonTile({ person }: { readonly person: PersonCardDto }) {
 }
 
 function TransactionPreviewCard({
+  highlightPending = false,
   isPending = false,
   item,
   people,
+  unread = false,
 }: {
+  readonly highlightPending?: boolean;
   readonly isPending?: boolean;
   readonly item: ActivityItemDto;
   readonly people: readonly PersonCardDto[];
+  readonly unread?: boolean;
 }) {
   const name =
     item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
@@ -424,9 +492,11 @@ function TransactionPreviewCard({
       directionLabel={isPending ? transactionDirectionLabel(item) : null}
       href={href}
       meta={meta}
-      pending={isPending}
+      pending={highlightPending}
+      pendingHighlightColor={highlightPending ? transactionAccentColor(item) : undefined}
       statusLabel={isPending ? null : recentStatusLabel}
       statusTone={transactionStatusTone(item)}
+      unread={unread}
     />
   );
 }
@@ -475,7 +545,7 @@ function InviteRequestRow({
   const displayName = displayNameForInvite(item);
   const subtitleParts = splitSubtitle(item.subtitle);
   const subtitle = subtitleParts[1] ?? subtitleParts[0] ?? statusLabelForInvite(item);
-  const meta = [formatRelativeLabel(item.createdAt), subtitleParts[0] ?? null]
+  const meta = [formatRelativeLabel(inviteHistoryTimestamp(item)), subtitleParts[0] ?? null]
     .filter(Boolean)
     .join(' | ');
   const busyPrefix = `${item.kind}:${item.inviteId}:`;
@@ -597,6 +667,7 @@ function InviteRequestRow({
 function InviteRequestsSheet({
   activeTab,
   busyKey,
+  historyItems,
   message,
   onAction,
   onChangeTab,
@@ -607,6 +678,7 @@ function InviteRequestsSheet({
 }: {
   readonly activeTab: InviteRequestsTab;
   readonly busyKey: string | null;
+  readonly historyItems: readonly InviteRequestItem[];
   readonly message: string | null;
   readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
   readonly onChangeTab: (tab: InviteRequestsTab) => void;
@@ -615,7 +687,12 @@ function InviteRequestsSheet({
   readonly sentItems: readonly InviteRequestItem[];
   readonly visible: boolean;
 }) {
-  const items = activeTab === 'received' ? receivedItems : sentItems;
+  const items =
+    activeTab === 'received'
+      ? receivedItems
+      : activeTab === 'sent'
+        ? sentItems
+        : historyItems;
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
@@ -641,6 +718,12 @@ function InviteRequestsSheet({
               onPress={() => onChangeTab('sent')}
               selected={activeTab === 'sent'}
             />
+            <InviteRequestTabButton
+              count={historyItems.length}
+              label="Historico"
+              onPress={() => onChangeTab('history')}
+              selected={activeTab === 'history'}
+            />
           </View>
           {message ? <MessageBanner message={message} tone="neutral" /> : null}
           <ScrollView
@@ -652,11 +735,15 @@ function InviteRequestsSheet({
                 <Text style={styles.sheetEmptyTitle}>
                   {activeTab === 'received'
                     ? 'Sin solicitudes recibidas'
-                    : 'Sin solicitudes enviadas'}
+                    : activeTab === 'sent'
+                      ? 'Sin solicitudes enviadas'
+                      : 'Sin historial'}
                 </Text>
                 <Text style={styles.sheetEmptyText}>
                   {activeTab === 'received'
                     ? 'Cuando alguien quiera conectar contigo, aparecera aqui.'
+                    : activeTab === 'history'
+                      ? 'Las solicitudes resueltas y vencidas apareceran aqui.'
                     : 'Las invitaciones que envies quedaran en esta pestaña.'}
                 </Text>
               </View>
@@ -697,12 +784,20 @@ export function DashboardScreen() {
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [busyInviteKey, setBusyInviteKey] = useState<string | null>(null);
   const [setupPromptDismissed, setSetupPromptDismissed] = useState<boolean | null>(null);
+  const [seenPendingTransactionIds, setSeenPendingTransactionIds] =
+    useState<ReadonlySet<string> | null>(null);
   const friendshipPendingItems = snapshotQuery.data?.friendshipPendingItems ?? [];
+  const friendshipHistoryItems = snapshotQuery.data?.friendshipHistoryItems ?? [];
   const accountInvitePendingItems = snapshotQuery.data?.accountInvitePendingItems ?? [];
+  const accountInviteHistoryItems = snapshotQuery.data?.accountInviteHistoryItems ?? [];
   const invitePendingItems = sortInviteRequestItems([
     ...friendshipPendingItems,
     ...accountInvitePendingItems,
   ]);
+  const inviteHistoryItems = useMemo(
+    () => sortInviteHistoryItems([...friendshipHistoryItems, ...accountInviteHistoryItems]),
+    [accountInviteHistoryItems, friendshipHistoryItems],
+  );
   const receivedInviteItems = invitePendingItems.filter(isReceivedInvite);
   const sentInviteItems = invitePendingItems.filter(isSentInvite);
   const inviteRequestCount = receivedInviteItems.length + sentInviteItems.length;
@@ -718,6 +813,22 @@ export function DashboardScreen() {
   const recentTransactionItems = (historySection?.items ?? [])
     .filter(isConsolidatedTransactionItem)
     .slice(0, RECENT_TRANSACTION_LIMIT);
+  const transactionPreviewItems = [
+    ...pendingTransactionItems.map((item) => ({
+      highlightPending: Boolean(
+        seenPendingTransactionIds && !seenPendingTransactionIds.has(item.id),
+      ),
+      isPending: true,
+      item,
+      unread: true,
+    })),
+    ...recentTransactionItems.map((item) => ({
+      highlightPending: false,
+      isPending: false,
+      item,
+      unread: false,
+    })),
+  ];
   const needsContacts = session.setupState.contactsPermissionStatus !== 'granted';
   const needsNotifications = !session.notificationsEnabled;
   const showNativeSetup = (needsContacts || needsNotifications) && setupPromptDismissed === false;
@@ -751,6 +862,37 @@ export function DashboardScreen() {
       isMounted = false;
     };
   }, [session.userId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setSeenPendingTransactionIds(null);
+    void getSeenPendingTransactionIds(session.userId).then((nextIds) => {
+      if (isMounted) {
+        setSeenPendingTransactionIds(nextIds);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session.userId]);
+
+  useEffect(() => {
+    if (!seenPendingTransactionIds) {
+      return;
+    }
+
+    const nextSeenIds = pendingTransactionItems
+      .map((item) => item.id)
+      .filter((itemId) => !seenPendingTransactionIds.has(itemId));
+
+    if (nextSeenIds.length === 0) {
+      return;
+    }
+
+    void markPendingTransactionIdsSeen(session.userId, nextSeenIds);
+  }, [pendingTransactionItems, seenPendingTransactionIds, session.userId]);
 
   async function handleContactsPermission() {
     setBusyNativeSetup('contacts');
@@ -790,7 +932,13 @@ export function DashboardScreen() {
 
   function openInviteRequests() {
     setInviteMessage(null);
-    setInviteTab(receivedInviteItems.length > 0 ? 'received' : 'sent');
+    setInviteTab(
+      receivedInviteItems.length > 0
+        ? 'received'
+        : sentInviteItems.length > 0
+          ? 'sent'
+          : 'history',
+    );
     setInviteSheetVisible(true);
   }
 
@@ -895,7 +1043,7 @@ export function DashboardScreen() {
       titleAlign="center"
     >
       <BalanceSummaryCard
-        detailsHref="/activity?category=transactions"
+        detailsHref="/transactions"
         netBalanceMinor={dashboard.summary.netBalanceMinor}
         totalIOweMinor={dashboard.summary.totalIOweMinor}
         totalOwedToMeMinor={dashboard.summary.totalOwedToMeMinor}
@@ -952,10 +1100,10 @@ export function DashboardScreen() {
         </ScrollView>
       </SectionBlock>
 
-      {pendingTransactionItems.length > 0 ? (
+      {transactionPreviewItems.length > 0 ? (
         <SectionBlock
           action={
-            <Link href="/activity?category=transactions" asChild>
+            <Link href="/transactions" asChild>
               <Pressable
                 style={({ pressed }) => [
                   styles.peopleSectionAction,
@@ -966,40 +1114,18 @@ export function DashboardScreen() {
               </Pressable>
             </Link>
           }
-          title="Transacciones pendientes"
+          title="Transacciones"
         >
           <View style={styles.transactionList}>
-            {pendingTransactionItems.map((item) => (
+            {transactionPreviewItems.map(({ highlightPending, isPending, item, unread }) => (
               <TransactionPreviewCard
-                isPending
+                highlightPending={highlightPending}
+                isPending={isPending}
                 item={item}
                 key={item.id}
                 people={dashboard.activePeople}
+                unread={unread}
               />
-            ))}
-          </View>
-        </SectionBlock>
-      ) : null}
-
-      {recentTransactionItems.length > 0 ? (
-        <SectionBlock
-          action={
-            <Link href="/activity?category=transactions" asChild>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.peopleSectionAction,
-                  pressed ? styles.quickActionPressed : null,
-                ]}
-              >
-                <Text style={styles.peopleSectionActionText}>Ver todas</Text>
-              </Pressable>
-            </Link>
-          }
-          title="Recientes"
-        >
-          <View style={styles.transactionList}>
-            {recentTransactionItems.map((item) => (
-              <TransactionPreviewCard item={item} key={item.id} people={dashboard.activePeople} />
             ))}
           </View>
         </SectionBlock>
@@ -1013,6 +1139,7 @@ export function DashboardScreen() {
       <InviteRequestsSheet
         activeTab={inviteTab}
         busyKey={busyInviteKey}
+        historyItems={inviteHistoryItems}
         message={inviteMessage}
         onAction={(item, action) => void handleInviteRequestAction(item, action)}
         onChangeTab={setInviteTab}
