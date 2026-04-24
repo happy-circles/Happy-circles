@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import type {
   BalanceAnalyticsCategoryRowDto,
@@ -17,6 +18,8 @@ import type {
   BalanceAnalyticsPersonRowDto,
 } from '@happy-circles/application';
 
+import { HappyCircleCard } from '@/components/happy-circle-card';
+import { HappyWaterfallChart } from '@/components/happy-waterfall-chart';
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
@@ -115,44 +118,10 @@ function categoryLensAmount(
   return row.netMinor;
 }
 
-function WaterfallRow({
-  amountMinor,
-  label,
-  tone,
-}: {
-  readonly amountMinor: number;
-  readonly label: string;
-  readonly tone: 'positive' | 'negative' | 'neutral';
-}) {
-  return (
-    <View style={styles.waterfallRow}>
-      <View
-        style={[
-          styles.waterfallBar,
-          tone === 'positive' ? styles.barPositive : null,
-          tone === 'negative' ? styles.barNegative : null,
-          tone === 'neutral' ? styles.barNeutral : null,
-          { width: `${Math.max(16, Math.min(Math.abs(amountMinor) / 400, 100))}%` },
-        ]}
-      />
-      <View style={styles.waterfallCopy}>
-        <Text style={styles.rowTitle}>{label}</Text>
-        <Text
-          style={[
-            styles.rowAmount,
-            tone === 'positive' ? styles.positiveText : null,
-            tone === 'negative' ? styles.negativeText : null,
-          ]}
-        >
-          {formatCop(amountMinor)}
-        </Text>
-      </View>
-    </View>
-  );
-}
 
 function RankingRow({
   description,
+  icon,
   label,
   meta,
   onPress,
@@ -160,6 +129,7 @@ function RankingRow({
   valueLabel,
 }: {
   readonly description?: string | null;
+  readonly icon?: keyof typeof Ionicons.glyphMap;
   readonly label: string;
   readonly meta: string;
   readonly onPress: () => void;
@@ -168,6 +138,11 @@ function RankingRow({
 }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.rankingRow, pressed ? styles.pressed : null]}>
+      {icon ? (
+        <View style={styles.rankingIcon}>
+          <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
+        </View>
+      ) : null}
       <View style={styles.rankingCopy}>
         <Text style={styles.rowTitle}>{label}</Text>
         {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
@@ -232,6 +207,12 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
   const [selectedCategory, setSelectedCategory] = useState<BalanceAnalyticsCategoryRowDto | null>(
     null,
   );
+
+  useEffect(() => {
+    if (analytics?.defaultPeriod) {
+      setPeriod(analytics.defaultPeriod);
+    }
+  }, [analytics?.defaultPeriod]);
 
   if (snapshotQuery.isLoading || !analytics) {
     return (
@@ -302,18 +283,17 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
     <ScreenShell
       headerVariant="plain"
       refresh={refresh}
-      subtitle="Comparaciones, personas, categorias y cierres desde una sola capa de lectura."
       title="Analitica"
     >
-      <SectionBlock subtitle="Filtros globales que recalculan todas las vistas." title="Vista">
-        <SegmentedControl options={PERIOD_OPTIONS} onChange={setPeriod} value={period} />
-        <SegmentedControl options={LENS_OPTIONS} onChange={setLens} value={lens} />
-        <SegmentedControl options={SEGMENT_OPTIONS} onChange={setSegment} value={segment} />
+      <SectionBlock title="Vista">
+        <SegmentedControl label="Periodo" options={PERIOD_OPTIONS} onChange={setPeriod} value={period} />
+        <SegmentedControl label="Filtro" options={LENS_OPTIONS} onChange={setLens} value={lens} />
+        <SegmentedControl label="Segmento" options={SEGMENT_OPTIONS} onChange={setSegment} value={segment} />
       </SectionBlock>
 
       {segment === 'summary' ? (
         <>
-          <SectionBlock subtitle={currentPeriod.labels.current} title="Resumen del periodo">
+          <SectionBlock title="Resumen del periodo">
             <SurfaceCard padding="lg" variant="elevated">
               <Text style={styles.heroEyebrow}>{currentPeriod.labels.current}</Text>
               <Text style={styles.heroAmount}>{formatCop(lensSummary.finalMinor)}</Text>
@@ -327,33 +307,22 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
             </SurfaceCard>
           </SectionBlock>
 
-          <SectionBlock
-            subtitle="Lectura por pasos del saldo inicial al balance final."
-            title="Waterfall"
-          >
-            <SurfaceCard padding="md">
-              {currentPeriod.waterfall.map((step) => (
-                <WaterfallRow
-                  amountMinor={step.netMinor}
-                  key={step.key}
-                  label={step.label}
-                  tone={amountTone(step.netMinor)}
-                />
-              ))}
-            </SurfaceCard>
-          </SectionBlock>
 
-          <SectionBlock subtitle="Una lectura corta para explicar el periodo." title="Insight">
+
+          <SectionBlock title="Insight">
             <SurfaceCard padding="md" variant="muted">
               <Text style={styles.insightText}>{currentPeriod.insight}</Text>
             </SurfaceCard>
           </SectionBlock>
 
-          <SectionBlock subtitle="Atajos a las dimensiones principales." title="Teasers">
+          <SectionBlock title="Teasers">
             <View style={styles.quickTeasers}>
               {sortedPeople[0] ? (
                 <SurfaceCard padding="md" style={styles.teaserCard}>
-                  <Text style={styles.teaserTitle}>Persona con mayor impacto</Text>
+                  <View style={styles.teaserHeader}>
+                    <Ionicons color={theme.colors.textMuted} name="person" size={16} />
+                    <Text style={styles.teaserTitle}>Persona con mayor impacto</Text>
+                  </View>
                   <Text style={styles.rowTitle}>{sortedPeople[0].label}</Text>
                   <Text style={styles.rowMeta}>
                     {sortedPeople[0].movementCount} movimiento
@@ -364,7 +333,10 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
               ) : null}
               {sortedCategories[0] ? (
                 <SurfaceCard padding="md" style={styles.teaserCard}>
-                  <Text style={styles.teaserTitle}>Categoria con mayor impacto</Text>
+                  <View style={styles.teaserHeader}>
+                    <Ionicons color={theme.colors.textMuted} name="pricetag" size={16} />
+                    <Text style={styles.teaserTitle}>Categoria con mayor impacto</Text>
+                  </View>
                   <Text style={styles.rowTitle}>{sortedCategories[0].label}</Text>
                   <Text style={styles.rowMeta}>
                     {sortedCategories[0].movementCount} movimiento
@@ -379,10 +351,11 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
       ) : null}
 
       {segment === 'people' ? (
-        <SectionBlock
-          subtitle="Solo personas visibles para ti, ordenadas por impacto absoluto."
-          title="Por persona"
-        >
+        <>
+          <SectionBlock title="Waterfall por persona">
+            <HappyWaterfallChart groups={currentPeriod.waterfallByPerson} />
+          </SectionBlock>
+          <SectionBlock title="Por persona">
           <SurfaceCard padding="md">
             {sortedPeople.length === 0 ? (
               <Text style={styles.supportText}>Todavia no hay actividad visible en este periodo.</Text>
@@ -394,6 +367,7 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
                       ? row.topCategories.map((category) => transactionCategoryLabel(category)).join(', ')
                       : 'Sin categorias dominantes'
                   }
+                  icon="person"
                   key={row.key}
                   label={row.label}
                   meta={`${row.movementCount} movimiento${row.movementCount === 1 ? '' : 's'} · saldo actual ${formatCop(row.netMinor)}`}
@@ -405,13 +379,15 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
             )}
           </SurfaceCard>
         </SectionBlock>
+        </>
       ) : null}
 
       {segment === 'categories' ? (
-        <SectionBlock
-          subtitle="Impacto por categoria sin exponer relaciones no visibles."
-          title="Por categoria"
-        >
+        <>
+          <SectionBlock title="Waterfall por categoria">
+            <HappyWaterfallChart groups={currentPeriod.waterfallByCategory} />
+          </SectionBlock>
+          <SectionBlock title="Por categoria">
           <SurfaceCard padding="md">
             {sortedCategories.length === 0 ? (
               <Text style={styles.supportText}>Todavia no hay categorias con impacto en este periodo.</Text>
@@ -423,6 +399,7 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
                       ? row.personLabels.join(', ')
                       : 'Sin personas visibles en este periodo'
                   }
+                  icon="pricetag"
                   key={row.key}
                   label={row.label}
                   meta={`${row.movementCount} movimiento${row.movementCount === 1 ? '' : 's'} · ${comparisonCopy(
@@ -439,40 +416,24 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
             )}
           </SurfaceCard>
         </SectionBlock>
+        </>
       ) : null}
 
       {segment === 'settlements' ? (
         <>
           {settlementPreview ? (
-            <SectionBlock subtitle="Entrada contextual a la propuesta activa." title="Happy Circle activo">
-              <PendingSnippetCard
-                amountLabel={formatCop(settlementPreview.totalAmountMinor)}
-                amountTone="neutral"
-                detail={settlementPreview.subtitle}
-                eyebrow="Happy Circle"
-                helperText={`${settlementPreview.participantCount} participante${settlementPreview.participantCount === 1 ? '' : 's'} · ${settlementPreview.savedMovementsCount} movimiento${settlementPreview.savedMovementsCount === 1 ? '' : 's'} ahorrado${settlementPreview.savedMovementsCount === 1 ? '' : 's'}`}
-                meta={settlementPreview.participantLabels.join(', ')}
-                statusLabel={settlementPreview.status === 'approved' ? 'Listo' : 'Pendiente'}
-                statusTone={settlementPreview.status === 'approved' ? 'cycle' : 'warning'}
-                title={settlementPreview.title}
-                tone="cycle"
-                variant="elevated"
-              >
-                <PrimaryAction
-                  href={`/settlements/${settlementPreview.proposalId}` as Href}
-                  label="Abrir Happy Circle"
-                />
-              </PendingSnippetCard>
+            <SectionBlock title="Happy Circle activo">
+              <HappyCircleCard proposal={settlementPreview} variant="compact" />
             </SectionBlock>
           ) : null}
 
-          <SectionBlock
-            subtitle="Historico de resolucion sin mezclarlo con la composicion del balance."
-            title="Metricas de cierres"
-          >
+          <SectionBlock title="Metricas de cierres">
             <View style={styles.quickTeasers}>
               <SurfaceCard padding="md" style={styles.teaserCard}>
-                <Text style={styles.teaserTitle}>Monto resuelto</Text>
+                <View style={styles.teaserHeader}>
+                  <Ionicons color={theme.colors.textMuted} name="checkmark-done" size={16} />
+                  <Text style={styles.teaserTitle}>Monto resuelto</Text>
+                </View>
                 <Text style={styles.rowAmount}>{formatCop(currentPeriod.settlements.resolvedMinor)}</Text>
                 <Text style={styles.rowMeta}>
                   {comparisonCopy(
@@ -482,7 +443,10 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
                 </Text>
               </SurfaceCard>
               <SurfaceCard padding="md" style={styles.teaserCard}>
-                <Text style={styles.teaserTitle}>Movimientos ahorrados</Text>
+                <View style={styles.teaserHeader}>
+                  <Ionicons color={theme.colors.textMuted} name="flash" size={16} />
+                  <Text style={styles.teaserTitle}>Movimientos ahorrados</Text>
+                </View>
                 <Text style={styles.rowAmount}>{currentPeriod.settlements.savedMovementsCount}</Text>
                 <Text style={styles.rowMeta}>
                   {currentPeriod.settlements.movementCount} movimiento
@@ -491,7 +455,10 @@ export function BalanceAnalyticsScreen({ initialSegment }: BalanceAnalyticsScree
                 </Text>
               </SurfaceCard>
               <SurfaceCard padding="md" style={styles.teaserCard}>
-                <Text style={styles.teaserTitle}>Circulos participados</Text>
+                <View style={styles.teaserHeader}>
+                  <Ionicons color={theme.colors.textMuted} name="people" size={16} />
+                  <Text style={styles.teaserTitle}>Circulos participados</Text>
+                </View>
                 <Text style={styles.rowAmount}>{currentPeriod.settlements.participatedCount}</Text>
                 <Text style={styles.rowMeta}>
                   {currentPeriod.settlements.activeCount} activo
@@ -676,6 +643,11 @@ const styles = StyleSheet.create({
   teaserCard: {
     gap: theme.spacing.xs,
   },
+  teaserHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
   teaserTitle: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
@@ -686,11 +658,18 @@ const styles = StyleSheet.create({
   rankingRow: {
     alignItems: 'center',
     borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  rankingIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.large,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
   rankingCopy: {
     flex: 1,

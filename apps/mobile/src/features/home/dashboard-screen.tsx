@@ -10,6 +10,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
+import { HappyCircleCard } from '@/components/happy-circle-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
@@ -1055,25 +1056,9 @@ export function DashboardScreen() {
       />
 
       {activeSettlementProposal ? (
-        <PendingSnippetCard
-          amountLabel={formatCop(activeSettlementProposal.totalAmountMinor)}
-          amountTone="neutral"
-          detail={activeSettlementProposal.subtitle}
-          eyebrow="Happy Circle"
-          helperText={`${activeSettlementProposal.savedMovementsCount} movimiento${activeSettlementProposal.savedMovementsCount === 1 ? '' : 's'} ahorrado${activeSettlementProposal.savedMovementsCount === 1 ? '' : 's'}`}
-          meta={activeSettlementProposal.participantLabels.join(', ')}
-          statusLabel={activeSettlementProposal.status === 'approved' ? 'Listo' : 'Pendiente'}
-          statusTone={activeSettlementProposal.status === 'approved' ? 'cycle' : 'warning'}
-          title={activeSettlementProposal.title}
-          tone="cycle"
-          variant="elevated"
-        >
-          <PrimaryAction
-            href={`/settlements/${activeSettlementProposal.proposalId}` as Href}
-            label="Ver Happy Circle"
-            variant="secondary"
-          />
-        </PendingSnippetCard>
+        <View style={styles.dashboardSettlementContainer}>
+          <HappyCircleCard proposal={activeSettlementProposal} variant="compact" />
+        </View>
       ) : null}
 
       {nativeSetupMessage ? <MessageBanner message={nativeSetupMessage} tone="neutral" /> : null}
@@ -1268,6 +1253,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     maxWidth: 68,
     textAlign: 'center',
+  },
+  dashboardSettlementContainer: {
+    paddingHorizontal: theme.spacing.lg,
   },
   transactionList: {
     gap: theme.spacing.sm,

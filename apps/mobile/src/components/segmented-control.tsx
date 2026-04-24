@@ -8,18 +8,22 @@ export interface SegmentedOption<T extends string> {
 }
 
 export interface SegmentedControlProps<T extends string> {
+  readonly label?: string;
   readonly options: readonly SegmentedOption<T>[];
   readonly value: T;
   readonly onChange: (value: T) => void;
 }
 
 export function SegmentedControl<T extends string>({
+  label,
   options,
   value,
   onChange,
 }: SegmentedControlProps<T>) {
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
+      {label ? <Text style={styles.controlLabel}>{label}</Text> : null}
+      <View style={styles.container}>
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -32,11 +36,21 @@ export function SegmentedControl<T extends string>({
           </Pressable>
         );
       })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    gap: 6,
+  },
+  controlLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
   container: {
     backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.border,

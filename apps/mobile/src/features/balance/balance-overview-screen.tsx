@@ -1,7 +1,9 @@
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
+import { HappyCircleCard } from '@/components/happy-circle-card';
 import { MoneyHero } from '@/components/money-hero';
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
@@ -46,20 +48,27 @@ function directionTone(amountMinor: number): 'positive' | 'negative' | 'neutral'
   return 'neutral';
 }
 
-function QuickLinkCard({
+function AnalyticsTeaserCard({
   description,
   href,
+  icon,
   label,
 }: {
   readonly description: string;
   readonly href: Href;
+  readonly icon: keyof typeof Ionicons.glyphMap;
   readonly label: string;
 }) {
   return (
     <Link href={href} asChild>
-      <Pressable style={({ pressed }) => [styles.quickLinkCard, pressed ? styles.pressed : null]}>
-        <Text style={styles.quickLinkLabel}>{label}</Text>
-        <Text style={styles.quickLinkDescription}>{description}</Text>
+      <Pressable style={({ pressed }) => [styles.analyticsTeaserCard, pressed ? styles.pressed : null]}>
+        <View style={styles.teaserIconBox}>
+          <Ionicons color={theme.colors.primary} name={icon} size={22} />
+        </View>
+        <View>
+          <Text style={styles.analyticsTeaserLabel}>{label}</Text>
+          <Text style={styles.analyticsTeaserDescription}>{description}</Text>
+        </View>
       </Pressable>
     </Link>
   );
@@ -198,68 +207,41 @@ export function BalanceOverviewScreen() {
           subtitle="Happy Circle vive como capa de resolucion y aparece cuando hay una propuesta activa."
           title="Happy Circle"
         >
-          <PendingSnippetCard
-            amountLabel={formatCop(activeProposal.totalAmountMinor)}
-            amountTone="neutral"
-            detail={activeProposal.subtitle}
-            eyebrow="Resolucion"
-            helperText={`${activeProposal.participantCount} participante${activeProposal.participantCount === 1 ? '' : 's'} · ${activeProposal.movementCount} movimiento${activeProposal.movementCount === 1 ? '' : 's'}`}
-            meta={
-              activeProposal.status === 'approved'
-                ? `Ahorra ${activeProposal.savedMovementsCount} movimiento${activeProposal.savedMovementsCount === 1 ? '' : 's'}`
-                : `Faltan ${activeProposal.approvalsPending} aprobacion${activeProposal.approvalsPending === 1 ? '' : 'es'}`
-            }
-            statusLabel={activeProposal.status === 'approved' ? 'Listo' : 'Pendiente'}
-            statusTone={activeProposal.status === 'approved' ? 'cycle' : 'warning'}
-            title={activeProposal.title}
-            tone="cycle"
-            variant="elevated"
-          >
-            <View style={styles.metricPillRow}>
-              <MetricPill
-                label="Movimientos ahorrados"
-                tone="positive"
-                value={`${activeProposal.savedMovementsCount}`}
-              />
-              <MetricPill
-                label="Circulos en los que vas"
-                value={`${overview.resolution.participatedCount}`}
-              />
-            </View>
-            <PrimaryAction
-              href={`/settlements/${activeProposal.proposalId}` as Href}
-              label="Ver Happy Circle"
-            />
-          </PendingSnippetCard>
+          <HappyCircleCard proposal={activeProposal} />
         </SectionBlock>
       ) : null}
 
-      <SectionBlock
-        subtitle="Atajos a la capa analitica para entender el balance sin salir del flujo operativo."
-        title="Explora tu balance"
-      >
-        <View style={styles.quickGrid}>
-          <QuickLinkCard
+      <SectionBlock title="Explora tu balance">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.analyticsRail}
+        >
+          <AnalyticsTeaserCard
             description="Resumen, comparacion y waterfall del periodo."
             href={'/balance/analytics?segment=summary' as Href}
+            icon="stats-chart"
             label="Resumen"
           />
-          <QuickLinkCard
+          <AnalyticsTeaserCard
             description="Impacto neto y movimientos por persona visible."
             href={'/balance/analytics?segment=people' as Href}
+            icon="people"
             label="Personas"
           />
-          <QuickLinkCard
+          <AnalyticsTeaserCard
             description="Categorias, variacion y personas involucradas."
             href={'/balance/analytics?segment=categories' as Href}
+            icon="pricetags"
             label="Categorias"
           />
-          <QuickLinkCard
+          <AnalyticsTeaserCard
             description="Happy Circle activo, ahorro de movimientos e historial."
             href={'/balance/analytics?segment=settlements' as Href}
+            icon="sync-circle"
             label="Cierres"
           />
-        </View>
+        </ScrollView>
       </SectionBlock>
     </ScreenShell>
   );
@@ -277,24 +259,34 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
-  quickGrid: {
-    gap: theme.spacing.sm,
+  analyticsRail: {
+    gap: theme.spacing.md,
+    paddingRight: theme.spacing.xl,
   },
-  quickLinkCard: {
+  analyticsTeaserCard: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.large,
     borderWidth: 1,
-    gap: 6,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    padding: theme.spacing.md,
+    width: 220,
   },
-  quickLinkLabel: {
+  teaserIconBox: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceSoft,
+    borderRadius: theme.radius.medium,
+    height: 44,
+    justifyContent: 'center',
+    marginBottom: theme.spacing.md,
+    width: 44,
+  },
+  analyticsTeaserLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
+    marginBottom: 4,
   },
-  quickLinkDescription: {
+  analyticsTeaserDescription: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,

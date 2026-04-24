@@ -9,6 +9,12 @@ export interface HomeSummaryDto {
 export type BalanceAnalyticsPeriod = 'week' | 'month' | 'year' | 'all';
 export type BalanceAnalyticsLens = 'balance' | 'i_owe' | 'owed_to_me';
 
+export interface SettlementParticipantDecisionDto {
+  readonly userId: string;
+  readonly label: string;
+  readonly decision: 'approved' | 'pending' | 'rejected';
+}
+
 export interface ActiveSettlementPreviewDto {
   readonly proposalId: string;
   readonly status: 'pending_approvals' | 'approved';
@@ -21,6 +27,7 @@ export interface ActiveSettlementPreviewDto {
   readonly participantCount: number;
   readonly participantUserIds: readonly string[];
   readonly participantLabels: readonly string[];
+  readonly participantDecisions: readonly SettlementParticipantDecisionDto[];
 }
 
 export interface BalanceProjectionDto {
@@ -58,13 +65,16 @@ export interface BalanceLensSummaryDto {
   readonly movementCount: number;
 }
 
-export interface BalanceWaterfallStepDto {
+export interface BalanceWaterfallGroupDto {
   readonly key: string;
   readonly label: string;
-  readonly category: TransactionCategory | 'starting_balance' | 'ending_balance';
+  readonly category?: TransactionCategory | 'starting_balance' | 'ending_balance';
+  readonly personId?: string;
   readonly iOweMinor: number;
   readonly owedToMeMinor: number;
+  readonly resolvedMinor: number;
   readonly netMinor: number;
+  readonly cumulativeBalanceMinor: number;
 }
 
 export interface BalanceAnalyticsPersonRowDto {
@@ -102,7 +112,8 @@ export interface BalanceAnalyticsPeriodDto {
     readonly previous: string | null;
   };
   readonly summaries: Readonly<Record<BalanceAnalyticsLens, BalanceLensSummaryDto>>;
-  readonly waterfall: readonly BalanceWaterfallStepDto[];
+  readonly waterfallByCategory: readonly BalanceWaterfallGroupDto[];
+  readonly waterfallByPerson: readonly BalanceWaterfallGroupDto[];
   readonly people: readonly BalanceAnalyticsPersonRowDto[];
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
   readonly settlements: BalanceSettlementMetricsDto;
