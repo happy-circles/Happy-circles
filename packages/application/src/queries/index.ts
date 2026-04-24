@@ -6,6 +6,114 @@ export interface HomeSummaryDto {
   readonly totalOwedToMeMinor: number;
 }
 
+export type BalanceAnalyticsPeriod = 'week' | 'month' | 'year' | 'all';
+export type BalanceAnalyticsLens = 'balance' | 'i_owe' | 'owed_to_me';
+
+export interface ActiveSettlementPreviewDto {
+  readonly proposalId: string;
+  readonly status: 'pending_approvals' | 'approved';
+  readonly title: string;
+  readonly subtitle: string;
+  readonly totalAmountMinor: number;
+  readonly approvalsPending: number;
+  readonly movementCount: number;
+  readonly savedMovementsCount: number;
+  readonly participantCount: number;
+  readonly participantUserIds: readonly string[];
+  readonly participantLabels: readonly string[];
+}
+
+export interface BalanceProjectionDto {
+  readonly pendingCount: number;
+  readonly pendingAmountMinor: number;
+  readonly impactMinor: number;
+  readonly projectedNetBalanceMinor: number;
+}
+
+export interface BalanceSettlementMetricsDto {
+  readonly activeCount: number;
+  readonly activeProposal: ActiveSettlementPreviewDto | null;
+  readonly resolvedMinor: number;
+  readonly movementCount: number;
+  readonly savedMovementsCount: number;
+  readonly participatedCount: number;
+  readonly previousResolvedMinor: number;
+  readonly changeRatio: number | null;
+}
+
+export interface BalanceOverviewDto {
+  readonly updatedAt: string;
+  readonly updatedAtLabel: string;
+  readonly summary: HomeSummaryDto;
+  readonly projection: BalanceProjectionDto;
+  readonly resolution: BalanceSettlementMetricsDto;
+}
+
+export interface BalanceLensSummaryDto {
+  readonly initialMinor: number;
+  readonly finalMinor: number;
+  readonly deltaMinor: number;
+  readonly previousDeltaMinor: number;
+  readonly changeRatio: number | null;
+  readonly movementCount: number;
+}
+
+export interface BalanceWaterfallStepDto {
+  readonly key: string;
+  readonly label: string;
+  readonly category: TransactionCategory | 'starting_balance' | 'ending_balance';
+  readonly iOweMinor: number;
+  readonly owedToMeMinor: number;
+  readonly netMinor: number;
+}
+
+export interface BalanceAnalyticsPersonRowDto {
+  readonly key: string;
+  readonly userId: string;
+  readonly label: string;
+  readonly netMinor: number;
+  readonly iOweMinor: number;
+  readonly owedToMeMinor: number;
+  readonly movementCount: number;
+  readonly periodNetMinor: number;
+  readonly periodIOweMinor: number;
+  readonly periodOwedToMeMinor: number;
+  readonly previousPeriodNetMinor: number;
+  readonly topCategories: readonly TransactionCategory[];
+}
+
+export interface BalanceAnalyticsCategoryRowDto {
+  readonly key: string;
+  readonly category: TransactionCategory;
+  readonly label: string;
+  readonly netMinor: number;
+  readonly iOweMinor: number;
+  readonly owedToMeMinor: number;
+  readonly movementCount: number;
+  readonly previousNetMinor: number;
+  readonly personLabels: readonly string[];
+  readonly userIds: readonly string[];
+}
+
+export interface BalanceAnalyticsPeriodDto {
+  readonly period: BalanceAnalyticsPeriod;
+  readonly labels: {
+    readonly current: string;
+    readonly previous: string | null;
+  };
+  readonly summaries: Readonly<Record<BalanceAnalyticsLens, BalanceLensSummaryDto>>;
+  readonly waterfall: readonly BalanceWaterfallStepDto[];
+  readonly people: readonly BalanceAnalyticsPersonRowDto[];
+  readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
+  readonly settlements: BalanceSettlementMetricsDto;
+  readonly insight: string;
+}
+
+export interface BalanceAnalyticsDto {
+  readonly defaultPeriod: BalanceAnalyticsPeriod;
+  readonly periods: Readonly<Record<BalanceAnalyticsPeriod, BalanceAnalyticsPeriodDto>>;
+}
+
 export interface PersonCardDto {
   readonly userId: string;
   readonly displayName: string;

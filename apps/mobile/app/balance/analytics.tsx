@@ -1,17 +1,17 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { SettlementDetailScreen } from '@/features/settlements/settlement-detail-screen';
+import { BalanceAnalyticsScreen } from '@/features/balance/balance-analytics-screen';
 import { theme } from '@/lib/theme';
 
-export default function SettlementDetailRoute() {
-  const params = useLocalSearchParams<{ id?: string }>();
-  const proposalId = typeof params.id === 'string' ? params.id : '';
+export default function BalanceAnalyticsRoute() {
+  const params = useLocalSearchParams<{ segment?: string }>();
+  const initialSegment = typeof params.segment === 'string' ? params.segment : null;
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Happy Circle',
+          title: 'Analitica',
           headerBackTitle: '',
           headerShadowVisible: false,
           headerStyle: { backgroundColor: theme.colors.background },
@@ -19,7 +19,7 @@ export default function SettlementDetailRoute() {
           headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
         }}
       />
-      <SettlementDetailScreen proposalId={proposalId} />
+      <BalanceAnalyticsScreen initialSegment={initialSegment} />
     </>
   );
 }

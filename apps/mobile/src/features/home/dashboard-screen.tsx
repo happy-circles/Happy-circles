@@ -9,12 +9,15 @@ import { BalanceSummaryCard } from '@/components/balance-summary-card';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
+import { PendingSnippetCard } from '@/components/pending-snippet-card';
+import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { formatCop } from '@/lib/data';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import {
   type AccountInviteListItem,
@@ -807,6 +810,8 @@ export function DashboardScreen() {
   const historySection = snapshotQuery.data?.activitySections.find(
     (section) => section.key === 'history',
   );
+  const activeSettlementProposal =
+    snapshotQuery.data?.balanceOverview.resolution.activeProposal ?? null;
   const pendingTransactionItems = (pendingSection?.items ?? [])
     .filter(isPendingTransactionItem)
     .slice(0, 2);
@@ -1043,11 +1048,33 @@ export function DashboardScreen() {
       titleAlign="center"
     >
       <BalanceSummaryCard
-        detailsHref="/transactions"
+        detailsHref={'/balance' as Href}
         netBalanceMinor={dashboard.summary.netBalanceMinor}
         totalIOweMinor={dashboard.summary.totalIOweMinor}
         totalOwedToMeMinor={dashboard.summary.totalOwedToMeMinor}
       />
+
+      {activeSettlementProposal ? (
+        <PendingSnippetCard
+          amountLabel={formatCop(activeSettlementProposal.totalAmountMinor)}
+          amountTone="neutral"
+          detail={activeSettlementProposal.subtitle}
+          eyebrow="Happy Circle"
+          helperText={`${activeSettlementProposal.savedMovementsCount} movimiento${activeSettlementProposal.savedMovementsCount === 1 ? '' : 's'} ahorrado${activeSettlementProposal.savedMovementsCount === 1 ? '' : 's'}`}
+          meta={activeSettlementProposal.participantLabels.join(', ')}
+          statusLabel={activeSettlementProposal.status === 'approved' ? 'Listo' : 'Pendiente'}
+          statusTone={activeSettlementProposal.status === 'approved' ? 'cycle' : 'warning'}
+          title={activeSettlementProposal.title}
+          tone="cycle"
+          variant="elevated"
+        >
+          <PrimaryAction
+            href={`/settlements/${activeSettlementProposal.proposalId}` as Href}
+            label="Ver Happy Circle"
+            variant="secondary"
+          />
+        </PendingSnippetCard>
+      ) : null}
 
       {nativeSetupMessage ? <MessageBanner message={nativeSetupMessage} tone="neutral" /> : null}
 

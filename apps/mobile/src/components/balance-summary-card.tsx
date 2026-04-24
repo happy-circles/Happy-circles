@@ -82,7 +82,7 @@ export function BalanceSummaryCard({
   const detailContent = (
     <Pressable style={({ pressed }) => [styles.detailsLink, pressed ? styles.pressed : null]}>
       <View style={styles.detailsContent}>
-        <Text style={styles.detailsText}>Ver como se compone</Text>
+        <Text style={styles.detailsText}>Ver balance</Text>
         <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={15} />
       </View>
     </Pressable>

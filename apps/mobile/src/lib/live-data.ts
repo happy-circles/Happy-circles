@@ -1,8 +1,19 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import type {
+  ActiveSettlementPreviewDto,
   ActivityItemDto,
   ActivitySectionDto,
+  BalanceAnalyticsCategoryRowDto,
+  BalanceAnalyticsDto,
+  BalanceAnalyticsLens,
+  BalanceAnalyticsPeriod,
+  BalanceAnalyticsPeriodDto,
+  BalanceAnalyticsPersonRowDto,
+  BalanceLensSummaryDto,
+  BalanceOverviewDto,
+  BalanceSettlementMetricsDto,
+  BalanceWaterfallStepDto,
   DashboardDto,
   PendingActionDto,
   PersonCardDto,
@@ -39,7 +50,12 @@ import { buildActivityHistoryItems, compareHistoryItems } from './history-cases'
 import { createIdempotencyKey } from './idempotency';
 import { queryClient } from './query-client';
 import { supabase } from './supabase';
-import { DEFAULT_TRANSACTION_CATEGORY, normalizeTransactionCategory } from './transaction-categories';
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  USER_TRANSACTION_CATEGORIES,
+  normalizeTransactionCategory,
+  transactionCategoryLabel,
+} from './transaction-categories';
 
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
 type FriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
@@ -361,6 +377,8 @@ interface ActionableItem {
 
 export interface AppSnapshot {
   readonly dashboard: DashboardDto;
+  readonly balanceOverview: BalanceOverviewDto;
+  readonly balanceAnalytics: BalanceAnalyticsDto;
   readonly people: readonly PersonCardDto[];
   readonly peopleById: Readonly<Record<string, PersonDetailDto>>;
   readonly currentUserProfile: {
@@ -494,6 +512,52 @@ function deriveDirection(
 
 function sortByNewest<T extends { readonly createdAt: string }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function actionablePriority(item: {
+  readonly kind: PendingActionDto['kind'];
+  readonly status: string;
+}): number {
+  if (item.kind === 'settlement_proposal' && item.status === 'approved') {
+    return 0;
+  }
+
+  if (item.kind === 'settlement_proposal') {
+    return 1;
+  }
+
+  if (item.kind === 'financial_request') {
+    return 2;
+  }
+
+  if (item.kind === 'friendship_invite') {
+    return 3;
+  }
+
+  return 4;
+}
+
+function sortActionableItems<
+  T extends {
+    readonly kind: PendingActionDto['kind'];
+    readonly status: string;
+    readonly createdAt: string;
+    readonly title: string;
+  },
+>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) => {
+    const priorityDiff = actionablePriority(left) - actionablePriority(right);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    const timeDiff = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+
+    return left.title.localeCompare(right.title, 'es-CO');
+  });
 }
 
 function sortHistoryItems<
@@ -1062,6 +1126,7 @@ function buildPendingSettlementItems(
   participantsByProposalId: Map<string, SettlementParticipantRow[]>,
   names: Map<string, string>,
   currentUserId: string,
+  visibleCounterpartyUserIds: ReadonlySet<string>,
   inboxItems: readonly InboxItemRow[],
 ): ActionableItem[] {
   const proposalById = new Map(proposals.map((proposal) => [proposal.id, proposal]));
@@ -1083,14 +1148,13 @@ function buildPendingSettlementItems(
     }
 
     const participants = participantsByProposalId.get(proposal.id) ?? [];
-    const participantNames = participants.map(
-      (participant) => names.get(participant.participant_user_id) ?? 'Persona',
-    );
-    const others = participantNames.filter((name) => name !== 'Tu');
-    const titleBase =
-      others.length > 0
-        ? `Ajusta saldos con ${others.join(', ')}`
-        : 'Ajusta saldos en tu circulo';
+    const participantLabels = buildSettlementParticipantLabels({
+      participantUserIds: participants.map((participant) => participant.participant_user_id),
+      currentUserId,
+      visibleCounterpartyUserIds,
+      names,
+    });
+    const titleBase = `Ajusta saldos con ${summarizeSettlementParticipants(participantLabels)}`;
 
     pendingProposalIds.add(proposal.id);
     items.push({
@@ -1101,6 +1165,7 @@ function buildPendingSettlementItems(
       status: 'pending_approvals',
       ctaLabel: 'Revisar',
       href: `/settlements/${proposal.id}`,
+      amountMinor: settlementProposalTotalAmount(proposal),
       category: 'cycle',
       participantUserIds: participants.map((participant) => participant.participant_user_id),
       createdAt: proposal.created_at,
@@ -1116,14 +1181,13 @@ function buildPendingSettlementItems(
     const actorParticipant = participants.find(
       (participant) => participant.participant_user_id === currentUserId,
     );
-    const participantNames = participants.map(
-      (participant) => names.get(participant.participant_user_id) ?? 'Persona',
-    );
-    const others = participantNames.filter((name) => name !== 'Tu');
-    const titleBase =
-      others.length > 0
-        ? `Ajusta saldos con ${others.join(', ')}`
-        : 'Ajusta saldos en tu circulo';
+    const participantLabels = buildSettlementParticipantLabels({
+      participantUserIds: participants.map((participant) => participant.participant_user_id),
+      currentUserId,
+      visibleCounterpartyUserIds,
+      names,
+    });
+    const titleBase = `Ajusta saldos con ${summarizeSettlementParticipants(participantLabels)}`;
 
     if (proposal.status === 'pending_approvals' && actorParticipant?.decision === 'approved') {
       const approvalsPending = participants.filter(
@@ -1138,6 +1202,7 @@ function buildPendingSettlementItems(
         status: 'waiting_other_side',
         ctaLabel: 'Revisar',
         href: `/settlements/${proposal.id}`,
+        amountMinor: settlementProposalTotalAmount(proposal),
         category: 'cycle',
         participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
@@ -1153,6 +1218,7 @@ function buildPendingSettlementItems(
         status: 'approved',
         ctaLabel: 'Completar',
         href: `/settlements/${proposal.id}`,
+        amountMinor: settlementProposalTotalAmount(proposal),
         category: 'cycle',
         participantUserIds: participants.map((participant) => participant.participant_user_id),
         createdAt: proposal.created_at,
@@ -1168,6 +1234,84 @@ function settlementProposalTotalAmount(proposal: SettlementProposalRow): number 
     (total, movement) => total + movement.amount_minor,
     0,
   );
+}
+
+function settlementSavedMovementsCount(
+  participantCount: number,
+  movementCount: number,
+): number {
+  return Math.max(participantCount - movementCount, 0);
+}
+
+function settlementParticipantLabel(input: {
+  readonly participantUserId: string;
+  readonly currentUserId: string;
+  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
+  readonly names: Map<string, string>;
+}): string | null {
+  if (input.participantUserId === input.currentUserId) {
+    return 'Tu';
+  }
+
+  if (input.visibleCounterpartyUserIds.has(input.participantUserId)) {
+    return input.names.get(input.participantUserId) ?? 'Persona';
+  }
+
+  return null;
+}
+
+function buildSettlementParticipantLabels(input: {
+  readonly participantUserIds: readonly string[];
+  readonly currentUserId: string;
+  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
+  readonly names: Map<string, string>;
+}): readonly string[] {
+  const labels: string[] = [];
+  let hiddenCount = 0;
+
+  for (const participantUserId of input.participantUserIds) {
+    const label = settlementParticipantLabel({
+      participantUserId,
+      currentUserId: input.currentUserId,
+      visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+      names: input.names,
+    });
+
+    if (label) {
+      if (!labels.includes(label)) {
+        labels.push(label);
+      }
+      continue;
+    }
+
+    hiddenCount += 1;
+  }
+
+  if (hiddenCount === 1) {
+    labels.push('Otra persona');
+  } else if (hiddenCount > 1) {
+    labels.push(`${hiddenCount} personas mas`);
+  }
+
+  return labels;
+}
+
+function summarizeSettlementParticipants(labels: readonly string[]): string {
+  const others = labels.filter((label) => label !== 'Tu');
+
+  if (others.length === 0) {
+    return 'tu circulo';
+  }
+
+  if (others.length === 1) {
+    return others[0] ?? 'tu circulo';
+  }
+
+  if (others.length === 2) {
+    return `${others[0]} y ${others[1]}`;
+  }
+
+  return `${others[0]} y ${others.length - 1} mas`;
 }
 
 function buildSettlementProposalHistoryTimelineItems(input: {
@@ -2020,19 +2164,51 @@ function buildSettlementDetail(
   proposal: SettlementProposalRow,
   participants: readonly SettlementParticipantRow[],
   names: Map<string, string>,
+  currentUserId: string,
+  visibleCounterpartyUserIds: ReadonlySet<string>,
 ): SettlementDetailDto {
   const movements = parseSettlementMovements(proposal.movements_json).map((movement) => {
-    const debtor = names.get(movement.debtor_user_id) ?? 'Deudor';
-    const creditor = names.get(movement.creditor_user_id) ?? 'Acreedor';
+    const debtor =
+      settlementParticipantLabel({
+        participantUserId: movement.debtor_user_id,
+        currentUserId,
+        visibleCounterpartyUserIds,
+        names,
+      }) ?? 'Otra persona';
+    const creditor =
+      settlementParticipantLabel({
+        participantUserId: movement.creditor_user_id,
+        currentUserId,
+        visibleCounterpartyUserIds,
+        names,
+      }) ?? 'Otra persona';
     return `${debtor} paga a ${creditor}: ${formatCop(movement.amount_minor)}`;
   });
   const impactLines = parseSettlementMovements(proposal.movements_json).map((movement) => {
-    const debtor = names.get(movement.debtor_user_id) ?? 'Deudor';
-    const creditor = names.get(movement.creditor_user_id) ?? 'Acreedor';
+    const debtor =
+      settlementParticipantLabel({
+        participantUserId: movement.debtor_user_id,
+        currentUserId,
+        visibleCounterpartyUserIds,
+        names,
+      }) ?? 'Otra persona';
+    const creditor =
+      settlementParticipantLabel({
+        participantUserId: movement.creditor_user_id,
+        currentUserId,
+        visibleCounterpartyUserIds,
+        names,
+      }) ?? 'Otra persona';
     return `Ajusta el saldo entre ${debtor} y ${creditor} por ${formatCop(movement.amount_minor)}`;
   });
   const participantStatuses = participants.map((participant) => {
-    const name = names.get(participant.participant_user_id) ?? 'Persona';
+    const name =
+      settlementParticipantLabel({
+        participantUserId: participant.participant_user_id,
+        currentUserId,
+        visibleCounterpartyUserIds,
+        names,
+      }) ?? 'Otra persona';
     return `${name}: ${participant.decision}`;
   });
 
@@ -2064,7 +2240,13 @@ function buildSettlementDetail(
     status: proposal.status,
     snapshotHash: proposal.graph_snapshot_hash,
     participants: participants.map(
-      (participant) => names.get(participant.participant_user_id) ?? 'Persona',
+      (participant) =>
+        settlementParticipantLabel({
+          participantUserId: participant.participant_user_id,
+          currentUserId,
+          visibleCounterpartyUserIds,
+          names,
+        }) ?? 'Otra persona',
     ),
     participantStatuses,
     movements,
@@ -2079,6 +2261,776 @@ function buildAuditItems(events: readonly AuditEventRow[]): AuditListItem[] {
     title: event.event_name.replaceAll('_', ' '),
     subtitle: `${event.entity_type} | ${formatRelativeLabel(event.created_at)}`,
   }));
+}
+
+interface AnalyticsEvent {
+  readonly id: string;
+  readonly happenedAt: string;
+  readonly timeMs: number;
+  readonly category: TransactionCategory;
+  readonly counterpartyUserId: string;
+  readonly counterpartyLabel: string;
+  readonly iOweMinor: number;
+  readonly owedToMeMinor: number;
+  readonly netMinor: number;
+}
+
+interface CurrentPersonBalanceSnapshot {
+  readonly userId: string;
+  readonly label: string;
+  readonly netMinor: number;
+  readonly iOweMinor: number;
+  readonly owedToMeMinor: number;
+}
+
+interface AnalyticsRange {
+  readonly currentStartMs: number | null;
+  readonly currentEndMs: number | null;
+  readonly previousStartMs: number | null;
+  readonly previousEndMs: number | null;
+  readonly currentLabel: string;
+  readonly previousLabel: string | null;
+}
+
+function dateMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function startOfDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
+}
+
+function endOfDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59, 59, 999);
+}
+
+function startOfWeek(value: Date): Date {
+  const day = value.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  return startOfDay(new Date(value.getFullYear(), value.getMonth(), value.getDate() + offset));
+}
+
+function startOfMonth(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function startOfYear(value: Date): Date {
+  return new Date(value.getFullYear(), 0, 1, 0, 0, 0, 0);
+}
+
+function previousRangeFromBounds(start: Date, end: Date): Pick<
+  AnalyticsRange,
+  'previousStartMs' | 'previousEndMs'
+> {
+  const lengthMs = end.getTime() - start.getTime() + 1;
+  return {
+    previousStartMs: start.getTime() - lengthMs,
+    previousEndMs: start.getTime() - 1,
+  };
+}
+
+function periodRange(period: BalanceAnalyticsPeriod, now = new Date()): AnalyticsRange {
+  if (period === 'week') {
+    const start = startOfWeek(now);
+    const end = endOfDay(now);
+    return {
+      currentStartMs: start.getTime(),
+      currentEndMs: end.getTime(),
+      currentLabel: 'Esta semana',
+      previousLabel: 'Semana anterior',
+      ...previousRangeFromBounds(start, end),
+    };
+  }
+
+  if (period === 'month') {
+    const start = startOfMonth(now);
+    const end = endOfDay(now);
+    return {
+      currentStartMs: start.getTime(),
+      currentEndMs: end.getTime(),
+      currentLabel: new Intl.DateTimeFormat('es-CO', {
+        month: 'long',
+        year: 'numeric',
+      }).format(now),
+      previousLabel: 'Mes anterior',
+      ...previousRangeFromBounds(start, end),
+    };
+  }
+
+  if (period === 'year') {
+    const start = startOfYear(now);
+    const end = endOfDay(now);
+    return {
+      currentStartMs: start.getTime(),
+      currentEndMs: end.getTime(),
+      currentLabel: `${now.getFullYear()}`,
+      previousLabel: `${now.getFullYear() - 1}`,
+      ...previousRangeFromBounds(start, end),
+    };
+  }
+
+  return {
+    currentStartMs: null,
+    currentEndMs: null,
+    previousStartMs: null,
+    previousEndMs: null,
+    currentLabel: 'Todo el tiempo',
+    previousLabel: null,
+  };
+}
+
+function isWithinRange(
+  timeMs: number,
+  startMs: number | null,
+  endMs: number | null,
+): boolean {
+  if (startMs !== null && timeMs < startMs) {
+    return false;
+  }
+
+  if (endMs !== null && timeMs > endMs) {
+    return false;
+  }
+
+  return true;
+}
+
+function computeChangeRatio(current: number, previous: number): number | null {
+  if (previous === 0) {
+    return current === 0 ? 0 : null;
+  }
+
+  return (current - previous) / Math.abs(previous);
+}
+
+function formatPeriodComparison(
+  changeRatio: number | null,
+  previousLabel: string | null,
+): string {
+  if (changeRatio === null || !previousLabel) {
+    return 'No hay comparacion disponible todavia.';
+  }
+
+  if (changeRatio === 0) {
+    return `Sin cambio frente a ${previousLabel.toLocaleLowerCase('es-CO')}.`;
+  }
+
+  const percentage = `${Math.round(Math.abs(changeRatio) * 100)}%`;
+  return changeRatio > 0
+    ? `Subio ${percentage} frente a ${previousLabel.toLocaleLowerCase('es-CO')}.`
+    : `Bajo ${percentage} frente a ${previousLabel.toLocaleLowerCase('es-CO')}.`;
+}
+
+function buildAnalyticsEvents(input: {
+  readonly history: readonly RelationshipHistoryRow[];
+  readonly currentUserId: string;
+  readonly counterpartyByRelationshipId: ReadonlyMap<
+    string,
+    {
+      readonly userId: string;
+      readonly displayName: string;
+    }
+  >;
+}): AnalyticsEvent[] {
+  return input.history.flatMap((row): AnalyticsEvent[] => {
+    if (row.item_kind !== 'ledger_transaction' || row.subtype === 'cycle_settlement') {
+      return [];
+    }
+
+    const counterparty = input.counterpartyByRelationshipId.get(row.relationship_id);
+    const timeMs = dateMs(row.happened_at);
+    if (!counterparty || timeMs === null) {
+      return [];
+    }
+
+    const iOweMinor = row.debtor_user_id === input.currentUserId ? row.amount_minor : 0;
+    const owedToMeMinor = row.creditor_user_id === input.currentUserId ? row.amount_minor : 0;
+
+    return [
+      {
+        id: row.item_id,
+        happenedAt: row.happened_at,
+        timeMs,
+        category: normalizeTransactionCategory(row.category),
+        counterpartyUserId: counterparty.userId,
+        counterpartyLabel: counterparty.displayName,
+        iOweMinor,
+        owedToMeMinor,
+        netMinor: owedToMeMinor - iOweMinor,
+      },
+    ];
+  });
+}
+
+function buildCurrentPersonBalances(
+  people: readonly PersonCardDto[],
+): readonly CurrentPersonBalanceSnapshot[] {
+  return people.map((person) => ({
+    userId: person.userId,
+    label: person.displayName,
+    netMinor:
+      person.direction === 'owes_me'
+        ? person.netAmountMinor
+        : person.direction === 'i_owe'
+          ? -person.netAmountMinor
+          : 0,
+    iOweMinor: person.direction === 'i_owe' ? person.netAmountMinor : 0,
+    owedToMeMinor: person.direction === 'owes_me' ? person.netAmountMinor : 0,
+  }));
+}
+
+function topCategoriesForEvents(events: readonly AnalyticsEvent[]): readonly TransactionCategory[] {
+  const totals = new Map<
+    TransactionCategory,
+    {
+      readonly category: TransactionCategory;
+      netMinor: number;
+      movementCount: number;
+    }
+  >();
+
+  for (const event of events) {
+    const current = totals.get(event.category);
+    if (current) {
+      current.netMinor += event.netMinor;
+      current.movementCount += 1;
+      continue;
+    }
+
+    totals.set(event.category, {
+      category: event.category,
+      netMinor: event.netMinor,
+      movementCount: 1,
+    });
+  }
+
+  return Array.from(totals.values())
+    .sort((left, right) => {
+      const amountDiff = Math.abs(right.netMinor) - Math.abs(left.netMinor);
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+
+      return right.movementCount - left.movementCount;
+    })
+    .slice(0, 3)
+    .map((entry) => entry.category);
+}
+
+function buildPeopleAnalyticsRows(input: {
+  readonly currentBalances: readonly CurrentPersonBalanceSnapshot[];
+  readonly currentEvents: readonly AnalyticsEvent[];
+  readonly previousEvents: readonly AnalyticsEvent[];
+}): readonly BalanceAnalyticsPersonRowDto[] {
+  const currentByUserId = groupBy(input.currentEvents, (event) => event.counterpartyUserId);
+  const previousByUserId = groupBy(input.previousEvents, (event) => event.counterpartyUserId);
+
+  return input.currentBalances
+    .map((person): BalanceAnalyticsPersonRowDto => {
+      const currentEvents = currentByUserId.get(person.userId) ?? [];
+      const previousEvents = previousByUserId.get(person.userId) ?? [];
+      const periodIOweMinor = currentEvents.reduce((total, event) => total + event.iOweMinor, 0);
+      const periodOwedToMeMinor = currentEvents.reduce(
+        (total, event) => total + event.owedToMeMinor,
+        0,
+      );
+      const previousPeriodNetMinor = previousEvents.reduce(
+        (total, event) => total + event.netMinor,
+        0,
+      );
+
+      return {
+        key: person.userId,
+        userId: person.userId,
+        label: person.label,
+        netMinor: person.netMinor,
+        iOweMinor: person.iOweMinor,
+        owedToMeMinor: person.owedToMeMinor,
+        movementCount: currentEvents.length,
+        periodNetMinor: periodOwedToMeMinor - periodIOweMinor,
+        periodIOweMinor,
+        periodOwedToMeMinor,
+        previousPeriodNetMinor,
+        topCategories: topCategoriesForEvents(currentEvents),
+      };
+    })
+    .filter(
+      (row) =>
+        row.netMinor !== 0 ||
+        row.periodNetMinor !== 0 ||
+        row.periodIOweMinor !== 0 ||
+        row.periodOwedToMeMinor !== 0 ||
+        row.movementCount > 0,
+    )
+    .sort((left, right) => {
+      const amountDiff = Math.abs(right.periodNetMinor) - Math.abs(left.periodNetMinor);
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+
+      if (right.movementCount !== left.movementCount) {
+        return right.movementCount - left.movementCount;
+      }
+
+      return left.label.localeCompare(right.label, 'es-CO');
+    });
+}
+
+function buildCategoryAnalyticsRows(input: {
+  readonly currentEvents: readonly AnalyticsEvent[];
+  readonly previousEvents: readonly AnalyticsEvent[];
+}): readonly BalanceAnalyticsCategoryRowDto[] {
+  const categories = [...USER_TRANSACTION_CATEGORIES, 'cycle'] as const;
+
+  return categories
+    .map((category): BalanceAnalyticsCategoryRowDto | null => {
+      const currentEvents = input.currentEvents.filter((event) => event.category === category);
+      const previousEvents = input.previousEvents.filter((event) => event.category === category);
+      if (currentEvents.length === 0 && previousEvents.length === 0) {
+        return null;
+      }
+
+      const iOweMinor = currentEvents.reduce((total, event) => total + event.iOweMinor, 0);
+      const owedToMeMinor = currentEvents.reduce((total, event) => total + event.owedToMeMinor, 0);
+      const previousNetMinor = previousEvents.reduce((total, event) => total + event.netMinor, 0);
+      const personLabels = Array.from(
+        new Set(currentEvents.map((event) => event.counterpartyLabel)),
+      ).slice(0, 4);
+      const userIds = Array.from(new Set(currentEvents.map((event) => event.counterpartyUserId)));
+
+      return {
+        key: category,
+        category,
+        label: transactionCategoryLabel(category),
+        netMinor: owedToMeMinor - iOweMinor,
+        iOweMinor,
+        owedToMeMinor,
+        movementCount: currentEvents.length,
+        previousNetMinor,
+        personLabels,
+        userIds,
+      };
+    })
+    .filter((row): row is BalanceAnalyticsCategoryRowDto => Boolean(row))
+    .sort((left, right) => {
+      const amountDiff = Math.abs(right.netMinor) - Math.abs(left.netMinor);
+      if (amountDiff !== 0) {
+        return amountDiff;
+      }
+
+      if (right.movementCount !== left.movementCount) {
+        return right.movementCount - left.movementCount;
+      }
+
+      return left.label.localeCompare(right.label, 'es-CO');
+    });
+}
+
+function buildWaterfall(input: {
+  readonly period: BalanceAnalyticsPeriod;
+  readonly currentSummary: DashboardDto['summary'];
+  readonly currentEvents: readonly AnalyticsEvent[];
+}): readonly BalanceWaterfallStepDto[] {
+  const grouped = new Map<
+    TransactionCategory,
+    {
+      readonly category: TransactionCategory;
+      iOweMinor: number;
+      owedToMeMinor: number;
+      netMinor: number;
+    }
+  >();
+
+  for (const event of input.currentEvents) {
+    const current = grouped.get(event.category);
+    if (current) {
+      current.iOweMinor += event.iOweMinor;
+      current.owedToMeMinor += event.owedToMeMinor;
+      current.netMinor += event.netMinor;
+      continue;
+    }
+
+    grouped.set(event.category, {
+      category: event.category,
+      iOweMinor: event.iOweMinor,
+      owedToMeMinor: event.owedToMeMinor,
+      netMinor: event.netMinor,
+    });
+  }
+
+  const periodNetMinor = input.currentEvents.reduce((total, event) => total + event.netMinor, 0);
+  const startingBalanceMinor = input.currentSummary.netBalanceMinor - periodNetMinor;
+  const categorySteps = Array.from(grouped.values())
+    .sort((left, right) => Math.abs(right.netMinor) - Math.abs(left.netMinor))
+    .map(
+      (entry): BalanceWaterfallStepDto => ({
+        key: entry.category,
+        label: transactionCategoryLabel(entry.category),
+        category: entry.category,
+        iOweMinor: entry.iOweMinor,
+        owedToMeMinor: entry.owedToMeMinor,
+        netMinor: entry.netMinor,
+      }),
+    );
+
+  return [
+    {
+      key: 'starting_balance',
+      label: input.period === 'all' ? 'Saldo base' : 'Saldo inicial',
+      category: 'starting_balance',
+      iOweMinor: 0,
+      owedToMeMinor: 0,
+      netMinor: startingBalanceMinor,
+    },
+    ...categorySteps,
+    {
+      key: 'ending_balance',
+      label: 'Balance final',
+      category: 'ending_balance',
+      iOweMinor: 0,
+      owedToMeMinor: 0,
+      netMinor: input.currentSummary.netBalanceMinor,
+    },
+  ];
+}
+
+function buildLensSummary(input: {
+  readonly lens: BalanceAnalyticsLens;
+  readonly currentSummary: DashboardDto['summary'];
+  readonly currentEvents: readonly AnalyticsEvent[];
+  readonly previousEvents: readonly AnalyticsEvent[];
+}): BalanceLensSummaryDto {
+  const periodIOweMinor = input.currentEvents.reduce((total, event) => total + event.iOweMinor, 0);
+  const periodOwedToMeMinor = input.currentEvents.reduce(
+    (total, event) => total + event.owedToMeMinor,
+    0,
+  );
+  const previousIOweMinor = input.previousEvents.reduce(
+    (total, event) => total + event.iOweMinor,
+    0,
+  );
+  const previousOwedToMeMinor = input.previousEvents.reduce(
+    (total, event) => total + event.owedToMeMinor,
+    0,
+  );
+  const finalMinor =
+    input.lens === 'balance'
+      ? input.currentSummary.netBalanceMinor
+      : input.lens === 'i_owe'
+        ? input.currentSummary.totalIOweMinor
+        : input.currentSummary.totalOwedToMeMinor;
+  const deltaMinor =
+    input.lens === 'balance'
+      ? periodOwedToMeMinor - periodIOweMinor
+      : input.lens === 'i_owe'
+        ? periodIOweMinor
+        : periodOwedToMeMinor;
+  const previousDeltaMinor =
+    input.lens === 'balance'
+      ? previousOwedToMeMinor - previousIOweMinor
+      : input.lens === 'i_owe'
+        ? previousIOweMinor
+        : previousOwedToMeMinor;
+
+  return {
+    initialMinor: finalMinor - deltaMinor,
+    finalMinor,
+    deltaMinor,
+    previousDeltaMinor,
+    changeRatio: computeChangeRatio(deltaMinor, previousDeltaMinor),
+    movementCount: input.currentEvents.length,
+  };
+}
+
+function buildActiveSettlementPreview(input: {
+  readonly proposals: readonly SettlementProposalRow[];
+  readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
+  readonly currentUserId: string;
+  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
+  readonly names: Map<string, string>;
+}): ActiveSettlementPreviewDto | null {
+  const activeProposals = input.proposals
+    .filter((proposal) => proposal.status === 'pending_approvals' || proposal.status === 'approved')
+    .filter((proposal) =>
+      (input.participantsByProposalId.get(proposal.id) ?? []).some(
+        (participant) => participant.participant_user_id === input.currentUserId,
+      ),
+    )
+    .sort((left, right) => {
+      const leftPriority = left.status === 'approved' ? 0 : 1;
+      const rightPriority = right.status === 'approved' ? 0 : 1;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      return Date.parse(right.updated_at) - Date.parse(left.updated_at);
+    });
+
+  const proposal = activeProposals[0];
+  if (!proposal) {
+    return null;
+  }
+
+  const participants = input.participantsByProposalId.get(proposal.id) ?? [];
+  const participantUserIds = participants.map((participant) => participant.participant_user_id);
+  const participantLabels = buildSettlementParticipantLabels({
+    participantUserIds,
+    currentUserId: input.currentUserId,
+    visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+    names: input.names,
+  });
+  const approvalsPending = participants.filter(
+    (participant) => participant.decision === 'pending',
+  ).length;
+  const movementCount = parseSettlementMovements(proposal.movements_json).length;
+
+  return {
+    proposalId: proposal.id,
+    status:
+      proposal.status === 'approved'
+        ? 'approved'
+        : 'pending_approvals',
+    title: proposal.status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
+    subtitle:
+      proposal.status === 'approved'
+        ? `Con ${summarizeSettlementParticipants(participantLabels)} ya puedes completarlo.`
+        : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`,
+    totalAmountMinor: settlementProposalTotalAmount(proposal),
+    approvalsPending,
+    movementCount,
+    savedMovementsCount: settlementSavedMovementsCount(participants.length, movementCount),
+    participantCount: participants.length,
+    participantUserIds,
+    participantLabels,
+  };
+}
+
+function buildSettlementMetrics(input: {
+  readonly proposals: readonly SettlementProposalRow[];
+  readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
+  readonly currentUserId: string;
+  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
+  readonly names: Map<string, string>;
+  readonly activeProposal: ActiveSettlementPreviewDto | null;
+  readonly range: AnalyticsRange;
+}): BalanceSettlementMetricsDto {
+  const participatedProposals = input.proposals.filter((proposal) =>
+    (input.participantsByProposalId.get(proposal.id) ?? []).some(
+      (participant) => participant.participant_user_id === input.currentUserId,
+    ),
+  );
+  const relevantTimestamp = (proposal: SettlementProposalRow) =>
+    dateMs(proposal.executed_at ?? proposal.updated_at ?? proposal.created_at);
+  const currentExecuted = participatedProposals.filter((proposal) => {
+    if (proposal.status !== 'executed') {
+      return false;
+    }
+    const timeMs = relevantTimestamp(proposal);
+    return timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs);
+  });
+  const previousExecuted = participatedProposals.filter((proposal) => {
+    if (proposal.status !== 'executed') {
+      return false;
+    }
+    const timeMs = relevantTimestamp(proposal);
+    return (
+      timeMs !== null &&
+      isWithinRange(timeMs, input.range.previousStartMs, input.range.previousEndMs)
+    );
+  });
+  const currentRelevant = participatedProposals.filter((proposal) => {
+    const timeMs = relevantTimestamp(proposal);
+    return timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs);
+  });
+  const sumProposalTotal = (proposal: SettlementProposalRow) => settlementProposalTotalAmount(proposal);
+  const sumMovementCount = (proposal: SettlementProposalRow) =>
+    parseSettlementMovements(proposal.movements_json).length;
+
+  const resolvedMinor = currentExecuted.reduce((total, proposal) => total + sumProposalTotal(proposal), 0);
+  const previousResolvedMinor = previousExecuted.reduce(
+    (total, proposal) => total + sumProposalTotal(proposal),
+    0,
+  );
+  const movementCount = currentExecuted.reduce(
+    (total, proposal) => total + sumMovementCount(proposal),
+    0,
+  );
+  const savedMovementsCount = currentExecuted.reduce((total, proposal) => {
+    const participants = input.participantsByProposalId.get(proposal.id) ?? [];
+    return total + settlementSavedMovementsCount(participants.length, sumMovementCount(proposal));
+  }, 0);
+
+  return {
+    activeCount: participatedProposals.filter(
+      (proposal) => proposal.status === 'pending_approvals' || proposal.status === 'approved',
+    ).length,
+    activeProposal: input.activeProposal,
+    resolvedMinor,
+    movementCount,
+    savedMovementsCount,
+    participatedCount: currentRelevant.length,
+    previousResolvedMinor,
+    changeRatio: computeChangeRatio(resolvedMinor, previousResolvedMinor),
+  };
+}
+
+function buildBalanceProjection(input: {
+  readonly financialRequests: readonly FinancialRequestRow[];
+  readonly currentUserId: string;
+  readonly currentSummary: DashboardDto['summary'];
+}): BalanceOverviewDto['projection'] {
+  const pendingRequests = input.financialRequests.filter((request) => request.status === 'pending');
+  const impactMinor = pendingRequests.reduce((total, request) => {
+    if (request.creditor_user_id === input.currentUserId) {
+      return total + request.amount_minor;
+    }
+
+    if (request.debtor_user_id === input.currentUserId) {
+      return total - request.amount_minor;
+    }
+
+    return total;
+  }, 0);
+  const pendingAmountMinor = pendingRequests.reduce((total, request) => total + request.amount_minor, 0);
+
+  return {
+    pendingCount: pendingRequests.length,
+    pendingAmountMinor,
+    impactMinor,
+    projectedNetBalanceMinor: input.currentSummary.netBalanceMinor + impactMinor,
+  };
+}
+
+function buildAnalyticsInsight(input: {
+  readonly lensSummary: BalanceLensSummaryDto;
+  readonly topPerson: BalanceAnalyticsPersonRowDto | null;
+  readonly topCategory: BalanceAnalyticsCategoryRowDto | null;
+  readonly previousLabel: string | null;
+}): string {
+  const comparison = formatPeriodComparison(input.lensSummary.changeRatio, input.previousLabel);
+  const detail =
+    input.topCategory && input.topPerson
+      ? `${input.topCategory.label} y ${input.topPerson.label} explican la mayor parte del cambio.`
+      : input.topCategory
+        ? `${input.topCategory.label} explica la mayor parte del cambio.`
+        : input.topPerson
+          ? `${input.topPerson.label} concentra el mayor impacto del periodo.`
+          : 'Todavia no hay suficiente actividad para explicar cambios.';
+
+  return `${detail} ${comparison}`;
+}
+
+function buildBalanceAnalytics(input: {
+  readonly currentSummary: DashboardDto['summary'];
+  readonly people: readonly PersonCardDto[];
+  readonly history: readonly RelationshipHistoryRow[];
+  readonly counterpartyByRelationshipId: ReadonlyMap<
+    string,
+    {
+      readonly userId: string;
+      readonly displayName: string;
+    }
+  >;
+  readonly proposals: readonly SettlementProposalRow[];
+  readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
+  readonly currentUserId: string;
+  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
+  readonly names: Map<string, string>;
+  readonly activeProposal: ActiveSettlementPreviewDto | null;
+}): BalanceAnalyticsDto {
+  const events = buildAnalyticsEvents({
+    history: input.history,
+    currentUserId: input.currentUserId,
+    counterpartyByRelationshipId: input.counterpartyByRelationshipId,
+  });
+  const currentBalances = buildCurrentPersonBalances(input.people);
+  const periods: BalanceAnalyticsPeriod[] = ['week', 'month', 'year', 'all'];
+
+  return {
+    defaultPeriod: 'month',
+    periods: Object.fromEntries(
+      periods.map((period): [BalanceAnalyticsPeriod, BalanceAnalyticsPeriodDto] => {
+        const range = periodRange(period);
+        const currentEvents = events.filter((event) =>
+          isWithinRange(event.timeMs, range.currentStartMs, range.currentEndMs),
+        );
+        const previousEvents = range.previousLabel
+          ? events.filter((event) =>
+              isWithinRange(event.timeMs, range.previousStartMs, range.previousEndMs),
+            )
+          : [];
+        const summaries: Record<BalanceAnalyticsLens, BalanceLensSummaryDto> = {
+          balance: buildLensSummary({
+            lens: 'balance',
+            currentSummary: input.currentSummary,
+            currentEvents,
+            previousEvents,
+          }),
+          i_owe: buildLensSummary({
+            lens: 'i_owe',
+            currentSummary: input.currentSummary,
+            currentEvents,
+            previousEvents,
+          }),
+          owed_to_me: buildLensSummary({
+            lens: 'owed_to_me',
+            currentSummary: input.currentSummary,
+            currentEvents,
+            previousEvents,
+          }),
+        };
+        const people = buildPeopleAnalyticsRows({
+          currentBalances,
+          currentEvents,
+          previousEvents,
+        });
+        const categories = buildCategoryAnalyticsRows({
+          currentEvents,
+          previousEvents,
+        });
+        const settlements = buildSettlementMetrics({
+          proposals: input.proposals,
+          participantsByProposalId: input.participantsByProposalId,
+          currentUserId: input.currentUserId,
+          visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+          names: input.names,
+          activeProposal: input.activeProposal,
+          range,
+        });
+
+        return [
+          period,
+          {
+            period,
+            labels: {
+              current: range.currentLabel,
+              previous: range.previousLabel,
+            },
+            summaries,
+            waterfall: buildWaterfall({
+              period,
+              currentSummary: input.currentSummary,
+              currentEvents,
+            }),
+            people,
+            categories,
+            settlements,
+            insight: buildAnalyticsInsight({
+              lensSummary: summaries.balance,
+              topPerson: people[0] ?? null,
+              topCategory: categories[0] ?? null,
+              previousLabel: range.previousLabel,
+            }),
+          },
+        ];
+      }),
+    ) as Readonly<Record<BalanceAnalyticsPeriod, BalanceAnalyticsPeriodDto>>,
+  };
 }
 
 function buildLiveSnapshot(input: {
@@ -2122,6 +3074,7 @@ function buildLiveSnapshot(input: {
   const visibleRelationshipIds = new Set(
     input.relationships.map((relationship) => relationship.id),
   );
+  const visibleCounterpartyUserIds = new Set(relationshipsByCounterpartyId.keys());
   const history = input.history.filter((row) =>
     isHistoryRowVisibleToCurrentUser(row, input.currentUserId, visibleRelationshipIds),
   );
@@ -2152,6 +3105,7 @@ function buildLiveSnapshot(input: {
     settlementParticipantsByProposalId,
     nameByUserId,
     input.currentUserId,
+    visibleCounterpartyUserIds,
     input.inboxItems,
   );
 
@@ -2319,7 +3273,7 @@ function buildLiveSnapshot(input: {
       };
     });
 
-  const pendingItems = sortByNewest([
+  const pendingItems = sortActionableItems([
     ...pendingRequests,
     ...pendingSettlements,
     ...friendshipState.pendingItems,
@@ -2366,9 +3320,49 @@ function buildLiveSnapshot(input: {
         proposal,
         settlementParticipantsByProposalId.get(proposal.id) ?? [],
         nameByUserId,
+        input.currentUserId,
+        visibleCounterpartyUserIds,
       ),
     ]),
   );
+  const activeProposal = buildActiveSettlementPreview({
+    proposals: input.settlementProposals,
+    participantsByProposalId: settlementParticipantsByProposalId,
+    currentUserId: input.currentUserId,
+    visibleCounterpartyUserIds,
+    names: nameByUserId,
+  });
+  const balanceOverview: BalanceOverviewDto = {
+    updatedAt: new Date().toISOString(),
+    updatedAtLabel: 'Actualizado hace unos segundos',
+    summary,
+    projection: buildBalanceProjection({
+      financialRequests: input.financialRequests,
+      currentUserId: input.currentUserId,
+      currentSummary: summary,
+    }),
+    resolution: buildSettlementMetrics({
+      proposals: input.settlementProposals,
+      participantsByProposalId: settlementParticipantsByProposalId,
+      currentUserId: input.currentUserId,
+      visibleCounterpartyUserIds,
+      names: nameByUserId,
+      activeProposal,
+      range: periodRange('all'),
+    }),
+  };
+  const balanceAnalytics = buildBalanceAnalytics({
+    currentSummary: summary,
+    people,
+    history,
+    counterpartyByRelationshipId,
+    proposals: input.settlementProposals,
+    participantsByProposalId: settlementParticipantsByProposalId,
+    currentUserId: input.currentUserId,
+    visibleCounterpartyUserIds,
+    names: nameByUserId,
+    activeProposal,
+  });
   const currentUserProfileRow = profileByUserId.get(input.currentUserId);
 
   return {
@@ -2386,10 +3380,12 @@ function buildLiveSnapshot(input: {
             href: pendingItems[0].href ?? '/activity',
             amountMinor: pendingItems[0].amountMinor,
             category: pendingItems[0].category,
-          }
+      }
         : null,
       activePeople: people,
     },
+    balanceOverview,
+    balanceAnalytics,
     people,
     peopleById,
     currentUserProfile: currentUserProfileRow

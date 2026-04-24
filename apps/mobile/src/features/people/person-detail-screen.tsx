@@ -223,6 +223,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
   const pendingItems = person?.pendingItems ?? [];
+  const activeSettlementProposal =
+    snapshotQuery.data?.balanceOverview.resolution.activeProposal ?? null;
+  const personActiveSettlement =
+    activeSettlementProposal?.participantUserIds.includes(userId) ? activeSettlementProposal : null;
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
   const orderedPendingItems = useMemo(() => {
     if (focusCandidates.size === 0) {
@@ -811,6 +815,29 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               style={styles.quickActionPill}
             />
           </View>
+
+          {personActiveSettlement ? (
+            <PendingSnippetCard
+              amountLabel={formatCop(personActiveSettlement.totalAmountMinor)}
+              amountTone="neutral"
+              detail={personActiveSettlement.subtitle}
+              eyebrow="Happy Circle"
+              helperText={`${personActiveSettlement.savedMovementsCount} movimiento${personActiveSettlement.savedMovementsCount === 1 ? '' : 's'} ahorrado${personActiveSettlement.savedMovementsCount === 1 ? '' : 's'}`}
+              meta={personActiveSettlement.participantLabels.join(', ')}
+              statusLabel={personActiveSettlement.status === 'approved' ? 'Listo' : 'Pendiente'}
+              statusTone={personActiveSettlement.status === 'approved' ? 'cycle' : 'warning'}
+              title={personActiveSettlement.title}
+              tone="cycle"
+              variant="elevated"
+            >
+              <PrimaryAction
+                compact
+                label="Ver Happy Circle"
+                onPress={() => router.push(`/settlements/${personActiveSettlement.proposalId}`)}
+                variant="secondary"
+              />
+            </PendingSnippetCard>
+          ) : null}
         </View>
 
         <View style={styles.panelArea}>
