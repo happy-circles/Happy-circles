@@ -86,6 +86,35 @@ interface SettlementMovement {
   readonly amount_minor: number;
 }
 
+export type SettlementDetailDecision = 'approved' | 'pending' | 'rejected';
+
+export interface SettlementDetailParticipantDto {
+  readonly userId: string;
+  readonly label: string;
+  readonly decision: SettlementDetailDecision;
+}
+
+export interface SettlementDetailMovementDto {
+  readonly id: string;
+  readonly debtorUserId: string;
+  readonly debtorLabel: string;
+  readonly creditorUserId: string;
+  readonly creditorLabel: string;
+  readonly amountMinor: number;
+}
+
+function normalizeSettlementDetailDecision(decision: string | null): SettlementDetailDecision {
+  if (decision === 'approved') {
+    return 'approved';
+  }
+
+  if (decision === 'rejected') {
+    return 'rejected';
+  }
+
+  return 'pending';
+}
+
 interface TimelineEventDraft {
   readonly id: string;
   readonly title: string;
@@ -110,7 +139,9 @@ export interface SettlementDetailDto {
   readonly status: string;
   readonly snapshotHash: string;
   readonly participants: readonly string[];
+  readonly participantDecisions: readonly SettlementDetailParticipantDto[];
   readonly participantStatuses: readonly string[];
+  readonly movementDetails: readonly SettlementDetailMovementDto[];
   readonly movements: readonly string[];
   readonly impactLines: readonly string[];
   readonly explainers: readonly string[];
@@ -2167,50 +2198,44 @@ function buildSettlementDetail(
   currentUserId: string,
   visibleCounterpartyUserIds: ReadonlySet<string>,
 ): SettlementDetailDto {
-  const movements = parseSettlementMovements(proposal.movements_json).map((movement) => {
-    const debtor =
-      settlementParticipantLabel({
-        participantUserId: movement.debtor_user_id,
-        currentUserId,
-        visibleCounterpartyUserIds,
-        names,
-      }) ?? 'Otra persona';
-    const creditor =
-      settlementParticipantLabel({
-        participantUserId: movement.creditor_user_id,
-        currentUserId,
-        visibleCounterpartyUserIds,
-        names,
-      }) ?? 'Otra persona';
-    return `${debtor} paga a ${creditor}: ${formatCop(movement.amount_minor)}`;
+  const participantLabel = (participantUserId: string) =>
+    settlementParticipantLabel({
+      participantUserId,
+      currentUserId,
+      visibleCounterpartyUserIds,
+      names,
+    }) ?? 'Otra persona';
+
+  const movementDetails = parseSettlementMovements(proposal.movements_json).map(
+    (movement, index) => {
+      const debtor = participantLabel(movement.debtor_user_id);
+      const creditor = participantLabel(movement.creditor_user_id);
+
+      return {
+        id: `${proposal.id}:movement:${index}`,
+        debtorUserId: movement.debtor_user_id,
+        debtorLabel: debtor,
+        creditorUserId: movement.creditor_user_id,
+        creditorLabel: creditor,
+        amountMinor: movement.amount_minor,
+      };
+    },
+  );
+  const movements = movementDetails.map(
+    (movement) =>
+      `${movement.debtorLabel} paga a ${movement.creditorLabel}: ${formatCop(movement.amountMinor)}`,
+  );
+  const impactLines = movementDetails.map((movement) => {
+    return `Ajusta el saldo entre ${movement.debtorLabel} y ${movement.creditorLabel} por ${formatCop(movement.amountMinor)}`;
   });
-  const impactLines = parseSettlementMovements(proposal.movements_json).map((movement) => {
-    const debtor =
-      settlementParticipantLabel({
-        participantUserId: movement.debtor_user_id,
-        currentUserId,
-        visibleCounterpartyUserIds,
-        names,
-      }) ?? 'Otra persona';
-    const creditor =
-      settlementParticipantLabel({
-        participantUserId: movement.creditor_user_id,
-        currentUserId,
-        visibleCounterpartyUserIds,
-        names,
-      }) ?? 'Otra persona';
-    return `Ajusta el saldo entre ${debtor} y ${creditor} por ${formatCop(movement.amount_minor)}`;
-  });
-  const participantStatuses = participants.map((participant) => {
-    const name =
-      settlementParticipantLabel({
-        participantUserId: participant.participant_user_id,
-        currentUserId,
-        visibleCounterpartyUserIds,
-        names,
-      }) ?? 'Otra persona';
-    return `${name}: ${participant.decision}`;
-  });
+  const participantDecisions = participants.map((participant) => ({
+    userId: participant.participant_user_id,
+    label: participantLabel(participant.participant_user_id),
+    decision: normalizeSettlementDetailDecision(participant.decision),
+  }));
+  const participantStatuses = participantDecisions.map(
+    (participant) => `${participant.label}: ${participant.decision}`,
+  );
 
   const approvalsPending = participants.filter(
     (participant) => participant.decision === 'pending',
@@ -2239,16 +2264,10 @@ function buildSettlementDetail(
     id: proposal.id,
     status: proposal.status,
     snapshotHash: proposal.graph_snapshot_hash,
-    participants: participants.map(
-      (participant) =>
-        settlementParticipantLabel({
-          participantUserId: participant.participant_user_id,
-          currentUserId,
-          visibleCounterpartyUserIds,
-          names,
-        }) ?? 'Otra persona',
-    ),
+    participants: participantDecisions.map((participant) => participant.label),
+    participantDecisions,
     participantStatuses,
+    movementDetails,
     movements,
     impactLines,
     explainers,
@@ -2781,7 +2800,7 @@ function buildWaterfalls(input: {
         return {
           key: g.key,
           label: g.label,
-          category: g.category as any,
+          category: g.category,
           personId: g.personId,
           iOweMinor: g.iOweMinor,
           owedToMeMinor: g.owedToMeMinor,
@@ -2934,11 +2953,7 @@ function buildActiveSettlementPreview(input: {
   const participantDecisions = participants.map((participant, index) => ({
     userId: participant.participant_user_id,
     label: participantLabels[index] ?? 'Persona',
-    decision: (participant.decision === 'approved'
-      ? 'approved'
-      : participant.decision === 'rejected'
-        ? 'rejected'
-        : 'pending') as 'approved' | 'pending' | 'rejected',
+    decision: normalizeSettlementDetailDecision(participant.decision),
   }));
 
   return {

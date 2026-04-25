@@ -20,7 +20,6 @@ import type {
 
 import { HappyCircleCard } from '@/components/happy-circle-card';
 import { HappyWaterfallChart } from '@/components/happy-waterfall-chart';
-import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';

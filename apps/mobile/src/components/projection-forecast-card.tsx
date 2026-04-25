@@ -1,11 +1,12 @@
 import { Fragment } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
+import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 
 function formatCompactCop(minor: number): string {
   const value = Math.abs(minor) / 100;
@@ -20,9 +21,18 @@ function formatCompactCop(minor: number): string {
   return formatCop(minor);
 }
 
+function formatSignedCompactCop(minor: number): string {
+  if (minor > 0) {
+    return `+${formatCompactCop(minor)}`;
+  }
+
+  return formatCompactCop(minor);
+}
+
 export interface ProjectionForecastCardProps {
   readonly currentBalanceMinor: number;
   readonly impactMinor: number;
+  readonly onSegmentPress?: (filter: ProjectionChartFilter) => void;
   readonly pendingCount: number;
   readonly pendingIncomingMinor: number;
   readonly pendingOutgoingMinor: number;
@@ -34,11 +44,13 @@ export interface ProjectionForecastCardProps {
 type BarDef = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  filter: ProjectionChartFilter;
   color: string;
   valTop: number;
   valBottom: number;
   isTotal: boolean;
   isForecast: boolean;
+  isPlaceholder?: boolean;
   borderColor?: string;
 };
 
@@ -48,10 +60,13 @@ const BAR_W = 28;
 const GAP = 32;
 const DIVIDER_GAP = 42;
 const FORECAST_START = 3; // index where forecast section begins
+const DASH_PATTERN = '4,4';
+const DASH_STROKE_WIDTH = 1.25;
 
 export function ProjectionForecastCard({
   currentBalanceMinor,
   impactMinor,
+  onSegmentPress,
   pendingCount,
   pendingIncomingMinor,
   pendingOutgoingMinor,
@@ -60,12 +75,15 @@ export function ProjectionForecastCard({
   totalOwedToMeMinor,
 }: ProjectionForecastCardProps) {
   const hasImpact = pendingCount > 0;
+  const impactTone = impactMinor > 0 ? 'positive' : impactMinor < 0 ? 'negative' : 'neutral';
+  const pendingLabel = `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}`;
 
   // ── Build bars ─────────────────────────────────────────────────
   const bars: BarDef[] = [
     {
       label: 'Te deben',
       icon: 'arrow-down-outline',
+      filter: 'owed_to_me',
       color: theme.colors.success,
       valTop: totalOwedToMeMinor,
       valBottom: 0,
@@ -75,6 +93,7 @@ export function ProjectionForecastCard({
     {
       label: 'Debes',
       icon: 'arrow-up-outline',
+      filter: 'i_owe',
       color: theme.colors.danger,
       valTop: totalOwedToMeMinor,
       valBottom: currentBalanceMinor,
@@ -84,6 +103,7 @@ export function ProjectionForecastCard({
     {
       label: 'Balance',
       icon: 'wallet-outline',
+      filter: 'current_balance',
       color: theme.colors.primary,
       valTop: Math.max(currentBalanceMinor, 0),
       valBottom: Math.min(currentBalanceMinor, 0),
@@ -92,39 +112,39 @@ export function ProjectionForecastCard({
     },
   ];
 
-  // Forecast step bars: split impact into Te deberán / Deberás based on pending breakdown
-  if (hasImpact) {
-    let currentForecastTop = currentBalanceMinor;
+  // Forecast slots stay fixed so the projection area keeps its shape even without pending items.
+  const incomingForecastStart = currentBalanceMinor;
+  const incomingForecastEnd = incomingForecastStart + pendingIncomingMinor;
+  bars.push({
+    label: 'Te deberán',
+    icon: 'arrow-down-outline',
+    filter: 'pending_incoming',
+    color: theme.colors.success,
+    valTop: incomingForecastEnd,
+    valBottom: incomingForecastStart,
+    isTotal: false,
+    isForecast: true,
+    isPlaceholder: pendingIncomingMinor <= 0,
+  });
 
-    if (pendingIncomingMinor > 0) {
-      bars.push({
-        label: 'Te deberán',
-        icon: 'arrow-down-outline',
-        color: theme.colors.success,
-        valTop: currentForecastTop + pendingIncomingMinor,
-        valBottom: currentForecastTop,
-        isTotal: false,
-        isForecast: true,
-      });
-      currentForecastTop += pendingIncomingMinor;
-    }
-
-    if (pendingOutgoingMinor > 0) {
-      bars.push({
-        label: 'Deberás',
-        icon: 'arrow-up-outline',
-        color: theme.colors.danger,
-        valTop: currentForecastTop,
-        valBottom: currentForecastTop - pendingOutgoingMinor,
-        isTotal: false,
-        isForecast: true,
-      });
-    }
-  }
+  const outgoingForecastStart = incomingForecastEnd;
+  const outgoingForecastEnd = outgoingForecastStart - pendingOutgoingMinor;
+  bars.push({
+    label: 'Deberás',
+    icon: 'arrow-up-outline',
+    filter: 'pending_outgoing',
+    color: theme.colors.danger,
+    valTop: outgoingForecastStart,
+    valBottom: outgoingForecastEnd,
+    isTotal: false,
+    isForecast: true,
+    isPlaceholder: pendingOutgoingMinor <= 0,
+  });
 
   bars.push({
     label: 'Proyectado',
     icon: 'flag-outline',
+    filter: 'projection',
     color: theme.colors.primary,
     valTop: Math.max(projectedBalanceMinor, 0),
     valBottom: Math.min(projectedBalanceMinor, 0),
@@ -183,8 +203,8 @@ export function ProjectionForecastCard({
   }
 
   // 4. Te deberán → Deberás (if both exist)
-  const idxTeDeberan = bars.findIndex(b => b.label === 'Te deberán');
-  const idxDeberas = bars.findIndex(b => b.label === 'Deberás');
+  const idxTeDeberan = bars.findIndex((b) => b.label === 'Te deberán');
+  const idxDeberas = bars.findIndex((b) => b.label === 'Deberás');
   if (idxTeDeberan !== -1 && idxDeberas !== -1) {
     connectors.push({
       x1: xPositions[idxTeDeberan] + BAR_W,
@@ -195,7 +215,7 @@ export function ProjectionForecastCard({
 
   // 5. Last Forecast → Proyectado
   const proyectadoIdx = bars.findIndex((b) => b.label === 'Proyectado');
-  if (hasImpact && proyectadoIdx > 3) {
+  if (proyectadoIdx > 3) {
     connectors.push({
       x1: xPositions[proyectadoIdx - 1] + BAR_W,
       x2: xPositions[proyectadoIdx],
@@ -209,186 +229,347 @@ export function ProjectionForecastCard({
   const dividerX = (balanceRightEdge + firstForecastLeft) / 2;
 
   return (
-    <SurfaceCard padding="lg" style={styles.card} variant="elevated">
-
-
-
-      {/* Chart content with forecast zone background */}
-      <View style={styles.chartContent}>
-        <View style={{ alignSelf: 'center', width: svgW, position: 'relative' }}>
-          {/* Forecast zone background matches projected outcome */}
-          <View
-            style={[
-              styles.forecastZone,
-              { 
-                backgroundColor: projectedBalanceMinor >= 0 ? `${theme.colors.success}10` : `${theme.colors.danger}10`,
-                left: dividerX,
-                width: svgW - dividerX + 16,
-              },
-            ]}
-          />
-
-          {/* Section labels */}
-          <View style={styles.sectionLabelsRow}>
-            <Text style={[styles.sectionLabel, { width: dividerX, textAlign: 'center' }]}>Hoy</Text>
-            <Text style={[styles.sectionLabel, styles.sectionLabelForecast, { width: svgW - dividerX, textAlign: 'center' }]}>Proyección</Text>
-          </View>
-
-          {/* SVG Chart */}
-          <View style={styles.chartWrapper}>
-            <Svg height={CHART_H} width={svgW}>
-            {/* Zero line */}
-            <Line
-              stroke={theme.colors.border}
-              strokeWidth={1}
-              x1={0}
-              x2={svgW}
-              y1={zeroY}
-              y2={zeroY}
-            />
-
-            {/* Connectors */}
-            {connectors.map((c, i) => (
-              <Line
-                key={`conn-${i}`}
-                stroke={theme.colors.muted}
-                strokeDasharray="3,3"
-                strokeWidth={1}
-                x1={c.x1}
-                x2={c.x2}
-                y1={c.y}
-                y2={c.y}
-              />
-            ))}
-
-            {/* Forecast divider */}
-            <Line
-              stroke={theme.colors.muted}
-              strokeDasharray="3,3"
-              strokeWidth={1}
-              x1={dividerX}
-              x2={dividerX}
-              y1={0}
-              y2={CHART_H}
-            />
-
-            {/* Bars */}
-            {bars.map((bar, i) => {
-              const x = xPositions[i];
-              const top = yPx(bar.valTop);
-              const bottom = yPx(bar.valBottom);
-              const h = Math.max(bottom - top, 3);
-              const fill = bar.isForecast ? `${bar.color}30` : bar.color;
-
-              return (
-                <Fragment key={bar.label}>
-                  <Rect
-                    fill={fill}
-                    height={h}
-                    rx={5}
-                    ry={5}
-                    width={BAR_W}
-                    x={x}
-                    y={top}
-                  />
-                  {bar.isForecast ? (
-                    <Rect
-                      fill="none"
-                      height={h}
-                      rx={5}
-                      ry={5}
-                      stroke={`${(bar.borderColor ?? bar.color)}88`}
-                      strokeDasharray="4,3"
-                      strokeWidth={1.5}
-                      width={BAR_W}
-                      x={x}
-                      y={top}
-                    />
-                  ) : null}
-                </Fragment>
-              );
-            })}
-          </Svg>
-
-          {/* Labels floating directly under each bar */}
-          {bars.map((bar, i) => {
-            let displayValue: number;
-            if (bar.label === 'Te deben') displayValue = totalOwedToMeMinor;
-            else if (bar.label === 'Debes') displayValue = totalIOweMinor;
-            else if (bar.label === 'Balance') displayValue = currentBalanceMinor;
-            else if (bar.label === 'Te deberán') displayValue = pendingIncomingMinor;
-            else if (bar.label === 'Deberás') displayValue = pendingOutgoingMinor;
-            else displayValue = projectedBalanceMinor;
-
-            return (
-              <View
-                key={bar.label}
-                style={[
-                  styles.labelCol,
-                  { 
-                    left: xPositions[i] + BAR_W / 2 - 32,
-                    top: yPx(bar.valBottom) + 14,
-                  },
-                ]}
+    <SurfaceCard padding="none" style={styles.card} variant="elevated">
+      <View style={styles.body}>
+        <View style={styles.summaryRow}>
+          <View style={styles.projectedStack}>
+            <Text style={styles.summaryLabel}>Proyección</Text>
+            <View style={styles.projectedMetaRow}>
+              <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+                numberOfLines={1}
+                style={styles.projectedValue}
               >
-                <Ionicons
-                  color={bar.isForecast ? `${bar.color}99` : bar.color}
-                  name={bar.icon}
-                  size={12}
-                />
-                <Text numberOfLines={1} style={styles.labelText}>
-                  {bar.label}
-                </Text>
-                <Text
-                  numberOfLines={1}
+                {formatCompactCop(projectedBalanceMinor)}
+              </Text>
+              {hasImpact ? (
+                <View
                   style={[
-                    styles.labelValue,
-                    { color: bar.isForecast ? `${bar.color}BB` : bar.color },
+                    styles.impactPill,
+                    impactTone === 'positive' ? styles.impactPillPositive : null,
+                    impactTone === 'negative' ? styles.impactPillNegative : null,
                   ]}
                 >
-                  {formatCompactCop(displayValue)}
-                </Text>
-              </View>
-            );
-          })}
+                  <Ionicons
+                    color={
+                      impactTone === 'positive'
+                        ? theme.colors.success
+                        : impactTone === 'negative'
+                          ? theme.colors.danger
+                          : theme.colors.textMuted
+                    }
+                    name={impactMinor >= 0 ? 'trending-up-outline' : 'trending-down-outline'}
+                    size={12}
+                  />
+                  <View style={styles.impactTextStack}>
+                    <Text numberOfLines={1} style={styles.impactLabel}>
+                      Impacto
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.impactValue,
+                        impactTone === 'positive' ? styles.positiveText : null,
+                        impactTone === 'negative' ? styles.negativeText : null,
+                      ]}
+                    >
+                      {formatSignedCompactCop(impactMinor)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          {hasImpact ? (
+            <View style={styles.pendingChip}>
+              <Text style={styles.pendingChipText}>{pendingLabel}</Text>
+            </View>
+          ) : null}
         </View>
+
+        {/* Chart content with forecast zone background */}
+        <View style={styles.chartContent}>
+          <View style={{ alignSelf: 'center', width: svgW, position: 'relative' }}>
+            {/* Forecast zone background matches projected outcome */}
+            <View
+              style={[
+                styles.forecastZone,
+                {
+                  backgroundColor:
+                    projectedBalanceMinor >= 0
+                      ? `${theme.colors.success}10`
+                      : `${theme.colors.danger}10`,
+                  left: dividerX,
+                  width: svgW - dividerX + 16,
+                },
+              ]}
+            />
+
+            {/* Section labels */}
+            <View style={styles.sectionLabelsRow}>
+              <Text style={[styles.sectionLabel, { width: dividerX, textAlign: 'center' }]}>
+                Hoy
+              </Text>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  styles.sectionLabelForecast,
+                  { width: svgW - dividerX, textAlign: 'center' },
+                ]}
+              >
+                Proyección
+              </Text>
+            </View>
+
+            {/* SVG Chart */}
+            <View style={styles.chartWrapper}>
+              <Svg height={CHART_H} width={svgW}>
+                {/* Zero line */}
+                <Line
+                  stroke={theme.colors.border}
+                  strokeWidth={1}
+                  x1={0}
+                  x2={svgW}
+                  y1={zeroY}
+                  y2={zeroY}
+                />
+
+                {/* Connectors */}
+                {connectors.map((c, i) => (
+                  <Line
+                    key={`conn-${i}`}
+                    stroke={theme.colors.muted}
+                    strokeDasharray={DASH_PATTERN}
+                    strokeWidth={DASH_STROKE_WIDTH}
+                    x1={c.x1}
+                    x2={c.x2}
+                    y1={c.y}
+                    y2={c.y}
+                  />
+                ))}
+
+                {/* Forecast divider */}
+                <Line
+                  stroke={theme.colors.muted}
+                  strokeDasharray={DASH_PATTERN}
+                  strokeWidth={DASH_STROKE_WIDTH}
+                  x1={dividerX}
+                  x2={dividerX}
+                  y1={0}
+                  y2={CHART_H}
+                />
+
+                {/* Bars */}
+                {bars.map((bar, i) => {
+                  const x = xPositions[i];
+                  const top = yPx(bar.valTop);
+                  const bottom = yPx(bar.valBottom);
+                  const h = Math.max(bottom - top, 3);
+                  const fill = bar.isForecast ? `${bar.color}30` : bar.color;
+
+                  return (
+                    <Fragment key={bar.label}>
+                      {bar.isPlaceholder ? (
+                        <Line
+                          opacity={0.64}
+                          stroke={bar.color}
+                          strokeLinecap="round"
+                          strokeWidth={2}
+                          x1={x + 8}
+                          x2={x + BAR_W - 8}
+                          y1={Math.max(6, Math.min(bottom, CHART_H - 6))}
+                          y2={Math.max(6, Math.min(bottom, CHART_H - 6))}
+                        />
+                      ) : (
+                        <>
+                          <Rect
+                            fill={fill}
+                            height={h}
+                            onPress={onSegmentPress ? () => onSegmentPress(bar.filter) : undefined}
+                            rx={5}
+                            ry={5}
+                            width={BAR_W}
+                            x={x}
+                            y={top}
+                          />
+                          {onSegmentPress ? (
+                            <Rect
+                              fill="transparent"
+                              height={Math.max(h + 16, 36)}
+                              onPress={() => onSegmentPress(bar.filter)}
+                              rx={8}
+                              ry={8}
+                              width={BAR_W + 18}
+                              x={x - 9}
+                              y={Math.max(top - 8, 0)}
+                            />
+                          ) : null}
+                          {bar.isForecast ? (
+                            <Rect
+                              fill="none"
+                              height={h}
+                              onPress={
+                                onSegmentPress ? () => onSegmentPress(bar.filter) : undefined
+                              }
+                              rx={5}
+                              ry={5}
+                              stroke={`${bar.borderColor ?? bar.color}88`}
+                              strokeDasharray={DASH_PATTERN}
+                              strokeWidth={DASH_STROKE_WIDTH}
+                              width={BAR_W}
+                              x={x}
+                              y={top}
+                            />
+                          ) : null}
+                        </>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </Svg>
+
+              {/* Labels floating directly under each bar */}
+              {bars.map((bar, i) => {
+                if (bar.isPlaceholder) {
+                  return null;
+                }
+
+                let displayValue: number;
+                if (bar.label === 'Te deben') displayValue = totalOwedToMeMinor;
+                else if (bar.label === 'Debes') displayValue = totalIOweMinor;
+                else if (bar.label === 'Balance') displayValue = currentBalanceMinor;
+                else if (bar.label === 'Te deberán') displayValue = pendingIncomingMinor;
+                else if (bar.label === 'Deberás') displayValue = pendingOutgoingMinor;
+                else displayValue = projectedBalanceMinor;
+
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    key={bar.label}
+                    onPress={() => onSegmentPress?.(bar.filter)}
+                    style={[
+                      styles.labelCol,
+                      onSegmentPress ? styles.labelColPressable : null,
+                      {
+                        left: xPositions[i] + BAR_W / 2 - 32,
+                        top: yPx(bar.valBottom) + 14,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      color={bar.isForecast ? `${bar.color}99` : bar.color}
+                      name={bar.icon}
+                      size={12}
+                    />
+                    <Text numberOfLines={1} style={styles.labelText}>
+                      {bar.label}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.labelValue,
+                        { color: bar.isForecast ? `${bar.color}BB` : bar.color },
+                      ]}
+                    >
+                      {formatCompactCop(displayValue)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </View>
       </View>
-
-      {/* Footer */}
-      {hasImpact ? (
-        <Text style={styles.footerText}>
-          {pendingCount} movimiento{pendingCount === 1 ? '' : 's'} pendiente
-          {pendingCount === 1 ? '' : 's'}
-        </Text>
-      ) : null}
     </SurfaceCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: theme.spacing.md },
-  headerRow: {
-    alignItems: 'center',
+  card: { gap: 0 },
+  body: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+  },
+  summaryRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
-  titleRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  title: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
+  projectedStack: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  summaryLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  projectedMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  projectedValue: {
+    color: 'rgba(15, 23, 40, 0.58)',
+    fontSize: theme.typography.title3,
     fontWeight: '800',
     letterSpacing: -0.2,
+    lineHeight: 23,
   },
-  badge: {
+  pendingChip: {
+    backgroundColor: 'rgba(26, 39, 68, 0.05)',
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pendingChipText: {
+    color: 'rgba(26, 39, 68, 0.62)',
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+  },
+  impactPill: {
     alignItems: 'center',
-    borderRadius: 999,
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.small,
     flexDirection: 'row',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    maxWidth: '100%',
+    paddingHorizontal: 7,
+    paddingVertical: 5,
   },
-  badgeText: { fontSize: theme.typography.caption, fontWeight: '800' },
+  impactPillPositive: {
+    backgroundColor: theme.colors.successSoft,
+  },
+  impactPillNegative: {
+    backgroundColor: theme.colors.dangerSoft,
+  },
+  impactTextStack: {
+    gap: 0,
+  },
+  impactLabel: {
+    color: theme.colors.textMuted,
+    flexShrink: 1,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    lineHeight: 9,
+    textTransform: 'uppercase',
+  },
+  impactValue: {
+    color: theme.colors.text,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 13,
+  },
   sectionLabelsRow: {
     flexDirection: 'row',
   },
@@ -403,7 +584,7 @@ const styles = StyleSheet.create({
   chartContent: {
     position: 'relative',
     overflow: 'visible',
-    paddingTop: 8,
+    paddingTop: theme.spacing.xs,
   },
   forecastZone: {
     borderRadius: 12,
@@ -418,6 +599,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 64,
   },
+  labelColPressable: {
+    borderRadius: theme.radius.tiny,
+  },
   labelText: {
     color: theme.colors.textMuted,
     fontSize: 10,
@@ -425,9 +609,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   labelValue: { fontSize: 10, fontWeight: '800' },
-  footerText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    textAlign: 'center',
+  positiveText: {
+    color: theme.colors.success,
+  },
+  negativeText: {
+    color: theme.colors.danger,
   },
 });

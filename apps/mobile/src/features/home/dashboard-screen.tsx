@@ -9,16 +9,13 @@ import { BalanceSummaryCard } from '@/components/balance-summary-card';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
-import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { HappyCircleCard } from '@/components/happy-circle-card';
-import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import { formatCop } from '@/lib/data';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import {
   type AccountInviteListItem,

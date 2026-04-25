@@ -1,18 +1,17 @@
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HappyCircleCard } from '@/components/happy-circle-card';
 import { MoneyHero } from '@/components/money-hero';
-import { PrimaryAction } from '@/components/primary-action';
 import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SurfaceCard } from '@/components/surface-card';
-import { formatCop } from '@/lib/data';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 
 function balanceTone(amountMinor: number): 'positive' | 'negative' | 'neutral' {
@@ -27,25 +26,8 @@ function balanceTone(amountMinor: number): 'positive' | 'negative' | 'neutral' {
   return 'neutral';
 }
 
-function signedAmountLabel(amountMinor: number): string {
-  if (amountMinor === 0) {
-    return formatCop(0);
-  }
-
-  const prefix = amountMinor > 0 ? '+' : '-';
-  return `${prefix} ${formatCop(Math.abs(amountMinor))}`;
-}
-
-function directionTone(amountMinor: number): 'positive' | 'negative' | 'neutral' {
-  if (amountMinor > 0) {
-    return 'positive';
-  }
-
-  if (amountMinor < 0) {
-    return 'negative';
-  }
-
-  return 'neutral';
+function transactionFilterHref(filter: ProjectionChartFilter): Href {
+  return `/transactions?filter=${filter}` as Href;
 }
 
 function AnalyticsTeaserCard({
@@ -59,7 +41,9 @@ function AnalyticsTeaserCard({
 }) {
   return (
     <Link href={href} asChild>
-      <Pressable style={({ pressed }) => [styles.analyticsTeaserCard, pressed ? styles.pressed : null]}>
+      <Pressable
+        style={({ pressed }) => [styles.analyticsTeaserCard, pressed ? styles.pressed : null]}
+      >
         <View style={styles.teaserIconBox}>
           <Ionicons color={theme.colors.primary} name={icon} size={22} />
         </View>
@@ -71,42 +55,8 @@ function AnalyticsTeaserCard({
   );
 }
 
-function SectionLinkAction({ href, label }: { readonly href: Href; readonly label: string }) {
-  return (
-    <Link href={href} asChild>
-      <Pressable style={({ pressed }) => [styles.sectionLinkAction, pressed ? styles.pressed : null]}>
-        <Text style={styles.sectionLinkActionText}>{label}</Text>
-      </Pressable>
-    </Link>
-  );
-}
-
-function MetricPill({
-  label,
-  tone,
-  value,
-}: {
-  readonly label: string;
-  readonly tone?: 'positive' | 'negative' | 'neutral';
-  readonly value: string;
-}) {
-  return (
-    <SurfaceCard padding="sm" style={styles.metricPill} variant="muted">
-      <Text style={styles.metricPillLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.metricPillValue,
-          tone === 'positive' ? styles.positiveText : null,
-          tone === 'negative' ? styles.negativeText : null,
-        ]}
-      >
-        {value}
-      </Text>
-    </SurfaceCard>
-  );
-}
-
 export function BalanceOverviewScreen() {
+  const router = useRouter();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const overview = snapshotQuery.data?.balanceOverview ?? null;
@@ -140,14 +90,9 @@ export function BalanceOverviewScreen() {
   }
 
   const activeProposal = overview.resolution.activeProposal;
-  const projectionTone = directionTone(overview.projection.impactMinor);
 
   return (
-    <ScreenShell
-      headerVariant="plain"
-      refresh={refresh}
-      title="Balance"
-    >
+    <ScreenShell headerVariant="plain" refresh={refresh} title="Balance">
       <MoneyHero
         amountMinor={overview.summary.netBalanceMinor}
         badgeLabel={overview.updatedAtLabel}
@@ -167,13 +112,11 @@ export function BalanceOverviewScreen() {
         tone={balanceTone(overview.summary.netBalanceMinor)}
       />
 
-      <SectionBlock
-        action={<SectionLinkAction href="/transactions" label="Ver pendientes" />}
-        title="Proyeccion"
-      >
+      <SectionBlock title="Proyección">
         <ProjectionForecastCard
           currentBalanceMinor={overview.summary.netBalanceMinor}
           impactMinor={overview.projection.impactMinor}
+          onSegmentPress={(filter) => router.push(transactionFilterHref(filter))}
           pendingCount={overview.projection.pendingCount}
           pendingIncomingMinor={overview.projection.pendingIncomingMinor}
           pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}
@@ -181,9 +124,6 @@ export function BalanceOverviewScreen() {
           totalIOweMinor={overview.summary.totalIOweMinor}
           totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
         />
-        <View style={{ marginTop: 12 }}>
-          <PrimaryAction href="/transactions" label="Abrir transacciones" variant="secondary" />
-        </View>
       </SectionBlock>
 
       {activeProposal ? (
@@ -262,41 +202,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     fontWeight: '800',
   },
-  sectionLinkAction: {
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 6,
-  },
-  sectionLinkActionText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
   pressed: {
     opacity: 0.9,
-  },
-  metricPillRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  metricPill: {
-    flex: 1,
-    gap: 2,
-  },
-  metricPillLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-  },
-  metricPillValue: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-  },
-  positiveText: {
-    color: theme.colors.success,
-  },
-  negativeText: {
-    color: theme.colors.warning,
   },
 });
