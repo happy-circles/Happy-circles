@@ -9,6 +9,7 @@ import {
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Linking,
@@ -21,6 +22,14 @@ import {
 import type { Href } from 'expo-router';
 import type { Json } from '@happy-circles/shared';
 
+import {
+  BrandLockup,
+  HEADER_BRAND_GAP,
+  HEADER_BRAND_LOGO_SIZE,
+  HEADER_BRAND_TITLE_LINE_HEIGHT,
+  HEADER_BRAND_TITLE_SIZE,
+  HEADER_BRAND_TITLE_WIDTH,
+} from '@/components/brand-lockup';
 import { GlobalFeedbackOverlay } from '@/components/global-feedback-overlay';
 import {
   HappyCirclesBottomPieceSvg,
@@ -31,6 +40,7 @@ import {
   HappyCirclesTopPieceSvg,
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
+import { LaunchIntroVisibilityProvider } from '@/components/launch-intro-presence';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
@@ -45,18 +55,22 @@ import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const LAUNCH_INTRO_MIN_MS = 1750;
-const LAUNCH_READY_MS = 760;
-const LAUNCH_LAND_MS = 1400;
-const LAUNCH_ROUTE_SETTLE_MS = 420;
-const LAUNCH_LOGO_SIZE = 116;
-const LAUNCH_HEADER_LOGO_SIZE = 68;
-const LAUNCH_HEADER_TITLE_SIZE = 30;
+const LAUNCH_INTRO_MIN_MS = 900;
+const LAUNCH_READY_MS = 420;
+const LAUNCH_TEXT_MS = 540;
+const LAUNCH_LAND_MS = 720;
+const LAUNCH_ROUTE_SETTLE_MS = 120;
+const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
+const LAUNCH_FACE_ID_DELAY_MS = 25;
+const LAUNCH_LOGO_SIZE = 84;
+const LAUNCH_HEADER_LOGO_SIZE = HEADER_BRAND_LOGO_SIZE;
+const LAUNCH_HEADER_TITLE_SIZE = HEADER_BRAND_TITLE_SIZE;
 const LAUNCH_HEADER_SCALE = LAUNCH_HEADER_LOGO_SIZE / LAUNCH_LOGO_SIZE;
-const LAUNCH_LOCKUP_GAP = 6 / LAUNCH_HEADER_SCALE;
-const LAUNCH_TITLE_WIDTH = 346;
+const LAUNCH_LOCKUP_GAP = HEADER_BRAND_GAP / LAUNCH_HEADER_SCALE;
+const LAUNCH_TITLE_WIDTH = HEADER_BRAND_TITLE_WIDTH / LAUNCH_HEADER_SCALE;
+const LAUNCH_LOCKUP_WIDTH = LAUNCH_LOGO_SIZE + LAUNCH_LOCKUP_GAP + LAUNCH_TITLE_WIDTH;
 const LAUNCH_TITLE_FONT_SIZE = LAUNCH_HEADER_TITLE_SIZE / LAUNCH_HEADER_SCALE;
-const LAUNCH_TITLE_LINE_HEIGHT = 36 / LAUNCH_HEADER_SCALE;
+const LAUNCH_TITLE_LINE_HEIGHT = HEADER_BRAND_TITLE_LINE_HEIGHT / LAUNCH_HEADER_SCALE;
 const LAUNCH_LOCKUP_LOGO_CENTER_OFFSET = (LAUNCH_TITLE_WIDTH + LAUNCH_LOCKUP_GAP) / 2;
 const LAUNCH_EASING = Easing.bezier(0.16, 1, 0.3, 1);
 
@@ -68,6 +82,32 @@ function wait(ms: number) {
 
 function createLaunchMaskId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}`;
+}
+
+function useReducedMotion() {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (mounted) {
+        setReducedMotion(enabled);
+      }
+    });
+
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReducedMotion,
+    );
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  return reducedMotion;
 }
 
 function NotificationBridge() {
@@ -224,22 +264,28 @@ function MandatoryUpdateGate() {
   );
 }
 
-function LaunchIntroOverlay() {
+function LaunchIntroOverlay({
+  onVisibleChange,
+}: {
+  readonly onVisibleChange: (visible: boolean) => void;
+}) {
   const session = useSession();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const [visible, setVisible] = useState(true);
   const [finishRequested, setFinishRequested] = useState(false);
   const mountedAtRef = useRef(Date.now());
   const unlockAttemptedRef = useRef(false);
   const latestStatusRef = useRef(session.status);
-  const latestUnlockRef = useRef(session.unlock);
+  const latestUnlockRef = useRef(() => session.unlock());
   const introMotion = useRef(new Animated.Value(0)).current;
   const spinMotion = useRef(new Animated.Value(0)).current;
   const pulseMotion = useRef(new Animated.Value(0)).current;
   const readyMotion = useRef(new Animated.Value(0)).current;
   const textMotion = useRef(new Animated.Value(0)).current;
   const landMotion = useRef(new Animated.Value(0)).current;
+  const reducedExitMotion = useRef(new Animated.Value(0)).current;
   const topMaskId = useMemo(() => createLaunchMaskId('launch-top'), []);
   const leftMaskId = useMemo(() => createLaunchMaskId('launch-left'), []);
   const rightMaskId = useMemo(() => createLaunchMaskId('launch-right'), []);
@@ -264,13 +310,24 @@ function LaunchIntroOverlay() {
       insets.top + theme.spacing.md + theme.spacing.xxs + LAUNCH_HEADER_LOGO_SIZE / 2;
     return headerCenterY - height / 2;
   }, [height, insets.top]);
+  const lockupFitScale = useMemo(() => {
+    const availableWidth = Math.max(1, width - theme.spacing.lg * 2);
+    return Math.min(1, Math.max(LAUNCH_HEADER_SCALE, availableWidth / LAUNCH_LOCKUP_WIDTH));
+  }, [width]);
 
   useEffect(() => {
     latestStatusRef.current = session.status;
-    latestUnlockRef.current = session.unlock;
-  }, [session.status, session.unlock]);
+    latestUnlockRef.current = () => session.unlock();
+  }, [session]);
 
   useEffect(() => {
+    if (reducedMotion) {
+      introMotion.setValue(1);
+      spinMotion.setValue(0);
+      pulseMotion.setValue(0);
+      return undefined;
+    }
+
     Animated.timing(introMotion, {
       duration: 620,
       easing: LAUNCH_EASING,
@@ -310,7 +367,7 @@ function LaunchIntroOverlay() {
       spinLoop.stop();
       pulseLoop.stop();
     };
-  }, [introMotion, pulseMotion, spinMotion]);
+  }, [introMotion, pulseMotion, reducedMotion, spinMotion]);
 
   useEffect(() => {
     if (session.status !== 'loading' && !finishRequested) {
@@ -327,7 +384,7 @@ function LaunchIntroOverlay() {
 
     async function finishIntro() {
       const elapsed = Date.now() - mountedAtRef.current;
-      if (elapsed < LAUNCH_INTRO_MIN_MS) {
+      if (!reducedMotion && elapsed < LAUNCH_INTRO_MIN_MS) {
         await wait(LAUNCH_INTRO_MIN_MS - elapsed);
       }
 
@@ -335,35 +392,62 @@ function LaunchIntroOverlay() {
         return;
       }
 
-      await new Promise<void>((resolve) => {
-        Animated.timing(readyMotion, {
-          duration: LAUNCH_READY_MS,
-          easing: LAUNCH_EASING,
-          toValue: 1,
-          useNativeDriver: true,
-        }).start(() => resolve());
-      });
+      function requestUnlockAfterIntro() {
+        if (latestStatusRef.current !== 'signed_in_locked' || unlockAttemptedRef.current) {
+          return;
+        }
 
-      if (!active) {
-        return;
-      }
-
-      await new Promise<void>((resolve) => {
-        Animated.timing(textMotion, {
-          duration: 860,
-          easing: LAUNCH_EASING,
-          toValue: 1,
-          useNativeDriver: true,
-        }).start(() => resolve());
-      });
-
-      if (!active) {
-        return;
-      }
-
-      if (latestStatusRef.current === 'signed_in_locked' && !unlockAttemptedRef.current) {
         unlockAttemptedRef.current = true;
-        await latestUnlockRef.current();
+        void wait(LAUNCH_FACE_ID_DELAY_MS).then(() => {
+          if (!active || latestStatusRef.current !== 'signed_in_locked') {
+            return;
+          }
+
+          void latestUnlockRef.current();
+        });
+      }
+
+      if (reducedMotion) {
+        await wait(LAUNCH_ROUTE_SETTLE_MS);
+
+        if (!active) {
+          return;
+        }
+
+        Animated.timing(reducedExitMotion, {
+          duration: LAUNCH_REDUCED_MOTION_EXIT_MS,
+          easing: Easing.out(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished && active) {
+            onVisibleChange(false);
+            setVisible(false);
+            requestUnlockAfterIntro();
+          }
+        });
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        Animated.parallel([
+          Animated.timing(readyMotion, {
+            duration: LAUNCH_READY_MS,
+            easing: LAUNCH_EASING,
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+          Animated.timing(textMotion, {
+            duration: LAUNCH_TEXT_MS,
+            easing: LAUNCH_EASING,
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+        ]).start(() => resolve());
+      });
+
+      if (!active) {
+        return;
       }
 
       await wait(LAUNCH_ROUTE_SETTLE_MS);
@@ -379,7 +463,9 @@ function LaunchIntroOverlay() {
         useNativeDriver: true,
       }).start(({ finished }) => {
         if (finished && active) {
+          onVisibleChange(false);
           setVisible(false);
+          requestUnlockAfterIntro();
         }
       });
     }
@@ -389,7 +475,15 @@ function LaunchIntroOverlay() {
     return () => {
       active = false;
     };
-  }, [finishRequested, landMotion, readyMotion, textMotion]);
+  }, [
+    finishRequested,
+    landMotion,
+    onVisibleChange,
+    readyMotion,
+    reducedExitMotion,
+    reducedMotion,
+    textMotion,
+  ]);
 
   if (!visible) {
     return null;
@@ -401,7 +495,7 @@ function LaunchIntroOverlay() {
   });
   const introScale = introMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.82, 1],
+    outputRange: [0.96, 1],
   });
   const rotate = spinMotion.interpolate({
     inputRange: [0, 1],
@@ -430,7 +524,7 @@ function LaunchIntroOverlay() {
   });
   const logoReadyScale = readyMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.94],
+    outputRange: [1, 1],
   });
   const textOpacity = textMotion.interpolate({
     inputRange: [0, 0.2, 1],
@@ -444,6 +538,10 @@ function LaunchIntroOverlay() {
     inputRange: [0, 1],
     outputRange: [LAUNCH_LOCKUP_LOGO_CENTER_OFFSET, 0],
   });
+  const lockupFitMotionScale = textMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, lockupFitScale],
+  });
   const landTranslateY = landMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [0, headerTranslateY],
@@ -452,10 +550,16 @@ function LaunchIntroOverlay() {
     inputRange: [0, 1],
     outputRange: [1, LAUNCH_HEADER_SCALE],
   });
-  const overlayOpacity = landMotion.interpolate({
-    inputRange: [0, 0.58, 1],
-    outputRange: [1, 0.96, 0],
+  const backdropOpacity = landMotion.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: [1, 1, 0],
   });
+  const overlayOpacity = reducedMotion
+    ? reducedExitMotion.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+      })
+    : 1;
 
   return (
     <Animated.View
@@ -463,7 +567,75 @@ function LaunchIntroOverlay() {
       pointerEvents="auto"
       style={[styles.launchOverlay, { opacity: overlayOpacity }]}
     >
-      <Animated.View
+      <Animated.View style={[styles.launchOverlayBackdrop, { opacity: backdropOpacity }]} />
+      <BrandLockup
+        gap={LAUNCH_LOCKUP_GAP}
+        logo={
+          <>
+            <Animated.View style={[styles.launchLogoLayer, { opacity: staticLogoOpacity }]}>
+              <HappyCirclesGlyph size={LAUNCH_LOGO_SIZE} />
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                styles.launchLogoLayer,
+                {
+                  opacity: rotatingPiecesOpacity,
+                  transform: [{ rotate }],
+                },
+              ]}
+            >
+              <Animated.View style={styles.launchLogoLayer}>
+                <HappyCirclesTopPieceSvg
+                  maskId={topMaskId}
+                  palette={loadingPalette}
+                  size={LAUNCH_LOGO_SIZE}
+                />
+              </Animated.View>
+              <Animated.View style={styles.launchLogoLayer}>
+                <HappyCirclesLeftPieceSvg
+                  maskId={leftMaskId}
+                  palette={loadingPalette}
+                  size={LAUNCH_LOGO_SIZE}
+                />
+              </Animated.View>
+              <Animated.View style={styles.launchLogoLayer}>
+                <HappyCirclesRightPieceSvg
+                  maskId={rightMaskId}
+                  palette={loadingPalette}
+                  size={LAUNCH_LOGO_SIZE}
+                />
+              </Animated.View>
+              <Animated.View style={styles.launchLogoLayer}>
+                <HappyCirclesBottomPieceSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
+              </Animated.View>
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                styles.launchLogoLayer,
+                {
+                  opacity: centerOverlayOpacity,
+                  transform: [{ scale: centerPulseScale }],
+                },
+              ]}
+            >
+              <Animated.View style={[styles.launchLogoLayer, { opacity: loadingFaceOpacity }]}>
+                <HappyCirclesCenterSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
+              </Animated.View>
+              <Animated.View style={[styles.launchLogoLayer, { opacity: successFaceOpacity }]}>
+                <HappyCirclesCenterSvg palette={successPalette} size={LAUNCH_LOGO_SIZE} wink />
+              </Animated.View>
+            </Animated.View>
+          </>
+        }
+        logoSize={LAUNCH_LOGO_SIZE}
+        logoStyle={[
+          styles.launchLogoStage,
+          {
+            transform: [{ scale: logoReadyScale }],
+          },
+        ]}
         style={[
           styles.launchIntroGroup,
           {
@@ -472,93 +644,26 @@ function LaunchIntroOverlay() {
             transform: [
               { translateX: lockupTranslateX },
               { translateY: landTranslateY },
-              { scale: Animated.multiply(introScale, landScale) },
+              {
+                scale: Animated.multiply(
+                  Animated.multiply(introScale, lockupFitMotionScale),
+                  landScale,
+                ),
+              },
             ],
-            width: LAUNCH_LOGO_SIZE + LAUNCH_LOCKUP_GAP + LAUNCH_TITLE_WIDTH,
+            width: LAUNCH_LOCKUP_WIDTH,
           },
         ]}
-      >
-        <Animated.View
-          style={[
-            styles.launchLogoStage,
-            {
-              height: LAUNCH_LOGO_SIZE,
-              transform: [{ scale: logoReadyScale }],
-              width: LAUNCH_LOGO_SIZE,
-            },
-          ]}
-        >
-          <Animated.View style={[styles.launchLogoLayer, { opacity: staticLogoOpacity }]}>
-            <HappyCirclesGlyph size={LAUNCH_LOGO_SIZE} />
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.launchLogoLayer,
-              {
-                opacity: rotatingPiecesOpacity,
-                transform: [{ rotate }],
-              },
-            ]}
-          >
-            <Animated.View style={styles.launchLogoLayer}>
-              <HappyCirclesTopPieceSvg
-                maskId={topMaskId}
-                palette={loadingPalette}
-                size={LAUNCH_LOGO_SIZE}
-              />
-            </Animated.View>
-            <Animated.View style={styles.launchLogoLayer}>
-              <HappyCirclesLeftPieceSvg
-                maskId={leftMaskId}
-                palette={loadingPalette}
-                size={LAUNCH_LOGO_SIZE}
-              />
-            </Animated.View>
-            <Animated.View style={styles.launchLogoLayer}>
-              <HappyCirclesRightPieceSvg
-                maskId={rightMaskId}
-                palette={loadingPalette}
-                size={LAUNCH_LOGO_SIZE}
-              />
-            </Animated.View>
-            <Animated.View style={styles.launchLogoLayer}>
-              <HappyCirclesBottomPieceSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
-            </Animated.View>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.launchLogoLayer,
-              {
-                opacity: centerOverlayOpacity,
-                transform: [{ scale: centerPulseScale }],
-              },
-            ]}
-          >
-            <Animated.View style={[styles.launchLogoLayer, { opacity: loadingFaceOpacity }]}>
-              <HappyCirclesCenterSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
-            </Animated.View>
-            <Animated.View style={[styles.launchLogoLayer, { opacity: successFaceOpacity }]}>
-              <HappyCirclesCenterSvg palette={successPalette} size={LAUNCH_LOGO_SIZE} wink />
-            </Animated.View>
-          </Animated.View>
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.launchTitleWrap,
-            {
-              opacity: textOpacity,
-              transform: [{ translateX: textTranslateX }],
-            },
-          ]}
-        >
-          <Text numberOfLines={1} style={styles.launchTitle}>
-            Happy Circles
-          </Text>
-        </Animated.View>
-      </Animated.View>
+        titleContainerStyle={[
+          styles.launchTitleWrap,
+          {
+            opacity: textOpacity,
+            transform: [{ translateX: textTranslateX }],
+          },
+        ]}
+        titleLineHeight={LAUNCH_TITLE_LINE_HEIGHT}
+        titleSize={LAUNCH_TITLE_FONT_SIZE}
+      />
     </Animated.View>
   );
 }
@@ -695,8 +800,10 @@ function SessionRouteGuard() {
 }
 
 function RootNavigator() {
+  const [launchIntroVisible, setLaunchIntroVisible] = useState(true);
+
   return (
-    <>
+    <LaunchIntroVisibilityProvider value={launchIntroVisible}>
       <StatusBar style="dark" />
       <NotificationBridge />
       <SessionRouteGuard />
@@ -757,9 +864,9 @@ function RootNavigator() {
         <Stack.Screen name="transactions" dangerouslySingular />
       </Stack>
       <MandatoryUpdateGate />
-      <LaunchIntroOverlay />
+      <LaunchIntroOverlay onVisibleChange={setLaunchIntroVisible} />
       <GlobalFeedbackOverlay />
-    </>
+    </LaunchIntroVisibilityProvider>
   );
 }
 
@@ -774,11 +881,18 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   launchOverlay: {
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
     bottom: 0,
     justifyContent: 'center',
     left: 0,
     padding: theme.spacing.lg,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  launchOverlayBackdrop: {
+    backgroundColor: theme.colors.background,
+    bottom: 0,
+    left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
@@ -788,6 +902,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: LAUNCH_LOCKUP_GAP,
     justifyContent: 'center',
+    maxWidth: 1000,
     position: 'relative',
   },
   launchLogoStage: {

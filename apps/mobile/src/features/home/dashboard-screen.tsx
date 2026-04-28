@@ -7,6 +7,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { AppAvatar } from '@/components/app-avatar';
 import { BalanceSummaryCard } from '@/components/balance-summary-card';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
+import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
 import { HappyCircleCard } from '@/components/happy-circle-card';
@@ -1001,7 +1002,12 @@ export function DashboardScreen() {
 
   if (snapshotQuery.isLoading || !dashboard) {
     return (
-      <ScreenShell headerVariant="plain" title="Happy Circles" titleAlign="center">
+      <ScreenShell
+        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+        headerVariant="plain"
+        title="Happy Circles"
+        titleAlign="center"
+      >
         <View style={styles.loadingMotion}>
           <HappyCirclesMotion size={132} variant="splash" />
         </View>
@@ -1014,7 +1020,13 @@ export function DashboardScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <ScreenShell headerVariant="plain" refresh={refresh} title="Happy Circles" titleAlign="center">
+      <ScreenShell
+        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+        headerVariant="plain"
+        refresh={refresh}
+        title="Happy Circles"
+        titleAlign="center"
+      >
         <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
       </ScreenShell>
     );
@@ -1038,6 +1050,7 @@ export function DashboardScreen() {
           </Pressable>
         </Link>
       }
+      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
       headerSlot={<NotificationBellButton count={dashboard.urgentCount} href="/activity" />}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}

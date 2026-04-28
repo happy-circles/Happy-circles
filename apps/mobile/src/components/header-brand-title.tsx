@@ -1,39 +1,40 @@
-import { StyleSheet, Text, View } from 'react-native';
-
-import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
-import { theme } from '@/lib/theme';
+import {
+  BrandLockup,
+  HEADER_BRAND_GAP,
+  HEADER_BRAND_LOGO_SIZE,
+  HEADER_BRAND_TITLE_LINE_HEIGHT,
+  HEADER_BRAND_TITLE_SIZE,
+  HEADER_BRAND_TITLE_WIDTH,
+} from '@/components/brand-lockup';
+import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
+import { StyleSheet } from 'react-native';
 
 export function HeaderBrandTitle({
-  logoSize = 34,
-  titleSize = theme.typography.largeTitle,
+  logoSize = HEADER_BRAND_LOGO_SIZE,
+  titleSize = HEADER_BRAND_TITLE_SIZE,
 }: {
   readonly logoSize?: number;
   readonly titleSize?: number;
 }) {
+  const launchIntroVisible = useLaunchIntroVisible();
+
   return (
-    <View accessibilityLabel="Happy Circles" style={styles.root}>
-      <HappyCirclesGlyph size={logoSize} />
-      <Text numberOfLines={1} style={[styles.title, { fontSize: titleSize }]}>
-        Happy Circles
-      </Text>
-    </View>
+    <BrandLockup
+      gap={HEADER_BRAND_GAP}
+      logoSize={logoSize}
+      style={launchIntroVisible ? styles.hiddenDuringLaunchIntro : undefined}
+      titleContainerStyle={styles.titleContainer}
+      titleLineHeight={HEADER_BRAND_TITLE_LINE_HEIGHT}
+      titleSize={titleSize}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    maxWidth: '100%',
-    minHeight: 40,
+  hiddenDuringLaunchIntro: {
+    opacity: 0,
   },
-  title: {
-    color: theme.colors.text,
-    flexShrink: 1,
-    fontWeight: '800',
-    letterSpacing: 0,
-    lineHeight: 36,
+  titleContainer: {
+    width: HEADER_BRAND_TITLE_WIDTH,
   },
 });

@@ -29,9 +29,106 @@ const people = {
 } satisfies Record<PersonId, PersonProfile>;
 
 type NodeSize = 'tiny' | 'sm' | 'md' | 'lg' | 'xl';
+type SvgPoint = readonly [number, number];
+const EDGE_OFFSET = 48;
+const ARROW_EDGE_OFFSET = 62;
 
 function nodeStyle(x: number, y: number): CSSProperties {
   return { '--x': `${x}%`, '--y': `${y}%` } as CSSProperties;
+}
+
+function getTrimmedEdge(from: SvgPoint, to: SvgPoint, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
+  const [x1, y1] = from;
+  const [x2, y2] = to;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+
+  if (!length) {
+    return { end: to, start: from };
+  }
+
+  if (length <= startOffset + endOffset) {
+    const symmetricOffset = Math.max(0, length / 2 - 4);
+    startOffset = symmetricOffset;
+    endOffset = symmetricOffset;
+  }
+
+  const ux = dx / length;
+  const uy = dy / length;
+  return {
+    end: [x2 - ux * endOffset, y2 - uy * endOffset] as SvgPoint,
+    start: [x1 + ux * startOffset, y1 + uy * startOffset] as SvgPoint,
+  };
+}
+
+function edgePath(from: SvgPoint, to: SvgPoint, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
+  const { end, start } = getTrimmedEdge(from, to, startOffset, endOffset);
+  return `M${start[0]} ${start[1]} L${end[0]} ${end[1]}`;
+}
+
+function curvedEdgePath(from: SvgPoint, to: SvgPoint, curve = -0.22, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
+  const { end, start } = getTrimmedEdge(from, to, startOffset, endOffset);
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  const midX = (start[0] + end[0]) / 2;
+  const midY = (start[1] + end[1]) / 2;
+  const normalX = length ? -dy / length : 0;
+  const normalY = length ? dx / length : 0;
+  const controlX = midX + normalX * length * curve;
+  const controlY = midY + normalY * length * curve;
+  return `M${start[0]} ${start[1]} Q${controlX} ${controlY} ${end[0]} ${end[1]}`;
+}
+
+function GraphEdge({
+  className,
+  endOffset,
+  from,
+  markerEnd,
+  startOffset,
+  to,
+}: Readonly<{
+  className?: string;
+  endOffset?: number;
+  from: SvgPoint;
+  markerEnd?: string;
+  startOffset?: number;
+  to: SvgPoint;
+}>) {
+  return (
+    <path
+      className={className}
+      d={edgePath(from, to, startOffset, endOffset ?? (markerEnd ? ARROW_EDGE_OFFSET : EDGE_OFFSET))}
+      markerEnd={markerEnd}
+    />
+  );
+}
+
+function CurvedGraphEdge({
+  className,
+  curve = -0.22,
+  endOffset,
+  from,
+  markerEnd,
+  startOffset,
+  to,
+}: Readonly<{
+  className?: string;
+  curve?: number;
+  endOffset?: number;
+  from: SvgPoint;
+  markerEnd?: string;
+  startOffset?: number;
+  to: SvgPoint;
+}>) {
+  return (
+    <path
+      className={className}
+      d={curvedEdgePath(from, to, curve, startOffset, endOffset ?? (markerEnd ? ARROW_EDGE_OFFSET : EDGE_OFFSET))}
+      markerEnd={markerEnd}
+    />
+  );
 }
 
 function HappyCirclesGlyph({ large = false }: Readonly<{ large?: boolean }>) {
@@ -185,11 +282,17 @@ function StoreButton({
 function HeroGhostGraph() {
   return (
     <div className="heroGhostGraph" aria-hidden="true">
-      <svg className="graphSvg ghostSvg" viewBox="0 0 360 440">
-        <path d="M42 124 L180 78 L318 138 L302 314 L188 376 L62 302 Z" />
-        <path d="M42 124 L188 376 L318 138" />
-        <path d="M62 302 L180 78 L302 314" />
-        <path d="M110 224 L318 138 L188 376" />
+      <svg className="graphSvg ghostSvg" preserveAspectRatio="none" viewBox="0 0 360 440">
+        <GraphEdge from={[43, 123]} to={[180, 79]} />
+        <GraphEdge from={[180, 79]} to={[317, 141]} />
+        <GraphEdge from={[317, 141]} to={[288, 282]} />
+        <GraphEdge from={[288, 282]} to={[187, 361]} />
+        <GraphEdge from={[187, 361]} to={[65, 304]} />
+        <GraphEdge from={[65, 304]} to={[43, 123]} />
+        <GraphEdge from={[43, 123]} to={[187, 361]} />
+        <GraphEdge from={[187, 361]} to={[317, 141]} />
+        <GraphEdge from={[65, 304]} to={[180, 79]} />
+        <GraphEdge from={[180, 79]} to={[288, 282]} />
       </svg>
       <GraphNode id="fernando" label={false} muted size="lg" x={12} y={28} />
       <GraphNode id="ana" label={false} muted size="lg" x={50} y={18} />
@@ -219,7 +322,7 @@ function DebtVisual() {
             <path d="M1 1 L15 8 L1 15 Z" fill="#e8604a" />
           </marker>
         </defs>
-        <path className="debtLine" d="M132 138 C158 122 198 122 226 138" markerEnd="url(#debt-arrow)" />
+        <path className="debtLine" d="M150 138 C166 122 196 122 212 138" markerEnd="url(#debt-arrow)" />
       </svg>
       <GraphNode id="bruno" size="xl" x={22} y={58} />
       <GraphNode id="ana" size="xl" x={78} y={58} />
@@ -236,26 +339,26 @@ function DebtVisual() {
 function RelationsVisual() {
   return (
     <div className="networkVisual visualStage" aria-label="Varias personas conectadas por deudas">
-      <svg className="graphSvg relationSvg" viewBox="0 0 360 420" aria-hidden="true">
-        <path d="M80 150 L172 132 L270 170 L250 292 L162 320 L78 270 Z" />
-        <path d="M80 150 L78 270" />
-        <path d="M172 132 L162 320" />
-        <path d="M270 170 L250 292" />
-        <path d="M80 150 L172 132" className="softLine" />
-        <path d="M162 320 L250 292" className="softLine" />
-        <path d="M44 98 L80 150 L46 318" className="softLine" />
-        <path d="M304 88 L270 170 L316 318" className="softLine" />
+      <svg className="graphSvg relationSvg" preserveAspectRatio="none" viewBox="0 0 360 420" aria-hidden="true">
+        <GraphEdge className="softLine" from={[47, 59]} to={[83, 143]} />
+        <GraphEdge from={[83, 143]} to={[180, 122]} />
+        <GraphEdge from={[180, 122]} to={[270, 172]} />
+        <GraphEdge className="softLine" from={[270, 172]} to={[310, 76]} />
+        <GraphEdge from={[180, 122]} to={[79, 286]} />
+        <GraphEdge from={[79, 286]} to={[173, 344]} />
+        <GraphEdge from={[173, 344]} to={[259, 286]} />
+        <GraphEdge className="softLine" from={[259, 286]} to={[331, 370]} />
+        <GraphEdge className="softLine" from={[270, 172]} to={[259, 286]} />
       </svg>
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={23} />
-      <GraphNode id="fernando" size="lg" x={24} y={36} />
-      <GraphNode id="ana" size="lg" x={50} y={32} />
-      <GraphNode id="diego" size="lg" x={77} y={42} />
-      <GraphNode id="carla" size="lg" x={23} y={66} />
-      <GraphNode id="bruno" size="lg" x={48} y={78} />
-      <GraphNode id="elena" size="lg" x={72} y={69} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={87} y={28} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={88} y={78} />
-      <GraphNode id="sofia" label={false} muted size="sm" x={10} y={77} />
+      <GraphNode id="sofia" label={false} muted size="sm" x={13} y={14} />
+      <GraphNode id="fernando" size="lg" x={23} y={34} />
+      <GraphNode id="ana" size="lg" x={50} y={29} />
+      <GraphNode id="diego" size="lg" x={75} y={41} />
+      <GraphNode id="carla" size="lg" x={22} y={68} />
+      <GraphNode id="bruno" size="lg" x={48} y={82} />
+      <GraphNode id="elena" size="lg" x={72} y={68} />
+      <GraphNode id="lucas" label={false} muted size="sm" x={86} y={18} />
+      <GraphNode id="pablo" label={false} muted size="sm" x={92} y={88} />
     </div>
   );
 }
@@ -263,35 +366,39 @@ function RelationsVisual() {
 function ConfusedVisual() {
   return (
     <div className="networkVisual networkVisualConfused visualStage" aria-label="Una red de deudas confusa">
-      <svg className="graphSvg confusedSvg" viewBox="0 0 360 450" aria-hidden="true">
-        <path d="M72 142 L172 116 L276 142 L314 246 L262 340 L158 356 L60 290 Z" />
-        <path d="M72 142 L262 340" />
-        <path d="M172 116 L60 290" />
-        <path d="M276 142 L158 356" />
-        <path d="M52 214 L314 246" />
-        <path d="M98 326 L284 96" />
-        <path d="M42 92 L172 116 L326 126" />
-        <path d="M40 366 L158 356 L320 360" />
-        <path d="M72 142 L158 356 L276 142" />
-        <path d="M60 290 L172 116 L262 340" />
+      <svg className="graphSvg confusedSvg" preserveAspectRatio="none" viewBox="0 0 360 450" aria-hidden="true">
+        <GraphEdge from={[43, 54]} to={[65, 194]} />
+        <GraphEdge from={[65, 194]} to={[54, 324]} />
+        <GraphEdge from={[54, 324]} to={[180, 387]} />
+        <GraphEdge from={[180, 387]} to={[281, 324]} />
+        <GraphEdge from={[281, 324]} to={[295, 194]} />
+        <GraphEdge from={[295, 194]} to={[317, 54]} />
+        <GraphEdge from={[317, 54]} to={[180, 108]} />
+        <GraphEdge from={[180, 108]} to={[43, 54]} />
+        <GraphEdge from={[65, 194]} to={[180, 387]} />
+        <GraphEdge from={[65, 194]} to={[295, 194]} />
+        <GraphEdge from={[180, 108]} to={[281, 324]} />
+        <GraphEdge from={[180, 108]} to={[180, 252]} />
+        <GraphEdge from={[295, 194]} to={[180, 387]} />
+        <GraphEdge from={[295, 194]} to={[180, 252]} />
+        <GraphEdge from={[180, 252]} to={[281, 324]} />
+        <GraphEdge from={[180, 252]} to={[54, 324]} />
+        <GraphEdge from={[180, 252]} to={[180, 387]} />
+        <GraphEdge from={[65, 194]} to={[180, 252]} />
+        <GraphEdge from={[54, 324]} to={[180, 108]} />
       </svg>
       <span className="waitIcon waitIconOne" aria-hidden="true" />
       <span className="waitIcon waitIconTwo" aria-hidden="true" />
       <span className="waitIcon waitIconThree" aria-hidden="true" />
-      <GraphNode id="sofia" label={false} muted size="sm" x={13} y={25} />
-      <GraphNode id="fernando" size="lg" x={26} y={40} />
-      <GraphNode id="ana" size="lg" x={51} y={39} />
-      <GraphNode id="diego" size="lg" x={76} y={46} />
-      <GraphNode id="carla" size="lg" x={25} y={65} />
-      <GraphNode id="bruno" size="lg" x={52} y={77} />
-      <GraphNode id="elena" size="lg" x={75} y={68} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={88} y={27} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={90} y={58} />
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={78} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={38} y={23} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={52} y={55} />
-      <GraphNode id="elena" label={false} muted size="sm" x={88} y={83} />
-      <GraphNode id="ana" label={false} muted size="sm" x={43} y={90} />
+      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={12} />
+      <GraphNode id="fernando" size="lg" x={18} y={43} />
+      <GraphNode id="ana" size="lg" x={50} y={24} />
+      <GraphNode id="diego" size="lg" x={82} y={43} />
+      <GraphNode id="carla" size="lg" x={15} y={72} />
+      <GraphNode id="bruno" size="lg" x={50} y={86} />
+      <GraphNode id="elena" size="lg" x={78} y={72} />
+      <GraphNode id="lucas" label={false} muted size="sm" x={88} y={12} />
+      <GraphNode id="pablo" label={false} muted size="sm" x={50} y={56} />
     </div>
   );
 }
@@ -299,7 +406,7 @@ function ConfusedVisual() {
 function HiddenPathVisual() {
   return (
     <div className="networkVisual networkVisualPath visualStage" aria-label="Happy Circles detecta un camino dentro de la red">
-      <svg className="graphSvg pathSvg" viewBox="0 0 360 430" aria-hidden="true">
+      <svg className="graphSvg pathSvg" preserveAspectRatio="none" viewBox="0 0 360 430" aria-hidden="true">
         <defs>
           <marker
             id="path-arrow-green"
@@ -327,28 +434,34 @@ function HiddenPathVisual() {
           </marker>
         </defs>
         <g className="dimmedGraphLines">
-          <path d="M72 138 L172 122 L276 150 L306 252 L250 338 L158 352 L66 286 Z" />
-          <path d="M72 138 L250 338" />
-          <path d="M172 122 L66 286" />
-          <path d="M276 150 L158 352" />
-          <path d="M54 212 L306 252" />
-          <path d="M98 326 L286 102" />
+          <GraphEdge from={[43, 60]} to={[86, 163]} />
+          <GraphEdge from={[86, 163]} to={[180, 133]} />
+          <GraphEdge from={[180, 133]} to={[274, 181]} />
+          <GraphEdge from={[274, 181]} to={[317, 69]} />
+          <GraphEdge from={[274, 181]} to={[274, 292]} />
+          <GraphEdge from={[274, 292]} to={[331, 378]} />
+          <GraphEdge from={[274, 292]} to={[180, 348]} />
+          <GraphEdge from={[180, 348]} to={[86, 292]} />
+          <GraphEdge from={[86, 292]} to={[86, 163]} />
+          <GraphEdge from={[43, 60]} to={[180, 133]} />
+          <GraphEdge from={[86, 163]} to={[180, 348]} />
         </g>
-        <path className="pathLine pathLineGreen" d="M88 160 L172 138 L270 170" markerEnd="url(#path-arrow-green)" />
-        <path className="pathLine pathLineCoral" d="M270 170 L250 294" markerEnd="url(#path-arrow-coral)" />
-        <path className="pathLine pathLineGreen" d="M250 294 L162 320 L80 270" markerEnd="url(#path-arrow-green)" />
-        <path className="pathLine pathLineCoral" d="M80 270 L88 160" markerEnd="url(#path-arrow-coral)" />
+        <GraphEdge className="pathLine pathLineGreen" from={[86, 163]} markerEnd="url(#path-arrow-green)" to={[180, 133]} />
+        <GraphEdge className="pathLine pathLineCoral" from={[180, 133]} markerEnd="url(#path-arrow-coral)" to={[274, 181]} />
+        <GraphEdge className="pathLine pathLineGreen" from={[274, 181]} markerEnd="url(#path-arrow-green)" to={[274, 292]} />
+        <GraphEdge className="pathLine pathLineCoral" from={[274, 292]} markerEnd="url(#path-arrow-coral)" to={[180, 348]} />
+        <GraphEdge className="pathLine pathLineGreen" from={[180, 348]} markerEnd="url(#path-arrow-green)" to={[86, 292]} />
+        <GraphEdge className="pathLine pathLineCoral" from={[86, 292]} markerEnd="url(#path-arrow-coral)" to={[86, 163]} />
       </svg>
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={24} />
+      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={14} />
       <GraphNode id="fernando" size="lg" x={25} y={38} />
-      <GraphNode id="ana" size="lg" x={50} y={34} />
-      <GraphNode id="diego" size="lg" x={76} y={43} />
+      <GraphNode id="ana" size="lg" x={50} y={31} />
+      <GraphNode id="diego" size="lg" x={76} y={42} />
       <GraphNode id="elena" size="lg" x={74} y={68} />
-      <GraphNode id="bruno" size="lg" x={49} y={77} />
-      <GraphNode id="carla" size="lg" x={24} y={65} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={87} y={27} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={88} y={78} />
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={79} />
+      <GraphNode id="bruno" size="lg" x={50} y={81} />
+      <GraphNode id="carla" size="lg" x={24} y={68} />
+      <GraphNode id="lucas" label={false} muted size="sm" x={88} y={16} />
+      <GraphNode id="pablo" label={false} muted size="sm" x={92} y={88} />
     </div>
   );
 }
@@ -356,7 +469,7 @@ function HiddenPathVisual() {
 function CircleVisual() {
   return (
     <div className="circleVisual visualStage" aria-label="Un círculo de cierre con menos pasos">
-      <svg className="graphSvg circleSvg" viewBox="0 0 360 430" aria-hidden="true">
+      <svg className="graphSvg circleSvg" preserveAspectRatio="none" viewBox="0 0 360 430" aria-hidden="true">
         <defs>
           <marker
             id="circle-arrow-green"
@@ -384,23 +497,59 @@ function CircleVisual() {
           </marker>
         </defs>
         <g className="backgroundRing">
-          <path d="M46 180 L170 112 L308 190 L260 326 L116 330 Z" />
-          <path d="M72 86 L306 112 L318 340 L50 350 Z" />
+          <GraphEdge from={[65, 172]} to={[180, 77]} />
+          <GraphEdge from={[180, 77]} to={[295, 172]} />
+          <GraphEdge from={[295, 172]} to={[281, 301]} />
+          <GraphEdge from={[281, 301]} to={[180, 370]} />
+          <GraphEdge from={[180, 370]} to={[65, 301]} />
+          <GraphEdge from={[65, 301]} to={[65, 172]} />
         </g>
-        <path className="circleArc circleArcGreen" d="M98 154 C116 104 176 86 228 112" markerEnd="url(#circle-arrow-green)" />
-        <path className="circleArc circleArcOrange" d="M260 142 C314 174 316 244 278 286" markerEnd="url(#circle-arrow-orange)" />
-        <path className="circleArc circleArcGreen" d="M242 330 C186 378 112 356 80 296" markerEnd="url(#circle-arrow-green)" />
-        <path className="circleArc circleArcOrange" d="M62 246 C44 202 58 170 96 150" markerEnd="url(#circle-arrow-orange)" />
+        <CurvedGraphEdge
+          className="circleArc circleArcGreen"
+          from={[65, 172]}
+          markerEnd="url(#circle-arrow-green)"
+          to={[180, 77]}
+        />
+        <CurvedGraphEdge
+          className="circleArc circleArcOrange"
+          from={[180, 77]}
+          markerEnd="url(#circle-arrow-orange)"
+          to={[295, 172]}
+        />
+        <CurvedGraphEdge
+          className="circleArc circleArcGreen"
+          from={[295, 172]}
+          markerEnd="url(#circle-arrow-green)"
+          to={[281, 301]}
+        />
+        <CurvedGraphEdge
+          className="circleArc circleArcOrange"
+          from={[281, 301]}
+          markerEnd="url(#circle-arrow-orange)"
+          to={[180, 370]}
+        />
+        <CurvedGraphEdge
+          className="circleArc circleArcGreen"
+          from={[180, 370]}
+          markerEnd="url(#circle-arrow-green)"
+          to={[65, 301]}
+        />
+        <CurvedGraphEdge
+          className="circleArc circleArcOrange"
+          from={[65, 301]}
+          markerEnd="url(#circle-arrow-orange)"
+          to={[65, 172]}
+        />
       </svg>
       <div className="centerLogo">
         <HappyCirclesGlyph />
       </div>
-      <GraphNode id="fernando" size="lg" x={24} y={35} />
-      <GraphNode id="ana" size="lg" x={52} y={25} />
-      <GraphNode id="diego" size="lg" x={78} y={43} />
-      <GraphNode id="elena" size="lg" x={75} y={69} />
-      <GraphNode id="bruno" size="lg" x={49} y={79} />
-      <GraphNode id="carla" size="lg" x={22} y={63} />
+      <GraphNode id="fernando" size="lg" x={18} y={40} />
+      <GraphNode id="ana" size="lg" x={50} y={18} />
+      <GraphNode id="diego" size="lg" x={82} y={40} />
+      <GraphNode id="elena" size="lg" x={78} y={70} />
+      <GraphNode id="bruno" size="lg" x={50} y={86} />
+      <GraphNode id="carla" size="lg" x={18} y={70} />
     </div>
   );
 }
@@ -408,12 +557,12 @@ function CircleVisual() {
 function ConfirmVisual() {
   return (
     <div className="confirmVisual visualStage" aria-label="La app propone y las personas confirman">
-      <svg className="graphSvg confirmSvg" viewBox="0 0 360 400" aria-hidden="true">
-        <path d="M180 198 L86 112" />
-        <path d="M180 198 L270 118" />
-        <path d="M180 198 L76 266" />
-        <path d="M180 198 L280 270" />
-        <path d="M180 198 L170 326" />
+      <svg className="graphSvg confirmSvg" preserveAspectRatio="none" viewBox="0 0 360 400" aria-hidden="true">
+        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[86, 112]} />
+        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[270, 118]} />
+        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[76, 266]} />
+        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[280, 270]} />
+        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[170, 326]} />
       </svg>
       <div className="proposalCard">
         <span className="proposalCheck">✓</span>

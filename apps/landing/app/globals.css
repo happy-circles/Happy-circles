@@ -466,8 +466,9 @@ a {
 }
 
 .networkVisualConfused {
-  max-height: 58svh;
-  min-height: 470px;
+  margin-top: 4px;
+  max-height: 62svh;
+  min-height: 500px;
 }
 
 .confusedSvg {
@@ -508,18 +509,18 @@ a {
 }
 
 .waitIconOne {
-  left: 8%;
-  top: 16%;
+  left: 4%;
+  top: 24%;
 }
 
 .waitIconTwo {
-  right: 5%;
-  top: 30%;
+  right: 4%;
+  top: 47%;
 }
 
 .waitIconThree {
-  bottom: 14%;
-  left: 38%;
+  bottom: 8%;
+  left: 42%;
 }
 
 .dimmedGraphLines {
@@ -836,10 +837,10 @@ a {
 }
 
 .decorLeaf {
-  bottom: 36px;
+  bottom: 12px;
   height: 92px;
-  opacity: 0.78;
-  right: 20px;
+  opacity: 0.58;
+  right: 14px;
   transform: rotate(-8deg);
   width: 84px;
 }

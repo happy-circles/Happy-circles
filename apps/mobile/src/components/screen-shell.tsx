@@ -92,7 +92,11 @@ export function ScreenShell({
             ) : null}
             <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
               {headerTitle ? (
-                headerTitle
+                <>
+                  {headerLeading}
+                  <View style={styles.headerTitleNode}>{headerTitle}</View>
+                  {headerSlot}
+                </>
               ) : (
                 <>
                   {headerLeading}
@@ -193,6 +197,10 @@ const styles = StyleSheet.create({
   },
   heroHeaderCentered: {
     justifyContent: 'center',
+  },
+  headerTitleNode: {
+    alignItems: 'center',
+    flex: 1,
   },
   title: {
     color: theme.colors.text,
