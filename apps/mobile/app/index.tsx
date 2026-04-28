@@ -15,9 +15,11 @@ export default function IndexRoute() {
       href={
         status === 'signed_out'
           ? '/join'
-          : !setupState.requiredComplete
-            ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
-            : '/home'
+          : status === 'signed_in_locked'
+            ? '/join'
+            : !setupState.requiredComplete
+              ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
+              : '/home'
       }
     />
   );

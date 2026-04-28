@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
 type SnackbarTone = 'success' | 'danger' | 'neutral';
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface SnackbarProps {
   readonly visible: boolean;
@@ -21,12 +22,12 @@ export function Snackbar({ visible, message, tone = 'neutral' }: SnackbarProps) 
       Animated.timing(opacity, {
         duration: 180,
         toValue: visible ? 1 : 0,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
       Animated.timing(translateY, {
         duration: 180,
         toValue: visible ? 0 : 24,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     ]).start();
   }, [opacity, translateY, visible]);

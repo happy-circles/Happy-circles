@@ -27,6 +27,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { ScreenFinalAction } from '@/components/screen-final-action';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { showBlockedActionAlert, useDelayedBusy } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
@@ -34,6 +35,7 @@ import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { directionVisual } from '@/lib/direction-ui';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -363,12 +365,7 @@ export function RegisterFlowScreen() {
   }
 
   function closeRegister() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    router.replace('/home');
+    backOrReturnTo(router, '/home');
   }
 
   function showValidationFeedback(nextErrors: RegisterFormErrors) {
@@ -403,7 +400,7 @@ export function RegisterFlowScreen() {
 
   function openInviteFlow(suggestedName?: string) {
     closePersonSearch();
-    router.push({
+    pushRoute(router, {
       pathname: '/invite',
       params: {
         inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
@@ -818,7 +815,9 @@ export function RegisterFlowScreen() {
                 </View>
               ) : null}
             </View>
-            <PrimaryAction
+            <ScreenFinalAction
+              anchored={false}
+              bottomPadding={false}
               disabled={createRequest.isPending}
               label={createRequest.isPending ? 'Guardando...' : 'Registrar'}
               loading={createRequest.isPending}

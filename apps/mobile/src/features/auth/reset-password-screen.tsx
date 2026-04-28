@@ -1,13 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text-input';
@@ -15,6 +8,7 @@ import { BrandMark } from '@/components/brand-mark';
 import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { returnToRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
@@ -45,7 +39,7 @@ export function ResetPasswordScreen() {
       setMessage(result);
 
       if (result === 'Clave actualizada.') {
-        router.replace('/home');
+        returnToRoute(router, '/home');
       }
     } finally {
       setBusy(false);

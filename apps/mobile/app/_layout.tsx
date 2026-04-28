@@ -1,25 +1,74 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Linking,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import type { Href } from 'expo-router';
 import type { Json } from '@happy-circles/shared';
 
 import { GlobalFeedbackOverlay } from '@/components/global-feedback-overlay';
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
+import {
+  HappyCirclesBottomPieceSvg,
+  HappyCirclesCenterSvg,
+  HappyCirclesGlyph,
+  HappyCirclesLeftPieceSvg,
+  HappyCirclesRightPieceSvg,
+  HappyCirclesTopPieceSvg,
+  resolveHappyCirclesPalette,
+} from '@/components/happy-circles-glyph';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
 import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
+import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const LAUNCH_INTRO_MIN_MS = 1750;
+const LAUNCH_READY_MS = 760;
+const LAUNCH_LAND_MS = 1400;
+const LAUNCH_ROUTE_SETTLE_MS = 420;
+const LAUNCH_LOGO_SIZE = 116;
+const LAUNCH_HEADER_LOGO_SIZE = 68;
+const LAUNCH_HEADER_TITLE_SIZE = 30;
+const LAUNCH_HEADER_SCALE = LAUNCH_HEADER_LOGO_SIZE / LAUNCH_LOGO_SIZE;
+const LAUNCH_LOCKUP_GAP = 6 / LAUNCH_HEADER_SCALE;
+const LAUNCH_TITLE_WIDTH = 346;
+const LAUNCH_TITLE_FONT_SIZE = LAUNCH_HEADER_TITLE_SIZE / LAUNCH_HEADER_SCALE;
+const LAUNCH_TITLE_LINE_HEIGHT = 36 / LAUNCH_HEADER_SCALE;
+const LAUNCH_LOCKUP_LOGO_CENTER_OFFSET = (LAUNCH_TITLE_WIDTH + LAUNCH_LOCKUP_GAP) / 2;
+const LAUNCH_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function createLaunchMaskId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2)}`;
+}
 
 function NotificationBridge() {
   const router = useRouter();
@@ -32,7 +81,7 @@ function NotificationBridge() {
     void addNotificationResponseListener((response) => {
       const href = response.notification.request.content.data?.href;
       if (typeof href === 'string') {
-        router.push(href as Href);
+        returnToRoute(router, href as Href);
       }
     }).then((subscription) => {
       currentSubscription = subscription;
@@ -175,129 +224,349 @@ function MandatoryUpdateGate() {
   );
 }
 
-function SessionOverlay() {
+function LaunchIntroOverlay() {
   const session = useSession();
-  const [message, setMessage] = useState<string | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [appState, setAppState] = useState(AppState.currentState);
-  const [retryKey, setRetryKey] = useState(0);
-  const autoUnlockTriggeredRef = useRef(false);
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const [visible, setVisible] = useState(true);
+  const [finishRequested, setFinishRequested] = useState(false);
+  const mountedAtRef = useRef(Date.now());
+  const unlockAttemptedRef = useRef(false);
+  const latestStatusRef = useRef(session.status);
+  const latestUnlockRef = useRef(session.unlock);
+  const introMotion = useRef(new Animated.Value(0)).current;
+  const spinMotion = useRef(new Animated.Value(0)).current;
+  const pulseMotion = useRef(new Animated.Value(0)).current;
+  const readyMotion = useRef(new Animated.Value(0)).current;
+  const textMotion = useRef(new Animated.Value(0)).current;
+  const landMotion = useRef(new Animated.Value(0)).current;
+  const topMaskId = useMemo(() => createLaunchMaskId('launch-top'), []);
+  const leftMaskId = useMemo(() => createLaunchMaskId('launch-left'), []);
+  const rightMaskId = useMemo(() => createLaunchMaskId('launch-right'), []);
+  const loadingPalette = useMemo(
+    () => ({
+      ...resolveHappyCirclesPalette('brand'),
+      face: theme.colors.brandCoral,
+      faceDetail: theme.colors.white,
+    }),
+    [],
+  );
+  const successPalette = useMemo(
+    () => ({
+      ...resolveHappyCirclesPalette('brand'),
+      face: theme.colors.brandGreen,
+      faceDetail: theme.colors.white,
+    }),
+    [],
+  );
+  const headerTranslateY = useMemo(() => {
+    const headerCenterY =
+      insets.top + theme.spacing.md + theme.spacing.xxs + LAUNCH_HEADER_LOGO_SIZE / 2;
+    return headerCenterY - height / 2;
+  }, [height, insets.top]);
 
-  const attemptUnlock = useCallback(
-    async (automatic: boolean) => {
-      if (isAuthenticating) {
+  useEffect(() => {
+    latestStatusRef.current = session.status;
+    latestUnlockRef.current = session.unlock;
+  }, [session.status, session.unlock]);
+
+  useEffect(() => {
+    Animated.timing(introMotion, {
+      duration: 620,
+      easing: LAUNCH_EASING,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+
+    const spinLoop = Animated.loop(
+      Animated.timing(spinMotion, {
+        duration: 1400,
+        easing: Easing.linear,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    );
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseMotion, {
+          duration: 620,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseMotion, {
+          duration: 620,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    spinLoop.start();
+    pulseLoop.start();
+
+    return () => {
+      spinLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [introMotion, pulseMotion, spinMotion]);
+
+  useEffect(() => {
+    if (session.status !== 'loading' && !finishRequested) {
+      setFinishRequested(true);
+    }
+  }, [finishRequested, session.status]);
+
+  useEffect(() => {
+    if (!finishRequested) {
+      return undefined;
+    }
+
+    let active = true;
+
+    async function finishIntro() {
+      const elapsed = Date.now() - mountedAtRef.current;
+      if (elapsed < LAUNCH_INTRO_MIN_MS) {
+        await wait(LAUNCH_INTRO_MIN_MS - elapsed);
+      }
+
+      if (!active) {
         return;
       }
 
-      setIsAuthenticating(true);
-      setMessage(null);
+      await new Promise<void>((resolve) => {
+        Animated.timing(readyMotion, {
+          duration: LAUNCH_READY_MS,
+          easing: LAUNCH_EASING,
+          toValue: 1,
+          useNativeDriver: true,
+        }).start(() => resolve());
+      });
 
-      const result = await session.unlock();
-      if (!result.success) {
-        const isTransientAutomaticFailure =
-          automatic && (result.error === 'app_cancel' || result.error === 'system_cancel');
-
-        if (isTransientAutomaticFailure) {
-          autoUnlockTriggeredRef.current = false;
-          setTimeout(() => {
-            setRetryKey((current) => current + 1);
-          }, 350);
-          setIsAuthenticating(false);
-          return;
-        }
-
-        setMessage(
-          result.error === 'device_untrusted'
-            ? 'Este dispositivo aun no es confiable. Valida el dispositivo desde tu perfil.'
-            : automatic
-            ? `No se pudo validar ${session.biometricLabel}. Intenta otra vez o cierra sesion.`
-            : result.error === 'user_cancel'
-              ? `Cancelaste ${session.biometricLabel}.`
-              : `No se pudo validar ${session.biometricLabel}.`,
-        );
+      if (!active) {
+        return;
       }
 
-      setIsAuthenticating(false);
-    },
-    [isAuthenticating, session],
-  );
+      await new Promise<void>((resolve) => {
+        Animated.timing(textMotion, {
+          duration: 860,
+          easing: LAUNCH_EASING,
+          toValue: 1,
+          useNativeDriver: true,
+        }).start(() => resolve());
+      });
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      setAppState(nextState);
-    });
+      if (!active) {
+        return;
+      }
+
+      if (latestStatusRef.current === 'signed_in_locked' && !unlockAttemptedRef.current) {
+        unlockAttemptedRef.current = true;
+        await latestUnlockRef.current();
+      }
+
+      await wait(LAUNCH_ROUTE_SETTLE_MS);
+
+      if (!active) {
+        return;
+      }
+
+      Animated.timing(landMotion, {
+        duration: LAUNCH_LAND_MS,
+        easing: LAUNCH_EASING,
+        toValue: 1,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished && active) {
+          setVisible(false);
+        }
+      });
+    }
+
+    void finishIntro();
 
     return () => {
-      subscription.remove();
+      active = false;
     };
-  }, []);
+  }, [finishRequested, landMotion, readyMotion, textMotion]);
 
-  useEffect(() => {
-    if (!session.isLocked) {
-      autoUnlockTriggeredRef.current = false;
-      setMessage(null);
-      setIsAuthenticating(false);
-      return;
-    }
-
-    if (session.status === 'loading' || autoUnlockTriggeredRef.current) {
-      return;
-    }
-
-    if (appState !== 'active') {
-      return;
-    }
-
-    autoUnlockTriggeredRef.current = true;
-    const timer = setTimeout(() => {
-      void attemptUnlock(true);
-    }, 250);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [appState, attemptUnlock, retryKey, session.isLocked, session.status]);
-
-  if (session.status === 'loading') {
-    return (
-      <View style={styles.overlay}>
-        <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
-          <View style={styles.lockMotion}>
-            <HappyCirclesMotion size={236} variant="splash" />
-          </View>
-          <Text style={styles.lockTitle}>Cargando Happy Circles</Text>
-          <Text style={styles.lockSubtitle}>Preparando sesion y ajustes locales.</Text>
-        </SurfaceCard>
-      </View>
-    );
-  }
-
-  if (!session.isLocked) {
+  if (!visible) {
     return null;
   }
 
+  const introOpacity = introMotion.interpolate({
+    inputRange: [0, 0.35, 1],
+    outputRange: [0, 0.8, 1],
+  });
+  const introScale = introMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1],
+  });
+  const rotate = spinMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  const centerPulseScale = pulseMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.045],
+  });
+  const loadingFaceOpacity = readyMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const successFaceOpacity = readyMotion;
+  const rotatingPiecesOpacity = textMotion.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: [1, 0.18, 0],
+  });
+  const staticLogoOpacity = textMotion.interpolate({
+    inputRange: [0, 0.42, 1],
+    outputRange: [0, 1, 1],
+  });
+  const centerOverlayOpacity = textMotion.interpolate({
+    inputRange: [0, 0.4, 1],
+    outputRange: [1, 0.35, 0],
+  });
+  const logoReadyScale = readyMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.94],
+  });
+  const textOpacity = textMotion.interpolate({
+    inputRange: [0, 0.2, 1],
+    outputRange: [0, 0.18, 1],
+  });
+  const textTranslateX = textMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, 0],
+  });
+  const lockupTranslateX = textMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [LAUNCH_LOCKUP_LOGO_CENTER_OFFSET, 0],
+  });
+  const landTranslateY = landMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, headerTranslateY],
+  });
+  const landScale = landMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, LAUNCH_HEADER_SCALE],
+  });
+  const overlayOpacity = landMotion.interpolate({
+    inputRange: [0, 0.58, 1],
+    outputRange: [1, 0.96, 0],
+  });
+
   return (
-    <View style={styles.overlay}>
-      <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
-        <Text style={styles.lockTitle}>{isAuthenticating ? `Verificando ${session.biometricLabel}` : 'App bloqueada'}</Text>
-        <Text style={styles.lockSubtitle}>
-          {session.email ?? 'Tu sesion'} requiere {session.biometricLabel} para entrar sin volver a escribir tu clave.
-        </Text>
-        {message ? <Text style={styles.lockMessage}>{message}</Text> : null}
-        <PrimaryAction
-          label={isAuthenticating ? `Validando ${session.biometricLabel}...` : `Entrar con ${session.biometricLabel}`}
-          subtitle="Si la validacion sale bien, entraras de una vez."
-          onPress={isAuthenticating ? undefined : () => void attemptUnlock(false)}
-        />
-        <PrimaryAction label="Cerrar sesion" onPress={() => void session.signOut()} variant="secondary" />
-      </SurfaceCard>
-    </View>
+    <Animated.View
+      accessibilityLabel="Happy Circles esta iniciando"
+      pointerEvents="auto"
+      style={[styles.launchOverlay, { opacity: overlayOpacity }]}
+    >
+      <Animated.View
+        style={[
+          styles.launchIntroGroup,
+          {
+            height: LAUNCH_LOGO_SIZE,
+            opacity: introOpacity,
+            transform: [
+              { translateX: lockupTranslateX },
+              { translateY: landTranslateY },
+              { scale: Animated.multiply(introScale, landScale) },
+            ],
+            width: LAUNCH_LOGO_SIZE + LAUNCH_LOCKUP_GAP + LAUNCH_TITLE_WIDTH,
+          },
+        ]}
+      >
+        <Animated.View
+          style={[
+            styles.launchLogoStage,
+            {
+              height: LAUNCH_LOGO_SIZE,
+              transform: [{ scale: logoReadyScale }],
+              width: LAUNCH_LOGO_SIZE,
+            },
+          ]}
+        >
+          <Animated.View style={[styles.launchLogoLayer, { opacity: staticLogoOpacity }]}>
+            <HappyCirclesGlyph size={LAUNCH_LOGO_SIZE} />
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.launchLogoLayer,
+              {
+                opacity: rotatingPiecesOpacity,
+                transform: [{ rotate }],
+              },
+            ]}
+          >
+            <Animated.View style={styles.launchLogoLayer}>
+              <HappyCirclesTopPieceSvg
+                maskId={topMaskId}
+                palette={loadingPalette}
+                size={LAUNCH_LOGO_SIZE}
+              />
+            </Animated.View>
+            <Animated.View style={styles.launchLogoLayer}>
+              <HappyCirclesLeftPieceSvg
+                maskId={leftMaskId}
+                palette={loadingPalette}
+                size={LAUNCH_LOGO_SIZE}
+              />
+            </Animated.View>
+            <Animated.View style={styles.launchLogoLayer}>
+              <HappyCirclesRightPieceSvg
+                maskId={rightMaskId}
+                palette={loadingPalette}
+                size={LAUNCH_LOGO_SIZE}
+              />
+            </Animated.View>
+            <Animated.View style={styles.launchLogoLayer}>
+              <HappyCirclesBottomPieceSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
+            </Animated.View>
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.launchLogoLayer,
+              {
+                opacity: centerOverlayOpacity,
+                transform: [{ scale: centerPulseScale }],
+              },
+            ]}
+          >
+            <Animated.View style={[styles.launchLogoLayer, { opacity: loadingFaceOpacity }]}>
+              <HappyCirclesCenterSvg palette={loadingPalette} size={LAUNCH_LOGO_SIZE} />
+            </Animated.View>
+            <Animated.View style={[styles.launchLogoLayer, { opacity: successFaceOpacity }]}>
+              <HappyCirclesCenterSvg palette={successPalette} size={LAUNCH_LOGO_SIZE} wink />
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.launchTitleWrap,
+            {
+              opacity: textOpacity,
+              transform: [{ translateX: textTranslateX }],
+            },
+          ]}
+        >
+          <Text numberOfLines={1} style={styles.launchTitle}>
+            Happy Circles
+          </Text>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 function SessionRouteGuard() {
   const { accountAccessState, profileCompletionState, setupState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
+  const params = useLocalSearchParams<{ preview?: string | string[] }>();
   const router = useRouter();
   const segments = useSegments();
 
@@ -310,17 +579,33 @@ function SessionRouteGuard() {
 
     async function syncRoutes() {
       const currentRootSegment = String(segments[0] ?? '');
+      const isRootRoute = currentRootSegment === '';
       const inAuthGroup = currentRootSegment === '(auth)';
-      const isCompleteProfileRoute = currentRootSegment === 'complete-profile';
-      const isSetupAccountRoute = currentRootSegment === 'setup-account' || isCompleteProfileRoute;
+      const isSetupAccountRoute = currentRootSegment === 'setup-account';
       const isInviteLinkRoute = currentRootSegment === 'invite';
       const isJoinRoute = currentRootSegment === 'join';
+      const hasJoinToken = isJoinRoute && segments.length > 1;
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
+      const isPublicSignedOutRoute = inAuthGroup || isPublicInviteRoute || isResetPasswordRoute;
+      const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
+      const isQaPreviewRoute = __DEV__ && rawPreview === 'true';
 
       if (status === 'signed_out') {
-        if (!inAuthGroup && !isPublicInviteRoute && !isResetPasswordRoute && !cancelled) {
-          router.replace('/join');
+        if (isRootRoute && !cancelled) {
+          returnToRoute(router, '/join');
+          return;
+        }
+
+        if (!isPublicSignedOutRoute && !cancelled) {
+          returnToRoute(router, '/sign-in');
+        }
+        return;
+      }
+
+      if (status === 'signed_in_locked') {
+        if (!isJoinRoute && !isInviteLinkRoute && !cancelled) {
+          returnToRoute(router, '/join');
         }
         return;
       }
@@ -330,8 +615,8 @@ function SessionRouteGuard() {
       const joinRootHref = '/join' as unknown as Href;
 
       if (accountAccessState === 'needs_invite') {
-        if (!isJoinRoute && !inAuthGroup && !cancelled) {
-          router.replace((inviteAwareHref ?? joinRootHref) as Href);
+        if (!isJoinRoute && !cancelled) {
+          returnToRoute(router, (inviteAwareHref ?? joinRootHref) as Href);
         }
         return;
       }
@@ -343,13 +628,34 @@ function SessionRouteGuard() {
         !isPublicInviteRoute
       ) {
         if (!cancelled) {
-          router.replace(buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile'));
+          returnToRoute(
+            router,
+            buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile'),
+          );
         }
         return;
       }
 
-      if (accountAccessState === 'needs_activation' && !isJoinRoute && !isSetupAccountRoute && !cancelled) {
-        router.replace((inviteAwareHref ?? joinRootHref) as Href);
+      if (
+        accountAccessState === 'needs_activation' &&
+        !isJoinRoute &&
+        !isSetupAccountRoute &&
+        !cancelled
+      ) {
+        returnToRoute(router, (inviteAwareHref ?? joinRootHref) as Href);
+        return;
+      }
+
+      if (
+        accountAccessState === 'active' &&
+        profileCompletionState === 'complete' &&
+        isJoinRoute &&
+        !hasJoinToken &&
+        !inviteAwareHref &&
+        !isQaPreviewRoute &&
+        !cancelled
+      ) {
+        returnToRoute(router, '/home');
         return;
       }
 
@@ -360,23 +666,12 @@ function SessionRouteGuard() {
             : buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
           : (inviteAwareHref ?? joinRootHref);
 
-      if (profileCompletionState === 'complete' && isCompleteProfileRoute) {
-        if (!cancelled) {
-          router.replace(buildSetupAccountHref('profile'));
-        }
-        return;
-      }
-
       if (isResetPasswordRoute) {
         return;
       }
 
       if (inAuthGroup && !cancelled) {
-        router.replace(
-          (
-            nextSignedInHref
-          ) as Href,
-        );
+        returnToRoute(router, nextSignedInHref as Href);
       }
     }
 
@@ -385,7 +680,16 @@ function SessionRouteGuard() {
     return () => {
       cancelled = true;
     };
-  }, [accountAccessState, profileCompletionState, rootNavigationState?.key, router, segments, setupState, status]);
+  }, [
+    accountAccessState,
+    params.preview,
+    profileCompletionState,
+    rootNavigationState?.key,
+    router,
+    segments,
+    setupState,
+    status,
+  ]);
 
   return null;
 }
@@ -413,8 +717,11 @@ function RootNavigator() {
           headerTintColor: theme.colors.text,
         }}
       >
+        <Stack.Screen name="(tabs)" dangerouslySingular />
+        <Stack.Screen name="advanced/audit" dangerouslySingular />
         <Stack.Screen
           name="activity"
+          dangerouslySingular
           options={{
             animation: 'slide_from_bottom',
             contentStyle: {
@@ -423,8 +730,19 @@ function RootNavigator() {
             presentation: 'transparentModal',
           }}
         />
+        <Stack.Screen name="balance/analytics" dangerouslySingular />
+        <Stack.Screen name="balance/index" dangerouslySingular />
+        <Stack.Screen name="invite/[token]" dangerouslySingular />
+        <Stack.Screen name="invite/index" dangerouslySingular />
+        <Stack.Screen name="join/[token]/create-account" dangerouslySingular />
+        <Stack.Screen name="join/[token]/index" dangerouslySingular />
+        <Stack.Screen name="join/index" dangerouslySingular />
+        <Stack.Screen name="people" dangerouslySingular />
+        <Stack.Screen name="person/[userId]" dangerouslySingular />
+        <Stack.Screen name="profile" dangerouslySingular />
         <Stack.Screen
           name="register"
+          dangerouslySingular
           options={{
             animation: 'slide_from_bottom',
             contentStyle: {
@@ -433,9 +751,13 @@ function RootNavigator() {
             presentation: 'transparentModal',
           }}
         />
+        <Stack.Screen name="reset-password" dangerouslySingular />
+        <Stack.Screen name="setup-account" dangerouslySingular />
+        <Stack.Screen name="settlements/[id]" dangerouslySingular />
+        <Stack.Screen name="transactions" dangerouslySingular />
       </Stack>
       <MandatoryUpdateGate />
-      <SessionOverlay />
+      <LaunchIntroOverlay />
       <GlobalFeedbackOverlay />
     </>
   );
@@ -450,6 +772,46 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  launchOverlay: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    padding: theme.spacing.lg,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  launchIntroGroup: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: LAUNCH_LOCKUP_GAP,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  launchLogoStage: {
+    overflow: 'visible',
+    position: 'relative',
+  },
+  launchLogoLayer: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  launchTitleWrap: {
+    overflow: 'hidden',
+    width: LAUNCH_TITLE_WIDTH,
+  },
+  launchTitle: {
+    color: theme.colors.text,
+    fontSize: LAUNCH_TITLE_FONT_SIZE,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: LAUNCH_TITLE_LINE_HEIGHT,
+  },
   overlay: {
     alignItems: 'center',
     backgroundColor: theme.colors.overlay,

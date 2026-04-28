@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import {
@@ -9,6 +9,7 @@ import {
 import { theme } from '@/lib/theme';
 
 const VISIBLE_MS = 1550;
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlobalFeedbackOverlay() {
   const [feedback, setFeedback] = useState<GlobalFeedbackPayload | null>(null);
@@ -32,14 +33,14 @@ export function GlobalFeedbackOverlay() {
             duration: 180,
             easing: Easing.out(Easing.cubic),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
           Animated.spring(scale, {
             damping: 16,
             mass: 0.8,
             stiffness: 180,
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
         ]).start();
 
@@ -48,7 +49,7 @@ export function GlobalFeedbackOverlay() {
             duration: 180,
             easing: Easing.in(Easing.cubic),
             toValue: 0,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start(({ finished }) => {
             if (finished) {
               setFeedback(null);

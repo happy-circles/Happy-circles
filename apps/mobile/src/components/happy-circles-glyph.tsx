@@ -106,14 +106,16 @@ export function HappyCirclesOuterSvg({
 export function HappyCirclesCenterSvg({
   palette,
   size,
+  viewBox = GLYPH_VIEW_BOX,
   wink = false,
 }: {
   readonly palette: HappyCirclesPalette;
   readonly size: number;
+  readonly viewBox?: string;
   readonly wink?: boolean;
 }) {
   return (
-    <Svg height={size} viewBox={GLYPH_VIEW_BOX} width={size}>
+    <Svg height={size} viewBox={viewBox} width={size}>
       <Circle cx="340" cy="340" fill={palette.face} r="50" />
       <Circle cx="325" cy="331" fill={palette.faceDetail} r="7" />
       {wink ? (

@@ -23,7 +23,11 @@ import {
   type Database,
 } from '@happy-circles/shared';
 
-import { getCurrentAppVersion, getCurrentDeviceName, getOrCreateDeviceId } from '@/lib/device-trust';
+import {
+  getCurrentAppVersion,
+  getCurrentDeviceName,
+  getOrCreateDeviceId,
+} from '@/lib/device-trust';
 import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
 import {
   getBiometricSupport,
@@ -36,10 +40,7 @@ import {
   requestContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
-import {
-  derivePendingRequiredSetupSteps,
-  type SetupStep,
-} from '@/lib/setup-account';
+import { derivePendingRequiredSetupSteps, type SetupStep } from '@/lib/setup-account';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
@@ -123,6 +124,10 @@ interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
 
+interface RefreshAccountStateOptions {
+  readonly preserveLocked?: boolean;
+}
+
 interface RememberedAccountSnapshot {
   readonly userId: string;
   readonly displayName: string;
@@ -180,7 +185,7 @@ interface SessionContextValue {
   attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
   trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
   revokeTrustedDevice(deviceId: string): Promise<string>;
-  refreshAccountState(): Promise<void>;
+  refreshAccountState(options?: RefreshAccountStateOptions): Promise<void>;
   signOut(): Promise<void>;
   unlock(): Promise<BiometricAuthResult>;
   lock(): void;
@@ -594,8 +599,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfileRow | null>(null);
   const [accountAccessState, setAccountAccessState] = useState<AccountAccessState>('loading');
-  const [rememberedAccount, setRememberedAccount] =
-    useState<RememberedAccountSnapshot | null>(null);
+  const [rememberedAccount, setRememberedAccount] = useState<RememberedAccountSnapshot | null>(
+    null,
+  );
   const [linkedMethods, setLinkedMethods] = useState<LinkedMethods>(EMPTY_LINKED_METHODS);
   const [profileCompletionState, setProfileCompletionState] =
     useState<ProfileCompletionState>('loading');
@@ -620,6 +626,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const sessionRef = useRef<Session | null>(null);
 
   const clearSignedInState = useCallback(() => {
+    accountLoadIdRef.current += 1;
     sessionRef.current = null;
     setSession(null);
     setProfile(null);
@@ -711,23 +718,25 @@ export function SessionProvider({ children }: PropsWithChildren) {
         last_seen_at: timestamp,
       };
 
-      const [profileResult, identities, maybeDeviceResult, pendingInviteIntent] = await Promise.all([
-        supabase
-          .from('user_profiles')
-          .select(
-            'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
-          )
-          .eq('id', nextSession.user.id)
-          .single(),
-        resolveUserIdentities(nextSession),
-        supabase
-          .from('trusted_devices')
-          .select('*')
-          .eq('user_id', nextSession.user.id)
-          .eq('device_id', deviceId)
-          .maybeSingle(),
-        readPendingInviteIntent(),
-      ]);
+      const [profileResult, identities, maybeDeviceResult, pendingInviteIntent] = await Promise.all(
+        [
+          supabase
+            .from('user_profiles')
+            .select(
+              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+            )
+            .eq('id', nextSession.user.id)
+            .single(),
+          resolveUserIdentities(nextSession),
+          supabase
+            .from('trusted_devices')
+            .select('*')
+            .eq('user_id', nextSession.user.id)
+            .eq('device_id', deviceId)
+            .maybeSingle(),
+          readPendingInviteIntent(),
+        ],
+      );
 
       if (profileResult.error) {
         throw new Error(profileResult.error.message);
@@ -737,7 +746,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
         throw new Error(maybeDeviceResult.error.message);
       }
 
-      let currentDevice: TrustedDeviceRow | null = maybeDeviceResult.data as TrustedDeviceRow | null;
+      let currentDevice: TrustedDeviceRow | null =
+        maybeDeviceResult.data as TrustedDeviceRow | null;
       if (!currentDevice) {
         const insertResult = await supabase
           .from('trusted_devices')
@@ -810,7 +820,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
             snapshot
               ? {
                   ...snapshot,
-                  accountAccessState: nextAccountAccessState === 'loading' ? 'needs_invite' : nextAccountAccessState,
+                  accountAccessState:
+                    nextAccountAccessState === 'loading' ? 'needs_invite' : nextAccountAccessState,
                 }
               : null,
           );
@@ -829,26 +840,29 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [biometricsEnabled],
   );
 
-  const refreshAccountState = useCallback(async () => {
-    if (!supabase) {
-      return;
-    }
+  const refreshAccountState = useCallback(
+    async (options?: RefreshAccountStateOptions) => {
+      if (!supabase) {
+        return;
+      }
 
-    const { data } = await supabase.auth.getSession();
-    const nextSession = data.session;
+      const { data } = await supabase.auth.getSession();
+      const nextSession = data.session;
 
-    if (!nextSession) {
-      clearSignedInState();
-      setStatus('signed_out');
-      return;
-    }
+      if (!nextSession) {
+        clearSignedInState();
+        setStatus('signed_out');
+        return;
+      }
 
-    await loadAccountState(nextSession, {
-      initialLock: false,
-      preserveLocked: status === 'signed_in_locked',
-      biometricPreference: biometricsEnabled,
-    });
-  }, [biometricsEnabled, clearSignedInState, loadAccountState, status]);
+      await loadAccountState(nextSession, {
+        initialLock: false,
+        preserveLocked: options?.preserveLocked ?? status === 'signed_in_locked',
+        biometricPreference: biometricsEnabled,
+      });
+    },
+    [biometricsEnabled, clearSignedInState, loadAccountState, status],
+  );
 
   useEffect(() => {
     let active = true;
@@ -1057,19 +1071,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       if (!authResult.data?.url) {
-        return mode === 'link' ? 'No se pudo abrir Google para vincularlo.' : 'No se pudo iniciar Google.';
+        return mode === 'link'
+          ? 'No se pudo abrir Google para vincularlo.'
+          : 'No se pudo iniciar Google.';
       }
 
       const result = await WebBrowser.openAuthSessionAsync(authResult.data.url, redirectTo);
       const resultType = String(result.type);
 
       if (resultType === 'cancel' || resultType === 'dismiss') {
-        return mode === 'link' ? 'Vinculacion con Google cancelada.' : 'Inicio con Google cancelado.';
+        return mode === 'link'
+          ? 'Vinculacion con Google cancelada.'
+          : 'Inicio con Google cancelado.';
       }
 
       if (resultType === 'success') {
-        const redirectUrl =
-          'url' in result && typeof result.url === 'string' ? result.url : null;
+        const redirectUrl = 'url' in result && typeof result.url === 'string' ? result.url : null;
         await applySessionFromUrl(redirectUrl);
         return mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.';
       }
@@ -1199,7 +1216,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
           (error as { readonly code?: string }).code === 'ERR_REQUEST_CANCELED'
         ) {
           return {
-            message: mode === 'link' ? 'Vinculacion con Apple cancelada.' : 'Inicio con Apple cancelado.',
+            message:
+              mode === 'link' ? 'Vinculacion con Apple cancelada.' : 'Inicio con Apple cancelado.',
             userId: null,
           };
         }
@@ -1283,9 +1301,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const signInWithGoogle = useCallback(async () => performGoogleOAuthFlow('sign-in'), [
-    performGoogleOAuthFlow,
-  ]);
+  const signInWithGoogle = useCallback(
+    async () => performGoogleOAuthFlow('sign-in'),
+    [performGoogleOAuthFlow],
+  );
 
   const signInWithApple = useCallback(async () => {
     const result = await performAppleAuth('sign-in');
@@ -1316,28 +1335,31 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const updatePassword = useCallback(async (input: PasswordResetInput) => {
-    try {
-      const parsed = passwordResetSchema.parse(input);
+  const updatePassword = useCallback(
+    async (input: PasswordResetInput) => {
+      try {
+        const parsed = passwordResetSchema.parse(input);
 
-      if (!supabase || !sessionRef.current) {
-        return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
+        if (!supabase || !sessionRef.current) {
+          return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
+        }
+
+        const { error } = await supabase.auth.updateUser({
+          password: parsed.password,
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        await refreshAccountState();
+        return 'Clave actualizada.';
+      } catch (error) {
+        return formatValidationMessage(error);
       }
-
-      const { error } = await supabase.auth.updateUser({
-        password: parsed.password,
-      });
-
-      if (error) {
-        return formatSupabaseAuthErrorMessage(error.message);
-      }
-
-      await refreshAccountState();
-      return 'Clave actualizada.';
-    } catch (error) {
-      return formatValidationMessage(error);
-    }
-  }, [refreshAccountState]);
+    },
+    [refreshAccountState],
+  );
 
   const signOut = useCallback(async () => {
     if (supabase) {
@@ -1586,7 +1608,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return formatValidationMessage(error);
       }
     },
-    [biometricLabel, deviceTrustState, profile, profileCompletionState, refreshAccountState, stepUpAuth],
+    [
+      biometricLabel,
+      deviceTrustState,
+      profile,
+      profileCompletionState,
+      refreshAccountState,
+      stepUpAuth,
+    ],
   );
 
   const linkGoogle = useCallback(async () => {

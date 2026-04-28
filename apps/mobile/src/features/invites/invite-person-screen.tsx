@@ -27,7 +27,13 @@ import {
   useCreatePeopleOutreachMutation,
   useResolvePeopleTargetsMutation,
 } from '@/lib/live-data';
-import { buildPhoneE164, COUNTRY_OPTIONS, DEFAULT_COUNTRY, normalizePhoneDigits } from '@/lib/phone';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
+import {
+  buildPhoneE164,
+  COUNTRY_OPTIONS,
+  DEFAULT_COUNTRY,
+  normalizePhoneDigits,
+} from '@/lib/phone';
 import { theme } from '@/lib/theme';
 
 type FriendshipOrAccountResult = PeopleOutreachResult['result'];
@@ -133,7 +139,8 @@ function findCountryOptionByPhoneNumber(rawNumber: string) {
   const digits = normalizePhoneDigits(trimmed);
   const sortedOptions = [...COUNTRY_OPTIONS].sort(
     (left, right) =>
-      normalizePhoneDigits(right.callingCode).length - normalizePhoneDigits(left.callingCode).length,
+      normalizePhoneDigits(right.callingCode).length -
+      normalizePhoneDigits(left.callingCode).length,
   );
 
   for (const option of sortedOptions) {
@@ -193,13 +200,15 @@ function isAccountInviteDeliveryResult(
 ): value is AccountInviteDeliveryResult {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      'deliveryToken' in value &&
-      typeof value.deliveryToken === 'string',
+    typeof value === 'object' &&
+    'deliveryToken' in value &&
+    typeof value.deliveryToken === 'string',
   );
 }
 
-function buildContactPhoneOptions(contact: Contacts.Contact | Contacts.ExistingContact): ContactPhoneOption[] {
+function buildContactPhoneOptions(
+  contact: Contacts.Contact | Contacts.ExistingContact,
+): ContactPhoneOption[] {
   const phoneNumbers = contact.phoneNumbers ?? [];
 
   return phoneNumbers.flatMap((phoneNumber, index) => {
@@ -261,16 +270,20 @@ async function readContactsFromDevice(): Promise<readonly ContactCandidate[]> {
       alias,
       phoneOptions,
       primaryPhone: phoneOptions[0],
-      searchKey: `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase('es-CO'),
+      searchKey:
+        `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase(
+          'es-CO',
+        ),
     });
   }
 
   return records.sort((left, right) => left.alias.localeCompare(right.alias, 'es-CO'));
 }
 
-function badgeForResolution(
-  resolution: PeopleTargetResolution | null,
-): { readonly label: string; readonly tone: 'neutral' | 'success' | 'warning' | 'primary' } {
+function badgeForResolution(resolution: PeopleTargetResolution | null): {
+  readonly label: string;
+  readonly tone: 'neutral' | 'success' | 'warning' | 'primary';
+} {
   if (!resolution) {
     return {
       label: 'Revisando',
@@ -334,7 +347,10 @@ function canPressForResolution(resolution: PeopleTargetResolution | null): boole
 }
 
 function buildContactMeta(contact: ContactCandidate): string {
-  const primaryLine = [contact.primaryPhone.label, formatPhonePreview(contact.primaryPhone.phoneE164)]
+  const primaryLine = [
+    contact.primaryPhone.label,
+    formatPhonePreview(contact.primaryPhone.phoneE164),
+  ]
     .filter(Boolean)
     .join(' | ');
 
@@ -477,7 +493,9 @@ export function InvitePersonScreen() {
         mergeTargetResolutions(resolutions);
       })
       .catch((error) => {
-        setMessage(error instanceof Error ? error.message : 'No se pudo revisar esta parte de tu agenda.');
+        setMessage(
+          error instanceof Error ? error.message : 'No se pudo revisar esta parte de tu agenda.',
+        );
       });
   }, [
     canReadContacts,
@@ -513,7 +531,9 @@ export function InvitePersonScreen() {
           : 'Tu agenda ya quedo lista para revisar quien ya esta en Happy Circles.',
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.');
+      setMessage(
+        error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.',
+      );
     } finally {
       setBusyKey(null);
     }
@@ -555,7 +575,9 @@ export function InvitePersonScreen() {
   }
 
   async function ensurePhoneStatuses(phoneE164List: readonly string[]) {
-    const missingPhones = [...new Set(phoneE164List.filter((phoneE164) => !targetCache[phoneE164]))];
+    const missingPhones = [
+      ...new Set(phoneE164List.filter((phoneE164) => !targetCache[phoneE164])),
+    ];
     if (missingPhones.length === 0) {
       return;
     }
@@ -569,7 +591,9 @@ export function InvitePersonScreen() {
     const shareMessage = buildAccountInviteShareMessage({
       inviteeAlias: alias,
       amountMinor:
-        Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0 ? transactionAmountMinor : null,
+        Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0
+          ? transactionAmountMinor
+          : null,
       direction: transactionDirection,
       description: transactionDescription,
       inviteLink,
@@ -587,7 +611,11 @@ export function InvitePersonScreen() {
     }
   }
 
-  function updateCacheFromOutreach(phoneE164: string, alias: string, response: PeopleOutreachResult) {
+  function updateCacheFromOutreach(
+    phoneE164: string,
+    alias: string,
+    response: PeopleOutreachResult,
+  ) {
     if (response.kind === 'already_related') {
       mergeTargetResolutions([
         {
@@ -625,7 +653,7 @@ export function InvitePersonScreen() {
     const accountInviteId =
       isAccountInviteDeliveryResult(response.result) && typeof response.result.inviteId === 'string'
         ? response.result.inviteId
-        : response.inviteId ?? null;
+        : (response.inviteId ?? null);
 
     mergeTargetResolutions([
       {
@@ -706,7 +734,9 @@ export function InvitePersonScreen() {
     try {
       await ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.');
+      setMessage(
+        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
+      );
     }
 
     setPendingContactSelection({
@@ -737,7 +767,7 @@ export function InvitePersonScreen() {
 
     setManualInviteInput('');
     setScannerOpen(false);
-    router.push({
+    pushRoute(router, {
       pathname: '/invite/[token]',
       params: { token },
     });
@@ -810,7 +840,7 @@ export function InvitePersonScreen() {
 
     setScannerLocked(true);
     setScannerOpen(false);
-    router.push({
+    pushRoute(router, {
       pathname: '/invite/[token]',
       params: { token },
     });
@@ -820,7 +850,11 @@ export function InvitePersonScreen() {
     <ScreenShell
       footer={
         <View style={styles.footer}>
-          <PrimaryAction label="Cerrar" onPress={() => router.dismiss()} variant="ghost" />
+          <PrimaryAction
+            label="Cerrar"
+            onPress={() => backOrReturnTo(router, '/people')}
+            variant="ghost"
+          />
         </View>
       }
       headerVariant="plain"
@@ -831,11 +865,14 @@ export function InvitePersonScreen() {
     >
       {message ? <MessageBanner message={message} /> : null}
 
-      {Number.isFinite(transactionAmountMinor) && transactionAmountMinor > 0 && transactionDirection ? (
+      {Number.isFinite(transactionAmountMinor) &&
+      transactionAmountMinor > 0 &&
+      transactionDirection ? (
         <SurfaceCard padding="md" variant="muted">
           <Text style={styles.contextLabel}>Contexto</Text>
           <Text style={styles.contextBody}>
-            {transactionDirection === 'i_owe' ? 'Salida' : 'Entrada'} de {formatCop(transactionAmountMinor)}
+            {transactionDirection === 'i_owe' ? 'Salida' : 'Entrada'} de{' '}
+            {formatCop(transactionAmountMinor)}
             {transactionDescription && transactionDescription.trim().length > 0
               ? ` por ${transactionDescription.trim()}`
               : ''}
@@ -870,7 +907,9 @@ export function InvitePersonScreen() {
               value={searchValue}
             />
 
-            {busyKey === 'load-contacts' ? <Text style={styles.helper}>Leyendo tu agenda...</Text> : null}
+            {busyKey === 'load-contacts' ? (
+              <Text style={styles.helper}>Leyendo tu agenda...</Text>
+            ) : null}
 
             {displayedContacts.length > 0 ? (
               <View style={styles.contactList}>
@@ -878,13 +917,19 @@ export function InvitePersonScreen() {
                   const resolution = targetCache[contact.primaryPhone.phoneE164] ?? null;
                   const badge = badgeForResolution(resolution);
                   const actionLabel =
-                    contact.phoneOptions.length > 1 ? 'Elegir numero' : actionLabelForResolution(resolution);
+                    contact.phoneOptions.length > 1
+                      ? 'Elegir numero'
+                      : actionLabelForResolution(resolution);
                   const actionEnabled =
                     contact.phoneOptions.length > 1 ? true : canPressForResolution(resolution);
                   const isBusy = busyKey === contact.primaryPhone.phoneE164;
 
                   return (
-                    <SurfaceCard key={`${contact.contactId}:${contact.primaryPhone.id}`} padding="md" variant="default">
+                    <SurfaceCard
+                      key={`${contact.contactId}:${contact.primaryPhone.id}`}
+                      padding="md"
+                      variant="default"
+                    >
                       <View style={styles.contactRow}>
                         <View style={styles.contactCopy}>
                           <View style={styles.contactTitleRow}>
@@ -898,7 +943,11 @@ export function InvitePersonScreen() {
                             compact
                             disabled={!actionEnabled || isBusy}
                             label={isBusy ? 'Procesando...' : actionLabel}
-                            onPress={!actionEnabled || isBusy ? undefined : () => void handleContactPress(contact)}
+                            onPress={
+                              !actionEnabled || isBusy
+                                ? undefined
+                                : () => void handleContactPress(contact)
+                            }
                             variant={resolution?.status === 'active_user' ? 'secondary' : 'primary'}
                           />
                         </View>
@@ -920,7 +969,8 @@ export function InvitePersonScreen() {
         ) : (
           <View style={styles.stack}>
             <Text style={styles.helper}>
-              Puedes dar permiso a tus contactos para ver rapidamente quien ya esta en Happy Circles, o seguir por celular manual.
+              Puedes dar permiso a tus contactos para ver rapidamente quien ya esta en Happy
+              Circles, o seguir por celular manual.
             </Text>
             {contactsPermissionStatus !== 'unavailable' ? (
               <PrimaryAction
@@ -990,7 +1040,10 @@ export function InvitePersonScreen() {
             onPress={busyKey ? undefined : () => void handlePasteManualInvite()}
             variant="secondary"
           />
-          <PrimaryAction label="Abrir invitacion" onPress={busyKey ? undefined : handleSubmitManualInvite} />
+          <PrimaryAction
+            label="Abrir invitacion"
+            onPress={busyKey ? undefined : handleSubmitManualInvite}
+          />
           <PrimaryAction
             label={scannerOpen ? 'Cerrar scanner' : 'Escanear QR'}
             onPress={() => void handleOpenScanner()}
@@ -1016,7 +1069,10 @@ export function InvitePersonScreen() {
         visible={pendingContactSelection !== null}
       >
         <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setPendingContactSelection(null)} />
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setPendingContactSelection(null)}
+          />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Elige el numero</Text>
             <Text style={styles.helper}>
@@ -1029,7 +1085,8 @@ export function InvitePersonScreen() {
                 const resolution = targetCache[phoneOption.phoneE164] ?? null;
                 const badge = badgeForResolution(resolution);
                 const actionLabel = actionLabelForResolution(resolution);
-                const disabled = !canPressForResolution(resolution) || busyKey === phoneOption.phoneE164;
+                const disabled =
+                  !canPressForResolution(resolution) || busyKey === phoneOption.phoneE164;
 
                 return (
                   <SurfaceCard key={phoneOption.id} padding="sm" variant="default">
@@ -1065,7 +1122,11 @@ export function InvitePersonScreen() {
                   </SurfaceCard>
                 );
               })}
-              <PrimaryAction label="Cancelar" onPress={() => setPendingContactSelection(null)} variant="ghost" />
+              <PrimaryAction
+                label="Cancelar"
+                onPress={() => setPendingContactSelection(null)}
+                variant="ghost"
+              />
             </View>
           </View>
         </View>

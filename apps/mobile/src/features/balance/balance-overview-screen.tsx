@@ -10,6 +10,7 @@ import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SurfaceCard } from '@/components/surface-card';
 import { useAppSnapshot } from '@/lib/live-data';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -116,7 +117,7 @@ export function BalanceOverviewScreen() {
         <ProjectionForecastCard
           currentBalanceMinor={overview.summary.netBalanceMinor}
           impactMinor={overview.projection.impactMinor}
-          onSegmentPress={(filter) => router.push(transactionFilterHref(filter))}
+          onSegmentPress={(filter) => pushRoute(router, transactionFilterHref(filter))}
           pendingCount={overview.projection.pendingCount}
           pendingIncomingMinor={overview.projection.pendingIncomingMinor}
           pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}

@@ -40,23 +40,6 @@ export function derivePendingRequiredSetupSteps(profile: UserProfileRow | null):
   return pendingSteps;
 }
 
-export function resolveLegacyCompleteProfileStep(focus: string | null | undefined): SetupStep {
-  if (focus === 'avatar') {
-    return 'photo';
-  }
-
-  if (
-    focus === 'trust-device' ||
-    focus === 'trust-password' ||
-    focus === 'device' ||
-    focus === 'device-help'
-  ) {
-    return 'security';
-  }
-
-  return 'profile';
-}
-
 export function resolveSetupStep(input: {
   readonly requestedStep?: string | null;
   readonly pendingRequiredSteps: readonly SetupStep[];

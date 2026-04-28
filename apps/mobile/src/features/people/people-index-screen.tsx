@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppTextInput } from '@/components/app-text-input';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
@@ -19,6 +20,10 @@ export function PeopleIndexScreen() {
   const refresh = useSnapshotRefresh(snapshotQuery);
   const people = snapshotQuery.data?.dashboard.activePeople ?? [];
   const [personQuery, setPersonQuery] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<{
+    readonly imageUrl: string | null;
+    readonly label: string;
+  } | null>(null);
   const normalizedQuery = personQuery.trim().toLocaleLowerCase('es-CO');
   const filteredPeople = useMemo(() => {
     if (normalizedQuery.length === 0) {
@@ -95,10 +100,25 @@ export function PeopleIndexScreen() {
       ) : (
         <View style={styles.list}>
           {filteredPeople.map((person) => (
-            <PersonRow key={person.userId} person={person} />
+            <PersonRow
+              key={person.userId}
+              onAvatarPress={(selectedPerson) =>
+                setAvatarPreview({
+                  imageUrl: selectedPerson.avatarUrl ?? null,
+                  label: selectedPerson.displayName,
+                })
+              }
+              person={person}
+            />
           ))}
         </View>
       )}
+      <AvatarViewerModal
+        imageUrl={avatarPreview?.imageUrl ?? null}
+        label={avatarPreview?.label ?? 'Persona'}
+        onClose={() => setAvatarPreview(null)}
+        visible={avatarPreview !== null}
+      />
     </ScreenShell>
   );
 }

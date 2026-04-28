@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import type { Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
-import {
-  clearPendingInviteIntent,
-  writePendingInviteIntent,
-} from '@/lib/invite-intent';
+import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
   useAccountInvitePreviewQuery,
@@ -74,14 +73,19 @@ export function AccountInviteScreen() {
   const [busyAction, setBusyAction] = useState<'activate' | 'approve' | 'reject' | null>(null);
 
   const deliveryToken = useMemo(
-    () => (typeof params.token === 'string' && params.token.trim().length > 0 ? params.token.trim() : null),
+    () =>
+      typeof params.token === 'string' && params.token.trim().length > 0
+        ? params.token.trim()
+        : null,
     [params.token],
   );
   const previewQuery = useAccountInvitePreviewQuery(deliveryToken);
   const preview = previewQuery.data;
 
   const isInviter = Boolean(preview && session.userId && preview.inviterUserId === session.userId);
-  const isActivatedUser = Boolean(preview && session.userId && preview.activatedUserId === session.userId);
+  const isActivatedUser = Boolean(
+    preview && session.userId && preview.activatedUserId === session.userId,
+  );
   const canActivate = preview
     ? Boolean(deliveryToken) &&
       !isInviter &&
@@ -123,7 +127,7 @@ export function AccountInviteScreen() {
       if (response.status === 'accepted') {
         await clearPendingInviteIntent();
         setMessage('Cuenta activada. Ya puedes entrar a Happy Circles.');
-        router.replace('/home');
+        returnToRoute(router, '/home');
         return;
       }
 
@@ -132,7 +136,7 @@ export function AccountInviteScreen() {
         setMessage(
           'Tu cuenta ya quedo lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
         );
-        router.replace('/home');
+        returnToRoute(router, '/home');
         return;
       }
 
@@ -175,7 +179,11 @@ export function AccountInviteScreen() {
     <ScreenShell
       footer={
         <View style={styles.footer}>
-          <PrimaryAction label="Ir al inicio" onPress={() => router.replace('/home')} variant="ghost" />
+          <PrimaryAction
+            label="Ir al inicio"
+            onPress={() => returnToRoute(router, '/home')}
+            variant="ghost"
+          />
         </View>
       }
       largeTitle={false}
@@ -221,7 +229,10 @@ export function AccountInviteScreen() {
               ) : null}
               {preview.intendedRecipientPhoneE164 ? (
                 <Text style={styles.snapshotLine}>
-                  {[preview.intendedRecipientPhoneLabel, maskPhoneValue(preview.intendedRecipientPhoneE164)]
+                  {[
+                    preview.intendedRecipientPhoneLabel,
+                    maskPhoneValue(preview.intendedRecipientPhoneE164),
+                  ]
                     .filter(Boolean)
                     .join(' | ')}
                 </Text>
@@ -241,12 +252,29 @@ export function AccountInviteScreen() {
           {session.status === 'signed_out' ? (
             <View style={styles.actionStack}>
               <PrimaryAction
-                href="/sign-in?mode=sign-in"
+                href={
+                  deliveryToken
+                    ? ({
+                        pathname: '/join',
+                        params: { mode: 'sign-in', token: deliveryToken },
+                      } as unknown as Href)
+                    : ({
+                        pathname: '/join',
+                        params: { mode: 'sign-in' },
+                      } as unknown as Href)
+                }
                 label="Ingresar"
                 subtitle="Si ya usaste Happy Circles en este telefono, entras mas rapido."
               />
               <PrimaryAction
-                href="/sign-in?mode=register"
+                href={
+                  deliveryToken
+                    ? ({
+                        pathname: '/join/[token]/create-account',
+                        params: { token: deliveryToken },
+                      } as Href)
+                    : '/join'
+                }
                 label="Crear acceso"
                 subtitle="Solo disponible porque esta invitacion sigue valida."
                 variant="secondary"
@@ -258,7 +286,9 @@ export function AccountInviteScreen() {
             <View style={styles.actionStack}>
               {needsSetup ? (
                 <PrimaryAction
-                  href={buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile')}
+                  href={buildSetupAccountHref(
+                    session.setupState.pendingRequiredSteps[0] ?? 'profile',
+                  )}
                   label="Completar perfil primero"
                   subtitle="Nombre, celular y foto siguen siendo obligatorios."
                   variant="secondary"
@@ -300,7 +330,7 @@ export function AccountInviteScreen() {
           {isActivatedUser && preview.status === 'pending_inviter_review' ? (
             <PrimaryAction
               label="Entrar a la app"
-              onPress={() => router.replace('/home')}
+              onPress={() => returnToRoute(router, '/home')}
               subtitle="Tu cuenta ya esta activa mientras se revisa esta conexion."
               variant="secondary"
             />

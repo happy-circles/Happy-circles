@@ -62,6 +62,9 @@ export const theme = {
   },
   shadow: {
     card: Platform.select({
+      web: {
+        boxShadow: '0 10px 22px rgba(15, 23, 40, 0.08)',
+      },
       ios: {
         shadowColor: '#0f1728',
         shadowOffset: { width: 0, height: 10 },
@@ -73,6 +76,9 @@ export const theme = {
       },
     }),
     floating: Platform.select({
+      web: {
+        boxShadow: '0 18px 28px rgba(15, 23, 40, 0.14)',
+      },
       ios: {
         shadowColor: '#0f1728',
         shadowOffset: { width: 0, height: 18 },

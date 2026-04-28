@@ -24,6 +24,7 @@ import {
   type SettlementDetailMovementDto,
   type SettlementDetailParticipantDto,
 } from '@/lib/live-data';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -381,7 +382,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         {
           text: 'Abrir',
           onPress: () => {
-            router.push(nextProposalId ? `/settlements/${nextProposalId}` : '/activity');
+            pushRoute(router, nextProposalId ? `/settlements/${nextProposalId}` : '/activity');
           },
         },
       ],

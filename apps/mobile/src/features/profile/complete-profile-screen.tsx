@@ -16,6 +16,7 @@ import { resolveAvatarUrl } from '@/lib/avatar';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
+import { returnToRoute } from '@/lib/navigation';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
@@ -42,14 +43,18 @@ export function CompleteProfileScreen() {
   const initialCountry = useMemo(
     () =>
       COUNTRY_OPTIONS.find((country) => country.iso2 === profile?.phone_country_iso2) ??
-      COUNTRY_OPTIONS.find((country) => country.callingCode === profile?.phone_country_calling_code) ??
+      COUNTRY_OPTIONS.find(
+        (country) => country.callingCode === profile?.phone_country_calling_code,
+      ) ??
       DEFAULT_COUNTRY,
     [profile?.phone_country_calling_code, profile?.phone_country_iso2],
   );
 
   const [fullName, setFullName] = useState(profile?.display_name ?? '');
   const [countryIso, setCountryIso] = useState(initialCountry.iso2);
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState(profile?.phone_national_number ?? '');
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState(
+    profile?.phone_national_number ?? '',
+  );
   const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +65,9 @@ export function CompleteProfileScreen() {
   const avatarOffsetRef = useRef(0);
   const fullNameOffsetRef = useRef(0);
   const phoneOffsetRef = useRef(0);
-  const [highlightTarget, setHighlightTarget] = useState<'avatar' | 'fullName' | 'phone' | null>(null);
+  const [highlightTarget, setHighlightTarget] = useState<'avatar' | 'fullName' | 'phone' | null>(
+    null,
+  );
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(busy || avatarMutation.isPending);
 
@@ -78,21 +85,28 @@ export function CompleteProfileScreen() {
       return;
     }
 
-    return navigation.addListener('beforeRemove', (event: { preventDefault(): void; data: { action: object } }) => {
-      event.preventDefault();
-      Alert.alert('Tienes cambios sin guardar', 'Si sales ahora, perderas los cambios del perfil.', [
-        {
-          text: 'Seguir editando',
-          style: 'cancel',
-        },
-        {
-          text: 'Descartar',
-          style: 'destructive',
-          onPress: () =>
-            navigation.dispatch(event.data.action as Parameters<typeof navigation.dispatch>[0]),
-        },
-      ]);
-    });
+    return navigation.addListener(
+      'beforeRemove',
+      (event: { preventDefault(): void; data: { action: object } }) => {
+        event.preventDefault();
+        Alert.alert(
+          'Tienes cambios sin guardar',
+          'Si sales ahora, perderas los cambios del perfil.',
+          [
+            {
+              text: 'Seguir editando',
+              style: 'cancel',
+            },
+            {
+              text: 'Descartar',
+              style: 'destructive',
+              onPress: () =>
+                navigation.dispatch(event.data.action as Parameters<typeof navigation.dispatch>[0]),
+            },
+          ],
+        );
+      },
+    );
   }, [avatarMutation.isPending, busy, isDirty, navigation]);
 
   useEffect(() => {
@@ -172,7 +186,9 @@ export function CompleteProfileScreen() {
       avatar: session.profile?.avatar_path ? undefined : 'Agrega una foto antes de continuar.',
       fullName: fullName.trim().length >= 3 ? undefined : 'Escribe un nombre usable.',
       phoneNationalNumber:
-        phoneNationalNumber.trim().length >= 7 ? undefined : 'Ingresa un celular valido para continuar.',
+        phoneNationalNumber.trim().length >= 7
+          ? undefined
+          : 'Ingresa un celular valido para continuar.',
     };
   }
 
@@ -288,7 +304,7 @@ export function CompleteProfileScreen() {
       if (result === 'Perfil actualizado.') {
         showSnackbar('Perfil actualizado.', 'success');
         const pendingIntent = await readPendingInviteIntent();
-        router.replace(pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
+        returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
         return;
       }
 
@@ -347,7 +363,9 @@ export function CompleteProfileScreen() {
       }
       headerVariant="plain"
       largeTitle={false}
-      overlay={<Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />}
+      overlay={
+        <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
+      }
       scrollViewRef={scrollViewRef}
       title="Completa tu perfil"
       subtitle="Antes de aceptar o enviar invitaciones necesitamos nombre usable, foto y celular unico para esta cuenta."

@@ -40,6 +40,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
+import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
 import { buildSetupReminderItem, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -846,22 +847,13 @@ export function ActivityScreen() {
   }
 
   function closeNotifications() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    router.replace('/home');
+    backOrReturnTo(router, '/home');
   }
 
   function openNotificationTarget(target: NotificationTarget) {
     if (target.homeIntent) {
       const homeIntent = target.homeIntent;
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace(target.href);
-      }
+      returnToRoute(router, target.href);
 
       InteractionManager.runAfterInteractions(() => {
         publishHomeNavigationIntent(homeIntent);
@@ -869,12 +861,7 @@ export function ActivityScreen() {
       return;
     }
 
-    if (typeof router.dismissTo === 'function') {
-      router.dismissTo(target.href);
-      return;
-    }
-
-    router.replace(target.href);
+    returnToRoute(router, target.href);
   }
 
   function renderPendingCard(item: ActivityItemDto) {

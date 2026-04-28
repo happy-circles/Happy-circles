@@ -15,6 +15,7 @@ const POSITIVE_VISUAL = toneVisual('positive');
 const NEGATIVE_VISUAL = toneVisual('negative');
 
 export interface PersonRowProps {
+  readonly onAvatarPress?: (person: PersonCardDto) => void;
   readonly person: PersonCardDto;
 }
 
@@ -35,7 +36,7 @@ function buildLastUpdateLabel(value: string): string {
   return value;
 }
 
-export function PersonRow({ person }: PersonRowProps) {
+export function PersonRow({ onAvatarPress, person }: PersonRowProps) {
   const isSettled = person.direction === 'settled' || person.netAmountMinor === 0;
   const amountTone = isSettled
     ? styles.neutral
@@ -62,12 +63,32 @@ export function PersonRow({ person }: PersonRowProps) {
           variant="default"
         >
           <View style={styles.leading}>
-            <AppAvatar
-              imageUrl={person.avatarUrl ?? null}
-              label={person.displayName}
-              rounded={false}
-              size={42}
-            />
+            {onAvatarPress ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onAvatarPress(person);
+                }}
+                style={({ pressed }) => [
+                  styles.avatarButton,
+                  pressed ? styles.avatarPressed : null,
+                ]}
+              >
+                <AppAvatar
+                  imageUrl={person.avatarUrl ?? null}
+                  label={person.displayName}
+                  rounded={false}
+                  size={42}
+                />
+              </Pressable>
+            ) : (
+              <AppAvatar
+                imageUrl={person.avatarUrl ?? null}
+                label={person.displayName}
+                rounded={false}
+                size={42}
+              />
+            )}
             <View style={styles.textWrap}>
               <View style={styles.titleRow}>
                 <Text style={styles.name}>{person.displayName}</Text>
@@ -116,6 +137,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  avatarButton: {
+    borderRadius: theme.radius.medium,
+  },
+  avatarPressed: {
+    opacity: 0.72,
   },
   textWrap: {
     flex: 1,

@@ -9,6 +9,7 @@ import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
+import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { LoadingOverlay } from '@/components/loading-overlay';
@@ -44,6 +45,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { toneVisual } from '@/lib/direction-ui';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -219,13 +221,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
+  const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
   const pendingItems = person?.pendingItems ?? [];
   const activeSettlementProposal =
     snapshotQuery.data?.balanceOverview.resolution.activeProposal ?? null;
-  const personActiveSettlement =
-    activeSettlementProposal?.participantUserIds.includes(userId) ? activeSettlementProposal : null;
+  const personActiveSettlement = activeSettlementProposal?.participantUserIds.includes(userId)
+    ? activeSettlementProposal
+    : null;
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
   const orderedPendingItems = useMemo(() => {
     if (focusCandidates.size === 0) {
@@ -407,7 +411,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         {
           text: 'Abrir',
           onPress: () => {
-            router.push(proposalId ? `/settlements/${proposalId}` : '/activity');
+            pushRoute(router, proposalId ? `/settlements/${proposalId}` : '/activity');
           },
         },
       ],
@@ -611,7 +615,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             : splitSubtitleSegments(item.subtitle).slice(1).join(' | ') || null
         }
         onPress={
-          item.href ? () => router.push(item.href as Parameters<typeof router.push>[0]) : undefined
+          item.href
+            ? () => pushRoute(router, item.href as Parameters<typeof router.push>[0])
+            : undefined
         }
         statusLabel={transactionStatusLabel(item) ?? pendingStatusLabel(item.status)}
         statusTone={transactionStatusTone(item)}
@@ -766,7 +772,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       <View style={styles.layout}>
         <View style={styles.fixedTop}>
           <View style={styles.heroBlock}>
-            <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
+            <Pressable
+              onPress={() => setAvatarViewerVisible(true)}
+              style={({ pressed }) => [styles.avatarButton, pressed ? styles.pressed : null]}
+            >
+              <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
+            </Pressable>
             <Text style={styles.contactFlatName}>{person.displayName}</Text>
             <Text
               style={[
@@ -789,7 +800,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <DirectionPill
               direction="i_owe"
               onPress={() =>
-                router.push({
+                pushRoute(router, {
                   pathname: '/register',
                   params: {
                     personId: person.userId,
@@ -803,7 +814,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <DirectionPill
               direction="owes_me"
               onPress={() =>
-                router.push({
+                pushRoute(router, {
                   pathname: '/register',
                   params: {
                     personId: person.userId,
@@ -832,7 +843,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               <PrimaryAction
                 compact
                 label="Ver Happy Circle"
-                onPress={() => router.push(`/settlements/${personActiveSettlement.proposalId}`)}
+                onPress={() =>
+                  pushRoute(router, `/settlements/${personActiveSettlement.proposalId}`)
+                }
                 variant="secondary"
               />
             </PendingSnippetCard>
@@ -941,6 +954,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         title="Procesando accion"
         visible={showBusyOverlay}
       />
+      <AvatarViewerModal
+        imageUrl={person.avatarUrl ?? null}
+        label={person.displayName}
+        onClose={() => setAvatarViewerVisible(false)}
+        visible={avatarViewerVisible}
+      />
     </SafeAreaView>
   );
 }
@@ -971,6 +990,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.xs,
+  },
+  avatarButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.82,
   },
   contactFlatName: {
     color: theme.colors.text,

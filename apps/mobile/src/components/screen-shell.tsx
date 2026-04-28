@@ -18,7 +18,9 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly titleAlign?: 'left' | 'center';
   readonly headerVariant?: 'card' | 'plain';
   readonly headerLeading?: ReactNode;
+  readonly headerTitle?: ReactNode;
   readonly headerSlot?: ReactNode;
+  readonly contentMode?: 'contained' | 'full';
   readonly footer?: ReactNode;
   readonly overlay?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
@@ -36,7 +38,9 @@ export function ScreenShell({
   titleAlign = 'left',
   headerVariant = 'card',
   headerLeading,
+  headerTitle,
   headerSlot,
+  contentMode = 'contained',
   footer,
   overlay,
   refresh,
@@ -57,12 +61,13 @@ export function ScreenShell({
             : styles.compactTitle;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <BrandedRefreshScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
+          contentMode === 'full' ? styles.contentFull : null,
           footer ? styles.contentWithFooter : null,
           contentContainerStyle,
         ]}
@@ -70,7 +75,13 @@ export function ScreenShell({
         refresh={refresh}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.contentWidth, contentWidthStyle]}>
+        <View
+          style={[
+            styles.contentWidth,
+            contentMode === 'full' ? styles.contentWidthFull : null,
+            contentWidthStyle,
+          ]}
+        >
           <View
             style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}
           >
@@ -79,18 +90,24 @@ export function ScreenShell({
                 <Text style={styles.eyebrowText}>{eyebrow}</Text>
               </View>
             ) : null}
-            <View style={styles.heroHeader}>
-              {headerLeading}
-              <Text
-                style={[
-                  styles.title,
-                  titleAlign === 'center' ? styles.titleCentered : null,
-                  resolvedTitleStyle,
-                ]}
-              >
-                {title}
-              </Text>
-              {headerSlot}
+            <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
+              {headerTitle ? (
+                headerTitle
+              ) : (
+                <>
+                  {headerLeading}
+                  <Text
+                    style={[
+                      styles.title,
+                      titleAlign === 'center' ? styles.titleCentered : null,
+                      resolvedTitleStyle,
+                    ]}
+                  >
+                    {title}
+                  </Text>
+                  {headerSlot}
+                </>
+              )}
             </View>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
@@ -116,19 +133,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    flexGrow: 1,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
+  },
+  contentFull: {
+    paddingBottom: 0,
+    paddingHorizontal: theme.spacing.lg,
   },
   contentWithFooter: {
     paddingBottom: 140,
   },
   contentWidth: {
     alignSelf: 'center',
+    flexGrow: 1,
     gap: theme.spacing.lg,
     maxWidth: 560,
     width: '100%',
+  },
+  contentWidthFull: {
+    maxWidth: '100%',
   },
   hero: {
     gap: theme.spacing.sm,
@@ -164,6 +190,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
+  },
+  heroHeaderCentered: {
+    justifyContent: 'center',
   },
   title: {
     color: theme.colors.text,

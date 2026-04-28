@@ -12,6 +12,7 @@ import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { TransactionEventCard } from '@/components/transaction-event-card';
+import { backOrReturnTo } from '@/lib/navigation';
 import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
@@ -437,12 +438,7 @@ export function TransactionsScreen() {
       headerLeading={
         <Pressable
           onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-              return;
-            }
-
-            router.replace('/home');
+            backOrReturnTo(router, '/home');
           }}
           style={({ pressed }) => [styles.backButton, pressed ? styles.backButtonPressed : null]}
         >

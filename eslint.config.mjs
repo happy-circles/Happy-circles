@@ -13,6 +13,7 @@ export default tseslint.config(
       'apps/mobile/babel.config.js',
       'apps/mobile/index.js',
       'apps/mobile/scripts/**/*.mjs',
+      'apps/landing/next.config.mjs',
       'eslint.config.mjs',
       'prettier.config.cjs',
       'scripts/**/*.mjs',
@@ -40,13 +41,31 @@ export default tseslint.config(
   },
   {
     files: ['apps/mobile/**/*.{ts,tsx}'],
+    ignores: ['apps/mobile/src/lib/navigation.ts'],
     languageOptions: {
       globals: {
         ...globals.browser,
       },
     },
     rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.object.name="router"][callee.property.name=/^(back|dismiss|dismissTo|push|replace)$/]',
+          message:
+            'Use src/lib/navigation.ts helpers so route changes do not duplicate screens in history.',
+        },
+      ],
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
+    },
+  },
+  {
+    files: ['apps/landing/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
     },
   },
 );

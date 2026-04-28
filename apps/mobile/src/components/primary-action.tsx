@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
@@ -18,6 +19,7 @@ export interface PrimaryActionProps {
   readonly fullWidth?: boolean;
   readonly color?: string;
   readonly icon?: keyof typeof Ionicons.glyphMap;
+  readonly style?: StyleProp<ViewStyle>;
 }
 
 export function PrimaryAction({
@@ -32,6 +34,7 @@ export function PrimaryAction({
   fullWidth = true,
   color,
   icon,
+  style,
 }: PrimaryActionProps) {
   const isDisabled = loading || disabled;
   const content = (
@@ -46,6 +49,7 @@ export function PrimaryAction({
         variant === 'secondary' ? styles.secondary : null,
         variant === 'ghost' ? styles.ghost : null,
         fullWidth ? styles.fullWidth : null,
+        style,
         pressed && !isDisabled ? styles.pressed : null,
         isDisabled ? styles.disabled : null,
       ]}

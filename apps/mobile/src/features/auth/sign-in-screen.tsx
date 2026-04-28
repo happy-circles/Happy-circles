@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import type { LayoutChangeEvent } from 'react-native';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -23,13 +22,11 @@ import { FieldBlock } from '@/components/field-block';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
-import { readPendingInviteIntent } from '@/lib/invite-intent';
-import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
-type SignInScreenMode = 'sign-in' | 'register' | 'recover';
+type SignInScreenMode = 'sign-in' | 'recover';
 
 export interface SignInScreenProps {
   readonly initialMode?: SignInScreenMode | null;
@@ -53,30 +50,20 @@ function animateModeChange() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 }
 
-export function SignInScreen({ initialMode = null }: SignInScreenProps) {
+export function SignInScreen({ initialMode = 'sign-in' }: SignInScreenProps) {
   const session = useSession();
   const [activeMode, setActiveMode] = useState<SignInScreenMode | null>(initialMode);
-  const [allowsRegistration, setAllowsRegistration] = useState(false);
-  const [inviteIntentChecked, setInviteIntentChecked] = useState(false);
   const [email, setEmail] = useState('');
-  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
-  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [socialBusyProvider, setSocialBusyProvider] = useState<'google' | 'apple' | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
-  const fieldOffsetsRef = useRef<Record<string, number>>({});
 
-  const isRegister = activeMode === 'register';
   const isRecovery = activeMode === 'recover';
-  const canUseRegistration = isRegister && inviteIntentChecked && allowsRegistration;
   const canShowSocialActions = activeMode === 'sign-in';
-  const canShowPasswordForm = activeMode === 'sign-in' || isRecovery || canUseRegistration;
-  const selectedCountry =
-    COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
+  const canShowPasswordForm = activeMode === 'sign-in' || isRecovery;
   const brandStateStyle = keyboardVisible
     ? styles.brandWrapKeyboard
     : activeMode
@@ -92,33 +79,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
   useEffect(() => {
     setActiveMode((currentMode) => (currentMode === initialMode ? currentMode : initialMode));
   }, [initialMode]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function syncInviteIntent() {
-      const pendingIntent = await readPendingInviteIntent();
-      if (!active) {
-        return;
-      }
-
-      setAllowsRegistration(pendingIntent?.type === 'account_invite');
-      setInviteIntentChecked(true);
-    }
-
-    void syncInviteIntent();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inviteIntentChecked && !allowsRegistration && activeMode === 'register') {
-      animateModeChange();
-      setActiveMode('sign-in');
-    }
-  }, [activeMode, allowsRegistration, inviteIntentChecked]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -139,44 +99,13 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
     };
   }, []);
 
-  function handleFieldLayout(fieldKey: string) {
-    return (event: LayoutChangeEvent) => {
-      fieldOffsetsRef.current[fieldKey] = event.nativeEvent.layout.y;
-    };
-  }
-
-  function focusField(fieldKey: string) {
-    requestAnimationFrame(() => {
-      const targetY = fieldOffsetsRef.current[fieldKey];
-      if (typeof targetY !== 'number') {
-        return;
-      }
-
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, targetY - 110),
-        animated: true,
-      });
-    });
-  }
-
   function switchMode(nextMode: SignInScreenMode) {
-    if (nextMode === 'register' && !inviteIntentChecked) {
-      setMessage('Estamos validando tu invitacion. Intenta otra vez en un momento.');
-      return;
-    }
-
-    if (nextMode === 'register' && !allowsRegistration) {
-      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
-      return;
-    }
-
     if (nextMode === activeMode && activeMode !== null) {
       return;
     }
 
     animateModeChange();
     setMessage(null);
-    setCountryMenuOpen(false);
     setActiveMode(nextMode);
 
     requestAnimationFrame(() => {
@@ -192,29 +121,15 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
       return;
     }
 
-    if (isRegister && !canUseRegistration) {
-      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
-      return;
-    }
-
     setBusy(true);
 
     try {
-      const result = isRegister
-        ? await session.registerAccount({
+      const result = isRecovery
+        ? await session.requestPasswordReset(email)
+        : await session.signInWithPassword({
             email,
             password,
-            confirmPassword: password,
-            phoneCountryIso2: selectedCountry.iso2,
-            phoneCountryCallingCode: selectedCountry.callingCode,
-            phoneNationalNumber,
-          })
-        : isRecovery
-          ? await session.requestPasswordReset(email)
-          : await session.signInWithPassword({
-              email,
-              password,
-            });
+          });
 
       setMessage(result);
     } finally {
@@ -224,11 +139,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
   async function handleGoogleSignIn() {
     if (socialBusyProvider) {
-      return;
-    }
-
-    if (isRegister && !canUseRegistration) {
-      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
       return;
     }
 
@@ -245,11 +155,6 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
   async function handleAppleButtonPress() {
     if (socialBusyProvider) {
-      return;
-    }
-
-    if (isRegister && !canUseRegistration) {
-      setMessage('Necesitas una invitacion valida para crear una cuenta nueva.');
       return;
     }
 
@@ -286,7 +191,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
 
             <View style={activeMode ? null : styles.idleBottomSpacer} />
 
-            {!activeMode && session.rememberedAccount ? (
+            {activeMode === 'sign-in' && session.rememberedAccount ? (
               <SurfaceCard padding="md" style={styles.rememberedCard} variant="elevated">
                 <View style={styles.rememberedLeading}>
                   <AppAvatar
@@ -308,9 +213,9 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                 </View>
                 <PrimaryAction
                   compact
-                  label="Seguir con esta cuenta"
-                  onPress={() => switchMode('sign-in')}
-                  subtitle="Usaremos el ingreso rapido de este telefono si tu sesion sigue viva."
+                  label="Usar este correo"
+                  onPress={() => setEmail(session.rememberedAccount?.email ?? '')}
+                  subtitle="Completa tu contrasena para entrar con la ultima cuenta usada."
                   variant="secondary"
                 />
               </SurfaceCard>
@@ -331,71 +236,33 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   Ingresar
                 </Text>
               </Pressable>
-              {allowsRegistration ? <View style={styles.tabDivider} /> : null}
-              {allowsRegistration ? (
-                <Pressable
-                  onPress={() => switchMode('register')}
-                  style={({ pressed }) => [
-                    styles.tabButton,
-                    activeMode === 'register' ? styles.tabButtonActive : null,
-                    pressed ? styles.tabButtonPressed : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      activeMode === 'register' ? styles.tabLabelActive : null,
-                    ]}
-                  >
-                    Crear cuenta
-                  </Text>
-                </Pressable>
-              ) : null}
             </View>
 
-            {!allowsRegistration ? (
-              <Text style={styles.inviteOnlyHint}>
-                Happy Circles abre cuentas nuevas solo con una invitacion valida.
-              </Text>
-            ) : null}
+            <Text style={styles.inviteOnlyHint}>
+              Happy Circles abre cuentas nuevas solo con una invitacion valida.
+            </Text>
 
-            {!isRegister ? (
-              <View style={styles.inlineActions}>
-                <Pressable
-                  onPress={() => switchMode('recover')}
-                  style={({ pressed }) => [
-                    styles.inlineActionButton,
-                    activeMode === 'recover' ? styles.inlineActionButtonActive : null,
-                    pressed ? styles.inlineActionButtonPressed : null,
+            <View style={styles.inlineActions}>
+              <Pressable
+                onPress={() => switchMode('recover')}
+                style={({ pressed }) => [
+                  styles.inlineActionButton,
+                  activeMode === 'recover' ? styles.inlineActionButtonActive : null,
+                  pressed ? styles.inlineActionButtonPressed : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.inlineActionLabel,
+                    activeMode === 'recover' ? styles.inlineActionLabelActive : null,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.inlineActionLabel,
-                      activeMode === 'recover' ? styles.inlineActionLabelActive : null,
-                    ]}
-                  >
-                    Olvide mi contrasena
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
+                  Olvide mi contrasena
+                </Text>
+              </Pressable>
+            </View>
 
             <View style={activeMode ? null : styles.idleFootSpacer} />
-
-            {isRegister ? (
-              <View style={styles.extraGlass}>
-                <View style={styles.extraGlassHeader}>
-                  <View style={styles.extraGlassDot} />
-                  <Text style={styles.extraGlassLabel}>Invitacion validada</Text>
-                </View>
-                <Text style={styles.registerHint}>
-                  {canUseRegistration
-                    ? 'Crea tu acceso con correo, celular y contrasena. Luego terminas nombre, foto y seguridad.'
-                    : 'Estamos confirmando tu invitacion antes de abrir el registro.'}
-                </Text>
-              </View>
-            ) : null}
 
             {canShowSocialActions ? (
               <View style={styles.socialActions}>
@@ -437,110 +304,43 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                   />
                 ) : null}
 
-                <View onLayout={handleFieldLayout('email')}>
-                  <FieldBlock label="Correo">
-                    <AppTextInput
-                      autoCapitalize="none"
-                      autoComplete="email"
-                      chrome="glass"
-                      keyboardType="email-address"
-                      onChangeText={setEmail}
-                      onFocus={() => focusField('email')}
-                      placeholder="tu@correo.com"
-                      placeholderTextColor={theme.colors.muted}
-                      style={styles.input}
-                      value={email}
-                    />
-                  </FieldBlock>
-                </View>
-
-                {isRegister ? (
-                  <View onLayout={handleFieldLayout('phone')}>
-                    <FieldBlock label="Celular">
-                      <View style={styles.phoneField}>
-                        <View style={styles.phoneRow}>
-                          <Pressable
-                            onPress={() => setCountryMenuOpen((value) => !value)}
-                            style={({ pressed }) => [
-                              styles.callingCodeBox,
-                              pressed ? styles.pressed : null,
-                            ]}
-                          >
-                            <Text style={styles.callingCodeText}>
-                              {selectedCountry.callingCode}
-                            </Text>
-                          </Pressable>
-
-                          <AppTextInput
-                            chrome="glass"
-                            keyboardType="phone-pad"
-                            onChangeText={setPhoneNationalNumber}
-                            onFocus={() => {
-                              setCountryMenuOpen(false);
-                              focusField('phone');
-                            }}
-                            placeholder="3001234567"
-                            placeholderTextColor={theme.colors.muted}
-                            style={styles.phoneInput}
-                            value={phoneNationalNumber}
-                          />
-                        </View>
-
-                        {countryMenuOpen ? (
-                          <View style={styles.countryMenu}>
-                            {COUNTRY_OPTIONS.map((country, index) => (
-                              <Pressable
-                                key={country.iso2}
-                                onPress={() => {
-                                  setCountryIso(country.iso2);
-                                  setCountryMenuOpen(false);
-                                }}
-                                style={[
-                                  styles.countryOption,
-                                  index === COUNTRY_OPTIONS.length - 1
-                                    ? styles.countryOptionLast
-                                    : null,
-                                ]}
-                              >
-                                <Text style={styles.countryLabel}>{country.label}</Text>
-                                <Text style={styles.countryCode}>{country.callingCode}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        ) : null}
-                      </View>
-                    </FieldBlock>
-                  </View>
-                ) : null}
+                <FieldBlock label="Correo">
+                  <AppTextInput
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    chrome="glass"
+                    keyboardType="email-address"
+                    onChangeText={setEmail}
+                    placeholder="tu@correo.com"
+                    placeholderTextColor={theme.colors.muted}
+                    style={styles.input}
+                    value={email}
+                  />
+                </FieldBlock>
 
                 {!isRecovery ? (
-                  <View onLayout={handleFieldLayout('password')}>
-                    <FieldBlock label="Contrasena">
-                      <AppTextInput
-                        autoCapitalize="none"
-                        autoComplete="password"
-                        chrome="glass"
-                        onChangeText={setPassword}
-                        onFocus={() => focusField('password')}
-                        placeholder="Tu contrasena"
-                        placeholderTextColor={theme.colors.muted}
-                        secureTextEntry
-                        style={styles.input}
-                        value={password}
-                      />
-                    </FieldBlock>
-                  </View>
+                  <FieldBlock label="Contrasena">
+                    <AppTextInput
+                      autoCapitalize="none"
+                      autoComplete="password"
+                      chrome="glass"
+                      onChangeText={setPassword}
+                      placeholder="Tu contrasena"
+                      placeholderTextColor={theme.colors.muted}
+                      secureTextEntry
+                      style={styles.input}
+                      value={password}
+                    />
+                  </FieldBlock>
                 ) : null}
 
                 <PrimaryAction
                   label={
                     busy
                       ? 'Procesando...'
-                      : isRegister
-                        ? 'Crear cuenta'
-                        : isRecovery
-                          ? 'Enviar enlace'
-                          : 'Ingresar'
+                      : isRecovery
+                        ? 'Enviar enlace'
+                        : 'Ingresar'
                   }
                   onPress={busy ? undefined : () => void handleSubmit()}
                 />
@@ -548,7 +348,7 @@ export function SignInScreen({ initialMode = null }: SignInScreenProps) {
                 {isRecovery ? (
                   <PrimaryAction
                     compact
-                    href="/sign-in?mode=sign-in"
+                    href="/sign-in"
                     label="Volver a ingresar"
                     variant="ghost"
                   />
@@ -691,11 +491,6 @@ const styles = StyleSheet.create({
   tabButtonPressed: {
     opacity: 0.88,
   },
-  tabDivider: {
-    backgroundColor: theme.colors.hairline,
-    marginBottom: theme.spacing.sm,
-    width: StyleSheet.hairlineWidth,
-  },
   tabLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.title3,
@@ -739,102 +534,4 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
   },
   input: {},
-  extraGlass: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderColor: 'rgba(255, 255, 255, 0.84)',
-    borderRadius: 26,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    ...theme.shadow.card,
-  },
-  extraGlassHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  extraGlassDot: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    height: 8,
-    width: 8,
-  },
-  extraGlassLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  registerHint: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  phoneField: {
-    position: 'relative',
-    zIndex: 20,
-  },
-  phoneRow: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  callingCodeBox: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderColor: 'rgba(15, 23, 40, 0.08)',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minWidth: 92,
-    paddingHorizontal: theme.spacing.md,
-  },
-  callingCodeText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  phoneInput: {
-    flex: 1,
-  },
-  countryMenu: {
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    borderColor: 'rgba(15, 23, 40, 0.08)',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    left: 0,
-    marginTop: theme.spacing.xs,
-    overflow: 'hidden',
-    paddingVertical: 4,
-    position: 'absolute',
-    right: 0,
-    top: '100%',
-    zIndex: 30,
-    ...theme.shadow.floating,
-  },
-  countryOption: {
-    alignItems: 'center',
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  countryOptionLast: {
-    borderBottomWidth: 0,
-  },
-  countryLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '600',
-  },
-  countryCode: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  pressed: {
-    opacity: 0.9,
-  },
 });

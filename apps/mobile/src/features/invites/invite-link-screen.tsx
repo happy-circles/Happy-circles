@@ -6,10 +6,8 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
-import {
-  clearPendingInviteIntent,
-  writePendingInviteIntent,
-} from '@/lib/invite-intent';
+import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
   useClaimExternalFriendshipInviteMutation,
@@ -90,7 +88,10 @@ export function InviteLinkScreen() {
   const [busyAction, setBusyAction] = useState<'claim' | 'approve' | 'reject' | null>(null);
 
   const deliveryToken = useMemo(
-    () => (typeof params.token === 'string' && params.token.trim().length > 0 ? params.token.trim() : null),
+    () =>
+      typeof params.token === 'string' && params.token.trim().length > 0
+        ? params.token.trim()
+        : null,
     [params.token],
   );
   const readyForPreview = status !== 'signed_out' && profileCompletionState === 'complete';
@@ -112,7 +113,7 @@ export function InviteLinkScreen() {
         });
 
         if (!cancelled) {
-          router.replace('/sign-in');
+          returnToRoute(router, '/sign-in');
         }
         return;
       }
@@ -124,7 +125,7 @@ export function InviteLinkScreen() {
         });
 
         if (!cancelled) {
-          router.replace(buildSetupAccountHref('profile'));
+          returnToRoute(router, buildSetupAccountHref('profile'));
         }
       }
     }
@@ -192,7 +193,11 @@ export function InviteLinkScreen() {
       eyebrow="Invitacion"
       footer={
         <View style={styles.footer}>
-          <PrimaryAction label="Ir al inicio" onPress={() => router.replace('/home')} variant="ghost" />
+          <PrimaryAction
+            label="Ir al inicio"
+            onPress={() => returnToRoute(router, '/home')}
+            variant="ghost"
+          />
         </View>
       }
       largeTitle={false}
@@ -212,7 +217,8 @@ export function InviteLinkScreen() {
         <SurfaceCard padding="lg" variant="accent">
           <Text style={styles.title}>Preparando acceso</Text>
           <Text style={styles.helper}>
-            Vamos a llevarte por login o setup antes de mostrar la confirmacion real de esta invitacion.
+            Vamos a llevarte por login o setup antes de mostrar la confirmacion real de esta
+            invitacion.
           </Text>
         </SurfaceCard>
       ) : null}
@@ -236,7 +242,9 @@ export function InviteLinkScreen() {
           <Text style={styles.title}>{preview.inviterDisplayName}</Text>
           <Text style={styles.helper}>
             {channelLabel(preview.channel)} |{' '}
-            {preview.expiresAt ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}` : 'sin vencimiento'}
+            {preview.expiresAt
+              ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}`
+              : 'sin vencimiento'}
           </Text>
 
           {preview.intendedRecipientAlias || preview.intendedRecipientPhoneE164 ? (
@@ -247,7 +255,10 @@ export function InviteLinkScreen() {
               ) : null}
               {preview.intendedRecipientPhoneE164 ? (
                 <Text style={styles.snapshotLine}>
-                  {[preview.intendedRecipientPhoneLabel, maskPhoneValue(preview.intendedRecipientPhoneE164)]
+                  {[
+                    preview.intendedRecipientPhoneLabel,
+                    maskPhoneValue(preview.intendedRecipientPhoneE164),
+                  ]
                     .filter(Boolean)
                     .join(' | ')}
                 </Text>
@@ -258,7 +269,9 @@ export function InviteLinkScreen() {
           {preview.claimantSnapshot ? (
             <View style={styles.snapshotBlock}>
               <Text style={styles.snapshotTitle}>
-                {preview.canApprove ? 'Cuenta que reclamo esta invitacion' : 'Cuenta que reclamo el acceso'}
+                {preview.canApprove
+                  ? 'Cuenta que reclamo esta invitacion'
+                  : 'Cuenta que reclamo el acceso'}
               </Text>
               <Text style={styles.snapshotLine}>{preview.claimantSnapshot.displayName}</Text>
               {preview.claimantSnapshot.maskedEmail ? (
@@ -304,7 +317,7 @@ export function InviteLinkScreen() {
           {!preview.canClaim && !preview.canApprove ? (
             <PrimaryAction
               label="Volver al inicio"
-              onPress={() => router.replace('/home')}
+              onPress={() => returnToRoute(router, '/home')}
               variant="secondary"
             />
           ) : null}

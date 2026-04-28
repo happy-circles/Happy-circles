@@ -602,6 +602,22 @@ function sortHistoryItems<
   return [...items].sort(compareHistoryItems);
 }
 
+function uniqueActivityItemsById<T extends { readonly id: string }>(items: readonly T[]): T[] {
+  const seenIds = new Set<string>();
+  const uniqueItems: T[] = [];
+
+  for (const item of items) {
+    if (seenIds.has(item.id)) {
+      continue;
+    }
+
+    seenIds.add(item.id);
+    uniqueItems.push(item);
+  }
+
+  return uniqueItems;
+}
+
 function actionableItemToActivityItem(item: ActionableItem): ActivityItemDto {
   return {
     id: item.id,
@@ -3462,11 +3478,13 @@ function buildLiveSnapshot(input: {
     ...accountInviteState.pendingItems,
   ]);
 
-  const historyItems = sortHistoryItems([
-    ...buildActivityHistoryItems(peopleById),
-    ...friendshipState.historyItems,
-    ...accountInviteState.historyItems,
-  ]);
+  const historyItems = uniqueActivityItemsById(
+    sortHistoryItems([
+      ...buildActivityHistoryItems(peopleById),
+      ...friendshipState.historyItems,
+      ...accountInviteState.historyItems,
+    ]),
+  );
 
   const summary = input.openDebts.reduce(
     (accumulator, debt) => {

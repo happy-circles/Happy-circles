@@ -1,0 +1,12 @@
+
+> @happy-circles/mobile@0.1.0 start:go:clear C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+> node ./scripts/start-expo.mjs --go --clear
+
+Starting Expo on port 8091
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Starting project at C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8091
+Logs for your project will appear below.

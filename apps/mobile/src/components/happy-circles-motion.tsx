@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 
 import {
   HappyCirclesBottomPieceSvg,
@@ -16,6 +16,7 @@ import {
 } from '@/components/happy-circles-glyph';
 
 type HappyCirclesMotionVariant = 'idle' | 'splash' | 'loading' | 'refresh' | 'success' | 'wink';
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface HappyCirclesMotionProps {
   readonly active?: boolean;
@@ -115,7 +116,7 @@ export function HappyCirclesMotion({
         duration: 700,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start();
       return;
     }
@@ -126,7 +127,7 @@ export function HappyCirclesMotion({
         duration: 360,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start();
       return;
     }
@@ -147,7 +148,7 @@ export function HappyCirclesMotion({
         duration: variant === 'refresh' ? 1200 : 1400,
         easing: Easing.linear,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     );
 
@@ -171,13 +172,13 @@ export function HappyCirclesMotion({
           duration: 550,
           easing: Easing.inOut(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }),
         Animated.timing(pulse, {
           duration: 550,
           easing: Easing.inOut(Easing.quad),
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }),
       ]),
     );
@@ -201,13 +202,13 @@ export function HappyCirclesMotion({
         duration: 210,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
       Animated.timing(success, {
         duration: 340,
         easing: Easing.out(Easing.cubic),
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     ]).start();
   }, [active, reducedMotion, success, variant]);
@@ -225,13 +226,13 @@ export function HappyCirclesMotion({
         duration: 90,
         easing: Easing.out(Easing.quad),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
       Animated.timing(wink, {
         duration: 90,
         easing: Easing.in(Easing.quad),
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     ]).start();
   }, [active, reducedMotion, variant, wink]);

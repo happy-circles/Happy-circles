@@ -1,5 +1,5 @@
 import { forwardRef, useState } from 'react';
-import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
+import { Platform, StyleSheet, TextInput, type TextInputProps } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
@@ -67,19 +67,35 @@ const styles = StyleSheet.create({
   focused: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.primary,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 0 10px rgba(26, 39, 68, 0.14)',
+      },
+      ios: {
+        shadowColor: theme.colors.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.14,
+        shadowRadius: 10,
+      },
+      default: {
+        elevation: 2,
+      },
+    }),
   },
   error: {
     borderColor: theme.colors.danger,
   },
   focusedError: {
     borderColor: theme.colors.danger,
-    shadowColor: theme.colors.danger,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 0 10px rgba(232, 96, 74, 0.12)',
+      },
+      ios: {
+        shadowColor: theme.colors.danger,
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
+      },
+    }),
   },
 });

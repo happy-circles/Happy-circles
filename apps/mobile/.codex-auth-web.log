@@ -1,0 +1,82 @@
+
+> @happy-circles/mobile@0.1.0 web C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+> node ./scripts/start-expo.mjs --web
+
+Starting Expo on port 8092
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Starting project at C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+Starting Metro Bundler
+Waiting on http://localhost:8092
+Logs for your project will appear below.
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.2% (288/481)
+Web Bundled 6057ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1180 modules)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 135ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 238ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 305ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 157ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 131ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 407ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 172ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 113ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 105ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 148ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 117ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 124ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 186ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 83ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 85ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 282ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 305ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 137ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 128ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 50ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 41ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 54ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 389ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 342ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 56ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 48ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 73ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 67ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_b613afc6ee6db1e4a2eeb6c5282a59b4\node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console

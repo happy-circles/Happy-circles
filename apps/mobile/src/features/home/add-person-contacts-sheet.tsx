@@ -36,6 +36,7 @@ import {
   useCreatePeopleOutreachMutation,
   useResolvePeopleTargetsMutation,
 } from '@/lib/live-data';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import {
   buildAccountInviteShareMessage,
@@ -636,7 +637,7 @@ export function AddPersonContactsSheet({
 
     setScannerOpen(false);
     onClose();
-    router.push({
+    pushRoute(router, {
       params: { token },
       pathname: '/invite/[token]',
     });
@@ -1170,7 +1171,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 0,
     paddingVertical: 0,
-    shadowOpacity: 0,
   },
   sheetContent: {
     gap: theme.spacing.md,

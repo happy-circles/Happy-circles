@@ -9,7 +9,7 @@ export default function JoinTokenRoute() {
     return null;
   }
 
-  if (session.status === 'signed_out') {
+  if (session.status === 'signed_out' || session.status === 'signed_in_locked') {
     return <AccountInviteEntryScreen />;
   }
 

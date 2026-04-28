@@ -8,7 +8,7 @@ import type {
   StyleProp,
   ViewStyle,
 } from 'react-native';
-import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
@@ -16,6 +16,8 @@ import { theme } from '@/lib/theme';
 const PULL_TRIGGER_DISTANCE = 84;
 const PULL_MAX_DISTANCE = 124;
 const PULL_RELEASE_DISTANCE = 64;
+const PULL_VISIBLE_DISTANCE = 18;
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface BrandedRefreshProps {
   readonly label?: string;
@@ -135,7 +137,7 @@ export const BrandedRefreshScrollView = forwardRef<
       duration: 210,
       easing: Easing.out(Easing.cubic),
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start(({ finished }) => {
       if (finished && !refreshingRef.current) {
         setPulling(false);
@@ -153,8 +155,10 @@ export const BrandedRefreshScrollView = forwardRef<
         thresholdHapticFiredRef.current = false;
       }
 
-      if (distance > 6) {
+      if (distance >= PULL_VISIBLE_DISTANCE) {
         setPulling(true);
+      } else if (!refreshingRef.current) {
+        setPulling(false);
       }
       pullDistance.setValue(distance);
     },
@@ -171,7 +175,7 @@ export const BrandedRefreshScrollView = forwardRef<
         mass: 0.8,
         stiffness: 170,
         toValue: PULL_RELEASE_DISTANCE,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start();
       return;
     }
@@ -184,9 +188,18 @@ export const BrandedRefreshScrollView = forwardRef<
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextY = event.nativeEvent.contentOffset.y;
     scrollYRef.current = nextY;
+    const isActivePullGesture = startYRef.current !== null && !releaseHandledRef.current;
 
-    if (refresh && !refresh.refreshing && nextY < 0) {
+    if (refresh && !refresh.refreshing && nextY < 0 && isActivePullGesture) {
       openPull(Math.min(PULL_MAX_DISTANCE, Math.abs(nextY) * 0.9));
+    } else if (
+      refresh &&
+      !refresh.refreshing &&
+      nextY >= 0 &&
+      latestPullRef.current > 0 &&
+      !isActivePullGesture
+    ) {
+      closePull();
     }
 
     onScroll?.(event);
@@ -207,6 +220,8 @@ export const BrandedRefreshScrollView = forwardRef<
 
       if (startedAtTop && deltaY > 0) {
         openPull(Math.min(PULL_MAX_DISTANCE, deltaY * 0.72));
+      } else if (latestPullRef.current > 0) {
+        closePull();
       }
     }
 
@@ -237,7 +252,7 @@ export const BrandedRefreshScrollView = forwardRef<
         mass: 0.8,
         stiffness: 170,
         toValue: PULL_RELEASE_DISTANCE,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start();
       void refresh.onRefresh();
     } else if (!refresh?.refreshing) {
@@ -273,7 +288,7 @@ export const BrandedRefreshScrollView = forwardRef<
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
         onTouchStart={handleTouchStart}
-        overScrollMode={refreshEnabled ? 'always' : overScrollMode}
+        overScrollMode={refreshEnabled ? 'never' : overScrollMode}
         ref={ref}
         scrollEventThrottle={scrollEventThrottle ?? 16}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
@@ -294,6 +309,8 @@ export const BrandedRefreshScrollView = forwardRef<
 const styles = StyleSheet.create({
   scrollWrap: {
     flexShrink: 1,
+    overflow: 'visible',
+    position: 'relative',
   },
   innerScroll: {
     flexShrink: 1,

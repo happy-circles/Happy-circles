@@ -212,12 +212,16 @@ export function buildHistoryCases<T extends HistoryCaseItem>(
 
   return Array.from(groups.entries())
     .flatMap(([id, groupedItems]): HistoryCase<T>[] => {
-      const completedItems = groupedItems.filter((item) => item.status !== 'pending');
+      const uniqueItems = groupedItems.filter(
+        (item, index, collection) =>
+          collection.findIndex((candidate) => candidate.id === item.id) === index,
+      );
+      const completedItems = uniqueItems.filter((item) => item.status !== 'pending');
       if (completedItems.length === 0) {
         return [];
       }
 
-      const steps = [...groupedItems].reverse();
+      const steps = [...uniqueItems].reverse();
       return [
         {
           id,
