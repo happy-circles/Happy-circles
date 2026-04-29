@@ -18,6 +18,7 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenFinalAction } from '@/components/screen-final-action';
 import { ScreenShell } from '@/components/screen-shell';
+import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
@@ -30,6 +31,7 @@ import {
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
+import { InviteTokenStatus } from './invite-token-status';
 
 function triggerSelectionHaptic() {
   void Haptics.selectionAsync().catch(() => undefined);
@@ -160,6 +162,33 @@ export function AccountCreateAccountScreen() {
   const emailPanelBackground = resolveFieldPanelBackground(emailStatus);
   const phonePanelBackground = resolveFieldPanelBackground(phoneStatus);
   const passwordPanelBackground = resolveFieldPanelBackground(passwordStatus);
+  const tokenState: BrandVerificationState = !shouldPreview || previewQuery.error || blockingMessage
+    ? 'error'
+    : previewQuery.isLoading
+      ? 'loading'
+      : canCreateAccount
+        ? 'success'
+        : 'idle';
+  const tokenTitle = !shouldPreview
+    ? 'Invitacion requerida'
+    : previewQuery.error
+      ? 'No pudimos validar invitacion'
+      : blockingMessage
+        ? 'Invitacion no disponible'
+        : previewQuery.isLoading
+          ? 'Validando invitacion'
+          : 'Invitacion confirmada';
+  const tokenSubtitle = !shouldPreview
+    ? 'Abre tu link o pega el codigo completo desde la entrada.'
+    : previewQuery.error
+      ? previewQuery.error.message
+      : blockingMessage
+        ? blockingMessage
+        : previewQuery.isLoading
+          ? 'Confirmando que este acceso sigue disponible.'
+          : inviterDisplayName
+            ? `${inviterDisplayName} te invito a crear tu acceso.`
+            : 'Este acceso privado sigue disponible.';
 
   function markFieldTouched(field: FieldName) {
     setTouchedFields((current) => {
@@ -270,6 +299,8 @@ export function AccountCreateAccountScreen() {
         headerVariant="plain"
         title="Happy Circles"
       >
+        <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+
         {!shouldPreview ? (
           <View style={styles.messageBlock}>
             <MessageBanner
@@ -301,20 +332,6 @@ export function AccountCreateAccountScreen() {
         {canCreateAccount ? (
           <>
             <View style={styles.accountContent}>
-              <View style={styles.inviteSummary}>
-                <View style={styles.inviteIcon}>
-                  <Ionicons color={theme.colors.success} name="checkmark" size={18} />
-                </View>
-                <View style={styles.inviteCopy}>
-                  <Text style={styles.inviteTitle}>Invitacion confirmada</Text>
-                  {inviterDisplayName ? (
-                    <Text numberOfLines={1} style={styles.inviteName}>
-                      {inviterDisplayName}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-
               {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
               <View style={styles.formBlock}>
@@ -495,45 +512,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: theme.spacing.xl,
     justifyContent: 'flex-start',
-    paddingTop: 108,
+    paddingTop: theme.spacing.md,
   },
   messageBlock: {
     gap: theme.spacing.md,
-  },
-  inviteSummary: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(61, 186, 110, 0.18)',
-    borderRadius: theme.radius.large,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    minHeight: 64,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  inviteIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  inviteCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  inviteTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-  },
-  inviteName: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
   },
   formBlock: {
     gap: 28,

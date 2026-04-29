@@ -3,10 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
+import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
@@ -17,6 +19,7 @@ import {
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+import { InviteTokenStatus } from './invite-token-status';
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'delivery_revoked') {
@@ -63,6 +66,20 @@ function channelLabel(channel: 'remote' | 'qr') {
   return channel === 'qr' ? 'QR temporal' : 'Invitacion privada';
 }
 
+function isUnavailableAccountInvite(preview: {
+  readonly deliveryStatus: string;
+  readonly reason: string;
+  readonly status: string;
+}) {
+  return (
+    ['revoked', 'expired'].includes(preview.deliveryStatus) ||
+    ['canceled', 'rejected'].includes(preview.status) ||
+    ['canceled', 'delivery_expired', 'delivery_revoked', 'expired', 'rejected'].includes(
+      preview.reason,
+    )
+  );
+}
+
 export function AccountInviteScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
@@ -97,6 +114,39 @@ export function AccountInviteScreen() {
     : false;
   const needsSetup = !session.setupState.requiredComplete;
   const needsTrustedDevice = session.deviceTrustState !== 'trusted';
+  const tokenUnavailable = preview ? isUnavailableAccountInvite(preview) : false;
+  const tokenState: BrandVerificationState =
+    !deliveryToken || previewQuery.error
+      ? 'error'
+      : previewQuery.isLoading
+        ? 'loading'
+        : preview
+          ? tokenUnavailable
+            ? 'error'
+            : 'success'
+          : 'idle';
+  const tokenTitle = !deliveryToken
+    ? 'Link invalido'
+    : previewQuery.error
+      ? 'No pudimos abrir este acceso'
+      : previewQuery.isLoading
+        ? 'Leyendo invitacion'
+        : preview
+          ? tokenUnavailable
+            ? 'Invitacion no disponible'
+            : canActivate
+              ? 'Activa tu cuenta'
+              : 'Invitacion confirmada'
+          : 'Entrar con invitacion';
+  const tokenSubtitle = !deliveryToken
+    ? 'No encontramos el token de esta invitacion.'
+    : previewQuery.error
+      ? previewQuery.error.message
+      : previewQuery.isLoading
+        ? 'Confirmando si este acceso sigue disponible.'
+        : preview
+          ? `${preview.inviterDisplayName} envio este acceso privado.`
+          : 'Una invitacion privada te da acceso a Happy Circles.';
 
   useEffect(() => {
     if (!deliveryToken) {
@@ -186,32 +236,14 @@ export function AccountInviteScreen() {
           />
         </View>
       }
+      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+      headerVariant="plain"
       largeTitle={false}
-      subtitle="Una invitacion privada te da acceso y puede conectarte automaticamente con quien te invito."
       title="Entrar con invitacion"
     >
+      <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+
       {message ? <MessageBanner message={message} tone="neutral" /> : null}
-
-      {!deliveryToken ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>Link invalido</Text>
-          <Text style={styles.helper}>No encontramos el token de esta invitacion.</Text>
-        </SurfaceCard>
-      ) : null}
-
-      {deliveryToken && previewQuery.isLoading ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>Leyendo invitacion</Text>
-          <Text style={styles.helper}>Confirmando si este acceso sigue disponible.</Text>
-        </SurfaceCard>
-      ) : null}
-
-      {deliveryToken && previewQuery.error ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>No pudimos abrir esta invitacion</Text>
-          <Text style={styles.helper}>{previewQuery.error.message}</Text>
-        </SurfaceCard>
-      ) : null}
 
       {preview ? (
         <SurfaceCard padding="lg" variant="elevated">

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
+import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
@@ -16,6 +18,7 @@ import {
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+import { InviteTokenStatus } from './invite-token-status';
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'identity_incomplete') {
@@ -78,6 +81,16 @@ function channelLabel(channel: 'remote' | 'qr') {
   return channel === 'qr' ? 'QR temporal' : 'Invitacion remota';
 }
 
+function isUnavailableFriendshipInvite(reason: string) {
+  return [
+    'canceled',
+    'claimed_by_other',
+    'delivery_revoked',
+    'expired',
+    'rejected',
+  ].includes(reason);
+}
+
 export function InviteLinkScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
@@ -97,6 +110,45 @@ export function InviteLinkScreen() {
   const readyForPreview = status !== 'signed_out' && profileCompletionState === 'complete';
   const previewQuery = useFriendshipInvitePreviewQuery(readyForPreview ? deliveryToken : null);
   const preview = previewQuery.data;
+  const tokenUnavailable = preview ? isUnavailableFriendshipInvite(preview.reason) : false;
+  const tokenState: BrandVerificationState =
+    !deliveryToken || previewQuery.error
+      ? 'error'
+      : !readyForPreview || previewQuery.isLoading
+        ? 'loading'
+        : preview
+          ? tokenUnavailable
+            ? 'error'
+            : 'success'
+          : 'idle';
+  const tokenTitle = !deliveryToken
+    ? 'Link invalido'
+    : !readyForPreview
+      ? 'Preparando acceso'
+      : previewQuery.error
+        ? 'No pudimos abrir esta invitacion'
+        : previewQuery.isLoading
+          ? 'Leyendo invitacion'
+          : preview
+            ? tokenUnavailable
+              ? 'Invitacion no disponible'
+              : preview.canApprove
+                ? 'Valida esta conexion'
+                : preview.canClaim
+                  ? 'Invitacion lista'
+                  : 'Invitacion revisada'
+            : 'Invitacion de amistad';
+  const tokenSubtitle = !deliveryToken
+    ? 'No encontramos el token de esta invitacion.'
+    : !readyForPreview
+      ? 'Te llevamos por login o setup antes de mostrar la confirmacion real.'
+      : previewQuery.error
+        ? previewQuery.error.message
+        : previewQuery.isLoading
+          ? 'Consultando el estado actual del token.'
+          : preview
+            ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
+            : 'El token abre una invitacion privada.';
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +242,6 @@ export function InviteLinkScreen() {
 
   return (
     <ScreenShell
-      eyebrow="Invitacion"
       footer={
         <View style={styles.footer}>
           <PrimaryAction
@@ -200,42 +251,14 @@ export function InviteLinkScreen() {
           />
         </View>
       }
+      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+      headerVariant="plain"
       largeTitle={false}
-      subtitle="El token abre la invitacion. Si tu celular coincide con el contacto esperado, la amistad puede quedar creada al reclamar; si no, pasa a validacion final."
       title="Invitacion de amistad"
     >
+      <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+
       {message ? <MessageBanner message={message} /> : null}
-
-      {!deliveryToken ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>Link invalido</Text>
-          <Text style={styles.helper}>No encontramos el token de esta invitacion.</Text>
-        </SurfaceCard>
-      ) : null}
-
-      {deliveryToken && !readyForPreview ? (
-        <SurfaceCard padding="lg" variant="accent">
-          <Text style={styles.title}>Preparando acceso</Text>
-          <Text style={styles.helper}>
-            Vamos a llevarte por login o setup antes de mostrar la confirmacion real de esta
-            invitacion.
-          </Text>
-        </SurfaceCard>
-      ) : null}
-
-      {deliveryToken && readyForPreview && previewQuery.isLoading ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>Leyendo invitacion</Text>
-          <Text style={styles.helper}>Consultando el estado actual del token.</Text>
-        </SurfaceCard>
-      ) : null}
-
-      {deliveryToken && readyForPreview && previewQuery.error ? (
-        <SurfaceCard padding="lg">
-          <Text style={styles.title}>No pudimos abrir esta invitacion</Text>
-          <Text style={styles.helper}>{previewQuery.error.message}</Text>
-        </SurfaceCard>
-      ) : null}
 
       {preview ? (
         <SurfaceCard padding="lg" variant="elevated">

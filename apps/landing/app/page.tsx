@@ -1,4 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react';
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 
 type PersonId =
   | 'ana'
@@ -16,6 +19,25 @@ type PersonProfile = {
   name: string;
 };
 
+type SvgPoint = readonly [number, number];
+
+type NodeFrame = {
+  muted?: boolean;
+  opacity: number;
+  size: number;
+  x: number;
+  y: number;
+};
+
+type ResolvedNodeFrame = Required<NodeFrame>;
+
+type EdgeDef = {
+  className?: string;
+  offset?: number;
+  from: PersonId;
+  to: PersonId;
+};
+
 const people = {
   ana: { name: 'Ana', asset: '/avatars/ana.webp' },
   bruno: { name: 'Bruno', asset: '/avatars/bruno.webp' },
@@ -28,13 +50,208 @@ const people = {
   sofia: { name: 'Sofía', asset: '/avatars/sofia.webp' },
 } satisfies Record<PersonId, PersonProfile>;
 
-type NodeSize = 'tiny' | 'sm' | 'md' | 'lg' | 'xl';
-type SvgPoint = readonly [number, number];
-const EDGE_OFFSET = 48;
-const ARROW_EDGE_OFFSET = 62;
+const personIds = Object.keys(people) as PersonId[];
 
-function nodeStyle(x: number, y: number): CSSProperties {
-  return { '--x': `${x}%`, '--y': `${y}%` } as CSSProperties;
+const storySteps = [
+  {
+    id: 'intro',
+    subtitle: 'Paga más rápido. Cobra más rápido.',
+    title: ['Happy Circles'],
+  },
+  {
+    id: 'debt',
+    subtitle: 'Una persona le presta a otra.',
+    title: ['Todo empieza', 'con una deuda.'],
+  },
+  {
+    id: 'relations',
+    subtitle: 'Una deuda se conecta con otra.',
+    title: ['Luego aparecen', 'más relaciones.'],
+  },
+  {
+    id: 'network',
+    subtitle: 'No todos se conocen. Todos esperan.',
+    title: ['La red se', 'vuelve confusa.'],
+  },
+  {
+    id: 'path',
+    subtitle: 'Happy Circles lo detecta.',
+    title: ['Pero hay un', 'camino escondido.'],
+  },
+  {
+    id: 'circle',
+    subtitle: 'Menos pasos, menos espera.',
+    title: ['La red se convierte', 'en un cierre.'],
+  },
+  {
+    id: 'confirm',
+    subtitle: 'Las personas confirman.',
+    title: ['La app propone.'],
+  },
+  {
+    id: 'final',
+    subtitle: 'Abre Happy Circles.',
+    title: ['Todo cobra', 'sentido.'],
+  },
+] as const;
+
+const STEP_COUNT = storySteps.length;
+const EDGE_OFFSET = 48;
+const circleParticipantIds = ['fernando', 'ana', 'diego', 'elena', 'bruno', 'carla'] as const satisfies readonly PersonId[];
+const circleParticipants = new Set<PersonId>(circleParticipantIds);
+
+const relationEdges: EdgeDef[] = [
+  { className: 'softStoryLine', from: 'sofia', to: 'fernando' },
+  { from: 'fernando', to: 'ana' },
+  { from: 'ana', to: 'diego' },
+  { className: 'softStoryLine', from: 'diego', to: 'lucas' },
+  { from: 'ana', to: 'carla' },
+  { from: 'carla', to: 'bruno' },
+  { from: 'diego', to: 'elena' },
+  { className: 'softStoryLine', from: 'elena', to: 'pablo' },
+  { className: 'softStoryLine', from: 'fernando', to: 'carla' },
+];
+
+const networkEdges: EdgeDef[] = [
+  { from: 'sofia', to: 'fernando' },
+  { from: 'fernando', to: 'carla' },
+  { from: 'carla', to: 'bruno' },
+  { from: 'bruno', to: 'elena' },
+  { from: 'elena', to: 'diego' },
+  { from: 'diego', to: 'lucas' },
+  { from: 'lucas', to: 'ana' },
+  { from: 'ana', to: 'sofia' },
+  { from: 'fernando', to: 'ana' },
+  { from: 'ana', to: 'diego' },
+  { from: 'fernando', to: 'bruno' },
+  { from: 'fernando', to: 'diego' },
+  { from: 'ana', to: 'elena' },
+  { from: 'ana', to: 'pablo' },
+  { from: 'diego', to: 'bruno' },
+  { from: 'diego', to: 'pablo' },
+  { from: 'pablo', to: 'elena' },
+  { from: 'pablo', to: 'carla' },
+  { from: 'pablo', to: 'bruno' },
+  { from: 'fernando', to: 'pablo' },
+  { from: 'carla', to: 'ana' },
+];
+
+const hiddenPathEdges: EdgeDef[] = [
+  { from: 'fernando', to: 'ana' },
+  { from: 'ana', to: 'diego' },
+  { from: 'diego', to: 'elena' },
+  { from: 'elena', to: 'bruno' },
+  { from: 'bruno', to: 'carla' },
+  { from: 'carla', to: 'fernando' },
+];
+
+const nodeFrames: Record<PersonId, readonly NodeFrame[]> = {
+  sofia: [
+    frame(10, 45, 0, 68, true),
+    frame(14, 46, 0, 72, true),
+    frame(8, 9, 0.72, 76),
+    frame(12, 12, 1, 76),
+    frame(12, 12, 0.16, 76, true),
+    frame(12, 12, 0.08, 76, true),
+    frame(12, 12, 0, 76, true),
+    frame(12, 12, 0, 76, true),
+  ],
+  fernando: [
+    frame(30, 48, 0, 70, true),
+    frame(25, 58, 0, 74, true),
+    frame(20, 47, 1, 78),
+    frame(18, 43, 1, 78),
+    frame(18, 43, 1, 78),
+    frame(20, 40, 1, 78),
+    frame(20, 38, 1, 78),
+    frame(20, 35, 1, 72),
+  ],
+  ana: [
+    frame(50, 40, 0, 74, true),
+    frame(74, 58, 1, 112),
+    frame(50, 33, 1, 78),
+    frame(50, 24, 1, 78),
+    frame(50, 24, 1, 78),
+    frame(50, 18, 1, 78),
+    frame(75, 34, 1, 78),
+    frame(50, 22, 1, 72),
+  ],
+  diego: [
+    frame(73, 52, 0, 70, true),
+    frame(76, 58, 0, 74, true),
+    frame(80, 47, 1, 78),
+    frame(82, 43, 1, 78),
+    frame(82, 43, 1, 78),
+    frame(80, 40, 1, 78),
+    frame(84, 58, 1, 78),
+    frame(80, 35, 1, 72),
+  ],
+  carla: [
+    frame(24, 74, 0, 74, true),
+    frame(22, 74, 0, 74, true),
+    frame(14, 76, 1, 78),
+    frame(15, 72, 1, 78),
+    frame(15, 72, 1, 78),
+    frame(20, 70, 1, 78),
+    frame(18, 68, 1, 78),
+    frame(20, 61, 1, 72),
+  ],
+  bruno: [
+    frame(50, 82, 0, 74, true),
+    frame(26, 58, 1, 112),
+    frame(48, 88, 1, 78),
+    frame(50, 86, 1, 78),
+    frame(50, 86, 1, 78),
+    frame(50, 86, 1, 78),
+    frame(48, 84, 1, 78),
+    frame(50, 72, 1, 72),
+  ],
+  elena: [
+    frame(78, 72, 0, 74, true),
+    frame(78, 72, 0, 74, true),
+    frame(75, 69, 1, 78),
+    frame(78, 72, 1, 78),
+    frame(78, 72, 1, 78),
+    frame(80, 70, 1, 78),
+    frame(80, 82, 1, 78),
+    frame(80, 61, 1, 72),
+  ],
+  lucas: [
+    frame(90, 30, 0, 68, true),
+    frame(88, 34, 0, 72, true),
+    frame(92, 9, 0.72, 76),
+    frame(88, 12, 1, 76),
+    frame(88, 12, 0.16, 76, true),
+    frame(88, 12, 0.08, 76, true),
+    frame(88, 12, 0, 76, true),
+    frame(88, 12, 0, 76, true),
+  ],
+  pablo: [
+    frame(52, 62, 0, 72, true),
+    frame(52, 62, 0, 72, true),
+    frame(88, 90, 0.72, 76),
+    frame(50, 56, 1, 76),
+    frame(50, 56, 0.16, 76, true),
+    frame(50, 56, 0.08, 76, true),
+    frame(50, 56, 0, 76, true),
+    frame(50, 56, 0, 76, true),
+  ],
+};
+
+function frame(x: number, y: number, opacity: number, size: number, muted = false): NodeFrame {
+  return { muted, opacity, size, x, y };
+}
+
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function lerp(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
+}
+
+function phaseOpacity(rawStep: number, index: number, width = 0.92) {
+  return clamp(1 - Math.abs(rawStep - index) / width);
 }
 
 function getTrimmedEdge(from: SvgPoint, to: SvgPoint, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
@@ -56,6 +273,7 @@ function getTrimmedEdge(from: SvgPoint, to: SvgPoint, startOffset = EDGE_OFFSET,
 
   const ux = dx / length;
   const uy = dy / length;
+
   return {
     end: [x2 - ux * endOffset, y2 - uy * endOffset] as SvgPoint,
     start: [x1 + ux * startOffset, y1 + uy * startOffset] as SvgPoint,
@@ -67,7 +285,7 @@ function edgePath(from: SvgPoint, to: SvgPoint, startOffset = EDGE_OFFSET, endOf
   return `M${start[0]} ${start[1]} L${end[0]} ${end[1]}`;
 }
 
-function curvedEdgePath(from: SvgPoint, to: SvgPoint, curve = -0.22, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
+function curvedEdgePath(from: SvgPoint, to: SvgPoint, curve = -0.18, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
   const { end, start } = getTrimmedEdge(from, to, startOffset, endOffset);
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
@@ -78,57 +296,144 @@ function curvedEdgePath(from: SvgPoint, to: SvgPoint, curve = -0.22, startOffset
   const normalY = length ? dx / length : 0;
   const controlX = midX + normalX * length * curve;
   const controlY = midY + normalY * length * curve;
+
   return `M${start[0]} ${start[1]} Q${controlX} ${controlY} ${end[0]} ${end[1]}`;
 }
 
-function GraphEdge({
-  className,
-  endOffset,
-  from,
-  markerEnd,
-  startOffset,
-  to,
-}: Readonly<{
-  className?: string;
-  endOffset?: number;
-  from: SvgPoint;
-  markerEnd?: string;
-  startOffset?: number;
-  to: SvgPoint;
-}>) {
-  return (
-    <path
-      className={className}
-      d={edgePath(from, to, startOffset, endOffset ?? (markerEnd ? ARROW_EDGE_OFFSET : EDGE_OFFSET))}
-      markerEnd={markerEnd}
-    />
+function circleEdgePath(from: SvgPoint, to: SvgPoint, center: SvgPoint, startOffset = EDGE_OFFSET, endOffset = EDGE_OFFSET) {
+  const { end, start } = getTrimmedEdge(from, to, startOffset, endOffset);
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  const midX = (start[0] + end[0]) / 2;
+  const midY = (start[1] + end[1]) / 2;
+  const radialX = midX - center[0];
+  const radialY = midY - center[1];
+  const radialLength = Math.hypot(radialX, radialY);
+  const fallbackNormalX = length ? -dy / length : 0;
+  const fallbackNormalY = length ? dx / length : 0;
+  const normalX = radialLength ? radialX / radialLength : fallbackNormalX;
+  const normalY = radialLength ? radialY / radialLength : fallbackNormalY;
+  const bulge = clamp(length * 0.28, 24, 46);
+  const controlX = midX + normalX * bulge;
+  const controlY = midY + normalY * bulge;
+
+  return `M${start[0]} ${start[1]} Q${controlX} ${controlY} ${end[0]} ${end[1]}`;
+}
+
+function toSvgPoint(node: ResolvedNodeFrame): SvgPoint {
+  return [node.x * 3.6, node.y * 4.5] as const;
+}
+
+function getNodeEdgeOffset(node: ResolvedNodeFrame) {
+  return node.size * 0.5 + 3;
+}
+
+function getCircleLayout(frames: Record<PersonId, ResolvedNodeFrame>) {
+  const points = circleParticipantIds.map((id) => toSvgPoint(frames[id]));
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  return {
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
+    rx: (maxX - minX) / 2,
+    ry: (maxY - minY) / 2,
+  };
+}
+
+function getNodeFrame(id: PersonId, index: number): NodeFrame {
+  return nodeFrames[id][index] ?? nodeFrames[id][0] ?? frame(50, 50, 0, 76);
+}
+
+function resolveNodeFrames(rawStep: number): Record<PersonId, ResolvedNodeFrame> {
+  const lowerIndex = Math.floor(clamp(rawStep, 0, STEP_COUNT - 1));
+  const upperIndex = Math.min(STEP_COUNT - 1, lowerIndex + 1);
+  const amount = clamp(rawStep - lowerIndex);
+  const nearestIndex = Math.round(rawStep);
+
+  return personIds.reduce(
+    (frames, id) => {
+      const lower = getNodeFrame(id, lowerIndex);
+      const upper = getNodeFrame(id, upperIndex);
+      const nearest = getNodeFrame(id, nearestIndex);
+
+      frames[id] = {
+        muted: nearest.muted ?? false,
+        opacity: lerp(lower.opacity, upper.opacity, amount),
+        size: lerp(lower.size, upper.size, amount),
+        x: lerp(lower.x, upper.x, amount),
+        y: lerp(lower.y, upper.y, amount),
+      };
+
+      return frames;
+    },
+    {} as Record<PersonId, ResolvedNodeFrame>,
   );
 }
 
-function CurvedGraphEdge({
-  className,
-  curve = -0.22,
-  endOffset,
-  from,
-  markerEnd,
-  startOffset,
-  to,
-}: Readonly<{
-  className?: string;
-  curve?: number;
-  endOffset?: number;
-  from: SvgPoint;
-  markerEnd?: string;
-  startOffset?: number;
-  to: SvgPoint;
-}>) {
-  return (
-    <path
-      className={className}
-      d={curvedEdgePath(from, to, curve, startOffset, endOffset ?? (markerEnd ? ARROW_EDGE_OFFSET : EDGE_OFFSET))}
-      markerEnd={markerEnd}
-    />
-  );
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    update();
+    mediaQuery.addEventListener('change', update);
+
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function useScrollProgress(ref: RefObject<HTMLElement | null>) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let frameId = 0;
+
+    const measure = () => {
+      if (!ref.current) {
+        return;
+      }
+
+      const rect = ref.current.getBoundingClientRect();
+      const scrollable = Math.max(1, rect.height - window.innerHeight);
+      const nextProgress = clamp(-rect.top / scrollable);
+      setProgress((currentProgress) => (Math.abs(currentProgress - nextProgress) > 0.001 ? nextProgress : currentProgress));
+    };
+
+    const requestMeasure = () => {
+      if (frameId) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        measure();
+      });
+    };
+
+    measure();
+    window.addEventListener('scroll', requestMeasure, { passive: true });
+    window.addEventListener('resize', requestMeasure);
+
+    return () => {
+      window.removeEventListener('scroll', requestMeasure);
+      window.removeEventListener('resize', requestMeasure);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [ref]);
+
+  return progress;
 }
 
 function HappyCirclesGlyph({ large = false }: Readonly<{ large?: boolean }>) {
@@ -148,110 +453,17 @@ function HappyCirclesGlyph({ large = false }: Readonly<{ large?: boolean }>) {
   );
 }
 
-function BrandLockup({ hero = false }: Readonly<{ hero?: boolean }>) {
-  return (
-    <div className={hero ? 'brandLockup brandLockupHero' : 'brandLockup'}>
-      <HappyCirclesGlyph large={hero} />
-      <strong>Happy Circles</strong>
-    </div>
-  );
-}
-
-function PersonNode({
-  check = false,
-  className = '',
-  id,
-  label = false,
-  muted = false,
-  size = 'md',
-  style,
-}: Readonly<{
-  check?: boolean;
-  className?: string;
-  id: PersonId;
-  label?: boolean;
-  muted?: boolean;
-  size?: NodeSize;
-  style?: CSSProperties;
-}>) {
-  const person = people[id];
-
-  return (
-    <figure
-      aria-label={person.name}
-      className={`personNode personNode-${size} ${muted ? 'personNodeMuted' : ''} ${className}`}
-      style={style}
-    >
-      <span className="personPortrait" style={{ backgroundImage: `url(${person.asset})` }}>
-        {check ? <span className="personCheck">✓</span> : null}
-      </span>
-      {label ? <figcaption>{person.name}</figcaption> : null}
-    </figure>
-  );
-}
-
-function GraphNode({
-  check = false,
-  id,
-  label = false,
-  muted = false,
-  size = 'md',
-  x,
-  y,
-}: Readonly<{
-  check?: boolean;
-  id: PersonId;
-  label?: boolean;
-  muted?: boolean;
-  size?: NodeSize;
-  x: number;
-  y: number;
-}>) {
-  return <PersonNode check={check} className="graphNode" id={id} label={label} muted={muted} size={size} style={nodeStyle(x, y)} />;
-}
-
-function Decor() {
+function StoryDecor() {
   return (
     <>
-      <span className="decor decorCloud" aria-hidden="true" />
-      <span className="decor decorBlob" aria-hidden="true" />
-      <span className="decor decorLeaf" aria-hidden="true" />
-      <span className="decor decorSpark decorSparkOne" aria-hidden="true" />
-      <span className="decor decorSpark decorSparkTwo" aria-hidden="true" />
-      <span className="decor decorDot decorDotOne" aria-hidden="true" />
-      <span className="decor decorDot decorDotTwo" aria-hidden="true" />
+      <span className="storyDecor storyDecorCloud" aria-hidden="true" />
+      <span className="storyDecor storyDecorBlob" aria-hidden="true" />
+      <span className="storyDecor storyDecorLeaf" aria-hidden="true" />
+      <span className="storyDecor storyDecorSpark storyDecorSparkOne" aria-hidden="true" />
+      <span className="storyDecor storyDecorSpark storyDecorSparkTwo" aria-hidden="true" />
+      <span className="storyDecor storyDecorDot storyDecorDotOne" aria-hidden="true" />
+      <span className="storyDecor storyDecorDot storyDecorDotTwo" aria-hidden="true" />
     </>
-  );
-}
-
-function StoryScreen({
-  align = 'left',
-  children,
-  className = '',
-  eyebrow,
-  id,
-  subtitle,
-  title,
-}: Readonly<{
-  align?: 'left' | 'center';
-  children: ReactNode;
-  className?: string;
-  eyebrow?: string;
-  id?: string;
-  subtitle?: string;
-  title: ReactNode;
-}>) {
-  return (
-    <section className={`storyScreen storyScreen-${align} ${className}`} id={id}>
-      <Decor />
-      <BrandLockup />
-      <div className="screenCopy">
-        {eyebrow ? <span className="screenEyebrow">{eyebrow}</span> : null}
-        <h2>{title}</h2>
-        {subtitle ? <p>{subtitle}</p> : null}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -279,475 +491,293 @@ function StoreButton({
   );
 }
 
-function HeroGhostGraph() {
+function AnimatedEdge({
+  className = '',
+  circleCenter,
+  edge,
+  frames,
+  opacity,
+  curved = false,
+}: Readonly<{
+  className?: string;
+  circleCenter?: SvgPoint;
+  curved?: boolean;
+  edge: EdgeDef;
+  frames: Record<PersonId, ResolvedNodeFrame>;
+  opacity: number;
+}>) {
+  const fromFrame = frames[edge.from];
+  const toFrame = frames[edge.to];
+  const from = toSvgPoint(fromFrame);
+  const to = toSvgPoint(toFrame);
+  const startOffset = edge.offset ?? getNodeEdgeOffset(fromFrame);
+  const endOffset = edge.offset ?? getNodeEdgeOffset(toFrame);
+  const d =
+    curved && circleCenter
+      ? circleEdgePath(from, to, circleCenter, startOffset, endOffset)
+      : curved
+        ? curvedEdgePath(from, to, -0.18, startOffset, endOffset)
+        : edgePath(from, to, startOffset, endOffset);
+
+  return <path className={`${edge.className ?? ''} ${className}`} d={d} style={{ opacity }} />;
+}
+
+function AnimatedNode({
+  check,
+  frame,
+  id,
+}: Readonly<{
+  check: boolean;
+  frame: ResolvedNodeFrame;
+  id: PersonId;
+}>) {
+  const person = people[id];
+  const style = {
+    '--avatar-size': `${frame.size}px`,
+    '--node-x': `${frame.x}%`,
+    '--node-y': `${frame.y}%`,
+    filter: frame.muted ? 'grayscale(1)' : 'none',
+    opacity: frame.opacity,
+  } as CSSProperties;
+
   return (
-    <div className="heroGhostGraph" aria-hidden="true">
-      <svg className="graphSvg ghostSvg" preserveAspectRatio="none" viewBox="0 0 360 440">
-        <GraphEdge from={[43, 123]} to={[180, 79]} />
-        <GraphEdge from={[180, 79]} to={[317, 141]} />
-        <GraphEdge from={[317, 141]} to={[288, 282]} />
-        <GraphEdge from={[288, 282]} to={[187, 361]} />
-        <GraphEdge from={[187, 361]} to={[65, 304]} />
-        <GraphEdge from={[65, 304]} to={[43, 123]} />
-        <GraphEdge from={[43, 123]} to={[187, 361]} />
-        <GraphEdge from={[187, 361]} to={[317, 141]} />
-        <GraphEdge from={[65, 304]} to={[180, 79]} />
-        <GraphEdge from={[180, 79]} to={[288, 282]} />
-      </svg>
-      <GraphNode id="fernando" label={false} muted size="lg" x={12} y={28} />
-      <GraphNode id="ana" label={false} muted size="lg" x={50} y={18} />
-      <GraphNode id="diego" label={false} muted size="lg" x={88} y={32} />
-      <GraphNode id="carla" label={false} muted size="lg" x={18} y={69} />
-      <GraphNode id="bruno" label={false} muted size="lg" x={52} y={82} />
-      <GraphNode id="elena" label={false} muted size="lg" x={80} y={64} />
+    <figure aria-label={person.name} className="morphNode" style={style}>
+      <span className="morphAvatar" style={{ backgroundImage: `url(${person.asset})` }}>
+        <span className="morphCheck" style={{ opacity: check ? 1 : 0 }}>
+          ✓
+        </span>
+      </span>
+    </figure>
+  );
+}
+
+function ChapterText({ rawStep }: Readonly<{ rawStep: number }>) {
+  return (
+    <div className="chapterStack" aria-live="polite">
+      {storySteps.map((step, index) => {
+        const opacity = index === 0 ? 0 : phaseOpacity(rawStep, index);
+        const style = {
+          opacity,
+          pointerEvents: opacity > 0.5 ? 'auto' : 'none',
+          transform: `translateY(${(1 - opacity) * 18}px)`,
+        } as CSSProperties;
+
+        return (
+          <div className="chapterCopy" key={step.id} style={style}>
+            <h1>
+              {step.title.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </h1>
+            <p>{step.subtitle}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function DebtVisual() {
+function IntroLockup({ rawStep }: Readonly<{ rawStep: number }>) {
+  const opacity = phaseOpacity(rawStep, 0, 0.72);
+
   return (
-    <div className="debtVisual visualStage" aria-label="Bruno le presta dinero a Ana">
-      <svg className="graphSvg debtSvg" viewBox="0 0 360 220" aria-hidden="true">
-        <defs>
-          <marker
-            id="debt-arrow"
-            markerHeight="16"
-            markerUnits="userSpaceOnUse"
-            markerWidth="16"
-            orient="auto"
-            refX="14"
-            refY="8"
-            viewBox="0 0 16 16"
-          >
-            <path d="M1 1 L15 8 L1 15 Z" fill="#e8604a" />
-          </marker>
-        </defs>
-        <path className="debtLine" d="M150 138 C166 122 196 122 212 138" markerEnd="url(#debt-arrow)" />
-      </svg>
-      <GraphNode id="bruno" size="xl" x={22} y={58} />
-      <GraphNode id="ana" size="xl" x={78} y={58} />
-      <div className="receiptCard">
-        <span />
-        <span />
-        <span />
-        <strong>$80k</strong>
-      </div>
+    <div className="introLockup" style={{ opacity, transform: `translate(-50%, -50%) scale(${0.94 + opacity * 0.06})` }}>
+      <HappyCirclesGlyph large />
+      <h1>Happy Circles</h1>
     </div>
   );
 }
 
-function RelationsVisual() {
+function ReceiptCard({ opacity }: Readonly<{ opacity: number }>) {
   return (
-    <div className="networkVisual visualStage" aria-label="Varias personas conectadas por deudas">
-      <svg className="graphSvg relationSvg" preserveAspectRatio="none" viewBox="0 0 360 420" aria-hidden="true">
-        <GraphEdge className="softLine" from={[47, 59]} to={[83, 143]} />
-        <GraphEdge from={[83, 143]} to={[180, 122]} />
-        <GraphEdge from={[180, 122]} to={[270, 172]} />
-        <GraphEdge className="softLine" from={[270, 172]} to={[310, 76]} />
-        <GraphEdge from={[180, 122]} to={[79, 286]} />
-        <GraphEdge from={[79, 286]} to={[173, 344]} />
-        <GraphEdge from={[173, 344]} to={[259, 286]} />
-        <GraphEdge className="softLine" from={[259, 286]} to={[331, 370]} />
-        <GraphEdge className="softLine" from={[270, 172]} to={[259, 286]} />
-      </svg>
-      <GraphNode id="sofia" label={false} muted size="sm" x={13} y={14} />
-      <GraphNode id="fernando" size="lg" x={23} y={34} />
-      <GraphNode id="ana" size="lg" x={50} y={29} />
-      <GraphNode id="diego" size="lg" x={75} y={41} />
-      <GraphNode id="carla" size="lg" x={22} y={68} />
-      <GraphNode id="bruno" size="lg" x={48} y={82} />
-      <GraphNode id="elena" size="lg" x={72} y={68} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={86} y={18} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={92} y={88} />
+    <div className="storyReceipt" style={{ opacity }}>
+      <span />
+      <span />
+      <span />
+      <strong>$80k</strong>
     </div>
   );
 }
 
-function ConfusedVisual() {
+function ProposalCard({ opacity }: Readonly<{ opacity: number }>) {
   return (
-    <div className="networkVisual networkVisualConfused visualStage" aria-label="Una red de deudas confusa">
-      <svg className="graphSvg confusedSvg" preserveAspectRatio="none" viewBox="0 0 360 450" aria-hidden="true">
-        <GraphEdge from={[43, 54]} to={[65, 194]} />
-        <GraphEdge from={[65, 194]} to={[54, 324]} />
-        <GraphEdge from={[54, 324]} to={[180, 387]} />
-        <GraphEdge from={[180, 387]} to={[281, 324]} />
-        <GraphEdge from={[281, 324]} to={[295, 194]} />
-        <GraphEdge from={[295, 194]} to={[317, 54]} />
-        <GraphEdge from={[317, 54]} to={[180, 108]} />
-        <GraphEdge from={[180, 108]} to={[43, 54]} />
-        <GraphEdge from={[65, 194]} to={[180, 387]} />
-        <GraphEdge from={[65, 194]} to={[295, 194]} />
-        <GraphEdge from={[180, 108]} to={[281, 324]} />
-        <GraphEdge from={[180, 108]} to={[180, 252]} />
-        <GraphEdge from={[295, 194]} to={[180, 387]} />
-        <GraphEdge from={[295, 194]} to={[180, 252]} />
-        <GraphEdge from={[180, 252]} to={[281, 324]} />
-        <GraphEdge from={[180, 252]} to={[54, 324]} />
-        <GraphEdge from={[180, 252]} to={[180, 387]} />
-        <GraphEdge from={[65, 194]} to={[180, 252]} />
-        <GraphEdge from={[54, 324]} to={[180, 108]} />
-      </svg>
-      <span className="waitIcon waitIconOne" aria-hidden="true" />
-      <span className="waitIcon waitIconTwo" aria-hidden="true" />
-      <span className="waitIcon waitIconThree" aria-hidden="true" />
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={12} />
-      <GraphNode id="fernando" size="lg" x={18} y={43} />
-      <GraphNode id="ana" size="lg" x={50} y={24} />
-      <GraphNode id="diego" size="lg" x={82} y={43} />
-      <GraphNode id="carla" size="lg" x={15} y={72} />
-      <GraphNode id="bruno" size="lg" x={50} y={86} />
-      <GraphNode id="elena" size="lg" x={78} y={72} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={88} y={12} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={50} y={56} />
+    <div className="storyProposal" style={{ opacity }}>
+      <span className="storyProposalCheck">✓</span>
+      <span />
+      <span />
     </div>
   );
 }
 
-function HiddenPathVisual() {
+function CenterLogo({ rawStep }: Readonly<{ rawStep: number }>) {
+  const circleOpacity = phaseOpacity(rawStep, 5, 0.86);
+  const finalOpacity = phaseOpacity(rawStep, 7, 1);
+  const opacity = clamp(circleOpacity + finalOpacity);
+  const scale = 0.72 + finalOpacity * 0.26;
+
   return (
-    <div className="networkVisual networkVisualPath visualStage" aria-label="Happy Circles detecta un camino dentro de la red">
-      <svg className="graphSvg pathSvg" preserveAspectRatio="none" viewBox="0 0 360 430" aria-hidden="true">
-        <defs>
-          <marker
-            id="path-arrow-green"
-            markerHeight="15"
-            markerUnits="userSpaceOnUse"
-            markerWidth="15"
-            orient="auto"
-            refX="13"
-            refY="7.5"
-            viewBox="0 0 15 15"
-          >
-            <path d="M1 1 L14 7.5 L1 14 Z" fill="#3dba6e" />
-          </marker>
-          <marker
-            id="path-arrow-coral"
-            markerHeight="15"
-            markerUnits="userSpaceOnUse"
-            markerWidth="15"
-            orient="auto"
-            refX="13"
-            refY="7.5"
-            viewBox="0 0 15 15"
-          >
-            <path d="M1 1 L14 7.5 L1 14 Z" fill="#e8604a" />
-          </marker>
-        </defs>
-        <g className="dimmedGraphLines">
-          <GraphEdge from={[43, 60]} to={[86, 163]} />
-          <GraphEdge from={[86, 163]} to={[180, 133]} />
-          <GraphEdge from={[180, 133]} to={[274, 181]} />
-          <GraphEdge from={[274, 181]} to={[317, 69]} />
-          <GraphEdge from={[274, 181]} to={[274, 292]} />
-          <GraphEdge from={[274, 292]} to={[331, 378]} />
-          <GraphEdge from={[274, 292]} to={[180, 348]} />
-          <GraphEdge from={[180, 348]} to={[86, 292]} />
-          <GraphEdge from={[86, 292]} to={[86, 163]} />
-          <GraphEdge from={[43, 60]} to={[180, 133]} />
-          <GraphEdge from={[86, 163]} to={[180, 348]} />
+    <div className="storyCenterLogo" style={{ opacity, transform: `translate(-50%, -50%) scale(${scale})` }}>
+      <HappyCirclesGlyph large />
+      <span className="storyCenterCheck" style={{ opacity: finalOpacity }}>
+        ✓
+      </span>
+    </div>
+  );
+}
+
+function StoryScene({ rawStep }: Readonly<{ rawStep: number }>) {
+  const frames = useMemo(() => resolveNodeFrames(rawStep), [rawStep]);
+  const circleLayout = useMemo(() => getCircleLayout(frames), [frames]);
+  const circleCenter = [circleLayout.cx, circleLayout.cy] as const;
+  const debtOpacity = phaseOpacity(rawStep, 1);
+  const relationOpacity = phaseOpacity(rawStep, 2);
+  const networkOpacity = Math.max(phaseOpacity(rawStep, 3), phaseOpacity(rawStep, 4) * 0.34);
+  const pathOpacity = Math.max(phaseOpacity(rawStep, 4), phaseOpacity(rawStep, 5) * 0.68);
+  const circleOpacity = phaseOpacity(rawStep, 5);
+  const confirmOpacity = phaseOpacity(rawStep, 6);
+  const finalOpacity = phaseOpacity(rawStep, 7);
+  const showChecks = rawStep > 5.45 && rawStep < 6.82;
+
+  return (
+    <div className="morphStage" aria-label="Historia visual de una red de deudas que se convierte en un cierre">
+      <svg className="morphGraphSvg" preserveAspectRatio="none" viewBox="0 0 360 450" aria-hidden="true">
+        <g className="storyDebtLines">
+          <AnimatedEdge className="storyDebtLine" edge={{ from: 'bruno', to: 'ana' }} frames={frames} opacity={debtOpacity} />
         </g>
-        <GraphEdge className="pathLine pathLineGreen" from={[86, 163]} markerEnd="url(#path-arrow-green)" to={[180, 133]} />
-        <GraphEdge className="pathLine pathLineCoral" from={[180, 133]} markerEnd="url(#path-arrow-coral)" to={[274, 181]} />
-        <GraphEdge className="pathLine pathLineGreen" from={[274, 181]} markerEnd="url(#path-arrow-green)" to={[274, 292]} />
-        <GraphEdge className="pathLine pathLineCoral" from={[274, 292]} markerEnd="url(#path-arrow-coral)" to={[180, 348]} />
-        <GraphEdge className="pathLine pathLineGreen" from={[180, 348]} markerEnd="url(#path-arrow-green)" to={[86, 292]} />
-        <GraphEdge className="pathLine pathLineCoral" from={[86, 292]} markerEnd="url(#path-arrow-coral)" to={[86, 163]} />
-      </svg>
-      <GraphNode id="sofia" label={false} muted size="sm" x={12} y={14} />
-      <GraphNode id="fernando" size="lg" x={25} y={38} />
-      <GraphNode id="ana" size="lg" x={50} y={31} />
-      <GraphNode id="diego" size="lg" x={76} y={42} />
-      <GraphNode id="elena" size="lg" x={74} y={68} />
-      <GraphNode id="bruno" size="lg" x={50} y={81} />
-      <GraphNode id="carla" size="lg" x={24} y={68} />
-      <GraphNode id="lucas" label={false} muted size="sm" x={88} y={16} />
-      <GraphNode id="pablo" label={false} muted size="sm" x={92} y={88} />
-    </div>
-  );
-}
-
-function CircleVisual() {
-  return (
-    <div className="circleVisual visualStage" aria-label="Un círculo de cierre con menos pasos">
-      <svg className="graphSvg circleSvg" preserveAspectRatio="none" viewBox="0 0 360 430" aria-hidden="true">
-        <defs>
-          <marker
-            id="circle-arrow-green"
-            markerHeight="16"
-            markerUnits="userSpaceOnUse"
-            markerWidth="16"
-            orient="auto"
-            refX="14"
-            refY="8"
-            viewBox="0 0 16 16"
-          >
-            <path d="M1 1 L15 8 L1 15 Z" fill="#3dba6e" />
-          </marker>
-          <marker
-            id="circle-arrow-orange"
-            markerHeight="16"
-            markerUnits="userSpaceOnUse"
-            markerWidth="16"
-            orient="auto"
-            refX="14"
-            refY="8"
-            viewBox="0 0 16 16"
-          >
-            <path d="M1 1 L15 8 L1 15 Z" fill="#f97316" />
-          </marker>
-        </defs>
-        <g className="backgroundRing">
-          <GraphEdge from={[65, 172]} to={[180, 77]} />
-          <GraphEdge from={[180, 77]} to={[295, 172]} />
-          <GraphEdge from={[295, 172]} to={[281, 301]} />
-          <GraphEdge from={[281, 301]} to={[180, 370]} />
-          <GraphEdge from={[180, 370]} to={[65, 301]} />
-          <GraphEdge from={[65, 301]} to={[65, 172]} />
+        <g className="storyRelationLines">
+          {relationEdges.map((edge) => (
+            <AnimatedEdge edge={edge} frames={frames} key={`${edge.from}-${edge.to}`} opacity={relationOpacity} />
+          ))}
         </g>
-        <CurvedGraphEdge
-          className="circleArc circleArcGreen"
-          from={[65, 172]}
-          markerEnd="url(#circle-arrow-green)"
-          to={[180, 77]}
-        />
-        <CurvedGraphEdge
-          className="circleArc circleArcOrange"
-          from={[180, 77]}
-          markerEnd="url(#circle-arrow-orange)"
-          to={[295, 172]}
-        />
-        <CurvedGraphEdge
-          className="circleArc circleArcGreen"
-          from={[295, 172]}
-          markerEnd="url(#circle-arrow-green)"
-          to={[281, 301]}
-        />
-        <CurvedGraphEdge
-          className="circleArc circleArcOrange"
-          from={[281, 301]}
-          markerEnd="url(#circle-arrow-orange)"
-          to={[180, 370]}
-        />
-        <CurvedGraphEdge
-          className="circleArc circleArcGreen"
-          from={[180, 370]}
-          markerEnd="url(#circle-arrow-green)"
-          to={[65, 301]}
-        />
-        <CurvedGraphEdge
-          className="circleArc circleArcOrange"
-          from={[65, 301]}
-          markerEnd="url(#circle-arrow-orange)"
-          to={[65, 172]}
-        />
+        <g className="storyNetworkLines">
+          {networkEdges.map((edge, index) => (
+            <AnimatedEdge edge={edge} frames={frames} key={`${edge.from}-${edge.to}-${index}`} opacity={networkOpacity} />
+          ))}
+        </g>
+        <g className="storyCircleBack" style={{ opacity: circleOpacity * 0.42 + finalOpacity * 0.44 }}>
+          <ellipse cx={circleLayout.cx} cy={circleLayout.cy} rx={circleLayout.rx} ry={circleLayout.ry} />
+        </g>
+        <g className="storyPathLines">
+          {hiddenPathEdges.map((edge, index) => (
+            <AnimatedEdge
+              circleCenter={circleCenter}
+              className={index % 2 === 0 && circleOpacity > 0.25 ? 'storyPathLineOrange' : 'storyPathLineGreen'}
+              curved={circleOpacity > 0.35 || finalOpacity > 0.35}
+              edge={edge}
+              frames={frames}
+              key={`${edge.from}-${edge.to}`}
+              opacity={pathOpacity}
+            />
+          ))}
+        </g>
+        <g className="storyConfirmLines" style={{ opacity: confirmOpacity }}>
+          <line x1="180" x2="90" y1="232" y2="155" />
+          <line x1="180" x2="270" y1="232" y2="155" />
+          <line x1="180" x2="75" y1="232" y2="300" />
+          <line x1="180" x2="282" y1="232" y2="300" />
+          <line x1="180" x2="180" y1="232" y2="372" />
+        </g>
       </svg>
-      <div className="centerLogo">
-        <HappyCirclesGlyph />
-      </div>
-      <GraphNode id="fernando" size="lg" x={18} y={40} />
-      <GraphNode id="ana" size="lg" x={50} y={18} />
-      <GraphNode id="diego" size="lg" x={82} y={40} />
-      <GraphNode id="elena" size="lg" x={78} y={70} />
-      <GraphNode id="bruno" size="lg" x={50} y={86} />
-      <GraphNode id="carla" size="lg" x={18} y={70} />
+
+      <ReceiptCard opacity={debtOpacity} />
+      <ProposalCard opacity={confirmOpacity} />
+      <CenterLogo rawStep={rawStep} />
+
+      {personIds.map((id) => (
+        <AnimatedNode
+          check={showChecks && circleParticipants.has(id) && rawStep < 7.15}
+          frame={frames[id]}
+          id={id}
+          key={id}
+        />
+      ))}
     </div>
   );
 }
 
-function ConfirmVisual() {
+function StoryActions({ rawStep }: Readonly<{ rawStep: number }>) {
+  const opacity = phaseOpacity(rawStep, 7, 0.8);
+
   return (
-    <div className="confirmVisual visualStage" aria-label="La app propone y las personas confirman">
-      <svg className="graphSvg confirmSvg" preserveAspectRatio="none" viewBox="0 0 360 400" aria-hidden="true">
-        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[86, 112]} />
-        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[270, 118]} />
-        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[76, 266]} />
-        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[280, 270]} />
-        <GraphEdge endOffset={52} from={[180, 198]} startOffset={78} to={[170, 326]} />
-      </svg>
-      <div className="proposalCard">
-        <span className="proposalCheck">✓</span>
-        <span />
-        <span />
+    <div className="storyActions" style={{ opacity, transform: `translateY(${(1 - opacity) * 18}px)` }}>
+      <a className="primaryCta" href="/download">
+        Abrir Happy Circles
+      </a>
+      <div className="storeRow">
+        <StoreButton href="/ios" label="Descargar en" store="App Store" />
+        <StoreButton href="/android" label="Disponible en" store="Play Store" variant="light" />
       </div>
-      <GraphNode check id="fernando" size="lg" x={25} y={24} />
-      <GraphNode check id="ana" size="lg" x={75} y={24} />
-      <GraphNode check id="carla" size="lg" x={20} y={66} />
-      <GraphNode check id="diego" size="lg" x={80} y={65} />
-      <GraphNode check id="bruno" size="lg" x={48} y={78} />
+      <small>La app propone. Tú decides confirmar.</small>
     </div>
   );
 }
 
-function FinalVisual() {
-  return (
-    <div className="finalVisual" aria-label="Círculo confirmado de Happy Circles">
-      <svg className="graphSvg finalRingSvg" viewBox="0 0 360 360" aria-hidden="true">
-        <circle cx="180" cy="180" r="122" />
-      </svg>
-      <div className="finalLogo">
-        <HappyCirclesGlyph large />
-        <span className="finalLogoCheck">✓</span>
-      </div>
-      <GraphNode id="ana" size="md" x={50} y={10} />
-      <GraphNode id="diego" size="md" x={84} y={32} />
-      <GraphNode id="elena" size="md" x={80} y={72} />
-      <GraphNode id="bruno" size="md" x={50} y={90} />
-      <GraphNode id="carla" size="md" x={16} y={72} />
-      <GraphNode id="fernando" size="md" x={16} y={32} />
-    </div>
-  );
-}
+function StickyStory() {
+  const storyRef = useRef<HTMLElement | null>(null);
+  const progress = useScrollProgress(storyRef);
+  const rawStep = progress * (STEP_COUNT - 1);
+  const brandOpacity = 1 - phaseOpacity(rawStep, 0, 0.72);
 
-function HeroScreen() {
   return (
-    <section className="storyScreen heroScreen">
-      <Decor />
-      <BrandLockup />
-      <div className="screenCopy heroCopy">
-        <h1>
-          <span>Paga más rápido.</span>
-          <span>Cobra más rápido.</span>
-        </h1>
-      </div>
-      <HeroGhostGraph />
-    </section>
-  );
-}
-
-function DebtScreen() {
-  return (
-    <StoryScreen
-      align="center"
-      className="debtScreen"
-      id="step-debt"
-      subtitle="Una persona le presta a otra."
-      title={
-        <>
-          <span>Todo empieza</span>
-          <span>con una deuda.</span>
-        </>
-      }
-    >
-      <DebtVisual />
-    </StoryScreen>
-  );
-}
-
-function RelationsScreen() {
-  return (
-    <StoryScreen
-      className="chainScreen"
-      id="step-chain"
-      subtitle="Una deuda se conecta con otra."
-      title={
-        <>
-          <span>Luego aparecen</span>
-          <span>más relaciones.</span>
-        </>
-      }
-    >
-      <RelationsVisual />
-    </StoryScreen>
-  );
-}
-
-function ConfusedScreen() {
-  return (
-    <StoryScreen
-      className="confusedScreen"
-      id="step-network"
-      subtitle="No todos se conocen. Todos esperan."
-      title={
-        <>
-          <span>La red se</span>
-          <span>vuelve confusa.</span>
-        </>
-      }
-    >
-      <ConfusedVisual />
-    </StoryScreen>
-  );
-}
-
-function HiddenPathScreen() {
-  return (
-    <StoryScreen
-      className="pathScreen"
-      id="step-path"
-      subtitle="Happy Circles lo detecta."
-      title={
-        <>
-          <span>Pero hay un</span>
-          <span>camino escondido.</span>
-        </>
-      }
-    >
-      <HiddenPathVisual />
-    </StoryScreen>
-  );
-}
-
-function ClosureScreen() {
-  return (
-    <StoryScreen
-      className="circleScreen"
-      id="step-circle"
-      subtitle="Menos pasos, menos espera."
-      title={
-        <>
-          <span>La red se convierte</span>
-          <span>en un cierre.</span>
-        </>
-      }
-    >
-      <CircleVisual />
-    </StoryScreen>
-  );
-}
-
-function ConfirmScreen() {
-  return (
-    <StoryScreen id="step-confirm" subtitle="Las personas confirman." title="La app propone.">
-      <ConfirmVisual />
-    </StoryScreen>
-  );
-}
-
-function FinalScreen() {
-  return (
-    <section className="storyScreen finalScreen" id="final" aria-labelledby="final-title">
-      <Decor />
-      <BrandLockup />
-      <div className="screenCopy finalCopy">
-        <h2 id="final-title">Todo cobra sentido.</h2>
-        <p>Abre Happy Circles.</p>
-      </div>
-      <FinalVisual />
-      <div className="finalActions">
-        <a className="primaryCta" href="/download">
-          Abrir Happy Circles
-        </a>
-        <div className="storeRow">
-          <StoreButton href="/ios" label="Descargar en" store="App Store" />
-          <StoreButton href="/android" label="Disponible en" store="Play Store" variant="light" />
+    <section className="scrollStory" ref={storyRef} style={{ '--story-progress': progress } as CSSProperties}>
+      <div className="stickyStory">
+        <StoryDecor />
+        <div className="storyBrand" style={{ opacity: brandOpacity }}>
+          <HappyCirclesGlyph />
+          <strong>Happy Circles</strong>
         </div>
-        <small>La app propone. Tú decides confirmar.</small>
+        <IntroLockup rawStep={rawStep} />
+        <ChapterText rawStep={rawStep} />
+        <StoryScene rawStep={rawStep} />
+        <StoryActions rawStep={rawStep} />
       </div>
     </section>
+  );
+}
+
+function ReducedStory() {
+  return (
+    <main className="scrollStoryPage reducedStoryPage">
+      {storySteps.map((step, index) => (
+        <section className="reducedStoryScreen" key={step.id}>
+          <StoryDecor />
+          <div className="storyBrand" style={{ opacity: index === 0 ? 0 : 1 }}>
+            <HappyCirclesGlyph />
+            <strong>Happy Circles</strong>
+          </div>
+          {index === 0 ? <IntroLockup rawStep={0} /> : null}
+          {index > 0 ? (
+            <div className="chapterCopy reducedChapterCopy">
+              <h1>
+                {step.title.map((line) => (
+                  <span key={line}>{line}</span>
+                ))}
+              </h1>
+              <p>{step.subtitle}</p>
+            </div>
+          ) : null}
+          <StoryScene rawStep={index} />
+          {index === STEP_COUNT - 1 ? <StoryActions rawStep={index} /> : null}
+        </section>
+      ))}
+    </main>
   );
 }
 
 export default function LandingPage() {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  if (prefersReducedMotion) {
+    return <ReducedStory />;
+  }
+
   return (
-    <main className="storyPage">
-      <HeroScreen />
-      <DebtScreen />
-      <RelationsScreen />
-      <ConfusedScreen />
-      <HiddenPathScreen />
-      <ClosureScreen />
-      <ConfirmScreen />
-      <FinalScreen />
+    <main className="scrollStoryPage">
+      <StickyStory />
+      <section className="storySemanticSummary" aria-label="Resumen de Happy Circles">
+        <h2>Happy Circles detecta conexiones de deuda.</h2>
+        <p>La app propone cierres inteligentes y las personas deciden confirmar antes de ejecutar.</p>
+      </section>
     </main>
   );
 }

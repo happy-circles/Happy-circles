@@ -6,7 +6,6 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { AppAvatar } from '@/components/app-avatar';
 import { BalanceSummaryCard } from '@/components/balance-summary-card';
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
@@ -1008,8 +1007,21 @@ export function DashboardScreen() {
         title="Happy Circles"
         titleAlign="center"
       >
-        <View style={styles.loadingMotion}>
-          <HappyCirclesMotion size={132} variant="splash" />
+        <View style={styles.homeLoadingStack}>
+          <View style={styles.homeLoadingHero}>
+            <View style={styles.homeLoadingTitleLine} />
+            <View style={styles.homeLoadingBodyLine} />
+          </View>
+          <View style={styles.homeLoadingGrid}>
+            <View style={styles.homeLoadingTile} />
+            <View style={styles.homeLoadingTile} />
+            <View style={styles.homeLoadingTile} />
+          </View>
+          <View style={styles.homeLoadingList}>
+            <View style={styles.homeLoadingListLine} />
+            <View style={styles.homeLoadingListLine} />
+            <View style={styles.homeLoadingListLineShort} />
+          </View>
         </View>
         <Text style={styles.supportText}>
           Estamos sincronizando el panorama general de tu cuenta.
@@ -1183,8 +1195,53 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  loadingMotion: {
-    alignItems: 'center',
+  homeLoadingStack: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
+  homeLoadingHero: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.medium,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+  },
+  homeLoadingTitleLine: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderRadius: theme.radius.pill,
+    height: 22,
+    width: '58%',
+  },
+  homeLoadingBodyLine: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderRadius: theme.radius.pill,
+    height: 14,
+    width: '82%',
+  },
+  homeLoadingGrid: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  homeLoadingTile: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.medium,
+    flex: 1,
+    height: 74,
+  },
+  homeLoadingList: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  homeLoadingListLine: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.pill,
+    height: 16,
+    width: '100%',
+  },
+  homeLoadingListLineShort: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.pill,
+    height: 16,
+    width: '68%',
   },
   profileButton: {
     alignItems: 'center',

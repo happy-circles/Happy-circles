@@ -1,11 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Haptics from 'expo-haptics';
 import {
-  ActivityIndicator,
   Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,16 +15,23 @@ import type { Href } from 'expo-router';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { AppTextInput } from '@/components/app-text-input';
+import {
+  BRAND_VERIFICATION_EASING,
+  BRAND_VERIFICATION_RESULT_MS,
+  BrandVerificationMark,
+  type BrandVerificationState,
+} from '@/components/brand-verification-lockup';
 import { FieldBlock } from '@/components/field-block';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
-import {
-  HappyCirclesCenterSvg,
-  resolveHappyCirclesPalette,
-} from '@/components/happy-circles-glyph';
+import { HappyCirclesCenterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
+import {
+  beginAuthRouteTransitionHold,
+  clearAuthRouteTransitionHold,
+} from '@/lib/auth-route-transition-hold';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
@@ -45,13 +49,13 @@ type SocialProvider = 'google' | 'apple';
 type SignInEntryMode = 'sign-in' | 'recover';
 type AuthEntryMode = 'remembered' | 'other';
 
-const AUTH_STATE_TRANSITION_MS = 860;
-const AUTH_STATE_EASING = Easing.bezier(0.22, 1, 0.36, 1);
-const AUTH_SUCCESS_TRANSITION_MS = 520;
-const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 650;
-const OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX = '290 290 100 100';
-const OTHER_ACCOUNT_FACE_IDLE_COLOR = theme.colors.brandNavy;
-const OTHER_ACCOUNT_FACE_FAILURE_COLOR = theme.colors.brandCoral;
+const AUTH_STATE_TRANSITION_MS = 640;
+const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
+const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
+const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
+const AUTH_FACE_AVATAR_VIEW_BOX = '290 290 100 100';
+const AUTH_IDENTITY_FACE_SIZE = 88;
+const AUTH_IDENTITY_MARK_SIZE = 208;
 
 function biometricMessage(error: string | null, label: string): string {
   if (error === 'user_cancel') {
@@ -70,6 +74,77 @@ function buildJoinSignInHref(token: string | null): Href {
     pathname: '/join',
     params: token ? { mode: 'sign-in', token } : { mode: 'sign-in' },
   } as unknown as Href;
+}
+
+function AuthEntryIdentity({
+  center,
+  hint,
+  state,
+  title,
+}: {
+  readonly center?: ReactNode;
+  readonly hint?: string | null;
+  readonly state: BrandVerificationState;
+  readonly title: string;
+}) {
+  const titleMotion = useRef(new Animated.Value(state === 'loading' ? 1 : 0)).current;
+  const facePalette = useMemo(
+    () => ({
+      ...resolveHappyCirclesPalette('brand'),
+      face: theme.colors.brandNavy,
+      faceDetail: theme.colors.white,
+    }),
+    [],
+  );
+
+  useEffect(() => {
+    Animated.timing(titleMotion, {
+      duration: state === 'loading' ? 320 : 360,
+      easing: AUTH_STATE_EASING,
+      toValue: state === 'loading' ? 1 : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [state, titleMotion]);
+
+  const defaultCenter = (
+    <HappyCirclesCenterSvg
+      palette={facePalette}
+      size={AUTH_IDENTITY_FACE_SIZE}
+      viewBox={AUTH_FACE_AVATAR_VIEW_BOX}
+    />
+  );
+  const titleOpacity = titleMotion.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: [1, 0.2, 0],
+  });
+  const titleTranslateY = titleMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 18],
+  });
+
+  return (
+    <View style={styles.authIdentityLockup}>
+      <BrandVerificationMark
+        center={center ?? defaultCenter}
+        centerSize={AUTH_IDENTITY_FACE_SIZE}
+        showOuterInIdle
+        size={AUTH_IDENTITY_MARK_SIZE}
+        state={state}
+      />
+      <Animated.View
+        style={[
+          styles.authIdentityCopy,
+          {
+            opacity: titleOpacity,
+            transform: [{ translateY: titleTranslateY }],
+          },
+        ]}
+      >
+        <Text style={styles.rememberedTitle}>{title}</Text>
+        {hint ? <Text style={styles.rememberedHint}>{hint}</Text> : null}
+      </Animated.View>
+    </View>
+  );
 }
 
 function AccountSignInEntry({
@@ -93,10 +168,14 @@ function AccountSignInEntry({
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [socialBusyProvider, setSocialBusyProvider] = useState<SocialProvider | null>(null);
   const [authSuccess, setAuthSuccess] = useState(false);
+  const [authResultState, setAuthResultState] = useState<BrandVerificationState | null>(null);
 
   const avatarUrl = account ? resolveAvatarUrl(account.avatarPath) : null;
 
-  const authBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
+  const authRequestBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
+  const authBusy = authRequestBusy || authResultState === 'success' || authSuccess;
+  const authVisualState: BrandVerificationState =
+    authResultState ?? (authRequestBusy ? 'loading' : 'idle');
   const isRecovery = authMode === 'recover';
   const isOtherAccountMode = showAuthOptions && authEntryMode === 'other';
   const isRememberedReauthMode =
@@ -104,33 +183,8 @@ function AccountSignInEntry({
   const locksRememberedEmail = isRememberedReauthMode && Boolean(account?.email);
   const authOptionsMotion = useRef(new Animated.Value(showAuthOptions ? 1 : 0)).current;
   const authEntryMotion = useRef(new Animated.Value(authEntryMode === 'other' ? 1 : 0)).current;
-  const failureMotion = useRef(new Animated.Value(0)).current;
-  const successMotion = useRef(new Animated.Value(0)).current;
   const successNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const otherAccountFaceIdlePalette = useMemo(
-    () => ({
-      ...resolveHappyCirclesPalette('brand'),
-      face: OTHER_ACCOUNT_FACE_IDLE_COLOR,
-      faceDetail: theme.colors.white,
-    }),
-    [],
-  );
-  const otherAccountFaceFailurePalette = useMemo(
-    () => ({
-      ...resolveHappyCirclesPalette('brand'),
-      face: OTHER_ACCOUNT_FACE_FAILURE_COLOR,
-      faceDetail: theme.colors.white,
-    }),
-    [],
-  );
-  const otherAccountFaceSuccessPalette = useMemo(
-    () => ({
-      ...resolveHappyCirclesPalette('brand'),
-      face: theme.colors.success,
-      faceDetail: theme.colors.white,
-    }),
-    [],
-  );
+  const successCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (showAuthOptions) {
@@ -158,29 +212,15 @@ function AccountSignInEntry({
     }).start();
   }, [authEntryMode, authEntryMotion]);
 
-  useEffect(() => {
-    Animated.timing(successMotion, {
-      duration: AUTH_SUCCESS_TRANSITION_MS,
-      easing: AUTH_STATE_EASING,
-      toValue: authSuccess ? 1 : 0,
-      useNativeDriver: true,
-    }).start();
-  }, [authSuccess, successMotion]);
-
-  useEffect(() => {
-    Animated.timing(failureMotion, {
-      duration: 420,
-      easing: AUTH_STATE_EASING,
-      toValue: message && !isRecovery && !authSuccess ? 1 : 0,
-      useNativeDriver: true,
-    }).start();
-  }, [authSuccess, failureMotion, isRecovery, message]);
-
   useEffect(
     () => () => {
       if (successNavigationTimerRef.current) {
         clearTimeout(successNavigationTimerRef.current);
       }
+      if (successCompletionTimerRef.current) {
+        clearTimeout(successCompletionTimerRef.current);
+      }
+      clearAuthRouteTransitionHold();
     },
     [],
   );
@@ -195,28 +235,6 @@ function AccountSignInEntry({
         }),
       },
     ],
-  };
-  const otherAccountFaceAnimatedStyle = {
-    transform: [
-      {
-        scale: successMotion.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 1.025],
-        }),
-      },
-    ],
-  };
-  const otherAccountFaceIdleStyle = {
-    opacity: successMotion.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0],
-    }),
-  };
-  const otherAccountFaceFailureStyle = {
-    opacity: failureMotion,
-  };
-  const otherAccountFaceSuccessStyle = {
-    opacity: successMotion,
   };
   const rememberedIdentityStyle = {
     opacity: authEntryMotion.interpolate({
@@ -266,6 +284,7 @@ function AccountSignInEntry({
           : ('/join' as Href);
 
     successNavigationTimerRef.current = setTimeout(() => {
+      clearAuthRouteTransitionHold();
       returnToRoute(router, destination);
     }, AUTH_SUCCESS_NAVIGATION_DELAY_MS);
 
@@ -286,15 +305,39 @@ function AccountSignInEntry({
     session.status,
   ]);
 
+  function clearSuccessCompletionTimer() {
+    if (successCompletionTimerRef.current) {
+      clearTimeout(successCompletionTimerRef.current);
+      successCompletionTimerRef.current = null;
+    }
+  }
+
   function completeSuccessfulSignIn() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    setAuthSuccess(true);
+    beginAuthRouteTransitionHold(
+      BRAND_VERIFICATION_RESULT_MS + AUTH_SUCCESS_NAVIGATION_DELAY_MS + 1000,
+    );
+    setAuthResultState('success');
     setMessage(null);
 
     if (successNavigationTimerRef.current) {
       clearTimeout(successNavigationTimerRef.current);
       successNavigationTimerRef.current = null;
     }
+    clearSuccessCompletionTimer();
+
+    successCompletionTimerRef.current = setTimeout(() => {
+      successCompletionTimerRef.current = null;
+      setAuthSuccess(true);
+    }, BRAND_VERIFICATION_RESULT_MS);
+  }
+
+  function showAuthFailure(nextMessage: string) {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
+    setAuthResultState('error');
+    setMessage(nextMessage);
   }
 
   function showRememberedReauthMode(nextMessage: string | null = null) {
@@ -307,18 +350,11 @@ function AccountSignInEntry({
     setAuthMode('sign-in');
     setEmail(account?.email ?? '');
     setPassword('');
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(nextMessage ? 'error' : null);
     setMessage(nextMessage);
-    setShowAuthOptions(true);
-  }
-
-  function showRememberedAccountMode() {
-    setAuthEntryMode('remembered');
-    setMessage(null);
-    setAuthMode('sign-in');
-    setEmail(account?.email ?? '');
-    setPassword('');
-    setAuthSuccess(false);
     setShowAuthOptions(true);
   }
 
@@ -327,27 +363,37 @@ function AccountSignInEntry({
     setAuthMode('sign-in');
     setEmail('');
     setPassword('');
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(null);
     setMessage(null);
     setShowAuthOptions(true);
   }
 
   function showRecoverMode() {
     setAuthMode('recover');
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(null);
     setMessage(null);
     setShowAuthOptions(true);
   }
 
   function showSignInMode() {
     setAuthMode('sign-in');
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(null);
     setMessage(null);
     setShowAuthOptions(true);
   }
 
   function handleEmailChange(value: string) {
     setEmail(value);
+    setAuthResultState(null);
     if (message && !isRecovery) {
       setMessage(null);
     }
@@ -355,6 +401,7 @@ function AccountSignInEntry({
 
   function handlePasswordChange(value: string) {
     setPassword(value);
+    setAuthResultState(null);
     if (message && !isRecovery) {
       setMessage(null);
     }
@@ -371,45 +418,18 @@ function AccountSignInEntry({
     });
   }
 
-  function signedInDestination(): Href {
-    if (pendingToken) {
-      return {
-        pathname: '/join/[token]',
-        params: { token: pendingToken },
-      } as unknown as Href;
-    }
-
-    if (!session.setupState.requiredComplete) {
-      return buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile');
-    }
-
-    if (session.accountAccessState === 'active') {
-      return '/home' as Href;
-    }
-
-    return '/join' as Href;
-  }
-
   function inviteEntryHref(): Href {
     if (pendingToken) {
       return {
         pathname: '/join',
-        params: { token: pendingToken },
+        params: { mode: 'token', token: pendingToken },
       } as unknown as Href;
     }
 
-    return '/join' as Href;
-  }
-
-  function createAccountHref(): Href {
-    if (pendingToken) {
-      return {
-        pathname: '/join/[token]/create-account',
-        params: { token: pendingToken },
-      } as unknown as Href;
-    }
-
-    return '/join' as Href;
+    return {
+      pathname: '/join',
+      params: { mode: 'token' },
+    } as unknown as Href;
   }
 
   async function handleContinue() {
@@ -423,6 +443,9 @@ function AccountSignInEntry({
     }
 
     setBiometricBusy(true);
+    beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+    clearSuccessCompletionTimer();
+    setAuthResultState(null);
     setMessage(null);
 
     try {
@@ -444,7 +467,10 @@ function AccountSignInEntry({
       return;
     }
 
+    beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(null);
     setMessage(null);
     setSocialBusyProvider(provider);
 
@@ -459,8 +485,7 @@ function AccountSignInEntry({
         return;
       }
 
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
-      setMessage(result);
+      showAuthFailure(result);
     } finally {
       setSocialBusyProvider(null);
     }
@@ -471,7 +496,10 @@ function AccountSignInEntry({
       return;
     }
 
+    beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+    clearSuccessCompletionTimer();
     setAuthSuccess(false);
+    setAuthResultState(null);
     setMessage(null);
     setPasswordBusy(true);
 
@@ -487,8 +515,7 @@ function AccountSignInEntry({
         return;
       }
 
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
-      setMessage(result);
+      showAuthFailure(result);
     } finally {
       setPasswordBusy(false);
     }
@@ -500,6 +527,8 @@ function AccountSignInEntry({
     }
 
     setMessage(null);
+    clearSuccessCompletionTimer();
+    setAuthResultState(null);
     setPasswordBusy(true);
 
     try {
@@ -508,42 +537,6 @@ function AccountSignInEntry({
     } finally {
       setPasswordBusy(false);
     }
-  }
-
-  if (authSuccess) {
-    return (
-      <KeyboardAvoidingView style={styles.keyboardShell}>
-        <ScreenShell
-          contentContainerStyle={styles.rememberedContent}
-          contentWidthStyle={styles.rememberedWidth}
-          headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-          headerVariant="plain"
-          title="Happy Circles"
-        >
-          <View style={[styles.rememberedBody, styles.authCompletionBody]}>
-            <View style={styles.authCompletionContent}>
-              <Animated.View
-                style={[
-                  styles.loginLogoMark,
-                  styles.authCompletionMark,
-                  otherAccountFaceAnimatedStyle,
-                ]}
-              >
-                <HappyCirclesCenterSvg
-                  palette={otherAccountFaceSuccessPalette}
-                  size={88}
-                  viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                  wink
-                />
-              </Animated.View>
-              <Text style={styles.rememberedTitle}>Entrando...</Text>
-              <Text style={styles.rememberedHint}>Preparando tu cuenta</Text>
-              <ActivityIndicator color={theme.colors.primary} size="small" />
-            </View>
-          </View>
-        </ScreenShell>
-      </KeyboardAvoidingView>
-    );
   }
 
   return (
@@ -571,14 +564,19 @@ function AccountSignInEntry({
                         rememberedIdentityStyle,
                       ]}
                     >
-                      <AppAvatar
-                        fallbackBackgroundColor="#ff5b0a"
-                        fallbackTextColor={theme.colors.white}
-                        imageUrl={avatarUrl}
-                        label={account.displayName}
-                        size={88}
+                      <AuthEntryIdentity
+                        center={
+                          <AppAvatar
+                            fallbackBackgroundColor="#ff5b0a"
+                            fallbackTextColor={theme.colors.white}
+                            imageUrl={avatarUrl}
+                            label={account.displayName}
+                            size={AUTH_IDENTITY_FACE_SIZE}
+                          />
+                        }
+                        state={authVisualState}
+                        title={`Entrar como ${account.displayName}`}
                       />
-                      <Text style={styles.rememberedTitle}>Entrar como {account.displayName}</Text>
                     </Animated.View>
 
                     <Animated.View
@@ -589,39 +587,10 @@ function AccountSignInEntry({
                         otherAccountIdentityStyle,
                       ]}
                     >
-                      <Animated.View style={[styles.loginLogoMark, otherAccountFaceAnimatedStyle]}>
-                        <Animated.View
-                          style={[styles.otherAccountFaceLayer, otherAccountFaceIdleStyle]}
-                        >
-                          <HappyCirclesCenterSvg
-                            palette={otherAccountFaceIdlePalette}
-                            size={88}
-                            viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                            wink={Boolean(socialBusyProvider)}
-                          />
-                        </Animated.View>
-                        <Animated.View
-                          style={[styles.otherAccountFaceLayer, otherAccountFaceFailureStyle]}
-                        >
-                          <HappyCirclesCenterSvg
-                            palette={otherAccountFaceFailurePalette}
-                            size={88}
-                            viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                            wink
-                          />
-                        </Animated.View>
-                        <Animated.View
-                          style={[styles.otherAccountFaceLayer, otherAccountFaceSuccessStyle]}
-                        >
-                          <HappyCirclesCenterSvg
-                            palette={otherAccountFaceSuccessPalette}
-                            size={88}
-                            viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                            wink
-                          />
-                        </Animated.View>
-                      </Animated.View>
-                      <Text style={styles.rememberedTitle}>Entrar con otra cuenta</Text>
+                      <AuthEntryIdentity
+                        state={authVisualState}
+                        title="Entrar con otra cuenta"
+                      />
                     </Animated.View>
                   </View>
                 ) : (
@@ -633,26 +602,34 @@ function AccountSignInEntry({
                       pressed && !authBusy ? styles.pressed : null,
                     ]}
                   >
-                    <AppAvatar
-                      fallbackBackgroundColor="#ff5b0a"
-                      fallbackTextColor={theme.colors.white}
-                      imageUrl={avatarUrl}
-                      label={account.displayName}
-                      size={88}
+                    <AuthEntryIdentity
+                      center={
+                        <AppAvatar
+                          fallbackBackgroundColor="#ff5b0a"
+                          fallbackTextColor={theme.colors.white}
+                          imageUrl={avatarUrl}
+                          label={account.displayName}
+                          size={AUTH_IDENTITY_FACE_SIZE}
+                        />
+                      }
+                      hint={
+                        biometricBusy
+                          ? `Validando ${session.biometricLabel}...`
+                          : 'Toca para continuar'
+                      }
+                      state={authVisualState}
+                      title={`Hola, ${account.displayName}`}
                     />
-                    <Text style={styles.rememberedTitle}>Hola, {account.displayName}</Text>
-                    {biometricBusy ? (
-                      <Text style={styles.rememberedHint}>
-                        Validando {session.biometricLabel}...
-                      </Text>
-                    ) : (
-                      <Text style={styles.rememberedHint}>Toca para continuar</Text>
-                    )}
                   </Pressable>
                 )}
                 {showAuthOptions ? (
                   <View style={styles.authMessageSlot}>
-                    {message ? <MessageBanner message={message} tone="neutral" /> : null}
+                    {message ? (
+                      <MessageBanner
+                        message={message}
+                        tone={authResultState === 'error' ? 'danger' : 'neutral'}
+                      />
+                    ) : null}
                   </View>
                 ) : null}
               </Animated.View>
@@ -663,32 +640,14 @@ function AccountSignInEntry({
                     style={[styles.rememberedProfile, isRecovery ? null : styles.authIdentityLayer]}
                   >
                     {!isRecovery ? (
-                      <View style={styles.loginLogoMark}>
-                        <Animated.View
-                          style={[styles.otherAccountFaceLayer, otherAccountFaceIdleStyle]}
-                        >
-                          <HappyCirclesCenterSvg
-                            palette={otherAccountFaceIdlePalette}
-                            size={88}
-                            viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                            wink={Boolean(socialBusyProvider)}
-                          />
-                        </Animated.View>
-                        <Animated.View
-                          style={[styles.otherAccountFaceLayer, otherAccountFaceFailureStyle]}
-                        >
-                          <HappyCirclesCenterSvg
-                            palette={otherAccountFaceFailurePalette}
-                            size={88}
-                            viewBox={OTHER_ACCOUNT_FACE_AVATAR_VIEW_BOX}
-                            wink
-                          />
-                        </Animated.View>
-                      </View>
+                      <AuthEntryIdentity
+                        state={authVisualState}
+                        title="Hola, inicia sesion!"
+                      />
                     ) : null}
-                    <Text style={styles.rememberedTitle}>
-                      {isRecovery ? 'Recupera tu contrasena' : 'Hola, inicia sesion!'}
-                    </Text>
+                    {isRecovery ? (
+                      <Text style={styles.rememberedTitle}>Recupera tu contrasena</Text>
+                    ) : null}
                     {isRecovery ? (
                       <Text style={styles.rememberedHint}>
                         Te enviaremos un enlace para definir una nueva clave.
@@ -698,7 +657,12 @@ function AccountSignInEntry({
                 </View>
                 {showAuthOptions ? (
                   <View style={styles.authMessageSlot}>
-                    {message ? <MessageBanner message={message} tone="neutral" /> : null}
+                    {message ? (
+                      <MessageBanner
+                        message={message}
+                        tone={authResultState === 'error' ? 'danger' : 'neutral'}
+                      />
+                    ) : null}
                   </View>
                 ) : null}
               </Animated.View>
@@ -760,13 +724,14 @@ function AccountSignInEntry({
 
                   <View style={styles.authActionRow}>
                     <PrimaryAction
+                      disabled={authBusy}
                       fullWidth
                       label={
                         passwordBusy ? 'Procesando...' : isRecovery ? 'Enviar enlace' : 'Ingresar'
                       }
                       loading={passwordBusy}
                       onPress={
-                        passwordBusy
+                        authBusy
                           ? undefined
                           : () =>
                               void (isRecovery ? handlePasswordRecovery() : handlePasswordSignIn())
@@ -777,63 +742,63 @@ function AccountSignInEntry({
                   {isRecovery ? (
                     <PrimaryAction
                       compact
+                      disabled={authBusy}
                       label="Volver a iniciar sesion"
                       onPress={showSignInMode}
                       variant="ghost"
                     />
-                  ) : (
-                    <View style={styles.formLinkRow}>
-                      <Pressable
-                        disabled={authBusy}
-                        onPress={showRecoverMode}
-                        style={({ pressed }) => [
-                          styles.inlineLinkButton,
-                          pressed ? styles.pressed : null,
-                        ]}
-                      >
-                        <Text style={styles.inlineLinkText}>Olvide contrasena</Text>
-                      </Pressable>
-                      <Pressable
-                        disabled={authBusy}
-                        onPress={() => returnToRoute(router, createAccountHref())}
-                        style={({ pressed }) => [
-                          styles.inlineLinkButton,
-                          pressed ? styles.pressed : null,
-                        ]}
-                      >
-                        <Text style={styles.inlineLinkText}>Crear cuenta</Text>
-                      </Pressable>
-                    </View>
-                  )}
+                  ) : null}
                 </View>
 
                 {!isRecovery ? (
-                  <>
-                    {session.appleSignInAvailable ? (
-                      <AppleAuthentication.AppleAuthenticationButton
-                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                        cornerRadius={18}
-                        onPress={() => void handleSocialSignIn('apple')}
-                        style={styles.appleButton}
-                      />
-                    ) : null}
+                  <View style={styles.authSecondaryBlock}>
+                    <View style={styles.socialProviderRow}>
+                      {session.appleSignInAvailable ? (
+                        <Pressable
+                          disabled={authBusy}
+                          onPress={() => void handleSocialSignIn('apple')}
+                          style={({ pressed }) => [
+                            styles.socialProviderButton,
+                            styles.appleProviderButton,
+                            pressed && !authBusy ? styles.pressed : null,
+                            authBusy ? styles.actionDisabled : null,
+                          ]}
+                        >
+                          <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
+                          <Text style={[styles.socialProviderText, styles.appleProviderText]}>
+                            {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
 
+                      <Pressable
+                        disabled={authBusy}
+                        onPress={() => void handleSocialSignIn('google')}
+                        style={({ pressed }) => [
+                          styles.socialProviderButton,
+                          styles.googleProviderButton,
+                          !session.appleSignInAvailable ? styles.socialProviderButtonFull : null,
+                          pressed && !authBusy ? styles.pressed : null,
+                          authBusy ? styles.actionDisabled : null,
+                        ]}
+                      >
+                        <Ionicons color={theme.colors.text} name="logo-google" size={18} />
+                        <Text style={styles.socialProviderText}>
+                          {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
+                        </Text>
+                      </Pressable>
+                    </View>
                     <Pressable
-                      onPress={() => void handleSocialSignIn('google')}
+                      disabled={authBusy}
+                      onPress={showRecoverMode}
                       style={({ pressed }) => [
-                        styles.googleButton,
+                        styles.forgotPasswordButton,
                         pressed ? styles.pressed : null,
                       ]}
                     >
-                      <Ionicons color={theme.colors.text} name="logo-google" size={20} />
-                      <Text style={styles.googleButtonLabel}>
-                        {socialBusyProvider === 'google'
-                          ? 'Abriendo Google...'
-                          : 'Continuar con Google'}
-                      </Text>
+                      <Text style={styles.inlineLinkText}>Olvide contrasena</Text>
                     </Pressable>
-                  </>
+                  </View>
                 ) : null}
               </Animated.View>
             ) : null}
@@ -842,21 +807,26 @@ function AccountSignInEntry({
           {account && !isRecovery ? (
             <Pressable
               disabled={authBusy}
-              onPress={isOtherAccountMode ? showRememberedAccountMode : showOtherAccountMode}
+              onPress={
+                isOtherAccountMode
+                  ? () => returnToRoute(router, inviteEntryHref())
+                  : showOtherAccountMode
+              }
               style={({ pressed }) => [styles.otherAccountButton, pressed ? styles.pressed : null]}
             >
               <Ionicons
                 color={theme.colors.textMuted}
-                name={isOtherAccountMode ? 'person-circle' : 'person-circle-outline'}
+                name={isOtherAccountMode ? 'key-outline' : 'person-circle-outline'}
                 size={18}
               />
               <Text style={styles.otherAccountText}>
-                {isOtherAccountMode ? `Volver a ${account.displayName}` : 'Usar otra cuenta'}
+                {isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta'}
               </Text>
             </Pressable>
           ) : (
             <PrimaryAction
               compact
+              disabled={authBusy}
               label="Volver a invitacion"
               onPress={() => returnToRoute(router, inviteEntryHref())}
               variant="ghost"
@@ -892,13 +862,14 @@ export function AccountInviteEntryScreen() {
   const pendingToken = shouldPreview ? normalizedToken : null;
   const isPreviewMode = __DEV__ && rawPreviewParam === 'true';
   const isRecoverMode = rawModeParam === 'recover' || rawModeParam === 'forgot-password';
+  const isTokenEntryMode = rawModeParam === 'token' || rawModeParam === 'invite';
   const isSignInMode = rawModeParam === 'sign-in' || rawModeParam === 'login' || isRecoverMode;
 
   useEffect(() => {
     setTokenInput(initialToken);
   }, [initialToken]);
 
-  if ((session.rememberedAccount && !isPreviewMode) || isSignInMode) {
+  if (((session.rememberedAccount && !isPreviewMode) || isSignInMode) && !isTokenEntryMode) {
     return (
       <AccountSignInEntry
         initialMode={isRecoverMode ? 'recover' : 'sign-in'}
@@ -1077,18 +1048,6 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.sm,
     paddingTop: theme.spacing.xl,
   },
-  authCompletionBody: {
-    justifyContent: 'center',
-    paddingBottom: theme.spacing.xxl,
-  },
-  authCompletionContent: {
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    width: '100%',
-  },
-  authCompletionMark: {
-    marginBottom: theme.spacing.xs,
-  },
   rememberedMain: {
     gap: theme.spacing.md,
     paddingTop: theme.spacing.lg,
@@ -1113,7 +1072,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   authIdentityStage: {
-    minHeight: 136,
+    minHeight: 274,
     position: 'relative',
     width: '100%',
   },
@@ -1123,26 +1082,21 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  authMessageSlot: {
-    justifyContent: 'flex-start',
-    marginTop: theme.spacing.sm,
-    minHeight: 48,
+  authIdentityLockup: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     width: '100%',
   },
-  loginLogoMark: {
+  authIdentityCopy: {
     alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 88,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: 88,
+    gap: theme.spacing.xs,
+    minHeight: 54,
+    width: '100%',
   },
-  otherAccountFaceLayer: {
-    height: 88,
-    left: 0,
-    position: 'absolute',
-    top: 0,
-    width: 88,
+  authMessageSlot: {
+    justifyContent: 'flex-start',
+    minHeight: 42,
+    width: '100%',
   },
   rememberedTitle: {
     color: theme.colors.text,
@@ -1162,34 +1116,52 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   authFormBlock: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
     width: '100%',
   },
   authActionRow: {
     paddingTop: theme.spacing.xs,
   },
-  appleButton: {
-    height: 52,
+  authSecondaryBlock: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
     width: '100%',
   },
-  googleButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
+  socialProviderRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'center',
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
     width: '100%',
   },
-  googleButtonLabel: {
+  socialProviderButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  socialProviderButtonFull: {
+    flexGrow: 1,
+  },
+  appleProviderButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  googleProviderButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  socialProviderText: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
-    fontWeight: '700',
+    fontWeight: '800',
+  },
+  appleProviderText: {
+    color: theme.colors.white,
   },
   iconFieldRow: {
     alignItems: 'flex-start',
@@ -1230,14 +1202,10 @@ const styles = StyleSheet.create({
   authInputLocked: {
     color: theme.colors.textMuted,
   },
-  formLinkRow: {
+  forgotPasswordButton: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 0,
-  },
-  inlineLinkButton: {
     borderRadius: theme.radius.pill,
+    minHeight: 34,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -1267,6 +1235,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.84,
+  },
+  actionDisabled: {
+    opacity: 0.58,
   },
   inviteSummary: {
     backgroundColor: theme.colors.surfaceMuted,
