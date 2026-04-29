@@ -2,17 +2,21 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams } from 'expo-router';
 import type { Href } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
 
-import { AppAvatar } from '@/components/app-avatar';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppTextInput } from '@/components/app-text-input';
+import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import {
+  triggerIdentityImpactHaptic,
+  triggerIdentitySelectionHaptic,
+  triggerIdentitySuccessHaptic,
+} from '@/lib/identity-flow-haptics';
 import { useAppSnapshot, useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
 import { buildSetupAccountHref } from '@/lib/setup-account';
@@ -41,15 +45,15 @@ function formatDeviceStateLabel(trustState: string) {
 }
 
 function triggerSelectionHaptic() {
-  void Haptics.selectionAsync().catch(() => undefined);
+  triggerIdentitySelectionHaptic();
 }
 
 function triggerImpactHaptic() {
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+  triggerIdentityImpactHaptic();
 }
 
 function triggerSuccessHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  triggerIdentitySuccessHaptic();
 }
 
 function resolveRowTone(tone: RowTone) {
@@ -446,28 +450,28 @@ export function ProfileScreen() {
 
   return (
     <ScreenShell
+      contentContainerStyle={styles.centeredContent}
+      contentWidthStyle={styles.contentWidth}
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
       scrollViewRef={scrollViewRef}
-      title="Perfil"
+      title="Happy Circles"
+      titleAlign="center"
     >
       <View style={styles.accountHeader}>
-        <Pressable
+        <IdentityFlowIdentity
+          avatarLabel={accountLabel}
+          avatarUrl={currentUserProfile?.avatarUrl ?? null}
           disabled={avatarMutation.isPending}
+          editable
           onPress={openAvatarOptions}
-          style={({ pressed }) => [styles.avatarButton, pressed ? styles.rowPressed : null]}
-        >
-          <AppAvatar
-            imageUrl={currentUserProfile?.avatarUrl ?? null}
-            label={accountLabel}
-            size={84}
-          />
-          <View style={styles.avatarEditBadge}>
-            <Ionicons color={theme.colors.white} name="pencil" size={15} />
-          </View>
-        </Pressable>
-        <Text style={styles.accountValue}>{accountLabel}</Text>
+          variant="avatar"
+        />
+        <View style={styles.accountCopy}>
+          <Text style={styles.accountValue}>{accountLabel}</Text>
+          <Text style={styles.accountMeta}>{accountEmail}</Text>
+        </View>
       </View>
 
       {message ? <MessageBanner message={message} /> : null}
@@ -815,29 +819,21 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  centeredContent: {},
+  contentWidth: {
+    maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
+  },
   accountHeader: {
     alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+  },
+  accountCopy: {
+    alignItems: 'center',
     gap: theme.spacing.xs,
-    paddingBottom: theme.spacing.sm,
-  },
-  avatarButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
-    position: 'relative',
-  },
-  avatarEditBadge: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    borderWidth: 3,
-    bottom: -1,
-    height: 32,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -1,
-    width: 32,
+    maxWidth: 340,
+    width: '100%',
   },
   accountEyebrow: {
     color: theme.colors.textMuted,
@@ -848,14 +844,16 @@ const styles = StyleSheet.create({
   },
   accountValue: {
     color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '700',
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
     letterSpacing: -0.2,
+    textAlign: 'center',
   },
   accountMeta: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    fontSize: theme.typography.callout,
+    fontWeight: '600',
+    lineHeight: 21,
     textAlign: 'center',
   },
   sectionBlock: {

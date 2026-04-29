@@ -3,10 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { HeaderBrandTitle } from '@/components/header-brand-title';
+import { IdentityFlowIdentity, IdentityFlowScreen } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
@@ -226,7 +225,7 @@ export function AccountInviteScreen() {
   }
 
   return (
-    <ScreenShell
+    <IdentityFlowScreen
       footer={
         <View style={styles.footer}>
           <PrimaryAction
@@ -236,12 +235,10 @@ export function AccountInviteScreen() {
           />
         </View>
       }
-      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-      headerVariant="plain"
-      largeTitle={false}
-      title="Entrar con invitacion"
+      identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
+      scrollEnabled={false}
     >
-      <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+      <InviteTokenStatus subtitle={tokenSubtitle} title={tokenTitle} />
 
       {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
@@ -369,7 +366,7 @@ export function AccountInviteScreen() {
           ) : null}
         </SurfaceCard>
       ) : null}
-    </ScreenShell>
+    </IdentityFlowScreen>
   );
 }
 

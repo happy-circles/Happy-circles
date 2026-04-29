@@ -1,21 +1,32 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import type { TextInput } from 'react-native';
 
-import { AppAvatar } from '@/components/app-avatar';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppTextInput } from '@/components/app-text-input';
 import { FieldBlock } from '@/components/field-block';
+import {
+  IdentityFlowActions,
+  IdentityFlowField,
+  IdentityFlowForm,
+  IdentityFlowIdentity,
+  IdentityFlowMessageSlot,
+  IdentityFlowScreen,
+  IdentityFlowTextInput,
+} from '@/components/identity-flow';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenFinalAction } from '@/components/screen-final-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import {
+  triggerIdentityImpactHaptic as triggerImpactHaptic,
+  triggerIdentitySelectionHaptic as triggerSelectionHaptic,
+  triggerIdentitySuccessHaptic as triggerSuccessHaptic,
+  triggerIdentityWarningHaptic as triggerWarningHaptic,
+} from '@/lib/identity-flow-haptics';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
@@ -41,22 +52,6 @@ function resolveTrustActionLabel(session: ReturnType<typeof useSession>) {
   }
 
   return 'Validar dispositivo';
-}
-
-function triggerSelectionHaptic() {
-  void Haptics.selectionAsync().catch(() => undefined);
-}
-
-function triggerImpactHaptic() {
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-}
-
-function triggerWarningHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-}
-
-function triggerSuccessHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }
 
 function resolveSecurityTone(tone: SecurityTone) {
@@ -403,38 +398,50 @@ export function SetupAccountScreen() {
   }
 
   return (
-    <ScreenShell
-      contentContainerStyle={styles.centeredContent}
-      contentWidthStyle={styles.contentWidth}
-      headerVariant="plain"
-      largeTitle={false}
-      titleAlign="center"
-      title={editPhoneMode ? 'Edita tu celular' : 'Deja tu cuenta lista'}
+    <IdentityFlowScreen
+      actions={
+        <IdentityFlowActions
+          disabled={isSaving}
+          loading={isSaving}
+          onPrimaryPress={isSaving ? undefined : () => void handleSaveAndFinish()}
+          primaryIcon="checkmark"
+          primaryLabel={
+            isSaving ? 'Guardando...' : editPhoneMode ? 'Guardar celular' : 'Guardar y entrar'
+          }
+        />
+      }
+      identity={
+        <IdentityFlowIdentity
+          avatarLabel={avatarLabel}
+          avatarUrl={avatarUrl}
+          disabled={avatarMutation.isPending}
+          editable
+          onPress={openAvatarOptions}
+          variant="avatar"
+        />
+      }
+      scrollEnabled
     >
-      {message ? <MessageBanner message={message} tone="neutral" /> : null}
+      <IdentityFlowMessageSlot>
+        {message ? (
+          <MessageBanner message={message} tone="neutral" />
+        ) : profileErrors.photo ? (
+          <Text style={[styles.helperText, styles.helperTextDanger]}>{profileErrors.photo}</Text>
+        ) : null}
+      </IdentityFlowMessageSlot>
 
       <View style={styles.setupContent}>
-        <View style={styles.avatarStage}>
-          <Pressable
-            disabled={avatarMutation.isPending}
-            onPress={openAvatarOptions}
-            style={({ pressed }) => [styles.avatarButton, pressed ? styles.pressed : null]}
+        <IdentityFlowForm>
+          <IdentityFlowField
+            error={profileErrors.fullName ?? null}
+            icon="person"
+            label="Nombre"
+            status={
+              profileErrors.fullName ? 'danger' : fullName.trim().length >= 3 ? 'success' : 'idle'
+            }
           >
-            <AppAvatar imageUrl={avatarUrl} label={avatarLabel} size={118} />
-            <View style={styles.avatarEditBadge}>
-              <Ionicons color={theme.colors.white} name="pencil" size={18} />
-            </View>
-          </Pressable>
-          {profileErrors.photo ? (
-            <Text style={[styles.helperText, styles.helperTextDanger]}>{profileErrors.photo}</Text>
-          ) : null}
-        </View>
-
-        <View style={styles.formBlock}>
-          <FieldBlock error={profileErrors.fullName ?? null} label="Nombre">
-            <AppTextInput
+            <IdentityFlowTextInput
               autoCapitalize="words"
-              hasError={Boolean(profileErrors.fullName)}
               onChangeText={(value) => {
                 setFullName(value);
                 clearProfileError('fullName');
@@ -442,10 +449,9 @@ export function SetupAccountScreen() {
               placeholder="Nombre y apellido"
               placeholderTextColor={theme.colors.muted}
               ref={fullNameInputRef}
-              style={styles.input}
               value={fullName}
             />
-          </FieldBlock>
+          </IdentityFlowField>
 
           {needsPhoneInput ? (
             <FieldBlock error={profileErrors.phoneNationalNumber ?? null} label="Celular">
@@ -504,7 +510,7 @@ export function SetupAccountScreen() {
               </View>
             </FieldBlock>
           ) : null}
-        </View>
+        </IdentityFlowForm>
 
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
@@ -590,13 +596,6 @@ export function SetupAccountScreen() {
         </View>
       </View>
 
-      <ScreenFinalAction
-        disabled={isSaving}
-        label={isSaving ? 'Guardando...' : editPhoneMode ? 'Guardar celular' : 'Guardar y entrar'}
-        loading={isSaving}
-        onPress={isSaving ? undefined : () => void handleSaveAndFinish()}
-      />
-
       <LoadingOverlay
         title={profileBusy ? 'Guardando perfil' : 'Actualizando foto'}
         visible={profileBusy || avatarMutation.isPending}
@@ -607,18 +606,17 @@ export function SetupAccountScreen() {
         onClose={() => setAvatarViewerVisible(false)}
         visible={avatarViewerVisible}
       />
-    </ScreenShell>
+    </IdentityFlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  centeredContent: {
-  },
+  centeredContent: {},
   contentWidth: {
     maxWidth: 460,
   },
   setupContent: {
-    gap: theme.spacing.xxl,
+    gap: theme.spacing.xl,
     paddingTop: theme.spacing.md,
   },
   avatarStage: {
@@ -644,6 +642,26 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 2,
     width: 38,
+  },
+  identityCopy: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    maxWidth: 340,
+    width: '100%',
+  },
+  identityTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
+  identityHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    fontWeight: '600',
+    lineHeight: 21,
+    textAlign: 'center',
   },
   formBlock: {
     gap: theme.spacing.xl,

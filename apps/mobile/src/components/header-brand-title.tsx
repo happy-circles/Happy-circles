@@ -6,7 +6,8 @@ import {
   HEADER_BRAND_TITLE_SIZE,
   HEADER_BRAND_TITLE_WIDTH,
 } from '@/components/brand-lockup';
-import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
+import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
+import { LaunchIntroTargetView } from '@/components/launch-intro-presence';
 import { StyleSheet } from 'react-native';
 
 export function HeaderBrandTitle({
@@ -16,13 +17,19 @@ export function HeaderBrandTitle({
   readonly logoSize?: number;
   readonly titleSize?: number;
 }) {
-  const launchIntroVisible = useLaunchIntroVisible();
-
   return (
     <BrandLockup
       gap={HEADER_BRAND_GAP}
+      logo={
+        <LaunchIntroTargetView
+          kind="brand"
+          priority={0}
+          style={{ height: logoSize, width: logoSize }}
+        >
+          <HappyCirclesGlyph size={logoSize} />
+        </LaunchIntroTargetView>
+      }
       logoSize={logoSize}
-      style={launchIntroVisible ? styles.hiddenDuringLaunchIntro : undefined}
       titleContainerStyle={styles.titleContainer}
       titleLineHeight={HEADER_BRAND_TITLE_LINE_HEIGHT}
       titleSize={titleSize}
@@ -31,9 +38,6 @@ export function HeaderBrandTitle({
 }
 
 const styles = StyleSheet.create({
-  hiddenDuringLaunchIntro: {
-    opacity: 0,
-  },
   titleContainer: {
     width: HEADER_BRAND_TITLE_WIDTH,
   },

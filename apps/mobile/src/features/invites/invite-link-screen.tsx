@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { HeaderBrandTitle } from '@/components/header-brand-title';
+import { IdentityFlowIdentity, IdentityFlowScreen } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
@@ -82,13 +81,9 @@ function channelLabel(channel: 'remote' | 'qr') {
 }
 
 function isUnavailableFriendshipInvite(reason: string) {
-  return [
-    'canceled',
-    'claimed_by_other',
-    'delivery_revoked',
-    'expired',
-    'rejected',
-  ].includes(reason);
+  return ['canceled', 'claimed_by_other', 'delivery_revoked', 'expired', 'rejected'].includes(
+    reason,
+  );
 }
 
 export function InviteLinkScreen() {
@@ -241,7 +236,7 @@ export function InviteLinkScreen() {
   }
 
   return (
-    <ScreenShell
+    <IdentityFlowScreen
       footer={
         <View style={styles.footer}>
           <PrimaryAction
@@ -251,12 +246,10 @@ export function InviteLinkScreen() {
           />
         </View>
       }
-      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-      headerVariant="plain"
-      largeTitle={false}
-      title="Invitacion de amistad"
+      identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
+      scrollEnabled={false}
     >
-      <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+      <InviteTokenStatus subtitle={tokenSubtitle} title={tokenTitle} />
 
       {message ? <MessageBanner message={message} /> : null}
 
@@ -346,7 +339,7 @@ export function InviteLinkScreen() {
           ) : null}
         </SurfaceCard>
       ) : null}
-    </ScreenShell>
+    </IdentityFlowScreen>
   );
 }
 

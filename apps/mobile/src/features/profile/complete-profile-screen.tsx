@@ -4,16 +4,27 @@ import * as ImagePicker from 'expo-image-picker';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
 
-import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput } from '@/components/app-text-input';
-import { FieldBlock } from '@/components/field-block';
+import {
+  IdentityFlowActions,
+  IdentityFlowField,
+  IdentityFlowForm,
+  IdentityFlowIdentity,
+  IdentityFlowMessageSlot,
+  IdentityFlowScreen,
+  IdentityFlowTextInput,
+} from '@/components/identity-flow';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
-import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import {
+  triggerIdentityErrorHaptic,
+  triggerIdentityImpactHaptic,
+  triggerIdentitySelectionHaptic,
+  triggerIdentitySuccessHaptic,
+  triggerIdentityWarningHaptic,
+} from '@/lib/identity-flow-haptics';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
@@ -206,6 +217,7 @@ export function CompleteProfileScreen() {
           : `Te faltan ${errorCount} datos para completar tu perfil.`,
       tone: 'danger',
     });
+    triggerIdentityWarningHaptic();
 
     if (nextErrors.fullName) {
       fullNameInputRef.current?.focus();
@@ -229,8 +241,10 @@ export function CompleteProfileScreen() {
       });
       clearFieldError('avatar');
       setBanner(null);
+      triggerIdentitySuccessHaptic();
       showSnackbar('Foto de perfil actualizada.', 'success');
     } catch (error) {
+      triggerIdentityErrorHaptic();
       setBanner({
         message: error instanceof Error ? error.message : 'No se pudo actualizar la foto.',
         tone: 'danger',
@@ -279,10 +293,32 @@ export function CompleteProfileScreen() {
     await uploadPickedAvatar(result);
   }
 
+  function openAvatarOptions() {
+    if (avatarMutation.isPending) {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
+
+    Alert.alert('Foto de perfil', undefined, [
+      {
+        text: 'Tomar foto',
+        onPress: () => void handleTakeAvatarPhoto(),
+      },
+      {
+        text: 'Elegir foto',
+        onPress: () => void handlePickAvatar(),
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
   async function handleSave() {
     if (busy) {
       return;
     }
+
+    triggerIdentityImpactHaptic();
 
     const nextErrors = validateForm();
     if (Object.values(nextErrors).some(Boolean)) {
@@ -302,6 +338,7 @@ export function CompleteProfileScreen() {
       });
 
       if (result === 'Perfil actualizado.') {
+        triggerIdentitySuccessHaptic();
         showSnackbar('Perfil actualizado.', 'success');
         const pendingIntent = await readPendingInviteIntent();
         returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
@@ -346,80 +383,67 @@ export function CompleteProfileScreen() {
         message: result,
         tone: 'danger',
       });
+      triggerIdentityErrorHaptic();
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <ScreenShell
-      footer={
-        <PrimaryAction
+    <IdentityFlowScreen
+      actions={
+        <IdentityFlowActions
           disabled={busy}
-          label={busy ? 'Guardando...' : 'Guardar y continuar'}
           loading={busy}
-          onPress={busy ? undefined : () => void handleSave()}
+          onPrimaryPress={busy ? undefined : () => void handleSave()}
+          primaryLabel={busy ? 'Guardando...' : 'Guardar y continuar'}
         />
       }
-      headerVariant="plain"
-      largeTitle={false}
-      overlay={
-        <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
-      }
-      scrollViewRef={scrollViewRef}
-      title="Completa tu perfil"
-      subtitle="Antes de aceptar o enviar invitaciones necesitamos nombre usable, foto y celular unico para esta cuenta."
-    >
-      {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
-
-      <View style={styles.form}>
+      identity={
         <View
           onLayout={(event) => {
             avatarOffsetRef.current = event.nativeEvent.layout.y;
           }}
-          style={[styles.avatarBlock, highlightTarget === 'avatar' ? styles.focusBlock : null]}
         >
-          <AppAvatar
-            imageUrl={avatarUrl}
-            label={fullName || profile?.display_name || profile?.email || 'Tu perfil'}
-            size={88}
+          <IdentityFlowIdentity
+            avatarLabel={fullName || profile?.display_name || profile?.email || 'Tu perfil'}
+            avatarUrl={avatarUrl}
+            disabled={avatarMutation.isPending}
+            editable
+            onPress={openAvatarOptions}
+            variant="avatar"
           />
-          <View style={styles.avatarActionRow}>
-            <Pressable
-              disabled={avatarMutation.isPending}
-              onPress={() => void handleTakeAvatarPhoto()}
-              style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.pressed : null]}
-            >
-              <Text style={styles.avatarActionText}>
-                {avatarMutation.isPending ? 'Subiendo...' : 'Tomar foto'}
-              </Text>
-            </Pressable>
-            <Pressable
-              disabled={avatarMutation.isPending}
-              onPress={() => void handlePickAvatar()}
-              style={({ pressed }) => [styles.avatarActionChip, pressed ? styles.pressed : null]}
-            >
-              <Text style={styles.avatarActionText}>Elegir foto</Text>
-            </Pressable>
-          </View>
-          <Text style={[styles.avatarHelper, errors.avatar ? styles.avatarHelperError : null]}>
-            {profile?.avatar_path
-              ? 'Tu foto actual ya cuenta para validar identidad.'
-              : 'La foto es obligatoria para poder continuar con invitaciones de amistad.'}
-          </Text>
-          {errors.avatar ? <Text style={styles.avatarError}>{errors.avatar}</Text> : null}
         </View>
+      }
+      overlay={
+        <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
+      }
+      scrollEnabled
+      scrollViewRef={scrollViewRef}
+    >
+      <IdentityFlowMessageSlot>
+        {banner ? (
+          <MessageBanner message={banner.message} tone={banner.tone} />
+        ) : errors.avatar ? (
+          <Text style={[styles.helperText, styles.helperTextDanger]}>{errors.avatar}</Text>
+        ) : null}
+      </IdentityFlowMessageSlot>
 
+      <IdentityFlowForm>
         <View
           onLayout={(event) => {
             fullNameOffsetRef.current = event.nativeEvent.layout.y;
           }}
           style={highlightTarget === 'fullName' ? styles.focusBlock : null}
         >
-          <FieldBlock error={errors.fullName ?? null} label="Nombre">
-            <AppTextInput
+          <IdentityFlowField
+            error={errors.fullName ?? null}
+            icon="person"
+            label="Nombre"
+            status={errors.fullName ? 'danger' : fullName.trim().length >= 3 ? 'success' : 'idle'}
+          >
+            <IdentityFlowTextInput
               autoCapitalize="words"
-              hasError={Boolean(errors.fullName)}
               onChangeText={(value) => {
                 setFullName(value);
                 clearFieldError('fullName');
@@ -427,10 +451,9 @@ export function CompleteProfileScreen() {
               placeholder="Nombre y apellido"
               placeholderTextColor={theme.colors.muted}
               ref={fullNameInputRef}
-              style={styles.input}
               value={fullName}
             />
-          </FieldBlock>
+          </IdentityFlowField>
         </View>
 
         <View
@@ -439,18 +462,31 @@ export function CompleteProfileScreen() {
           }}
           style={highlightTarget === 'phone' ? styles.focusBlock : null}
         >
-          <FieldBlock error={errors.phoneNationalNumber ?? null} label="Celular">
+          <IdentityFlowField
+            error={errors.phoneNationalNumber ?? null}
+            icon="call"
+            label="Celular"
+            status={
+              errors.phoneNationalNumber
+                ? 'danger'
+                : phoneNationalNumber.trim().length >= 7
+                  ? 'success'
+                  : 'idle'
+            }
+          >
             <View style={styles.phoneField}>
               <View style={styles.phoneRow}>
                 <Pressable
-                  onPress={() => setCountryMenuOpen((value) => !value)}
+                  onPress={() => {
+                    triggerIdentitySelectionHaptic();
+                    setCountryMenuOpen((value) => !value);
+                  }}
                   style={({ pressed }) => [styles.callingCodeBox, pressed ? styles.pressed : null]}
                 >
                   <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
                 </Pressable>
 
-                <AppTextInput
-                  hasError={Boolean(errors.phoneNationalNumber)}
+                <IdentityFlowTextInput
                   keyboardType="phone-pad"
                   onChangeText={(value) => {
                     setPhoneNationalNumber(value);
@@ -471,6 +507,7 @@ export function CompleteProfileScreen() {
                     <Pressable
                       key={country.iso2}
                       onPress={() => {
+                        triggerIdentitySelectionHaptic();
                         setCountryIso(country.iso2);
                         setCountryMenuOpen(false);
                       }}
@@ -486,9 +523,10 @@ export function CompleteProfileScreen() {
                 </View>
               ) : null}
             </View>
-          </FieldBlock>
+          </IdentityFlowField>
         </View>
-      </View>
+      </IdentityFlowForm>
+
       <LoadingOverlay
         message={
           busy
@@ -498,49 +536,66 @@ export function CompleteProfileScreen() {
         title={busy ? 'Guardando perfil' : 'Actualizando foto'}
         visible={showBusyOverlay}
       />
-    </ScreenShell>
+    </IdentityFlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  form: {
-    gap: theme.spacing.md,
+  centeredContent: {},
+  contentWidth: {
+    maxWidth: 460,
   },
-  avatarBlock: {
+  form: {
+    gap: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
+  },
+  avatarStage: {
     alignItems: 'center',
     gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
   },
   focusBlock: {
     borderRadius: theme.radius.large,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    padding: theme.spacing.xs,
+    backgroundColor: theme.colors.primaryGhost,
   },
-  avatarActionRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+  avatarButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  avatarActionChip: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
+  avatarEditBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderWidth: 3,
+    bottom: 2,
+    height: 38,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 2,
+    width: 38,
   },
-  avatarActionText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+  identityCopy: {
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    maxWidth: 340,
+    width: '100%',
   },
-  avatarHelper: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
+  identityTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
-  avatarHelperError: {
-    color: theme.colors.danger,
+  identityHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    fontWeight: '600',
+    lineHeight: 21,
+    textAlign: 'center',
   },
   avatarError: {
     color: theme.colors.danger,
@@ -548,6 +603,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 16,
     textAlign: 'center',
+  },
+  helperText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  helperTextDanger: {
+    color: theme.colors.danger,
   },
   input: {},
   phoneField: {

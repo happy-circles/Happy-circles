@@ -1,38 +1,37 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import {
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
-import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput } from '@/components/app-text-input';
 import {
   BRAND_VERIFICATION_EASING,
   BRAND_VERIFICATION_RESULT_MS,
-  BrandVerificationMark,
   type BrandVerificationState,
 } from '@/components/brand-verification-lockup';
-import { FieldBlock } from '@/components/field-block';
-import { HeaderBrandTitle } from '@/components/header-brand-title';
-import { HappyCirclesCenterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
+import {
+  IDENTITY_FLOW_STAGE_SIZE,
+  IdentityFlowActions,
+  IdentityFlowField,
+  IdentityFlowForm,
+  IdentityFlowIdentity,
+  IdentityFlowMessageSlot,
+  IdentityFlowScreen,
+  IdentityFlowSecondaryAction,
+  IdentityFlowTextInput,
+} from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
-import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
-import { SurfaceCard } from '@/components/surface-card';
 import {
   beginAuthRouteTransitionHold,
   clearAuthRouteTransitionHold,
 } from '@/lib/auth-route-transition-hold';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import {
+  triggerIdentityImpactHaptic,
+  triggerIdentitySelectionHaptic,
+  triggerIdentityWarningHaptic,
+} from '@/lib/identity-flow-haptics';
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { pushRoute, returnToRoute } from '@/lib/navigation';
@@ -53,9 +52,6 @@ const AUTH_STATE_TRANSITION_MS = 640;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
 const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
 const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
-const AUTH_FACE_AVATAR_VIEW_BOX = '290 290 100 100';
-const AUTH_IDENTITY_FACE_SIZE = 88;
-const AUTH_IDENTITY_MARK_SIZE = 208;
 
 function biometricMessage(error: string | null, label: string): string {
   if (error === 'user_cancel') {
@@ -77,73 +73,23 @@ function buildJoinSignInHref(token: string | null): Href {
 }
 
 function AuthEntryIdentity({
-  center,
-  hint,
+  avatarLabel,
+  avatarUrl,
   state,
-  title,
+  variant = 'brand',
 }: {
-  readonly center?: ReactNode;
-  readonly hint?: string | null;
+  readonly avatarLabel?: string;
+  readonly avatarUrl?: string | null;
   readonly state: BrandVerificationState;
-  readonly title: string;
+  readonly variant?: 'brand' | 'remembered';
 }) {
-  const titleMotion = useRef(new Animated.Value(state === 'loading' ? 1 : 0)).current;
-  const facePalette = useMemo(
-    () => ({
-      ...resolveHappyCirclesPalette('brand'),
-      face: theme.colors.brandNavy,
-      faceDetail: theme.colors.white,
-    }),
-    [],
-  );
-
-  useEffect(() => {
-    Animated.timing(titleMotion, {
-      duration: state === 'loading' ? 320 : 360,
-      easing: AUTH_STATE_EASING,
-      toValue: state === 'loading' ? 1 : 0,
-      useNativeDriver: true,
-    }).start();
-  }, [state, titleMotion]);
-
-  const defaultCenter = (
-    <HappyCirclesCenterSvg
-      palette={facePalette}
-      size={AUTH_IDENTITY_FACE_SIZE}
-      viewBox={AUTH_FACE_AVATAR_VIEW_BOX}
-    />
-  );
-  const titleOpacity = titleMotion.interpolate({
-    inputRange: [0, 0.72, 1],
-    outputRange: [1, 0.2, 0],
-  });
-  const titleTranslateY = titleMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 18],
-  });
-
   return (
-    <View style={styles.authIdentityLockup}>
-      <BrandVerificationMark
-        center={center ?? defaultCenter}
-        centerSize={AUTH_IDENTITY_FACE_SIZE}
-        showOuterInIdle
-        size={AUTH_IDENTITY_MARK_SIZE}
-        state={state}
-      />
-      <Animated.View
-        style={[
-          styles.authIdentityCopy,
-          {
-            opacity: titleOpacity,
-            transform: [{ translateY: titleTranslateY }],
-          },
-        ]}
-      >
-        <Text style={styles.rememberedTitle}>{title}</Text>
-        {hint ? <Text style={styles.rememberedHint}>{hint}</Text> : null}
-      </Animated.View>
-    </View>
+    <IdentityFlowIdentity
+      avatarLabel={avatarLabel}
+      avatarUrl={avatarUrl}
+      state={state}
+      variant={variant}
+    />
   );
 }
 
@@ -539,302 +485,219 @@ function AccountSignInEntry({
     }
   }
 
-  return (
-    <KeyboardAvoidingView style={styles.keyboardShell}>
-      <ScreenShell
-        contentContainerStyle={styles.rememberedContent}
-        contentWidthStyle={styles.rememberedWidth}
-        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-        headerVariant="plain"
-        title="Happy Circles"
-      >
-        <View style={styles.rememberedBody}>
-          <View
-            style={[styles.rememberedMain, !isRecovery ? styles.rememberedMainRemembered : null]}
-          >
-            {account && !isRecovery ? (
-              <Animated.View style={styles.rememberedProfileMotion}>
-                {showAuthOptions ? (
-                  <View style={styles.authIdentityStage}>
-                    <Animated.View
-                      pointerEvents={isOtherAccountMode ? 'none' : 'auto'}
-                      style={[
-                        styles.rememberedProfile,
-                        styles.authIdentityLayer,
-                        rememberedIdentityStyle,
-                      ]}
-                    >
-                      <AuthEntryIdentity
-                        center={
-                          <AppAvatar
-                            fallbackBackgroundColor="#ff5b0a"
-                            fallbackTextColor={theme.colors.white}
-                            imageUrl={avatarUrl}
-                            label={account.displayName}
-                            size={AUTH_IDENTITY_FACE_SIZE}
-                          />
-                        }
-                        state={authVisualState}
-                        title={`Entrar como ${account.displayName}`}
-                      />
-                    </Animated.View>
+  const authFooterAction =
+    account && !isRecovery ? (
+      <IdentityFlowSecondaryAction
+        disabled={authBusy}
+        icon={isOtherAccountMode ? 'key-outline' : 'person-circle-outline'}
+        label={isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta'}
+        onPress={
+          isOtherAccountMode ? () => returnToRoute(router, inviteEntryHref()) : showOtherAccountMode
+        }
+      />
+    ) : isRecovery ? (
+      <IdentityFlowSecondaryAction
+        disabled={authBusy}
+        icon="person-circle-outline"
+        label="Iniciar sesion"
+        onPress={showSignInMode}
+      />
+    ) : (
+      <IdentityFlowSecondaryAction
+        disabled={authBusy}
+        icon="key-outline"
+        label="Volver a invitacion"
+        onPress={() => returnToRoute(router, inviteEntryHref())}
+      />
+    );
 
-                    <Animated.View
-                      pointerEvents={isOtherAccountMode ? 'auto' : 'none'}
-                      style={[
-                        styles.rememberedProfile,
-                        styles.authIdentityLayer,
-                        otherAccountIdentityStyle,
-                      ]}
-                    >
-                      <AuthEntryIdentity
-                        state={authVisualState}
-                        title="Entrar con otra cuenta"
-                      />
-                    </Animated.View>
-                  </View>
-                ) : (
-                  <Pressable
-                    disabled={authBusy}
-                    onPress={() => void handleContinue()}
-                    style={({ pressed }) => [
-                      styles.rememberedProfile,
-                      pressed && !authBusy ? styles.pressed : null,
-                    ]}
-                  >
-                    <AuthEntryIdentity
-                      center={
-                        <AppAvatar
-                          fallbackBackgroundColor="#ff5b0a"
-                          fallbackTextColor={theme.colors.white}
-                          imageUrl={avatarUrl}
-                          label={account.displayName}
-                          size={AUTH_IDENTITY_FACE_SIZE}
-                        />
-                      }
-                      hint={
-                        biometricBusy
-                          ? `Validando ${session.biometricLabel}...`
-                          : 'Toca para continuar'
-                      }
-                      state={authVisualState}
-                      title={`Hola, ${account.displayName}`}
-                    />
-                  </Pressable>
-                )}
-                {showAuthOptions ? (
-                  <View style={styles.authMessageSlot}>
-                    {message ? (
-                      <MessageBanner
-                        message={message}
-                        tone={authResultState === 'error' ? 'danger' : 'neutral'}
-                      />
-                    ) : null}
-                  </View>
-                ) : null}
-              </Animated.View>
+  return (
+    <IdentityFlowScreen actions={authFooterAction} bodyStyle={styles.rememberedBody}>
+      <View style={[styles.rememberedMain, !isRecovery ? styles.rememberedMainRemembered : null]}>
+        {account && !isRecovery ? (
+          <Animated.View style={styles.rememberedProfileMotion}>
+            {showAuthOptions ? (
+              <View style={styles.authIdentityStage}>
+                <Animated.View
+                  pointerEvents={isOtherAccountMode ? 'none' : 'auto'}
+                  style={[
+                    styles.rememberedProfile,
+                    styles.authIdentityLayer,
+                    rememberedIdentityStyle,
+                  ]}
+                >
+                  <AuthEntryIdentity
+                    avatarLabel={account.displayName}
+                    avatarUrl={avatarUrl}
+                    state={authVisualState}
+                    variant="remembered"
+                  />
+                </Animated.View>
+
+                <Animated.View
+                  pointerEvents={isOtherAccountMode ? 'auto' : 'none'}
+                  style={[
+                    styles.rememberedProfile,
+                    styles.authIdentityLayer,
+                    otherAccountIdentityStyle,
+                  ]}
+                >
+                  <AuthEntryIdentity state={authVisualState} />
+                </Animated.View>
+              </View>
             ) : (
-              <Animated.View style={styles.rememberedProfileMotion}>
-                <View style={isRecovery ? undefined : styles.authIdentityStage}>
-                  <View
-                    style={[styles.rememberedProfile, isRecovery ? null : styles.authIdentityLayer]}
-                  >
-                    {!isRecovery ? (
-                      <AuthEntryIdentity
-                        state={authVisualState}
-                        title="Hola, inicia sesion!"
-                      />
-                    ) : null}
-                    {isRecovery ? (
-                      <Text style={styles.rememberedTitle}>Recupera tu contrasena</Text>
-                    ) : null}
-                    {isRecovery ? (
-                      <Text style={styles.rememberedHint}>
-                        Te enviaremos un enlace para definir una nueva clave.
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                {showAuthOptions ? (
-                  <View style={styles.authMessageSlot}>
-                    {message ? (
-                      <MessageBanner
-                        message={message}
-                        tone={authResultState === 'error' ? 'danger' : 'neutral'}
-                      />
-                    ) : null}
-                  </View>
-                ) : null}
-              </Animated.View>
+              <Pressable
+                disabled={authBusy}
+                onPress={() => void handleContinue()}
+                style={({ pressed }) => [
+                  styles.rememberedProfile,
+                  pressed && !authBusy ? styles.pressed : null,
+                ]}
+              >
+                <AuthEntryIdentity
+                  avatarLabel={account.displayName}
+                  avatarUrl={avatarUrl}
+                  state={authVisualState}
+                  variant="remembered"
+                />
+              </Pressable>
             )}
 
-            {authOptionsMounted ? (
-              <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
-                <View style={styles.authFormBlock}>
-                  <View style={styles.iconFieldRow}>
-                    <View style={styles.authFieldIcon}>
-                      <Ionicons color={theme.colors.primary} name="mail" size={18} />
-                    </View>
-                    <View style={styles.fieldControl}>
-                      <View
-                        style={[
-                          styles.authInputPanel,
-                          locksRememberedEmail ? styles.authInputPanelLocked : null,
-                        ]}
-                      >
-                        <AppTextInput
-                          autoCapitalize="none"
-                          autoComplete="email"
-                          editable={!locksRememberedEmail}
-                          keyboardType="email-address"
-                          onChangeText={handleEmailChange}
-                          placeholder="tu@correo.com"
-                          placeholderTextColor={theme.colors.muted}
-                          style={[
-                            styles.authInput,
-                            locksRememberedEmail ? styles.authInputLocked : null,
-                          ]}
-                          value={email}
-                        />
-                      </View>
-                    </View>
-                  </View>
+            {showAuthOptions ? (
+              <View style={styles.authMessageSlot}>
+                {message ? (
+                  <MessageBanner
+                    message={message}
+                    tone={authResultState === 'error' ? 'danger' : 'neutral'}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </Animated.View>
+        ) : (
+          <Animated.View style={styles.rememberedProfileMotion}>
+            <View style={isRecovery ? undefined : styles.authIdentityStage}>
+              <View
+                style={[styles.rememberedProfile, isRecovery ? null : styles.authIdentityLayer]}
+              >
+                {!isRecovery ? <AuthEntryIdentity state={authVisualState} /> : null}
+                {isRecovery ? <AuthEntryIdentity state={authVisualState} /> : null}
+              </View>
+            </View>
 
-                  {!isRecovery ? (
-                    <View style={styles.iconFieldRow}>
-                      <View style={styles.authFieldIcon}>
-                        <Ionicons color={theme.colors.primary} name="lock-closed" size={18} />
-                      </View>
-                      <View style={styles.fieldControl}>
-                        <View style={styles.authInputPanel}>
-                          <AppTextInput
-                            autoCapitalize="none"
-                            autoComplete="password"
-                            onChangeText={handlePasswordChange}
-                            placeholder="Tu contrasena"
-                            placeholderTextColor={theme.colors.muted}
-                            secureTextEntry
-                            style={styles.authInput}
-                            value={password}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  ) : null}
+            {showAuthOptions ? (
+              <View style={styles.authMessageSlot}>
+                {message ? (
+                  <MessageBanner
+                    message={message}
+                    tone={authResultState === 'error' ? 'danger' : 'neutral'}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </Animated.View>
+        )}
 
-                  <View style={styles.authActionRow}>
-                    <PrimaryAction
-                      disabled={authBusy}
-                      fullWidth
-                      label={
-                        passwordBusy ? 'Procesando...' : isRecovery ? 'Enviar enlace' : 'Ingresar'
-                      }
-                      loading={passwordBusy}
-                      onPress={
-                        authBusy
-                          ? undefined
-                          : () =>
-                              void (isRecovery ? handlePasswordRecovery() : handlePasswordSignIn())
-                      }
-                    />
-                  </View>
+        {authOptionsMounted ? (
+          <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
+            <IdentityFlowForm>
+              <IdentityFlowField icon="mail" label="Correo">
+                <IdentityFlowTextInput
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  editable={!locksRememberedEmail}
+                  keyboardType="email-address"
+                  onChangeText={handleEmailChange}
+                  placeholder="tu@correo.com"
+                  placeholderTextColor={theme.colors.muted}
+                  value={email}
+                />
+              </IdentityFlowField>
 
-                  {isRecovery ? (
-                    <PrimaryAction
-                      compact
-                      disabled={authBusy}
-                      label="Volver a iniciar sesion"
-                      onPress={showSignInMode}
-                      variant="ghost"
-                    />
-                  ) : null}
-                </View>
+              {!isRecovery ? (
+                <IdentityFlowField icon="lock-closed" label="Contrasena">
+                  <IdentityFlowTextInput
+                    autoCapitalize="none"
+                    autoComplete="password"
+                    onChangeText={handlePasswordChange}
+                    placeholder="Tu contrasena"
+                    placeholderTextColor={theme.colors.muted}
+                    secureTextEntry
+                    value={password}
+                  />
+                </IdentityFlowField>
+              ) : null}
 
-                {!isRecovery ? (
-                  <View style={styles.authSecondaryBlock}>
-                    <View style={styles.socialProviderRow}>
-                      {session.appleSignInAvailable ? (
-                        <Pressable
-                          disabled={authBusy}
-                          onPress={() => void handleSocialSignIn('apple')}
-                          style={({ pressed }) => [
-                            styles.socialProviderButton,
-                            styles.appleProviderButton,
-                            pressed && !authBusy ? styles.pressed : null,
-                            authBusy ? styles.actionDisabled : null,
-                          ]}
-                        >
-                          <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
-                          <Text style={[styles.socialProviderText, styles.appleProviderText]}>
-                            {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
-                          </Text>
-                        </Pressable>
-                      ) : null}
+              <IdentityFlowActions
+                anchored={false}
+                disabled={authBusy}
+                loading={passwordBusy}
+                onPrimaryPress={
+                  authBusy
+                    ? undefined
+                    : () => void (isRecovery ? handlePasswordRecovery() : handlePasswordSignIn())
+                }
+                primaryLabel={
+                  passwordBusy ? 'Procesando...' : isRecovery ? 'Enviar enlace' : 'Ingresar'
+                }
+              />
+            </IdentityFlowForm>
 
-                      <Pressable
-                        disabled={authBusy}
-                        onPress={() => void handleSocialSignIn('google')}
-                        style={({ pressed }) => [
-                          styles.socialProviderButton,
-                          styles.googleProviderButton,
-                          !session.appleSignInAvailable ? styles.socialProviderButtonFull : null,
-                          pressed && !authBusy ? styles.pressed : null,
-                          authBusy ? styles.actionDisabled : null,
-                        ]}
-                      >
-                        <Ionicons color={theme.colors.text} name="logo-google" size={18} />
-                        <Text style={styles.socialProviderText}>
-                          {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
-                        </Text>
-                      </Pressable>
-                    </View>
+            {!isRecovery ? (
+              <View style={styles.authSecondaryBlock}>
+                <View style={styles.socialProviderRow}>
+                  {session.appleSignInAvailable ? (
                     <Pressable
                       disabled={authBusy}
-                      onPress={showRecoverMode}
+                      onPress={() => void handleSocialSignIn('apple')}
                       style={({ pressed }) => [
-                        styles.forgotPasswordButton,
-                        pressed ? styles.pressed : null,
+                        styles.socialProviderButton,
+                        styles.appleProviderButton,
+                        pressed && !authBusy ? styles.pressed : null,
+                        authBusy ? styles.actionDisabled : null,
                       ]}
                     >
-                      <Text style={styles.inlineLinkText}>Olvide contrasena</Text>
+                      <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
+                      <Text style={[styles.socialProviderText, styles.appleProviderText]}>
+                        {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
+                      </Text>
                     </Pressable>
-                  </View>
-                ) : null}
-              </Animated.View>
-            ) : null}
-          </View>
+                  ) : null}
 
-          {account && !isRecovery ? (
-            <Pressable
-              disabled={authBusy}
-              onPress={
-                isOtherAccountMode
-                  ? () => returnToRoute(router, inviteEntryHref())
-                  : showOtherAccountMode
-              }
-              style={({ pressed }) => [styles.otherAccountButton, pressed ? styles.pressed : null]}
-            >
-              <Ionicons
-                color={theme.colors.textMuted}
-                name={isOtherAccountMode ? 'key-outline' : 'person-circle-outline'}
-                size={18}
-              />
-              <Text style={styles.otherAccountText}>
-                {isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta'}
-              </Text>
-            </Pressable>
-          ) : (
-            <PrimaryAction
-              compact
-              disabled={authBusy}
-              label="Volver a invitacion"
-              onPress={() => returnToRoute(router, inviteEntryHref())}
-              variant="ghost"
-            />
-          )}
-        </View>
-      </ScreenShell>
-    </KeyboardAvoidingView>
+                  <Pressable
+                    disabled={authBusy}
+                    onPress={() => void handleSocialSignIn('google')}
+                    style={({ pressed }) => [
+                      styles.socialProviderButton,
+                      styles.googleProviderButton,
+                      !session.appleSignInAvailable ? styles.socialProviderButtonFull : null,
+                      pressed && !authBusy ? styles.pressed : null,
+                      authBusy ? styles.actionDisabled : null,
+                    ]}
+                  >
+                    <Ionicons color={theme.colors.text} name="logo-google" size={18} />
+                    <Text style={styles.socialProviderText}>
+                      {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <Pressable
+                  disabled={authBusy}
+                  onPress={showRecoverMode}
+                  style={({ pressed }) => [
+                    styles.forgotPasswordButton,
+                    pressed ? styles.pressed : null,
+                  ]}
+                >
+                  <Text style={styles.inlineLinkText}>Olvide contrasena</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </Animated.View>
+        ) : null}
+      </View>
+    </IdentityFlowScreen>
   );
 }
 
@@ -881,10 +744,12 @@ export function AccountInviteEntryScreen() {
   async function handleContinue() {
     const token = extractAccountInviteToken(tokenInput);
     if (token.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH) {
+      triggerIdentityWarningHaptic();
       setMessage('Abre tu link de invitacion o pega el token completo para continuar.');
       return;
     }
 
+    triggerIdentityImpactHaptic();
     setMessage(null);
 
     const previewResult = await previewQuery.refetch();
@@ -920,26 +785,38 @@ export function AccountInviteEntryScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardShell}
+    <IdentityFlowScreen
+      actions={
+        <IdentityFlowSecondaryAction
+          icon="person-circle-outline"
+          label="Ya tengo cuenta"
+          onPress={() => {
+            triggerIdentitySelectionHaptic();
+            returnToRoute(router, buildJoinSignInHref(pendingToken));
+          }}
+        />
+      }
+      bodyStyle={styles.rememberedBody}
     >
-      <ScreenShell
-        contentContainerStyle={styles.inviteEntryContent}
-        contentWidthStyle={styles.inviteEntryWidth}
-        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-        headerVariant="plain"
-        title="Happy Circles"
+      <View
+        style={[styles.rememberedMain, styles.rememberedMainRemembered, styles.inviteEntryMain]}
       >
-        <View style={styles.inviteEntryBody}>
-          <View style={styles.copyBlock}>
-            <Text style={styles.title}>Bienvenido a Happy Circles</Text>
-            <Text style={styles.subtitle}>Necesitas una invitacion para empezar.</Text>
-          </View>
+        <View style={styles.inviteEntryLogoCenter}>
+          <IdentityFlowIdentity
+            state={previewQuery.isFetching ? 'loading' : 'idle'}
+            variant="brand"
+          />
+        </View>
 
-          <SurfaceCard padding="lg" style={styles.card} variant="elevated">
-            <FieldBlock label="Codigo de invitacion">
-              <AppTextInput
+        <View style={styles.inviteEntryFormAnchor}>
+          <IdentityFlowForm>
+            <IdentityFlowField
+              icon="key"
+              label="Codigo de invitacion"
+              reserveError={false}
+              status={blockingMessage || message ? 'danger' : preview ? 'success' : 'idle'}
+            >
+              <IdentityFlowTextInput
                 autoCapitalize="none"
                 autoCorrect={false}
                 onChangeText={(value) => {
@@ -950,36 +827,32 @@ export function AccountInviteEntryScreen() {
                 placeholderTextColor={theme.colors.muted}
                 value={tokenInput}
               />
-            </FieldBlock>
+            </IdentityFlowField>
 
-            {preview && !blockingMessage ? (
-              <View style={styles.inviteSummary}>
-                <Text style={styles.inviteLabel}>Invitacion de</Text>
-                <Text style={styles.inviteName}>{preview.inviterDisplayName}</Text>
-              </View>
-            ) : null}
+            <IdentityFlowMessageSlot minHeight={72}>
+              {preview && !blockingMessage ? (
+                <View style={styles.inviteSummary}>
+                  <Text style={styles.inviteLabel}>Invitacion de</Text>
+                  <Text style={styles.inviteName}>{preview.inviterDisplayName}</Text>
+                </View>
+              ) : blockingMessage ? (
+                <MessageBanner message={blockingMessage} tone="warning" />
+              ) : message ? (
+                <MessageBanner message={message} tone="neutral" />
+              ) : null}
+            </IdentityFlowMessageSlot>
 
-            {blockingMessage ? <MessageBanner message={blockingMessage} tone="warning" /> : null}
-            {message ? <MessageBanner message={message} tone="neutral" /> : null}
-
-            <PrimaryAction
+            <IdentityFlowActions
+              anchored={false}
               disabled={!shouldPreview || Boolean(blockingMessage)}
-              label={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
               loading={previewQuery.isFetching}
-              onPress={previewQuery.isFetching ? undefined : () => void handleContinue()}
-              subtitle="Luego creas tu acceso con correo, celular y contrasena."
+              onPrimaryPress={previewQuery.isFetching ? undefined : () => void handleContinue()}
+              primaryLabel={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
             />
-          </SurfaceCard>
-
-          <PrimaryAction
-            href={buildJoinSignInHref(pendingToken)}
-            label="Ya tengo cuenta"
-            subtitle="Ingresa con correo, Google o Apple."
-            variant="secondary"
-          />
+          </IdentityFlowForm>
         </View>
-      </ScreenShell>
-    </KeyboardAvoidingView>
+      </View>
+    </IdentityFlowScreen>
   );
 }
 
@@ -1004,29 +877,61 @@ const styles = StyleSheet.create({
   },
   inviteEntryBody: {
     flex: 1,
-    gap: theme.spacing.lg,
+    gap: 0,
+    paddingBottom: theme.spacing.sm,
+  },
+  inviteEntryMain: {
+    flex: 1,
     justifyContent: 'center',
-    paddingBottom: theme.spacing.xxl,
+    position: 'relative',
+    width: '100%',
   },
-  copyBlock: {
+  inviteEntryLogoCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteEntryFormAnchor: {
+    left: 0,
+    marginTop: IDENTITY_FLOW_STAGE_SIZE / 2 + theme.spacing.xl,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+  },
+  inviteEntryBrandWrap: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  inviteEntryLogoTarget: {
+    alignSelf: 'center',
+  },
+  inviteEntryLogoCopy: {
+    alignItems: 'center',
     gap: theme.spacing.xs,
+    minHeight: 58,
+    width: '100%',
   },
-  title: {
+  inviteEntryLogoTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.title1,
+    fontSize: theme.typography.title2,
     fontWeight: '800',
-    letterSpacing: -0.6,
-    lineHeight: 34,
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
-  subtitle: {
+  inviteEntryLogoSubtitle: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
-    lineHeight: 22,
+    fontWeight: '600',
+    lineHeight: 21,
     textAlign: 'center',
   },
-  card: {
+  inviteEntryFormArea: {
     gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+  },
+  inviteTokenInput: {
+    minHeight: 54,
   },
   rememberedContent: {
     flexGrow: 1,
@@ -1062,9 +967,6 @@ const styles = StyleSheet.create({
   },
   rememberedProfile: {
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
     width: '100%',
   },
   rememberedProfileMotion: {
@@ -1072,7 +974,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   authIdentityStage: {
-    minHeight: 274,
+    height: IDENTITY_FLOW_STAGE_SIZE,
     position: 'relative',
     width: '100%',
   },
@@ -1121,6 +1023,13 @@ const styles = StyleSheet.create({
   },
   authActionRow: {
     paddingTop: theme.spacing.xs,
+  },
+  recoveryHelper: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '600',
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.xs,
   },
   authSecondaryBlock: {
     alignItems: 'center',
@@ -1211,25 +1120,6 @@ const styles = StyleSheet.create({
   },
   inlineLinkText: {
     color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
-  otherAccountButton: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    marginTop: 'auto',
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  otherAccountText: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '800',
   },

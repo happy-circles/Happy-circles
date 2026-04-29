@@ -1,24 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppTextInput } from '@/components/app-text-input';
-import { FieldBlock } from '@/components/field-block';
-import { HeaderBrandTitle } from '@/components/header-brand-title';
+import {
+  IdentityFlowActions,
+  IdentityFlowField,
+  IdentityFlowForm,
+  IdentityFlowIdentity,
+  IdentityFlowMessageSlot,
+  IdentityFlowScreen,
+  IdentityFlowTextInput,
+} from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenFinalAction } from '@/components/screen-final-action';
-import { ScreenShell } from '@/components/screen-shell';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
+import {
+  triggerIdentityImpactHaptic,
+  triggerIdentitySelectionHaptic,
+  triggerIdentitySuccessHaptic,
+  triggerIdentityWarningHaptic,
+} from '@/lib/identity-flow-haptics';
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
@@ -31,23 +33,6 @@ import {
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
-import { InviteTokenStatus } from './invite-token-status';
-
-function triggerSelectionHaptic() {
-  void Haptics.selectionAsync().catch(() => undefined);
-}
-
-function triggerImpactHaptic() {
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-}
-
-function triggerWarningHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-}
-
-function triggerSuccessHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-}
 
 function countryFlag(iso2: string) {
   return iso2
@@ -57,42 +42,6 @@ function countryFlag(iso2: string) {
 
 type FieldStatus = 'idle' | 'valid' | 'invalid';
 type FieldName = 'email' | 'phone' | 'password';
-
-function resolveFieldStatusColor(status: FieldStatus) {
-  if (status === 'valid') {
-    return theme.colors.success;
-  }
-
-  if (status === 'invalid') {
-    return theme.colors.danger;
-  }
-
-  return theme.colors.primary;
-}
-
-function resolveFieldStatusBackground(status: FieldStatus) {
-  if (status === 'valid') {
-    return theme.colors.successSoft;
-  }
-
-  if (status === 'invalid') {
-    return theme.colors.dangerSoft;
-  }
-
-  return theme.colors.primarySoft;
-}
-
-function resolveFieldPanelBackground(status: FieldStatus) {
-  if (status === 'valid') {
-    return 'rgba(61, 186, 110, 0.08)';
-  }
-
-  if (status === 'invalid') {
-    return 'rgba(232, 96, 74, 0.08)';
-  }
-
-  return theme.colors.primaryGhost;
-}
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -123,7 +72,6 @@ export function AccountCreateAccountScreen() {
       ? accountInviteStatusMessage(preview.status, preview.deliveryStatus)
       : null;
   const canCreateAccount = isPreviewMode || Boolean(preview && !blockingMessage);
-  const inviterDisplayName = isPreviewMode ? 'Invitacion QA' : preview?.inviterDisplayName;
   const [email, setEmail] = useState('');
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
   const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
@@ -153,43 +101,14 @@ export function AccountCreateAccountScreen() {
     : passwordValid
       ? 'valid'
       : 'invalid';
-  const emailStatusColor = resolveFieldStatusColor(emailStatus);
-  const phoneStatusColor = resolveFieldStatusColor(phoneStatus);
-  const passwordStatusColor = resolveFieldStatusColor(passwordStatus);
-  const emailStatusBackground = resolveFieldStatusBackground(emailStatus);
-  const phoneStatusBackground = resolveFieldStatusBackground(phoneStatus);
-  const passwordStatusBackground = resolveFieldStatusBackground(passwordStatus);
-  const emailPanelBackground = resolveFieldPanelBackground(emailStatus);
-  const phonePanelBackground = resolveFieldPanelBackground(phoneStatus);
-  const passwordPanelBackground = resolveFieldPanelBackground(passwordStatus);
-  const tokenState: BrandVerificationState = !shouldPreview || previewQuery.error || blockingMessage
-    ? 'error'
-    : previewQuery.isLoading
-      ? 'loading'
-      : canCreateAccount
-        ? 'success'
-        : 'idle';
-  const tokenTitle = !shouldPreview
-    ? 'Invitacion requerida'
-    : previewQuery.error
-      ? 'No pudimos validar invitacion'
-      : blockingMessage
-        ? 'Invitacion no disponible'
-        : previewQuery.isLoading
-          ? 'Validando invitacion'
-          : 'Invitacion confirmada';
-  const tokenSubtitle = !shouldPreview
-    ? 'Abre tu link o pega el codigo completo desde la entrada.'
-    : previewQuery.error
-      ? previewQuery.error.message
-      : blockingMessage
-        ? blockingMessage
-        : previewQuery.isLoading
-          ? 'Confirmando que este acceso sigue disponible.'
-          : inviterDisplayName
-            ? `${inviterDisplayName} te invito a crear tu acceso.`
-            : 'Este acceso privado sigue disponible.';
-
+  const tokenState: BrandVerificationState =
+    !shouldPreview || previewQuery.error || blockingMessage
+      ? 'error'
+      : previewQuery.isLoading
+        ? 'loading'
+        : canCreateAccount
+          ? 'success'
+          : 'idle';
   function markFieldTouched(field: FieldName) {
     setTouchedFields((current) => {
       if (current[field]) {
@@ -239,11 +158,11 @@ export function AccountCreateAccountScreen() {
       return;
     }
 
-    triggerImpactHaptic();
+    triggerIdentityImpactHaptic();
     setValidationAttempted(true);
 
     if (!emailValid || !phoneValid || !passwordValid) {
-      triggerWarningHaptic();
+      triggerIdentityWarningHaptic();
       setMessage(null);
       return;
     }
@@ -274,7 +193,7 @@ export function AccountCreateAccountScreen() {
       setMessage(result);
 
       if (result === 'Cuenta creada. Ahora termina tu setup.') {
-        triggerSuccessHaptic();
+        triggerIdentitySuccessHaptic();
         returnToRoute(router, buildSetupAccountHref('profile'));
       }
     } catch (error) {
@@ -289,288 +208,180 @@ export function AccountCreateAccountScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardShell}
+    <IdentityFlowScreen
+      actions={
+        canCreateAccount ? (
+          <IdentityFlowActions
+            disabled={busy}
+            loading={busy}
+            onPrimaryPress={busy ? undefined : () => void handleSubmit()}
+            primaryLabel={busy ? 'Creando...' : 'Crear cuenta'}
+          />
+        ) : undefined
+      }
+      identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
     >
-      <ScreenShell
-        contentMode="full"
-        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
-        headerVariant="plain"
-        title="Happy Circles"
-      >
-        <InviteTokenStatus state={tokenState} subtitle={tokenSubtitle} title={tokenTitle} />
+      {!shouldPreview ? (
+        <View style={styles.messageBlock}>
+          <MessageBanner
+            message="Abre tu link de invitacion o pega el codigo completo desde la entrada."
+            tone="neutral"
+          />
+          <PrimaryAction href="/join" label="Volver a invitacion" variant="secondary" />
+        </View>
+      ) : null}
 
-        {!shouldPreview ? (
-          <View style={styles.messageBlock}>
-            <MessageBanner
-              message="Abre tu link de invitacion o pega el codigo completo desde la entrada."
-              tone="neutral"
-            />
-            <PrimaryAction href="/join" label="Volver a invitacion" variant="secondary" />
-          </View>
-        ) : null}
-
-        {shouldPreview && previewQuery.isLoading ? (
+      {shouldPreview && previewQuery.isLoading ? (
+        <IdentityFlowMessageSlot>
           <MessageBanner message="Validando invitacion." tone="neutral" />
-        ) : null}
+        </IdentityFlowMessageSlot>
+      ) : null}
 
-        {shouldPreview && previewQuery.error ? (
-          <View style={styles.messageBlock}>
-            <MessageBanner message={previewQuery.error.message} tone="warning" />
-            <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
-          </View>
-        ) : null}
+      {shouldPreview && previewQuery.error ? (
+        <View style={styles.messageBlock}>
+          <MessageBanner message={previewQuery.error.message} tone="warning" />
+          <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
+        </View>
+      ) : null}
 
-        {blockingMessage ? (
-          <View style={styles.messageBlock}>
-            <MessageBanner message={blockingMessage} tone="warning" />
-            <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
-          </View>
-        ) : null}
+      {blockingMessage ? (
+        <View style={styles.messageBlock}>
+          <MessageBanner message={blockingMessage} tone="warning" />
+          <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
+        </View>
+      ) : null}
 
-        {canCreateAccount ? (
-          <>
-            <View style={styles.accountContent}>
-              {message ? <MessageBanner message={message} tone="neutral" /> : null}
+      {canCreateAccount ? (
+        <IdentityFlowForm>
+          <IdentityFlowMessageSlot>
+            {message ? (
+              <MessageBanner
+                message={message}
+                tone={message === 'Cuenta creada. Ahora termina tu setup.' ? 'success' : 'neutral'}
+              />
+            ) : null}
+          </IdentityFlowMessageSlot>
 
-              <View style={styles.formBlock}>
-                <FieldBlock label="Correo">
-                  <View style={styles.iconFieldRow}>
-                    <View style={[styles.fieldIcon, { backgroundColor: emailStatusBackground }]}>
-                      <Ionicons color={emailStatusColor} name="mail" size={18} />
-                    </View>
-                    <View style={styles.fieldControl}>
-                      <View
-                        style={[
-                          styles.inputValidationBox,
-                          { backgroundColor: emailPanelBackground },
-                        ]}
-                      >
-                        <AppTextInput
-                          autoCapitalize="none"
-                          autoComplete="email"
-                          keyboardType="email-address"
-                          onBlur={() => markFieldTouched('email')}
-                          onChangeText={setEmail}
-                          placeholder="tu@correo.com"
-                          placeholderTextColor={theme.colors.muted}
-                          style={styles.validationInput}
-                          value={email}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.inlineFieldError,
-                          emailStatus !== 'invalid' ? styles.inlineFieldErrorHidden : null,
-                        ]}
-                      >
-                        {emailStatus === 'invalid' ? 'Escribe un correo valido.' : ' '}
-                      </Text>
-                    </View>
-                  </View>
-                </FieldBlock>
-
-                <FieldBlock label="Celular">
-                  <View style={styles.phoneField}>
-                    <View style={styles.phoneRow}>
-                      <View style={[styles.fieldIcon, { backgroundColor: phoneStatusBackground }]}>
-                        <Ionicons color={phoneStatusColor} name="call" size={18} />
-                      </View>
-                      <Pressable
-                        onPress={() => {
-                          triggerSelectionHaptic();
-                          setCountryMenuOpen((value) => !value);
-                        }}
-                        style={({ pressed }) => [
-                          styles.callingCodeBox,
-                          pressed ? styles.pressed : null,
-                        ]}
-                      >
-                        <Text style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</Text>
-                        <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
-                        <Ionicons color={theme.colors.textMuted} name="chevron-down" size={14} />
-                      </Pressable>
-
-                      <View style={styles.fieldControl}>
-                        <View
-                          style={[
-                            styles.inputValidationBox,
-                            { backgroundColor: phonePanelBackground },
-                          ]}
-                        >
-                          <AppTextInput
-                            keyboardType="phone-pad"
-                            onBlur={() => markFieldTouched('phone')}
-                            onChangeText={setPhoneNationalNumber}
-                            onFocus={() => setCountryMenuOpen(false)}
-                            placeholder="3001234567"
-                            placeholderTextColor={theme.colors.muted}
-                            style={styles.validationInput}
-                            value={phoneNationalNumber}
-                          />
-                        </View>
-                        <Text
-                          style={[
-                            styles.inlineFieldError,
-                            phoneStatus !== 'invalid' ? styles.inlineFieldErrorHidden : null,
-                          ]}
-                        >
-                          {phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : ' '}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {countryMenuOpen ? (
-                      <View style={styles.countryMenu}>
-                        {COUNTRY_OPTIONS.map((country, index) => (
-                          <Pressable
-                            key={country.iso2}
-                            onPress={() => {
-                              triggerSelectionHaptic();
-                              setCountryIso(country.iso2);
-                              setCountryMenuOpen(false);
-                            }}
-                            style={[
-                              styles.countryOption,
-                              index === COUNTRY_OPTIONS.length - 1
-                                ? styles.countryOptionLast
-                                : null,
-                            ]}
-                          >
-                            <View style={styles.countryOptionLabel}>
-                              <Text style={styles.countryFlag}>{countryFlag(country.iso2)}</Text>
-                              <Text style={styles.countryLabel}>{country.label}</Text>
-                            </View>
-                            <Text style={styles.countryCode}>{country.callingCode}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                </FieldBlock>
-
-                <FieldBlock label="Contrasena">
-                  <View style={styles.iconFieldRow}>
-                    <View
-                      style={[styles.fieldIcon, { backgroundColor: passwordStatusBackground }]}
-                    >
-                      <Ionicons color={passwordStatusColor} name="lock-closed" size={18} />
-                    </View>
-                    <View style={styles.fieldControl}>
-                      <View
-                        style={[
-                          styles.inputValidationBox,
-                          { backgroundColor: passwordPanelBackground },
-                        ]}
-                      >
-                        <AppTextInput
-                          autoCapitalize="none"
-                          autoComplete="password"
-                          onBlur={() => markFieldTouched('password')}
-                          onChangeText={setPassword}
-                          placeholder="Tu contrasena"
-                          placeholderTextColor={theme.colors.muted}
-                          secureTextEntry
-                          style={styles.validationInput}
-                          value={password}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.inlineFieldError,
-                          passwordStatus !== 'invalid' ? styles.inlineFieldErrorHidden : null,
-                        ]}
-                      >
-                        {passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : ' '}
-                      </Text>
-                    </View>
-                  </View>
-                </FieldBlock>
-              </View>
-            </View>
-
-            <ScreenFinalAction
-              disabled={busy}
-              label={busy ? 'Creando...' : 'Crear cuenta'}
-              loading={busy}
-              onPress={busy ? undefined : () => void handleSubmit()}
+          <IdentityFlowField
+            error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
+            icon="mail"
+            label="Correo"
+            status={
+              emailStatus === 'invalid' ? 'danger' : emailStatus === 'valid' ? 'success' : 'idle'
+            }
+          >
+            <IdentityFlowTextInput
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              onBlur={() => markFieldTouched('email')}
+              onChangeText={setEmail}
+              placeholder="tu@correo.com"
+              placeholderTextColor={theme.colors.muted}
+              value={email}
             />
-          </>
-        ) : null}
-      </ScreenShell>
-    </KeyboardAvoidingView>
+          </IdentityFlowField>
+
+          <IdentityFlowField
+            error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : null}
+            icon="call"
+            label="Celular"
+            status={
+              phoneStatus === 'invalid' ? 'danger' : phoneStatus === 'valid' ? 'success' : 'idle'
+            }
+          >
+            <View style={styles.phoneField}>
+              <View style={styles.phoneRow}>
+                <Pressable
+                  onPress={() => {
+                    triggerIdentitySelectionHaptic();
+                    setCountryMenuOpen((value) => !value);
+                  }}
+                  style={({ pressed }) => [styles.callingCodeBox, pressed ? styles.pressed : null]}
+                >
+                  <Text style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</Text>
+                  <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
+                  <Ionicons color={theme.colors.textMuted} name="chevron-down" size={14} />
+                </Pressable>
+
+                <IdentityFlowTextInput
+                  keyboardType="phone-pad"
+                  onBlur={() => markFieldTouched('phone')}
+                  onChangeText={setPhoneNationalNumber}
+                  onFocus={() => setCountryMenuOpen(false)}
+                  placeholder="3001234567"
+                  placeholderTextColor={theme.colors.muted}
+                  style={styles.phoneInput}
+                  value={phoneNationalNumber}
+                />
+              </View>
+
+              {countryMenuOpen ? (
+                <View style={styles.countryMenu}>
+                  {COUNTRY_OPTIONS.map((country, index) => (
+                    <Pressable
+                      key={country.iso2}
+                      onPress={() => {
+                        triggerIdentitySelectionHaptic();
+                        setCountryIso(country.iso2);
+                        setCountryMenuOpen(false);
+                      }}
+                      style={[
+                        styles.countryOption,
+                        index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
+                      ]}
+                    >
+                      <View style={styles.countryOptionLabel}>
+                        <Text style={styles.countryFlag}>{countryFlag(country.iso2)}</Text>
+                        <Text style={styles.countryLabel}>{country.label}</Text>
+                      </View>
+                      <Text style={styles.countryCode}>{country.callingCode}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </IdentityFlowField>
+
+          <IdentityFlowField
+            error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
+            icon="lock-closed"
+            label="Contrasena"
+            status={
+              passwordStatus === 'invalid'
+                ? 'danger'
+                : passwordStatus === 'valid'
+                  ? 'success'
+                  : 'idle'
+            }
+          >
+            <IdentityFlowTextInput
+              autoCapitalize="none"
+              autoComplete="password"
+              onBlur={() => markFieldTouched('password')}
+              onChangeText={setPassword}
+              placeholder="Tu contrasena"
+              placeholderTextColor={theme.colors.muted}
+              secureTextEntry
+              value={password}
+            />
+          </IdentityFlowField>
+        </IdentityFlowForm>
+      ) : null}
+    </IdentityFlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardShell: {
-    backgroundColor: theme.colors.background,
-    flex: 1,
-  },
-  accountContent: {
-    flex: 1,
-    gap: theme.spacing.xl,
-    justifyContent: 'flex-start',
-    paddingTop: theme.spacing.md,
-  },
   messageBlock: {
     gap: theme.spacing.md,
-  },
-  formBlock: {
-    gap: 28,
-    marginTop: -4,
-  },
-  inputValidationBox: {
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    flex: 1,
-    overflow: 'hidden',
-  },
-  inlineFieldError: {
-    color: theme.colors.danger,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    lineHeight: 16,
-    minHeight: 16,
-    paddingHorizontal: theme.spacing.xs,
-  },
-  inlineFieldErrorHidden: {
-    opacity: 0,
-  },
-  iconFieldRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  fieldControl: {
-    flex: 1,
-    gap: theme.spacing.xxs,
-  },
-  fieldIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 40,
-    justifyContent: 'center',
-    marginTop: 6,
-    width: 40,
-  },
-  validationInput: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    height: 56,
-    minHeight: 56,
-    paddingBottom: 0,
-    paddingTop: 0,
-    textAlignVertical: 'center',
   },
   phoneField: {
     position: 'relative',
     zIndex: 20,
   },
   phoneRow: {
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
@@ -595,6 +406,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.body,
     fontWeight: '700',
+  },
+  phoneInput: {
+    flex: 1,
   },
   countryMenu: {
     backgroundColor: theme.colors.surface,

@@ -23,20 +23,16 @@ import type { Href } from 'expo-router';
 import type { Json } from '@happy-circles/shared';
 
 import {
-  HEADER_BRAND_GAP,
-  HEADER_BRAND_LOGO_SIZE,
-  HEADER_BRAND_TITLE_LINE_HEIGHT,
-  HEADER_BRAND_TITLE_SIZE,
-  HEADER_BRAND_TITLE_WIDTH,
-} from '@/components/brand-lockup';
-import {
   BRAND_VERIFICATION_EASING,
   BRAND_VERIFICATION_RESULT_MS,
-  BrandVerificationLockup,
+  BrandVerificationMark,
   type BrandVerificationState,
 } from '@/components/brand-verification-lockup';
 import { GlobalFeedbackOverlay } from '@/components/global-feedback-overlay';
-import { LaunchIntroVisibilityProvider } from '@/components/launch-intro-presence';
+import {
+  LaunchIntroVisibilityProvider,
+  useLaunchIntroTarget,
+} from '@/components/launch-intro-presence';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { isAuthRouteTransitionHoldActive } from '@/lib/auth-route-transition-hold';
 import { PrimaryAction } from '@/components/primary-action';
@@ -58,14 +54,7 @@ const LAUNCH_ROUTE_SETTLE_MS = 120;
 const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
 const LAUNCH_FACE_ID_DELAY_MS = 25;
 const LAUNCH_LOGO_SIZE = 132;
-const LAUNCH_HEADER_LOGO_SIZE = HEADER_BRAND_LOGO_SIZE;
-const LAUNCH_HEADER_TITLE_SIZE = HEADER_BRAND_TITLE_SIZE;
-const LAUNCH_HEADER_SCALE = LAUNCH_HEADER_LOGO_SIZE / LAUNCH_LOGO_SIZE;
-const LAUNCH_LOCKUP_GAP = HEADER_BRAND_GAP / LAUNCH_HEADER_SCALE;
-const LAUNCH_TITLE_WIDTH = HEADER_BRAND_TITLE_WIDTH / LAUNCH_HEADER_SCALE;
-const LAUNCH_LOCKUP_WIDTH = LAUNCH_LOGO_SIZE + LAUNCH_LOCKUP_GAP + LAUNCH_TITLE_WIDTH;
-const LAUNCH_TITLE_FONT_SIZE = LAUNCH_HEADER_TITLE_SIZE / LAUNCH_HEADER_SCALE;
-const LAUNCH_TITLE_LINE_HEIGHT = HEADER_BRAND_TITLE_LINE_HEIGHT / LAUNCH_HEADER_SCALE;
+const LAUNCH_FALLBACK_TARGET_SIZE = 68;
 const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
 
 function wait(ms: number) {
@@ -262,6 +251,7 @@ function LaunchIntroOverlay({
   const session = useSession();
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
+  const target = useLaunchIntroTarget();
   const { height, width } = useWindowDimensions();
   const [visible, setVisible] = useState(true);
   const [finishRequested, setFinishRequested] = useState(false);
@@ -271,18 +261,18 @@ function LaunchIntroOverlay({
   const latestStatusRef = useRef(session.status);
   const latestUnlockRef = useRef(() => session.unlock());
   const introMotion = useRef(new Animated.Value(0)).current;
-  const fitMotion = useRef(new Animated.Value(0)).current;
   const landMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
-  const headerTranslateY = useMemo(() => {
-    const headerCenterY =
-      insets.top + theme.spacing.md + theme.spacing.xxs + LAUNCH_HEADER_LOGO_SIZE / 2;
-    return headerCenterY - height / 2;
-  }, [height, insets.top]);
-  const lockupFitScale = useMemo(() => {
-    const availableWidth = Math.max(1, width - theme.spacing.lg * 2);
-    return Math.min(1, Math.max(LAUNCH_HEADER_SCALE, availableWidth / LAUNCH_LOCKUP_WIDTH));
-  }, [width]);
+  const fallbackTargetFrame = useMemo(
+    () => ({
+      height: LAUNCH_FALLBACK_TARGET_SIZE,
+      width: LAUNCH_FALLBACK_TARGET_SIZE,
+      x: width / 2 - LAUNCH_FALLBACK_TARGET_SIZE / 2,
+      y: insets.top + theme.spacing.md + theme.spacing.xxs,
+    }),
+    [insets.top, width],
+  );
+  const targetFrame = target ?? fallbackTargetFrame;
 
   useEffect(() => {
     latestStatusRef.current = session.status;
@@ -292,12 +282,10 @@ function LaunchIntroOverlay({
   useEffect(() => {
     if (reducedMotion) {
       introMotion.setValue(1);
-      fitMotion.setValue(1);
       setLockupState('idle');
       return undefined;
     }
 
-    fitMotion.setValue(0);
     setLockupState('loading');
     Animated.timing(introMotion, {
       duration: 620,
@@ -307,7 +295,7 @@ function LaunchIntroOverlay({
     }).start();
 
     return undefined;
-  }, [fitMotion, introMotion, reducedMotion]);
+  }, [introMotion, reducedMotion]);
 
   useEffect(() => {
     if (session.status !== 'loading' && !finishRequested) {
@@ -370,12 +358,6 @@ function LaunchIntroOverlay({
       }
 
       setLockupState('success');
-      Animated.timing(fitMotion, {
-        duration: 360,
-        easing: LAUNCH_EASING,
-        toValue: 1,
-        useNativeDriver: true,
-      }).start();
       await wait(BRAND_VERIFICATION_RESULT_MS);
       setLockupState('idle');
 
@@ -410,7 +392,6 @@ function LaunchIntroOverlay({
     };
   }, [
     finishRequested,
-    fitMotion,
     landMotion,
     onVisibleChange,
     reducedExitMotion,
@@ -429,28 +410,35 @@ function LaunchIntroOverlay({
     inputRange: [0, 1],
     outputRange: [0.96, 1],
   });
-  const lockupReadyScale = fitMotion.interpolate({
+  const targetCenterX = targetFrame.x + targetFrame.width / 2;
+  const targetCenterY = targetFrame.y + targetFrame.height / 2;
+  const targetSize = Math.max(1, Math.min(targetFrame.width, targetFrame.height));
+  const targetScale = targetSize / LAUNCH_LOGO_SIZE;
+  const landTranslateX = landMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, lockupFitScale],
+    outputRange: [0, targetCenterX - width / 2],
   });
   const landTranslateY = landMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, headerTranslateY],
+    outputRange: [0, targetCenterY - height / 2],
   });
-  const landingStartScale = (LAUNCH_LOGO_SIZE * lockupFitScale) / LAUNCH_HEADER_LOGO_SIZE;
   const landingScale = landMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [landingStartScale, 1],
+    outputRange: [1, targetScale],
   });
-  const introLandingOpacity = landMotion.interpolate({
-    inputRange: [0, 0.08, 1],
-    outputRange: [1, 0, 0],
-  });
-  const landingOpacity = landMotion.interpolate({
-    inputRange: [0, 0.08, 1],
-    outputRange: [0, 1, 1],
-  });
+  const logoOpacity = Animated.multiply(
+    introOpacity,
+    landMotion.interpolate({
+      inputRange: [0, 0.9, 1],
+      outputRange: [1, 1, 0],
+    }),
+  );
+  const logoScale = Animated.multiply(introScale, landingScale);
   const backdropOpacity = landMotion.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: [1, 1, 0],
+  });
+  const overlayFadeOpacity = landMotion.interpolate({
     inputRange: [0, 0.72, 1],
     outputRange: [1, 1, 0],
   });
@@ -459,7 +447,7 @@ function LaunchIntroOverlay({
         inputRange: [0, 1],
         outputRange: [1, 0],
       })
-    : 1;
+    : overlayFadeOpacity;
 
   return (
     <Animated.View
@@ -470,47 +458,25 @@ function LaunchIntroOverlay({
       <Animated.View style={[styles.launchOverlayBackdrop, { opacity: backdropOpacity }]} />
       <Animated.View
         style={[
-          styles.launchIntroGroup,
+          styles.launchLogoGroup,
           {
             height: LAUNCH_LOGO_SIZE,
-            opacity: Animated.multiply(introOpacity, introLandingOpacity),
-            transform: [
-              {
-                scale: Animated.multiply(introScale, lockupReadyScale),
-              },
-            ],
-            width: LAUNCH_LOCKUP_WIDTH,
+            left: width / 2 - LAUNCH_LOGO_SIZE / 2,
+            opacity: logoOpacity,
+            top: height / 2 - LAUNCH_LOGO_SIZE / 2,
+            transform: [{ translateX: landTranslateX }, { translateY: landTranslateY }],
+            width: LAUNCH_LOGO_SIZE,
           },
         ]}
       >
-        <BrandVerificationLockup
-          gap={LAUNCH_LOCKUP_GAP}
-          size={LAUNCH_LOGO_SIZE}
-          state={lockupState}
-          titleLineHeight={LAUNCH_TITLE_LINE_HEIGHT}
-          titleSize={LAUNCH_TITLE_FONT_SIZE}
-          titleWidth={LAUNCH_TITLE_WIDTH}
-        />
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.launchLandingGroup,
-          {
-            height: LAUNCH_HEADER_LOGO_SIZE,
-            opacity: landingOpacity,
-            transform: [{ translateY: landTranslateY }, { scale: landingScale }],
-            width: LAUNCH_HEADER_LOGO_SIZE + HEADER_BRAND_GAP + HEADER_BRAND_TITLE_WIDTH,
-          },
-        ]}
-      >
-        <BrandVerificationLockup
-          gap={HEADER_BRAND_GAP}
-          size={LAUNCH_HEADER_LOGO_SIZE}
-          state={lockupState}
-          titleLineHeight={HEADER_BRAND_TITLE_LINE_HEIGHT}
-          titleSize={HEADER_BRAND_TITLE_SIZE}
-          titleWidth={HEADER_BRAND_TITLE_WIDTH}
-        />
+        <Animated.View style={{ transform: [{ scale: logoScale }] }}>
+          <BrandVerificationMark
+            showOuterInIdle
+            replaceCenterOnResult={false}
+            size={LAUNCH_LOGO_SIZE}
+            state={lockupState}
+          />
+        </Animated.View>
       </Animated.View>
     </Animated.View>
   );
@@ -748,13 +714,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  launchIntroGroup: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    maxWidth: 1000,
-    position: 'relative',
-  },
-  launchLandingGroup: {
+  launchLogoGroup: {
     alignItems: 'center',
     justifyContent: 'center',
     maxWidth: 1000,

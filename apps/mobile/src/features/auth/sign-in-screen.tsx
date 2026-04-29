@@ -180,6 +180,7 @@ export function SignInScreen({ initialMode = 'sign-in' }: SignInScreenProps) {
           ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={false}
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.contentWidth, activeMode ? null : styles.contentWidthIdle]}>
@@ -335,13 +336,7 @@ export function SignInScreen({ initialMode = 'sign-in' }: SignInScreenProps) {
                 ) : null}
 
                 <PrimaryAction
-                  label={
-                    busy
-                      ? 'Procesando...'
-                      : isRecovery
-                        ? 'Enviar enlace'
-                        : 'Ingresar'
-                  }
+                  label={busy ? 'Procesando...' : isRecovery ? 'Enviar enlace' : 'Ingresar'}
                   onPress={busy ? undefined : () => void handleSubmit()}
                 />
 

@@ -24,6 +24,7 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly footer?: ReactNode;
   readonly overlay?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
+  readonly scrollEnabled?: boolean;
   readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
@@ -44,11 +45,13 @@ export function ScreenShell({
   footer,
   overlay,
   refresh,
+  scrollEnabled = true,
   scrollViewRef,
   children,
   contentContainerStyle,
   contentWidthStyle,
 }: ScreenShellProps) {
+  const shouldUseScroll = scrollEnabled || Boolean(refresh);
   const resolvedTitleStyle =
     titleSize === 'largeTitle'
       ? styles.largeTitle
@@ -60,64 +63,74 @@ export function ScreenShell({
             ? styles.largeTitle
             : styles.compactTitle;
 
+  const screenContent = (
+    <View
+      style={[
+        styles.contentWidth,
+        !shouldUseScroll ? styles.contentWidthFixed : null,
+        contentMode === 'full' ? styles.contentWidthFull : null,
+        contentWidthStyle,
+      ]}
+    >
+      <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+        {eyebrow ? (
+          <View style={styles.eyebrowBadge}>
+            <Text style={styles.eyebrowText}>{eyebrow}</Text>
+          </View>
+        ) : null}
+        <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
+          {headerTitle ? (
+            <>
+              {headerLeading}
+              <View style={styles.headerTitleNode}>{headerTitle}</View>
+              {headerSlot}
+            </>
+          ) : (
+            <>
+              {headerLeading}
+              <Text
+                style={[
+                  styles.title,
+                  titleAlign === 'center' ? styles.titleCentered : null,
+                  resolvedTitleStyle,
+                ]}
+              >
+                {title}
+              </Text>
+              {headerSlot}
+            </>
+          )}
+        </View>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+      {children}
+    </View>
+  );
+
+  const contentStyle = [
+    styles.content,
+    !shouldUseScroll ? styles.contentFixed : null,
+    contentMode === 'full' ? styles.contentFull : null,
+    footer ? styles.contentWithFooter : null,
+    contentContainerStyle,
+  ];
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-      <BrandedRefreshScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.content,
-          contentMode === 'full' ? styles.contentFull : null,
-          footer ? styles.contentWithFooter : null,
-          contentContainerStyle,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        refresh={refresh}
-        showsVerticalScrollIndicator={false}
-      >
-        <View
-          style={[
-            styles.contentWidth,
-            contentMode === 'full' ? styles.contentWidthFull : null,
-            contentWidthStyle,
-          ]}
+      {shouldUseScroll ? (
+        <BrandedRefreshScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          contentContainerStyle={contentStyle}
+          keyboardShouldPersistTaps="handled"
+          refresh={refresh}
+          showsVerticalScrollIndicator={false}
         >
-          <View
-            style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}
-          >
-            {eyebrow ? (
-              <View style={styles.eyebrowBadge}>
-                <Text style={styles.eyebrowText}>{eyebrow}</Text>
-              </View>
-            ) : null}
-            <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
-              {headerTitle ? (
-                <>
-                  {headerLeading}
-                  <View style={styles.headerTitleNode}>{headerTitle}</View>
-                  {headerSlot}
-                </>
-              ) : (
-                <>
-                  {headerLeading}
-                  <Text
-                    style={[
-                      styles.title,
-                      titleAlign === 'center' ? styles.titleCentered : null,
-                      resolvedTitleStyle,
-                    ]}
-                  >
-                    {title}
-                  </Text>
-                  {headerSlot}
-                </>
-              )}
-            </View>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          </View>
-          {children}
-        </View>
-      </BrandedRefreshScrollView>
+          {screenContent}
+        </BrandedRefreshScrollView>
+      ) : (
+        <View style={contentStyle}>{screenContent}</View>
+      )}
       {footer ? (
         <View style={styles.footer}>
           <View style={styles.contentWidth}>{footer}</View>
@@ -143,6 +156,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
   },
+  contentFixed: {
+    flex: 1,
+  },
   contentFull: {
     paddingBottom: 0,
     paddingHorizontal: theme.spacing.lg,
@@ -156,6 +172,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     maxWidth: 560,
     width: '100%',
+  },
+  contentWidthFixed: {
+    flex: 1,
   },
   contentWidthFull: {
     maxWidth: '100%',
