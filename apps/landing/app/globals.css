@@ -38,6 +38,7 @@ a {
   align-items: center;
   background: var(--bg);
   display: flex;
+  justify-content: center;
   min-height: 100vh;
   min-height: 100svh;
   padding: max(24px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
@@ -50,6 +51,7 @@ a {
   justify-items: center;
   margin: 0 auto;
   max-width: 390px;
+  min-width: 0;
   width: 100%;
 }
 
@@ -58,7 +60,9 @@ a {
   display: grid;
   gap: 22px;
   justify-items: center;
+  min-width: 0;
   text-align: center;
+  width: 100%;
 }
 
 .brandMark {
@@ -116,15 +120,18 @@ a {
 .brandCopy {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
 }
 
 .brandCopy h1 {
   color: var(--brand-navy);
-  font-size: clamp(40px, 11vw, 56px);
+  font-size: clamp(34px, 5vw, 54px);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 0.98;
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .brandCopy p {
@@ -139,7 +146,9 @@ a {
 .landingActions {
   display: grid;
   gap: 12px;
-  width: min(100%, 330px);
+  max-width: 280px;
+  min-width: 0;
+  width: 100%;
 }
 
 .primaryButton,
@@ -209,14 +218,16 @@ a {
   }
 }
 
+@media (min-width: 760px) {
+  .landingActions {
+    max-width: 330px;
+  }
+}
+
 @media (max-width: 360px) {
   .landingShell {
     padding-left: 18px;
     padding-right: 18px;
-  }
-
-  .brandCopy h1 {
-    font-size: 38px;
   }
 
   .landingActions {
