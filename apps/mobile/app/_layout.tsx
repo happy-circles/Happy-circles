@@ -54,6 +54,7 @@ import {
 } from '@/lib/home-entry-handoff';
 import { subscribeSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { PrimaryAction } from '@/components/primary-action';
+import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
 import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
@@ -1666,6 +1667,13 @@ function SessionRouteGuard() {
         return;
       }
 
+      if (status === 'signed_in_untrusted') {
+        if (!isSetupAccountRoute && !isResetPasswordRoute && !isPublicInviteRoute && !cancelled) {
+          returnToRoute(router, buildSetupAccountHref('security'));
+        }
+        return;
+      }
+
       const pendingIntent = await readPendingInviteIntent();
       const inviteAwareHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : null;
       const joinRootHref = '/join' as unknown as Href;
@@ -1832,6 +1840,7 @@ function RootNavigator() {
         <Stack.Screen name="transactions" dangerouslySingular />
       </Stack>
       <MandatoryUpdateGate />
+      <ProductAnalyticsBridge />
       <LaunchIntroOverlay onVisibleChange={setLaunchIntroVisible} />
       <SetupEntryHandoffOverlay
         disabled={launchIntroVisible || homeEntryHandoffVisible}

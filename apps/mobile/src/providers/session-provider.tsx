@@ -41,6 +41,7 @@ import {
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
 import { derivePendingRequiredSetupSteps, type SetupStep } from '@/lib/setup-account';
+import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
@@ -1460,7 +1461,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const setBiometricsEnabled = useCallback(
     async (enabled: boolean): Promise<BiometricToggleResult> => {
       if (!enabled) {
-        if (biometricsEnabled) {
+        if (biometricsEnabled && deviceTrustState === 'trusted') {
           const result = await stepUpAuth(true);
           if (!result.success) {
             return {
@@ -1481,6 +1482,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return {
           ok: true,
           message: 'Ingreso con biometria desactivado.',
+        };
+      }
+
+      if (deviceTrustState !== 'trusted') {
+        return {
+          ok: false,
+          message: 'Primero valida este dispositivo para activar la biometria.',
         };
       }
 
@@ -1578,6 +1586,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           return 'No hay una sesion activa.';
         }
 
+        const wasCompletingRequiredProfile = profileCompletionState !== 'complete';
         const changingProtectedProfileData =
           profileCompletionState === 'complete' &&
           profile?.phone_e164 &&
@@ -1602,6 +1611,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
           phone_e164: phoneE164,
         };
 
+        if (wasCompletingRequiredProfile) {
+          recordProductEventSafe({
+            eventName: 'registration_started',
+            screenName: 'setup_account',
+            metadata: { source: 'complete_profile' },
+          });
+        }
+
         const { error } = await supabase
           .from('user_profiles')
           .update(updatePayload as never)
@@ -1623,6 +1640,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
         }
 
         await refreshAccountState();
+        if (wasCompletingRequiredProfile) {
+          recordProductEventSafe({
+            eventName: 'registration_completed',
+            screenName: 'setup_account',
+            metadata: { source: 'complete_profile' },
+          });
+        }
         return 'Perfil actualizado.';
       } catch (error) {
         return formatValidationMessage(error);

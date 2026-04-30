@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { Snackbar } from '@/components/snackbar';
 import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import { recordProductEventSafe } from '@/lib/analytics-client';
 import { formatCop } from '@/lib/data';
 import {
   useAppSnapshot,
@@ -361,8 +362,22 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const [graphFocused, setGraphFocused] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyAction));
+  const viewedProposalIdRef = useRef<string | null>(null);
 
   const settlement = snapshotQuery.data?.settlementsById[proposalId] ?? null;
+
+  useEffect(() => {
+    if (!settlement || viewedProposalIdRef.current === proposalId) {
+      return;
+    }
+
+    viewedProposalIdRef.current = proposalId;
+    recordProductEventSafe({
+      eventName: 'settlement_proposal_viewed',
+      screenName: 'settlement_detail',
+      metadata: { status: settlement?.status ?? 'loading' },
+    });
+  }, [proposalId, settlement?.status]);
 
   function showAutoCyclePrompt(nextProposalId: string | null, status: string | null) {
     if (status !== 'pending_approvals' && status !== 'approved') {

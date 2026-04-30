@@ -1,0 +1,5 @@
+
+> @happy-circles/landing@0.1.0 start C:\Users\Samuel\Documents\Happy_circles\apps\landing
+> next start "--" "-H" "127.0.0.1" "-p" "3010"
+
+ ELIFECYCLE  Command failed with exit code 1.

@@ -580,16 +580,16 @@ export function SetupAccountScreen() {
               icon="finger-print"
               subtitle={
                 session.setupState.biometricsEligible
-                  ? 'Entrada rapida'
+                  ? session.biometricLabel
                   : session.biometricAvailable
                     ? 'Primero valida el telefono'
                     : 'No disponible'
               }
-              title="Face ID / Touch ID"
+              title="Biometria"
               tone={session.biometricsEnabled ? 'success' : 'muted'}
               trailing={
                 <Switch
-                  disabled={!session.setupState.biometricsEligible}
+                  disabled={!session.setupState.biometricsEligible && !session.biometricsEnabled}
                   onValueChange={(nextValue) => void handleBiometricToggle(nextValue)}
                   trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
                   value={session.biometricsEnabled}

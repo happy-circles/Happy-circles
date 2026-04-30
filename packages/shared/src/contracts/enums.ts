@@ -142,3 +142,41 @@ export const AUDIT_EVENT_NAMES = [
   'settlement_executed',
 ] as const;
 export type AuditEventName = (typeof AUDIT_EVENT_NAMES)[number];
+
+export const ANALYTICS_EVENT_NAMES = [
+  'app_opened',
+  'app_backgrounded',
+  'screen_viewed',
+  'registration_started',
+  'registration_completed',
+  'financial_request_started',
+  'financial_request_created',
+  'financial_request_accepted',
+  'friendship_invite_created',
+  'friendship_invite_accepted',
+  'settlement_proposal_viewed',
+  'settlement_proposal_approved',
+  'settlement_executed',
+] as const;
+export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
+
+export const ANALYTICS_SCREEN_NAMES = [
+  'activity',
+  'advanced_audit',
+  'auth',
+  'balance_analytics',
+  'balance_overview',
+  'home',
+  'invite',
+  'join',
+  'people',
+  'person_detail',
+  'profile',
+  'register',
+  'reset_password',
+  'setup_account',
+  'settlement_detail',
+  'transactions',
+  'unknown',
+] as const;
+export type AnalyticsScreenName = (typeof ANALYTICS_SCREEN_NAMES)[number];

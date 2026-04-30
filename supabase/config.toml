@@ -48,6 +48,12 @@ verify_jwt = true
 [functions.create-people-outreach]
 verify_jwt = true
 
+[functions.start-app-session]
+verify_jwt = true
+
+[functions.record-product-event]
+verify_jwt = true
+
 [functions.resolve-people-targets]
 verify_jwt = true
 

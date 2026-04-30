@@ -235,8 +235,12 @@ begin
     raise exception 'expected remote share and copy to reuse the same external invite';
   end if;
 
-  if (v_external_remote_share ->> 'deliveryToken') <> (v_external_remote_copy ->> 'deliveryToken') then
-    raise exception 'expected remote share and copy to reuse the same delivery token';
+  if (v_external_remote_share ->> 'deliveryToken') = (v_external_remote_copy ->> 'deliveryToken') then
+    raise exception 'expected remote share and copy to rotate delivery tokens';
+  end if;
+
+  if (v_external_remote_share ->> 'deliveryId')::uuid = (v_external_remote_copy ->> 'deliveryId')::uuid then
+    raise exception 'expected remote share and copy to create separate delivery rows';
   end if;
 
   if (v_external_remote_share ->> 'intendedRecipientPhoneE164') <> '+573001111103' then
@@ -282,7 +286,7 @@ begin
   if not exists (
     select 1
     from public.friendship_invite_deliveries
-    where token = (v_external_qr_1 ->> 'deliveryToken')
+    where id = (v_external_qr_1 ->> 'deliveryId')::uuid
       and status = 'revoked'
   ) then
     raise exception 'expected first QR delivery to be revoked after generating a new QR';

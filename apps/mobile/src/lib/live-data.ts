@@ -44,6 +44,7 @@ import {
 } from '@happy-circles/shared';
 
 import { useSession } from '@/providers/session-provider';
+import { recordProductEventSafe } from './analytics-client';
 import { AVATAR_BUCKET, resolveAvatarUrl } from './avatar';
 import { formatCop } from './data';
 import { buildActivityHistoryItems, compareHistoryItems } from './history-cases';
@@ -3954,7 +3955,14 @@ export function useCreateInternalFriendshipInviteMutation() {
         payload,
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async (_data, input) => {
+      recordProductEventSafe({
+        eventName: 'friendship_invite_created',
+        screenName: 'people',
+        metadata: { flow: 'internal', source: input.sourceContext ?? 'direct' },
+      });
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -3981,7 +3989,18 @@ export function useCreateExternalFriendshipInviteMutation() {
         payload,
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async (_data, input) => {
+      recordProductEventSafe({
+        eventName: 'friendship_invite_created',
+        screenName: 'people',
+        metadata: {
+          channel: input.channel,
+          flow: 'external',
+          source: input.sourceContext ?? 'share',
+        },
+      });
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -4193,7 +4212,16 @@ export function useReviewExternalFriendshipInviteMutation() {
         payload,
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async (_data, input) => {
+      if (input.decision === 'approve') {
+        recordProductEventSafe({
+          eventName: 'friendship_invite_accepted',
+          screenName: 'people',
+          metadata: { flow: 'external', decision: input.decision },
+        });
+      }
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -4216,7 +4244,16 @@ export function useRespondInternalFriendshipInviteMutation() {
         payload,
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async (_data, input) => {
+      if (input.decision === 'accept') {
+        recordProductEventSafe({
+          eventName: 'friendship_invite_accepted',
+          screenName: 'people',
+          metadata: { flow: 'internal', decision: input.decision },
+        });
+      }
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -4242,6 +4279,11 @@ export function useCreateRequestMutation() {
 
   return useMutation({
     mutationFn: async (input: CreateRequestInput) => {
+      recordProductEventSafe({
+        eventName: 'financial_request_started',
+        screenName: 'register',
+        metadata: { category: input.category ?? DEFAULT_TRANSACTION_CATEGORY },
+      });
       await guardSensitiveAction('crear el movimiento');
 
       const payload = createBalanceRequestSchema.parse({
@@ -4258,6 +4300,10 @@ export function useCreateRequestMutation() {
       return invokeSupabaseFunction('create-balance-request', payload);
     },
     onSuccess: async () => {
+      recordProductEventSafe({
+        eventName: 'financial_request_created',
+        screenName: 'register',
+      });
       await invalidateAppSnapshot();
     },
   });
@@ -4277,7 +4323,13 @@ export function useAcceptFinancialRequestMutation() {
 
       return invokeSupabaseFunction('accept-financial-request', payload);
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async () => {
+      recordProductEventSafe({
+        eventName: 'financial_request_accepted',
+        screenName: 'transactions',
+      });
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -4339,7 +4391,13 @@ export function useApproveSettlementMutation() {
 
       return invokeSupabaseFunction('approve-cycle-settlement', payload);
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async () => {
+      recordProductEventSafe({
+        eventName: 'settlement_proposal_approved',
+        screenName: 'settlement_detail',
+      });
+      await invalidateAppSnapshot();
+    },
   });
 }
 
@@ -4375,6 +4433,12 @@ export function useExecuteSettlementMutation() {
 
       return invokeSupabaseFunction('execute-approved-cycle-settlement', payload);
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: async () => {
+      recordProductEventSafe({
+        eventName: 'settlement_executed',
+        screenName: 'settlement_detail',
+      });
+      await invalidateAppSnapshot();
+    },
   });
 }

@@ -5,6 +5,8 @@ import {
   ACCOUNT_ACCESS_STATES,
   ACCOUNT_INVITE_CHANNELS,
   ACCOUNT_INVITE_STATUSES,
+  ANALYTICS_EVENT_NAMES,
+  ANALYTICS_SCREEN_NAMES,
   AUDIT_ENTITY_TYPES,
   AUDIT_EVENT_NAMES,
   CURRENCY_CODE,
@@ -50,6 +52,48 @@ export const accountAccessStateSchema = z.enum(ACCOUNT_ACCESS_STATES);
 export const accountInviteStatusSchema = z.enum(ACCOUNT_INVITE_STATUSES);
 export const accountInviteChannelSchema = z.enum(ACCOUNT_INVITE_CHANNELS);
 export const peopleTargetStatusSchema = z.enum(PEOPLE_TARGET_STATUSES);
+export const analyticsEventNameSchema = z.enum(ANALYTICS_EVENT_NAMES);
+export const analyticsScreenNameSchema = z.enum(ANALYTICS_SCREEN_NAMES);
+const analyticsMetadataValueSchema = z.union([
+  z.string().trim().max(120),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+]);
+
+export const analyticsMetadataSchema = z
+  .object({
+    amountBucket: analyticsMetadataValueSchema.optional(),
+    category: analyticsMetadataValueSchema.optional(),
+    channel: analyticsMetadataValueSchema.optional(),
+    decision: analyticsMetadataValueSchema.optional(),
+    flow: analyticsMetadataValueSchema.optional(),
+    itemKind: analyticsMetadataValueSchema.optional(),
+    reason: analyticsMetadataValueSchema.optional(),
+    result: analyticsMetadataValueSchema.optional(),
+    route: analyticsMetadataValueSchema.optional(),
+    source: analyticsMetadataValueSchema.optional(),
+    status: analyticsMetadataValueSchema.optional(),
+  })
+  .partial()
+  .strict();
+
+export const startAppSessionSchema = z.object({
+  clientSessionId: z.string().trim().min(8).max(160),
+  platform: z.string().trim().min(1).max(40),
+  appVersion: z.string().trim().min(1).max(80).nullable().optional(),
+  deviceId: z.string().trim().min(1).max(200).nullable().optional(),
+  startedAt: z.string().datetime({ offset: true }),
+});
+
+export const recordProductEventSchema = z.object({
+  clientEventId: z.string().trim().min(8).max(180),
+  sessionId: uuidSchema,
+  eventName: analyticsEventNameSchema,
+  occurredAt: z.string().datetime({ offset: true }),
+  screenName: analyticsScreenNameSchema.nullable().optional(),
+  metadata: analyticsMetadataSchema.default({}),
+});
 
 export const createBalanceRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,

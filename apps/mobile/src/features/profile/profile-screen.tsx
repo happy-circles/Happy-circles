@@ -534,12 +534,18 @@ export function ProfileScreen() {
 
           <ProfileStatusRow
             icon="finger-print"
-            subtitle={session.biometricAvailable ? session.biometricLabel : 'No disponible'}
+            subtitle={
+              session.setupState.biometricsEligible
+                ? session.biometricLabel
+                : session.biometricAvailable
+                  ? 'Primero valida el telefono'
+                  : 'No disponible'
+            }
             title="Biometria"
             tone={session.biometricsEnabled ? 'success' : 'muted'}
             trailing={
               <Switch
-                disabled={!session.biometricAvailable}
+                disabled={!session.setupState.biometricsEligible && !session.biometricsEnabled}
                 onValueChange={(nextValue) => void handleBiometrics(nextValue)}
                 trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
                 value={session.biometricsEnabled}

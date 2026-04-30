@@ -2,6 +2,8 @@ do $$
 declare
   v_missing_security_invoker text;
   v_exposed_token_view text;
+  v_raw_token_column text;
+  v_nullable_token_hash text;
   v_direct_rpc text;
 begin
   select string_agg(format('%I.%I', n.nspname, c.relname), ', ')
@@ -36,6 +38,35 @@ begin
 
   if v_exposed_token_view is not null then
     raise exception 'delivery live views must not expose raw tokens: %', v_exposed_token_view;
+  end if;
+
+  select string_agg(format('%I.%I.%I', table_schema, table_name, column_name), ', ')
+    into v_raw_token_column
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name in (
+      'friendship_invite_deliveries',
+      'account_invite_deliveries'
+    )
+    and column_name = 'token';
+
+  if v_raw_token_column is not null then
+    raise exception 'delivery tables must not persist raw tokens: %', v_raw_token_column;
+  end if;
+
+  select string_agg(format('%I.%I.%I', table_schema, table_name, column_name), ', ')
+    into v_nullable_token_hash
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name in (
+      'friendship_invite_deliveries',
+      'account_invite_deliveries'
+    )
+    and column_name = 'token_hash'
+    and is_nullable <> 'NO';
+
+  if v_nullable_token_hash is not null then
+    raise exception 'delivery token hashes must be required: %', v_nullable_token_hash;
   end if;
 
   select string_agg(p.oid::regprocedure::text, ', ')

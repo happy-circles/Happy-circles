@@ -19,3 +19,5 @@ apps/mobile/web-build
 .env
 .env.*
 !.env.example
+
+.vercel

@@ -12,6 +12,18 @@ export interface BiometricAuthResult {
   readonly error: string | null;
 }
 
+function resolveBiometricLabel(types: readonly LocalAuthentication.AuthenticationType[]): string {
+  if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+    return Platform.OS === 'ios' ? 'Face ID' : 'reconocimiento facial';
+  }
+
+  if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+    return Platform.OS === 'ios' ? 'Touch ID' : 'huella';
+  }
+
+  return 'biometria';
+}
+
 function shouldAllowDeviceFallback(): boolean {
   if (Platform.OS !== 'ios') {
     return false;
@@ -31,11 +43,7 @@ export async function getBiometricSupport(): Promise<BiometricSupport> {
     LocalAuthentication.supportedAuthenticationTypesAsync(),
   ]);
 
-  const label = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
-    ? 'Face ID'
-    : types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
-      ? 'huella'
-      : 'biometria';
+  const label = resolveBiometricLabel(types);
 
   return {
     available: hasHardware && isEnrolled,

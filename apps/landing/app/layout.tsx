@@ -3,12 +3,11 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Happy Circles | Paga más rápido. Cobra más rápido.',
-  description:
-    'Happy Circles detecta conexiones de deuda y propone cierres inteligentes para que el dinero fluya mejor.',
+  title: 'Happy Circles | Finanzas entre amigos',
+  description: 'Abre Happy Circles y descarga la app para iOS o Android.',
   openGraph: {
     title: 'Happy Circles',
-    description: 'Paga más rápido. Cobra más rápido.',
+    description: 'Tu app de finanzas entre amigos.',
     siteName: 'Happy Circles',
     type: 'website',
   },

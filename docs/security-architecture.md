@@ -17,14 +17,15 @@ Happy Circles treats Supabase as the enforcement layer, not only as storage. Cli
 
 ## Invitation Tokens
 
-- Delivery tokens are stored with `token_hash` for indexed lookup. The legacy raw `token` column remains only for the transition window and must not appear in live views or snapshots.
-- Raw delivery tokens may be returned only at creation/resend time to the owner flow that needs to share the link.
+- Delivery tokens are never persisted raw. Creation/resend flows generate the token in memory, store only `token_hash`, and return the raw token once to the owner flow that needs to share the link.
+- Idempotency responses strip `deliveryToken` before persistence, so retries may mint a fresh delivery token instead of recovering a raw secret from the database.
 - Public account invite preview is intentionally unauthenticated, but it returns a minimal payload, masks recipient phone data, uses a generic unavailable reason, and rate-limits by token hash plus a hashed client fingerprint.
 
 ## Device Trust
 
 - Biometrics and device trust are local step-up protections. They must not be treated as server-side proof if the client can modify the backing state.
 - Server-side authorization should be based on JWT identity, RLS, relationship/account state, and invite/token validity.
+- Account invite activation does not authorize from `trusted_devices`; the server records device metadata only as account context.
 
 ## Migration Checklist
 

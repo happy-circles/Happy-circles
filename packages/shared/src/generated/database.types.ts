@@ -3,6 +3,85 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      analytics_event_catalog: {
+        Row: {
+          event_name: string;
+          description: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      app_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          client_session_id: string;
+          platform: string;
+          app_version: string | null;
+          device_id_hash: string | null;
+          started_at: string;
+          last_seen_at: string;
+          ended_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      product_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          session_id: string;
+          client_event_id: string;
+          event_name: string;
+          screen_name: string | null;
+          platform: string;
+          app_version: string | null;
+          occurred_at: string;
+          metadata_json: Json;
+          created_at: string;
+        };
+      };
+      analytics_daily_user_facts: {
+        Row: {
+          fact_date: string;
+          user_id: string;
+          is_active: boolean;
+          session_count: number;
+          event_count: number;
+          screen_view_count: number;
+          first_seen_at: string | null;
+          last_seen_at: string | null;
+          latest_platform: string | null;
+          latest_app_version: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      analytics_daily_product_facts: {
+        Row: {
+          fact_date: string;
+          active_user_count: number;
+          new_user_count: number;
+          session_count: number;
+          event_count: number;
+          screen_view_count: number;
+          relationships_created_count: number;
+          friendship_invites_created_count: number;
+          friendship_invites_accepted_count: number;
+          account_invites_created_count: number;
+          account_invites_accepted_count: number;
+          financial_requests_created_count: number;
+          financial_requests_accepted_count: number;
+          financial_requests_rejected_count: number;
+          ledger_transaction_count: number;
+          confirmed_volume_minor: number;
+          settlement_proposals_created_count: number;
+          settlement_executions_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
       user_profiles: {
         Row: {
           id: string;
@@ -64,8 +143,7 @@ export interface Database {
         Row: {
           id: string;
           invite_id: string;
-          token: string;
-          token_hash: string | null;
+          token_hash: string;
           channel: string;
           source_context: string | null;
           status: string;
@@ -101,8 +179,7 @@ export interface Database {
         Row: {
           id: string;
           invite_id: string;
-          token: string;
-          token_hash: string | null;
+          token_hash: string;
           channel: string;
           source_context: string | null;
           status: string;
