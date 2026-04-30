@@ -1,0 +1,14 @@
+.env
+.env.*
+.codex
+.turbo
+.pnpm-store
+node_modules
+**/.next
+**/.expo
+**/.tmp
+**/.screenshots
+**/.codex-*.log
+**/.codex-*.err.log
+**/*.tsbuildinfo
+supabase/.temp

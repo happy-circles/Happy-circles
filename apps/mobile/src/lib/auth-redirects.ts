@@ -20,5 +20,9 @@ function buildWebRedirect(path: string): string {
 }
 
 export function buildEmailAuthRedirect(path: string): string {
-  return Platform.OS === 'web' ? buildWebRedirect(path) : buildNativeRedirect(path);
+  if (Platform.OS === 'web' || appConfig.authRedirectMode !== 'scheme') {
+    return buildWebRedirect(path);
+  }
+
+  return buildNativeRedirect(path);
 }

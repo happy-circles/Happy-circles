@@ -1,6 +1,8 @@
 import type { ExpoConfig } from 'expo/config';
 
 const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
+const authRedirectMode = process.env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
+const appLinkPathPrefixes = ['/invite', '/join', '/reset-password', '/setup-account', '/sign-in'];
 const appWebHost = (() => {
   try {
     return new URL(appWebOrigin).host;
@@ -64,18 +66,11 @@ const config: ExpoConfig = {
         action: 'VIEW',
         autoVerify: true,
         category: ['BROWSABLE', 'DEFAULT'],
-        data: [
-          {
-            scheme: 'https',
-            host: appWebHost,
-            pathPrefix: '/invite/',
-          },
-          {
-            scheme: 'https',
-            host: appWebHost,
-            pathPrefix: '/join/',
-          },
-        ],
+        data: appLinkPathPrefixes.map((pathPrefix) => ({
+          scheme: 'https',
+          host: appWebHost,
+          pathPrefix,
+        })),
       },
     ],
   },
@@ -86,6 +81,7 @@ const config: ExpoConfig = {
       process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
       '',
     appWebOrigin,
+    authRedirectMode,
   },
 };
 

@@ -11,7 +11,7 @@ This project uses `Supabase Auth` for email/password accounts and password recov
 - Email/password sign-in
 - Email/password registration
 - Password reset request from the sign-in screen
-- Deep-link recovery into `happycircles://reset-password`
+- Universal-link recovery into `https://app.happy-circles.com/reset-password`
 - Setting a new password inside the mobile app after opening the recovery email
 
 Relevant files:
@@ -62,10 +62,16 @@ Important:
 
 In `Authentication -> URL Configuration`, allow at least these redirects:
 
-- `happycircles://reset-password`
-- `happycircles://home`
 - `https://app.happy-circles.com/reset-password`
-- `https://app.happy-circles.com/home`
+- `https://app.happy-circles.com/setup-account`
+- `https://app.happy-circles.com/sign-in`
+- `https://app.happy-circles.com/join`
+- `https://app.happy-circles.com/join/*`
+- `https://app.happy-circles.com/invite`
+- `https://app.happy-circles.com/invite/*`
+- `happycircles://reset-password`
+- `happycircles://setup-account`
+- `happycircles://sign-in`
 
 If you still test with Expo development URLs, keep those temporary development redirects too.
 
@@ -88,12 +94,13 @@ The app uses:
 
 - Scheme: `happycircles`
 - Recovery route: `/reset-password`
+- Production app-link origin: `https://app.happy-circles.com`
 
 That means `supabase.auth.resetPasswordForEmail()` now points users back into:
 
-- `happycircles://reset-password`
+- `https://app.happy-circles.com/reset-password`
 
-For native email auth flows, the app now forces the stable custom scheme instead of relying on Expo runtime URLs. That keeps the Supabase allow-list fixed for password recovery and email confirmation.
+For production email auth flows, the app uses HTTPS Universal Links / Android App Links so iOS and Android share the same redirect URLs. Development builds can set `EXPO_PUBLIC_AUTH_REDIRECT_MODE=scheme` to keep using `happycircles://...`.
 
 ## Verification checklist
 
@@ -111,3 +118,4 @@ For native email auth flows, the app now forces the stable custom scheme instead
 - Redirect URL missing from Supabase allow-list
 - Opening the email link on a device that does not have the app or cannot resolve the custom scheme
 - Using Expo Go instead of a proper development build for auth-link testing
+- Missing `app.happy-circles.com` DNS, Apple association file, or Android asset links

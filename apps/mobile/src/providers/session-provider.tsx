@@ -377,7 +377,7 @@ function formatSupabaseAuthErrorMessage(message: string): string {
     normalized.includes('error sending recovery email') ||
     normalized.includes('error sending confirmation email')
   ) {
-    return 'Supabase no pudo enviar el correo. Revisa en Supabase que Email use el SMTP de Resend, que el remitente pertenezca a un dominio verificado y que las URLs permitidas incluyan happycircles://reset-password y happycircles://home.';
+    return 'Supabase no pudo enviar el correo. Revisa en Supabase que Email use el SMTP de Resend, que el remitente pertenezca a un dominio verificado y que las URLs permitidas incluyan https://app.happy-circles.com/reset-password y https://app.happy-circles.com/setup-account.';
   }
 
   if (
@@ -781,19 +781,18 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return retryUpdateResult.data as TrustedDeviceRow;
       }
 
-      const [profileResult, identities, currentDevice, pendingInviteIntent] =
-        await Promise.all([
-          client
-            .from('user_profiles')
-            .select(
-              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
-            )
-            .eq('id', nextSession.user.id)
-            .single(),
-          resolveUserIdentities(nextSession),
-          persistCurrentDevice(),
-          readPendingInviteIntent(),
-        ]);
+      const [profileResult, identities, currentDevice, pendingInviteIntent] = await Promise.all([
+        client
+          .from('user_profiles')
+          .select(
+            'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+          )
+          .eq('id', nextSession.user.id)
+          .single(),
+        resolveUserIdentities(nextSession),
+        persistCurrentDevice(),
+        readPendingInviteIntent(),
+      ]);
 
       if (profileResult.error) {
         throw new Error(profileResult.error.message);
