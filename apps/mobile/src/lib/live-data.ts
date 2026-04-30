@@ -59,21 +59,70 @@ import {
 } from './transaction-categories';
 
 type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
-type FriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
-type FriendshipInviteDeliveryRow =
+type NonNullFields<T, K extends keyof T> = Omit<T, K> & {
+  readonly [P in K]-?: NonNullable<T[P]>;
+};
+type OverrideFields<T, U> = Omit<T, keyof U> & U;
+type GeneratedFriendshipInviteRow =
+  Database['public']['Views']['v_friendship_invites_live']['Row'];
+type FriendshipInviteRow = OverrideFields<
+  NonNullFields<
+    GeneratedFriendshipInviteRow,
+    'created_at' | 'flow' | 'id' | 'inviter_user_id' | 'origin_channel' | 'updated_at'
+  >,
+  { readonly status: string }
+>;
+type GeneratedFriendshipInviteDeliveryRow =
   Database['public']['Views']['v_friendship_invite_deliveries_live']['Row'];
-type AccountInviteRow = Database['public']['Views']['v_account_invites_live']['Row'];
-type AccountInviteDeliveryRow =
+type FriendshipInviteDeliveryRow = OverrideFields<
+  NonNullFields<GeneratedFriendshipInviteDeliveryRow, 'channel' | 'created_at' | 'id' | 'invite_id'>,
+  { readonly status: string }
+>;
+type GeneratedAccountInviteRow = Database['public']['Views']['v_account_invites_live']['Row'];
+type AccountInviteRow = OverrideFields<
+  NonNullFields<
+    GeneratedAccountInviteRow,
+    'created_at' | 'expires_at' | 'id' | 'inviter_user_id' | 'updated_at'
+  >,
+  { readonly status: string }
+>;
+type GeneratedAccountInviteDeliveryRow =
   Database['public']['Views']['v_account_invite_deliveries_live']['Row'];
+type AccountInviteDeliveryRow = NonNullFields<
+  GeneratedAccountInviteDeliveryRow,
+  'channel' | 'created_at' | 'id' | 'invite_id' | 'status'
+>;
 type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
 type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
 type SettlementProposalRow = Database['public']['Tables']['settlement_proposals']['Row'];
 type SettlementParticipantRow =
   Database['public']['Tables']['settlement_proposal_participants']['Row'];
 type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
-type OpenDebtRow = Database['public']['Views']['v_open_debts']['Row'];
-type RelationshipHistoryRow = Database['public']['Views']['v_relationship_history']['Row'];
-type InboxItemRow = Database['public']['Views']['v_inbox_items']['Row'];
+type OpenDebtRow = NonNullFields<
+  Database['public']['Views']['v_open_debts']['Row'],
+  | 'amount_minor'
+  | 'creditor_user_id'
+  | 'currency_code'
+  | 'debtor_user_id'
+  | 'relationship_id'
+  | 'user_high_id'
+  | 'user_low_id'
+>;
+type RelationshipHistoryRow = NonNullFields<
+  Database['public']['Views']['v_relationship_history']['Row'],
+  | 'amount_minor'
+  | 'happened_at'
+  | 'item_id'
+  | 'item_kind'
+  | 'relationship_id'
+  | 'source_type'
+  | 'status'
+  | 'subtype'
+>;
+type InboxItemRow = NonNullFields<
+  Database['public']['Views']['v_inbox_items']['Row'],
+  'created_at' | 'item_id' | 'item_kind' | 'owner_user_id' | 'status'
+>;
 
 interface AuditListItem {
   readonly id: string;
@@ -3696,12 +3745,12 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('settlement_proposals')
       .select(
-        'id, created_by_user_id, status, graph_snapshot_hash, graph_snapshot, movements_json, created_at, updated_at, executed_at',
+        'id, created_by_user_id, status, graph_snapshot_hash, graph_snapshot, movements_json, anchor_user_low_id, anchor_user_high_id, currency_code, source_graph_cycle_job_id, created_at, updated_at, executed_at',
       )
       .order('created_at', { ascending: false }),
     client
       .from('settlement_proposal_participants')
-      .select('id, settlement_proposal_id, participant_user_id, decision, decided_at'),
+      .select('id, settlement_proposal_id, participant_user_id, decision, decided_at, created_at'),
     client
       .from('audit_events')
       .select(
@@ -3766,15 +3815,17 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
   return buildLiveSnapshot({
     currentUserId,
     profiles: profilesResult.data ?? [],
-    friendshipInvites: friendshipInvitesResult.data ?? [],
-    friendshipInviteDeliveries: friendshipInviteDeliveriesResult.data ?? [],
-    accountInvites: accountInvitesResult.data ?? [],
-    accountInviteDeliveries: accountInviteDeliveriesResult.data ?? [],
+    friendshipInvites: (friendshipInvitesResult.data ?? []) as readonly FriendshipInviteRow[],
+    friendshipInviteDeliveries: (friendshipInviteDeliveriesResult.data ??
+      []) as readonly FriendshipInviteDeliveryRow[],
+    accountInvites: (accountInvitesResult.data ?? []) as readonly AccountInviteRow[],
+    accountInviteDeliveries: (accountInviteDeliveriesResult.data ??
+      []) as readonly AccountInviteDeliveryRow[],
     relationships: relationshipsResult.data ?? [],
-    openDebts: openDebtsResult.data ?? [],
+    openDebts: (openDebtsResult.data ?? []) as readonly OpenDebtRow[],
     financialRequests: requestsResult.data ?? [],
-    history: historyResult.data ?? [],
-    inboxItems: inboxItemsResult.data ?? [],
+    history: (historyResult.data ?? []) as readonly RelationshipHistoryRow[],
+    inboxItems: (inboxItemsResult.data ?? []) as readonly InboxItemRow[],
     settlementProposals: settlementProposalsResult.data ?? [],
     settlementParticipants: settlementParticipantsResult.data ?? [],
     auditEvents: auditResult.data ?? [],

@@ -1493,3 +1493,29 @@ begin
   return v_response;
 end;
 $$;
+
+do $$
+declare
+  v_function record;
+begin
+  for v_function in
+    select p.oid::regprocedure as function_signature
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in (
+        'claim_graph_cycle_job',
+        'complete_graph_cycle_job',
+        'enqueue_graph_cycle_job',
+        'enqueue_manual_graph_cycle_job',
+        'fail_graph_cycle_job',
+        'get_graph_cycle_job_context',
+        'propose_cycle_settlement',
+        'supersede_graph_cycle_job'
+      )
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', v_function.function_signature);
+    execute format('grant execute on function %s to service_role', v_function.function_signature);
+  end loop;
+end;
+$$;

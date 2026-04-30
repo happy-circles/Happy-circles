@@ -4,6 +4,8 @@
 
 do $$
 declare
+  v_request jsonb;
+  v_request_id uuid;
   v_snapshot jsonb;
   v_graph_snapshot_hash text;
   v_proposal_first jsonb;
@@ -12,6 +14,27 @@ declare
   v_pending_count integer;
   v_participant_count integer;
 begin
+  v_request := public.create_balance_request(
+    '00000000-0000-0000-0000-0000000000a1',
+    'test-cycle-proposal-anchor-request',
+    'balance_increase',
+    '00000000-0000-0000-0000-0000000000b2',
+    '00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000b2',
+    1234,
+    'Cycle proposal test anchor',
+    null,
+    null
+  );
+
+  v_request_id := (v_request ->> 'requestId')::uuid;
+
+  perform public.accept_financial_request(
+    '00000000-0000-0000-0000-0000000000b2',
+    'test-cycle-proposal-anchor-accept',
+    v_request_id
+  );
+
   v_snapshot := public.compute_graph_component_snapshot(
     '00000000-0000-0000-0000-0000000000a1',
     '00000000-0000-0000-0000-0000000000b2',
