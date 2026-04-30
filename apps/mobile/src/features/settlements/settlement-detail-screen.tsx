@@ -25,7 +25,6 @@ import {
   type SettlementDetailMovementDto,
   type SettlementDetailParticipantDto,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -55,20 +54,6 @@ function readNestedStatus(value: unknown, key: string): string | null {
   }
 
   return readResultStatus((value as Record<string, unknown>)[key]);
-}
-
-function readNestedProposalId(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const nested = (value as Record<string, unknown>)[key];
-  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) {
-    return null;
-  }
-
-  const proposalId = (nested as Record<string, unknown>)['proposalId'];
-  return typeof proposalId === 'string' ? proposalId : null;
 }
 
 function settlementStatusLabel(status: string): string {
@@ -379,31 +364,6 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     });
   }, [proposalId, settlement?.status]);
 
-  function showAutoCyclePrompt(nextProposalId: string | null, status: string | null) {
-    if (status !== 'pending_approvals' && status !== 'approved') {
-      return;
-    }
-
-    Alert.alert(
-      status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
-      status === 'approved'
-        ? 'Todos ya aprobaron este Circle. Quieres abrirlo ahora para completarlo?'
-        : 'Se detecto otro Happy Circle automatico. Quieres revisarlo ahora?',
-      [
-        {
-          text: 'Luego',
-          style: 'cancel',
-        },
-        {
-          text: 'Abrir',
-          onPress: () => {
-            pushRoute(router, nextProposalId ? `/settlements/${nextProposalId}` : '/activity');
-          },
-        },
-      ],
-    );
-  }
-
   async function handleAction(action: 'approve' | 'reject' | 'execute') {
     setBusyAction(action);
     setBanner(null);
@@ -431,17 +391,20 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       } else {
         const response = await executeSettlement.mutateAsync(proposalId);
         const nextStatus = readResultStatus(response);
-        const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleProposal');
-        const nextAutoCycleProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
+        const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
         if (nextStatus === 'stale') {
           setBanner({
             message: 'Este Circle fue reemplazado antes de completarlo.',
             tone: 'warning',
           });
         } else {
-          showSnackbar('Happy Circle completado.', 'success');
+          showSnackbar(
+            nextAutoCycleStatus === 'queued'
+              ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
+              : 'Happy Circle completado.',
+            'success',
+          );
         }
-        showAutoCyclePrompt(nextAutoCycleProposalId, nextAutoCycleStatus);
       }
     } catch (error) {
       const nextMessage =

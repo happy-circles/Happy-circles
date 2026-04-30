@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  Alert,
   InteractionManager,
   Pressable,
   ScrollView,
@@ -433,20 +432,6 @@ function readNestedStatus(value: unknown, key: string): string | null {
   return readResultStatus((value as Record<string, unknown>)[key]);
 }
 
-function readNestedProposalId(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const nested = (value as Record<string, unknown>)[key];
-  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) {
-    return null;
-  }
-
-  const proposalId = (nested as Record<string, unknown>)['proposalId'];
-  return typeof proposalId === 'string' ? proposalId : null;
-}
-
 function actionLabel(
   itemId: string,
   busyKey: string | null,
@@ -819,33 +804,6 @@ export function ActivityScreen() {
     }
   }, [activeAmendmentItemId, allPendingItems]);
 
-  function showAutoCyclePrompt(proposalId: string | null, status: string | null) {
-    if (status !== 'pending_approvals' && status !== 'approved') {
-      return;
-    }
-
-    Alert.alert(
-      status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
-      status === 'approved'
-        ? 'Todos ya aprobaron este Circle. Quieres abrirlo ahora para completarlo?'
-        : 'Se detecto un Happy Circle automatico en tu circulo. Quieres revisarlo ahora?',
-      [
-        {
-          text: 'Luego',
-          style: 'cancel',
-        },
-        {
-          text: 'Abrir',
-          onPress: () => {
-            openNotificationTarget({
-              href: (proposalId ? `/settlements/${proposalId}` : '/activity') as RouterHref,
-            });
-          },
-        },
-      ],
-    );
-  }
-
   function closeNotifications() {
     backOrReturnTo(router, '/home');
   }
@@ -1188,14 +1146,12 @@ export function ActivityScreen() {
       if (kind === 'financial_request') {
         if (action === 'accept') {
           const response = await acceptRequest.mutateAsync(itemId);
-          const autoCycleStatus = readNestedStatus(response, 'autoCycleProposal');
-          const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
+          const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
           setMessage(
-            autoCycleStatus === 'pending_approvals'
-              ? 'Propuesta aceptada. Tambien quedo un Happy Circle listo para revisar.'
+            autoCycleStatus === 'queued'
+              ? 'Propuesta aceptada. Estamos buscando Happy Circles en segundo plano.'
               : 'Propuesta aceptada.',
           );
-          showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
         } else {
           await rejectRequest.mutateAsync(itemId);
           setMessage('Propuesta no aceptada.');
@@ -1223,14 +1179,12 @@ export function ActivityScreen() {
 
       if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
         const response = await executeSettlement.mutateAsync(itemId);
-        const nextStatus = readNestedStatus(response, 'nextAutoCycleProposal');
-        const nextProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
+        const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
         setMessage(
-          nextStatus === 'pending_approvals'
-            ? 'Happy Circle completado. Ya quedo otro Circle pendiente.'
+          nextStatus === 'queued'
+            ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
             : 'Happy Circle completado.',
         );
-        showAutoCyclePrompt(nextProposalId, nextStatus);
         return;
       }
 

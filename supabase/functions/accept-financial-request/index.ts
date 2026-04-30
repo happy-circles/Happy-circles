@@ -1,4 +1,4 @@
-import { proposeAutomaticCycleSettlement } from '../_shared/cycle.ts';
+import { triggerGraphCycleWorker } from '../_shared/cycle-worker.ts';
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
 
 Deno.serve((request) =>
@@ -14,23 +14,14 @@ Deno.serve((request) =>
       throw error;
     }
 
-    const requestId = requireString(body.requestId, 'requestId');
-    const cycleProposal = await proposeAutomaticCycleSettlement(
-      client,
-      actorUserId,
-      `auto_cycle_after_request_${requestId}`,
-    );
+    triggerGraphCycleWorker(1);
 
     if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-      return {
-        ...data,
-        autoCycleProposal: cycleProposal,
-      };
+      return data;
     }
 
     return {
       result: data,
-      autoCycleProposal: cycleProposal,
     };
   }),
 );

@@ -51,6 +51,11 @@ begin
   if v_transaction_type <> 'balance_increase_acceptance' then
     raise exception 'expected balance_increase_acceptance transaction, got %', v_transaction_type;
   end if;
+
+  if coalesce(v_accept_response -> 'autoCycleJob' ->> 'status', '') not in ('queued', 'skipped') then
+    raise exception 'expected accept_financial_request to return queued or skipped autoCycleJob, got %',
+      v_accept_response -> 'autoCycleJob';
+  end if;
 end
 $$;
 

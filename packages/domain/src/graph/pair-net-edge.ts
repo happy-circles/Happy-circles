@@ -22,50 +22,93 @@ export interface CycleSettlementDraft {
   readonly snapshotHash: string;
 }
 
-type MutableEdge = {
+interface ParentStep {
+  readonly previousNode: UserId;
+  readonly edge: PairNetEdge;
+}
+
+interface MutableEdge {
   debtorUserId: UserId;
   creditorUserId: UserId;
   amountMinor: number;
-};
+}
+
+type Adjacency = Map<UserId, readonly PairNetEdge[]>;
+
+export function detectAnchoredCycleSettlementDraft(
+  edges: readonly PairNetEdge[],
+  anchorEdge: PairNetEdge,
+): CycleSettlementDraft | null {
+  if (anchorEdge.amountMinor <= 0) {
+    return null;
+  }
+
+  const activeEdges = edges.filter((edge) => edge.amountMinor > 0);
+  const adjacency = buildAdjacency(activeEdges);
+  const thresholds = [
+    ...new Set(
+      activeEdges
+        .map((edge) => edge.amountMinor)
+        .filter((amountMinor) => amountMinor <= anchorEdge.amountMinor),
+    ),
+  ].sort((left, right) => left - right);
+
+  let low = 0;
+  let high = thresholds.length - 1;
+  let bestThreshold: number | null = null;
+
+  while (low <= high) {
+    const midpoint = Math.floor((low + high) / 2);
+    const threshold = thresholds[midpoint]!;
+    if (
+      hasPathAtThreshold(
+        anchorEdge.creditorUserId,
+        anchorEdge.debtorUserId,
+        threshold,
+        adjacency,
+      )
+    ) {
+      bestThreshold = threshold;
+      low = midpoint + 1;
+    } else {
+      high = midpoint - 1;
+    }
+  }
+
+  if (bestThreshold === null) {
+    return null;
+  }
+
+  const pathEdges = findShortestPathAtThreshold(
+    anchorEdge.creditorUserId,
+    anchorEdge.debtorUserId,
+    bestThreshold,
+    adjacency,
+  );
+  if (!pathEdges) {
+    return null;
+  }
+
+  return buildDraft([anchorEdge, ...pathEdges], Math.min(anchorEdge.amountMinor, bestThreshold), edges, 1);
+}
 
 export function detectCycleSettlementDrafts(
   edges: readonly PairNetEdge[],
   maxCycles = 5,
 ): readonly CycleSettlementDraft[] {
-  const workingEdges = edges
+  const workingEdges: MutableEdge[] = edges
     .filter((edge) => edge.amountMinor > 0)
     .map((edge) => ({ ...edge }));
   const drafts: CycleSettlementDraft[] = [];
 
   while (drafts.length < maxCycles) {
-    const sccs = findStronglyConnectedComponents(workingEdges);
-    const cycle = findDeterministicCycle(workingEdges, sccs);
-    if (!cycle) {
+    const draft = detectBestCycleSettlementDraft(workingEdges, drafts.length + 1);
+    if (!draft) {
       break;
     }
 
-    const amountMinor = Math.min(...cycle.map((edge) => edge.amountMinor));
-    const cycleNodes = cycle.map((edge) => edge.debtorUserId);
-    const participantUserIds = [
-      ...new Set([...cycleNodes, cycle[cycle.length - 1]!.creditorUserId]),
-    ].sort();
-    const movements = cycle.map<CycleSettlementMovement>((edge) => ({
-      debtorUserId: edge.creditorUserId,
-      creditorUserId: edge.debtorUserId,
-      amountMinor,
-    }));
-
-    applyVirtualReduction(workingEdges, cycle, amountMinor);
-
-    drafts.push({
-      proposalId: `draft-${drafts.length + 1}`,
-      cycleNodes,
-      reducedEdges: cycle,
-      movements,
-      amountMinor,
-      participantUserIds,
-      snapshotHash: hashEdges(edges),
-    });
+    applyVirtualReduction(workingEdges, draft.reducedEdges, draft.amountMinor);
+    drafts.push(draft);
   }
 
   return drafts;
@@ -85,6 +128,185 @@ export function hashEdges(edges: readonly PairNetEdge[]): string {
   }
 
   return `${hash >>> 0}:${normalized.length}`;
+}
+
+function detectBestCycleSettlementDraft(
+  edges: readonly PairNetEdge[],
+  draftNumber: number,
+): CycleSettlementDraft | null {
+  const candidateAnchors = [...edges]
+    .filter((edge) => edge.amountMinor > 0)
+    .sort(
+      (left, right) =>
+        right.amountMinor - left.amountMinor ||
+        left.debtorUserId.localeCompare(right.debtorUserId) ||
+        left.creditorUserId.localeCompare(right.creditorUserId),
+    );
+  let best: CycleSettlementDraft | null = null;
+
+  for (const anchor of candidateAnchors) {
+    if (best && anchor.amountMinor < best.amountMinor) {
+      break;
+    }
+
+    const draft = detectAnchoredCycleSettlementDraft(edges, anchor);
+    if (!draft) {
+      continue;
+    }
+
+    const numberedDraft = {
+      ...draft,
+      proposalId: `draft-${draftNumber}`,
+    };
+
+    if (!best || compareDrafts(numberedDraft, best) < 0) {
+      best = numberedDraft;
+    }
+  }
+
+  return best;
+}
+
+function buildDraft(
+  cycleEdges: readonly PairNetEdge[],
+  amountMinor: number,
+  snapshotEdges: readonly PairNetEdge[],
+  draftNumber: number,
+): CycleSettlementDraft {
+  const participantUserIds = [
+    ...new Set(cycleEdges.flatMap((edge) => [edge.debtorUserId, edge.creditorUserId])),
+  ].sort();
+
+  return {
+    proposalId: `draft-${draftNumber}`,
+    cycleNodes: cycleEdges.map((edge) => edge.debtorUserId),
+    reducedEdges: cycleEdges,
+    amountMinor,
+    participantUserIds,
+    snapshotHash: hashEdges(snapshotEdges),
+    movements: cycleEdges.map((edge) => ({
+      debtorUserId: edge.creditorUserId,
+      creditorUserId: edge.debtorUserId,
+      amountMinor,
+    })),
+  };
+}
+
+function buildAdjacency(edges: readonly PairNetEdge[]): Adjacency {
+  const adjacency = new Map<UserId, PairNetEdge[]>();
+
+  for (const edge of edges) {
+    const outgoing = adjacency.get(edge.debtorUserId) ?? [];
+    outgoing.push(edge);
+    adjacency.set(edge.debtorUserId, outgoing);
+  }
+
+  for (const [node, outgoing] of adjacency.entries()) {
+    adjacency.set(
+      node,
+      outgoing.sort(
+        (left, right) =>
+          left.creditorUserId.localeCompare(right.creditorUserId) ||
+          right.amountMinor - left.amountMinor ||
+          left.debtorUserId.localeCompare(right.debtorUserId),
+      ),
+    );
+  }
+
+  return adjacency;
+}
+
+function hasPathAtThreshold(
+  startNode: UserId,
+  targetNode: UserId,
+  threshold: number,
+  adjacency: Adjacency,
+): boolean {
+  const queue = [startNode];
+  const visited = new Set<UserId>([startNode]);
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]!;
+
+    for (const edge of adjacency.get(current) ?? []) {
+      if (edge.amountMinor < threshold) {
+        continue;
+      }
+
+      const next = edge.creditorUserId;
+      if (next === targetNode) {
+        return true;
+      }
+
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+
+  return false;
+}
+
+function findShortestPathAtThreshold(
+  startNode: UserId,
+  targetNode: UserId,
+  threshold: number,
+  adjacency: Adjacency,
+): readonly PairNetEdge[] | null {
+  const queue = [startNode];
+  const visited = new Set<UserId>([startNode]);
+  const parents = new Map<UserId, ParentStep>();
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]!;
+
+    for (const edge of adjacency.get(current) ?? []) {
+      if (edge.amountMinor < threshold) {
+        continue;
+      }
+
+      const next = edge.creditorUserId;
+      if (visited.has(next)) {
+        continue;
+      }
+
+      parents.set(next, {
+        previousNode: current,
+        edge,
+      });
+
+      if (next === targetNode) {
+        return rebuildPath(startNode, targetNode, parents);
+      }
+
+      visited.add(next);
+      queue.push(next);
+    }
+  }
+
+  return null;
+}
+
+function rebuildPath(
+  startNode: UserId,
+  targetNode: UserId,
+  parents: Map<UserId, ParentStep>,
+): readonly PairNetEdge[] {
+  const path: PairNetEdge[] = [];
+  let current = targetNode;
+
+  while (current !== startNode) {
+    const parent = parents.get(current);
+    if (!parent) {
+      throw new Error('Missing path parent while rebuilding cycle.');
+    }
+
+    path.push(parent.edge);
+    current = parent.previousNode;
+  }
+
+  return path.reverse();
 }
 
 function applyVirtualReduction(
@@ -110,159 +332,16 @@ function applyVirtualReduction(
   }
 }
 
-function findStronglyConnectedComponents(
-  edges: readonly PairNetEdge[],
-): readonly UserId[][] {
-  const nodes = [...new Set(edges.flatMap((edge) => [edge.debtorUserId, edge.creditorUserId]))].sort();
-  const adjacency = new Map<UserId, UserId[]>();
-  for (const node of nodes) {
-    adjacency.set(node, []);
-  }
-
-  for (const edge of edges) {
-    adjacency.get(edge.debtorUserId)?.push(edge.creditorUserId);
-  }
-
-  for (const [node, neighbors] of adjacency.entries()) {
-    adjacency.set(node, [...neighbors].sort());
-  }
-
-  const indices = new Map<UserId, number>();
-  const lowLinks = new Map<UserId, number>();
-  const stack: UserId[] = [];
-  const onStack = new Set<UserId>();
-  const components: UserId[][] = [];
-  let currentIndex = 0;
-
-  const strongConnect = (node: UserId): void => {
-    indices.set(node, currentIndex);
-    lowLinks.set(node, currentIndex);
-    currentIndex += 1;
-    stack.push(node);
-    onStack.add(node);
-
-    for (const neighbor of adjacency.get(node) ?? []) {
-      if (!indices.has(neighbor)) {
-        strongConnect(neighbor);
-        lowLinks.set(node, Math.min(lowLinks.get(node)!, lowLinks.get(neighbor)!));
-      } else if (onStack.has(neighbor)) {
-        lowLinks.set(node, Math.min(lowLinks.get(node)!, indices.get(neighbor)!));
-      }
-    }
-
-    if (lowLinks.get(node) === indices.get(node)) {
-      const component: UserId[] = [];
-      while (stack.length > 0) {
-        const member = stack.pop()!;
-        onStack.delete(member);
-        component.push(member);
-        if (member === node) {
-          break;
-        }
-      }
-
-      if (component.length > 1) {
-        components.push(component.sort());
-      }
-    }
-  };
-
-  for (const node of nodes) {
-    if (!indices.has(node)) {
-      strongConnect(node);
-    }
-  }
-
-  return components.sort((left, right) => left.join('|').localeCompare(right.join('|')));
+function compareDrafts(left: CycleSettlementDraft, right: CycleSettlementDraft): number {
+  return (
+    right.amountMinor - left.amountMinor ||
+    left.participantUserIds.length - right.participantUserIds.length ||
+    canonicalCycleKey(left).localeCompare(canonicalCycleKey(right))
+  );
 }
 
-function findDeterministicCycle(
-  edges: readonly PairNetEdge[],
-  components: readonly UserId[][],
-): readonly PairNetEdge[] | undefined {
-  const edgeIndex = new Map<string, PairNetEdge>();
-  for (const edge of edges) {
-    edgeIndex.set(`${edge.debtorUserId}->${edge.creditorUserId}`, edge);
-  }
-
-  const cycles: PairNetEdge[][] = [];
-
-  for (const component of components) {
-    const nodes = [...component].sort();
-    const nodeSet = new Set(nodes);
-    const adjacency = new Map<UserId, UserId[]>();
-
-    for (const node of nodes) {
-      adjacency.set(node, []);
-    }
-
-    for (const edge of edges) {
-      if (nodeSet.has(edge.debtorUserId) && nodeSet.has(edge.creditorUserId)) {
-        adjacency.get(edge.debtorUserId)?.push(edge.creditorUserId);
-      }
-    }
-
-    for (const [node, neighbors] of adjacency.entries()) {
-      adjacency.set(node, [...neighbors].sort());
-    }
-
-    for (const start of nodes) {
-      const path: UserId[] = [start];
-      const visited = new Set<UserId>([start]);
-
-      const dfs = (current: UserId): void => {
-        for (const next of adjacency.get(current) ?? []) {
-          if (next === start && path.length >= 3) {
-            cycles.push(toEdges(path, edgeIndex));
-            continue;
-          }
-
-          if (visited.has(next)) {
-            continue;
-          }
-
-          visited.add(next);
-          path.push(next);
-          dfs(next);
-          path.pop();
-          visited.delete(next);
-        }
-      };
-
-      dfs(start);
-    }
-  }
-
-  if (cycles.length === 0) {
-    return undefined;
-  }
-
-  return cycles
-    .map((cycle) => ({ cycle, key: canonicalCycleKey(cycle) }))
-    .sort((left, right) => left.key.localeCompare(right.key))[0]?.cycle;
-}
-
-function toEdges(
-  cycleNodes: readonly UserId[],
-  edgeIndex: Map<string, PairNetEdge>,
-): PairNetEdge[] {
-  const edges: PairNetEdge[] = [];
-
-  for (let index = 0; index < cycleNodes.length; index += 1) {
-    const from = cycleNodes[index]!;
-    const to = cycleNodes[(index + 1) % cycleNodes.length]!;
-    const edge = edgeIndex.get(`${from}->${to}`);
-    if (!edge) {
-      throw new Error(`Missing edge ${from}->${to} while rebuilding cycle.`);
-    }
-    edges.push(edge);
-  }
-
-  return edges;
-}
-
-function canonicalCycleKey(cycle: readonly PairNetEdge[]): string {
-  const nodes = cycle.map((edge) => edge.debtorUserId);
+function canonicalCycleKey(draft: CycleSettlementDraft): string {
+  const nodes = draft.cycleNodes;
   let smallestIndex = 0;
 
   for (let index = 1; index < nodes.length; index += 1) {
@@ -271,8 +350,7 @@ function canonicalCycleKey(cycle: readonly PairNetEdge[]): string {
     }
   }
 
-  const rotated = nodes.slice(smallestIndex).concat(nodes.slice(0, smallestIndex));
-  return rotated.join('>');
+  return nodes.slice(smallestIndex).concat(nodes.slice(0, smallestIndex)).join('>');
 }
 
 function compareEdges(left: PairNetEdge, right: PairNetEdge): number {

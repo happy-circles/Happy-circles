@@ -78,6 +78,9 @@ verify_jwt = true
 [functions.propose-cycle-settlement]
 verify_jwt = true
 
+[functions.process-graph-cycle-jobs]
+verify_jwt = false
+
 [functions.propose-transaction-reversal]
 verify_jwt = true
 

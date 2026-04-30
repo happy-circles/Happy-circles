@@ -97,20 +97,6 @@ function readNestedStatus(value: unknown, key: string): string | null {
   return readResultStatus((value as Record<string, unknown>)[key]);
 }
 
-function readNestedProposalId(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const nested = (value as Record<string, unknown>)[key];
-  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) {
-    return null;
-  }
-
-  const proposalId = (nested as Record<string, unknown>)['proposalId'];
-  return typeof proposalId === 'string' ? proposalId : null;
-}
-
 function splitSubtitleSegments(value: string): string[] {
   return value
     .split('|')
@@ -393,31 +379,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     }
   }
 
-  function showAutoCyclePrompt(proposalId: string | null, status: string | null) {
-    if (status !== 'pending_approvals' && status !== 'approved') {
-      return;
-    }
-
-    Alert.alert(
-      status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
-      status === 'approved'
-        ? 'Todos ya aprobaron este Circle. Quieres abrirlo ahora para completarlo?'
-        : 'Se detecto otro Happy Circle en tu circulo. Quieres revisarlo ahora?',
-      [
-        {
-          text: 'Luego',
-          style: 'cancel',
-        },
-        {
-          text: 'Abrir',
-          onPress: () => {
-            pushRoute(router, proposalId ? `/settlements/${proposalId}` : '/activity');
-          },
-        },
-      ],
-    );
-  }
-
   async function handlePendingItemAction(
     itemId: string,
     kind: string,
@@ -432,15 +393,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       if (kind === 'financial_request') {
         if (action === 'accept') {
           const response = await acceptRequest.mutateAsync(itemId);
-          const autoCycleStatus = readNestedStatus(response, 'autoCycleProposal');
-          const autoCycleProposalId = readNestedProposalId(response, 'autoCycleProposal');
+          const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
           showSnackbar(
-            autoCycleStatus === 'pending_approvals'
-              ? 'Propuesta aceptada. Tambien quedo un Happy Circle listo para revisar.'
+            autoCycleStatus === 'queued'
+              ? 'Propuesta aceptada. Estamos buscando Happy Circles en segundo plano.'
               : 'Propuesta aceptada.',
             'success',
           );
-          showAutoCyclePrompt(autoCycleProposalId, autoCycleStatus);
         } else {
           await rejectRequest.mutateAsync(itemId);
           showSnackbar('Propuesta no aceptada.', 'neutral');
@@ -474,15 +433,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
       if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
         const response = await executeSettlement.mutateAsync(itemId);
-        const nextStatus = readNestedStatus(response, 'nextAutoCycleProposal');
-        const nextProposalId = readNestedProposalId(response, 'nextAutoCycleProposal');
+        const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
         showSnackbar(
-          nextStatus === 'pending_approvals'
-            ? 'Happy Circle completado. Ya quedo otro Circle pendiente.'
+          nextStatus === 'queued'
+            ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
             : 'Happy Circle completado.',
           'success',
         );
-        showAutoCyclePrompt(nextProposalId, nextStatus);
       }
     } catch (error) {
       const nextMessage =

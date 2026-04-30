@@ -7,6 +7,7 @@ export interface PairNetEdge {
 export interface CycleSettlementDraft {
   cycleNodes: string[];
   participantUserIds: string[];
+  amountMinor: number;
   movements: Array<{
     debtor_user_id: string;
     creditor_user_id: string;
@@ -14,7 +15,14 @@ export interface CycleSettlementDraft {
   }>;
 }
 
-function parseAmountMinor(value: unknown, field: string): number {
+interface ParentStep {
+  previousNode: string;
+  edge: PairNetEdge;
+}
+
+type Adjacency = Map<string, PairNetEdge[]>;
+
+export function parseAmountMinor(value: unknown, field: string): number {
   if (typeof value === 'number') {
     if (!Number.isSafeInteger(value) || value < 0) {
       throw new Error(`Invalid ${field}`);
@@ -35,6 +43,77 @@ function parseAmountMinor(value: unknown, field: string): number {
   throw new Error(`Invalid ${field}`);
 }
 
+export function detectBestAnchoredCycleSettlement(
+  edges: PairNetEdge[],
+  anchorEdge: PairNetEdge,
+): CycleSettlementDraft | null {
+  const activeEdges = edges.filter((edge) => edge.amount_minor > 0);
+  if (anchorEdge.amount_minor <= 0) {
+    return null;
+  }
+
+  const adjacency = buildAdjacency(activeEdges);
+  const startNode = anchorEdge.creditor_user_id;
+  const targetNode = anchorEdge.debtor_user_id;
+  const thresholds = [
+    ...new Set(
+      activeEdges
+        .map((edge) => edge.amount_minor)
+        .filter((amountMinor) => amountMinor <= anchorEdge.amount_minor),
+    ),
+  ].sort((left, right) => left - right);
+
+  if (thresholds.length === 0) {
+    return null;
+  }
+
+  let low = 0;
+  let high = thresholds.length - 1;
+  let bestThreshold: number | null = null;
+
+  while (low <= high) {
+    const midpoint = Math.floor((low + high) / 2);
+    const threshold = thresholds[midpoint]!;
+    if (hasPathAtThreshold(startNode, targetNode, threshold, adjacency)) {
+      bestThreshold = threshold;
+      low = midpoint + 1;
+    } else {
+      high = midpoint - 1;
+    }
+  }
+
+  if (bestThreshold === null) {
+    return null;
+  }
+
+  const pathEdges = findShortestPathAtThreshold(
+    startNode,
+    targetNode,
+    bestThreshold,
+    adjacency,
+  );
+  if (!pathEdges) {
+    return null;
+  }
+
+  const cycleEdges = [anchorEdge, ...pathEdges];
+  const amountMinor = Math.min(anchorEdge.amount_minor, bestThreshold);
+  const participantUserIds = [
+    ...new Set(cycleEdges.flatMap((edge) => [edge.debtor_user_id, edge.creditor_user_id])),
+  ].sort();
+
+  return {
+    cycleNodes: cycleEdges.map((edge) => edge.debtor_user_id),
+    participantUserIds,
+    amountMinor,
+    movements: cycleEdges.map((edge) => ({
+      debtor_user_id: edge.creditor_user_id,
+      creditor_user_id: edge.debtor_user_id,
+      amount_minor: amountMinor,
+    })),
+  };
+}
+
 export function detectFirstCycleSettlement(edges: PairNetEdge[]): CycleSettlementDraft | null {
   return detectFirstCycleSettlementForUser(edges);
 }
@@ -43,94 +122,171 @@ export function detectFirstCycleSettlementForUser(
   edges: PairNetEdge[],
   requiredUserId?: string,
 ): CycleSettlementDraft | null {
-  const workingEdges = edges
-    .filter((edge) => edge.amount_minor > 0)
-    .map((edge) => ({ ...edge }));
+  const candidateAnchors = edges
+    .filter(
+      (edge) =>
+        edge.amount_minor > 0 &&
+        (!requiredUserId ||
+          edge.debtor_user_id === requiredUserId ||
+          edge.creditor_user_id === requiredUserId),
+    )
+    .sort(
+      (left, right) =>
+        right.amount_minor - left.amount_minor ||
+        left.debtor_user_id.localeCompare(right.debtor_user_id) ||
+        left.creditor_user_id.localeCompare(right.creditor_user_id),
+    );
 
-  const cycle = findCycle(workingEdges, requiredUserId);
-  if (!cycle) {
-    return null;
-  }
+  let best: CycleSettlementDraft | null = null;
 
-  const amountMinor = Math.min(...cycle.map((edge) => edge.amount_minor));
-  const cycleNodes = cycle.map((edge) => edge.debtor_user_id);
-  const participantUserIds = [...new Set([...cycleNodes, cycle[cycle.length - 1]!.creditor_user_id])].sort();
-
-  return {
-    cycleNodes,
-    participantUserIds,
-    movements: cycle.map((edge) => ({
-      debtor_user_id: edge.creditor_user_id,
-      creditor_user_id: edge.debtor_user_id,
-      amount_minor: amountMinor,
-    })),
-  };
-}
-
-function findCycle(edges: PairNetEdge[], requiredUserId?: string): PairNetEdge[] | null {
-  const nodes = [...new Set(edges.flatMap((edge) => [edge.debtor_user_id, edge.creditor_user_id]))].sort();
-  const edgeIndex = new Map(edges.map((edge) => [`${edge.debtor_user_id}->${edge.creditor_user_id}`, edge]));
-  const cycles: PairNetEdge[][] = [];
-
-  for (const start of nodes) {
-    const path = [start];
-    const visited = new Set([start]);
-
-    const visit = (current: string): void => {
-      const outgoing = edges
-        .filter((edge) => edge.debtor_user_id === current)
-        .sort((left, right) => left.creditor_user_id.localeCompare(right.creditor_user_id));
-
-      for (const edge of outgoing) {
-        const next = edge.creditor_user_id;
-        if (next === start && path.length >= 3) {
-          cycles.push(toEdges(path, edgeIndex));
-          continue;
-        }
-
-        if (visited.has(next)) {
-          continue;
-        }
-
-        visited.add(next);
-        path.push(next);
-        visit(next);
-        path.pop();
-        visited.delete(next);
-      }
-    };
-
-    visit(start);
-  }
-
-  if (cycles.length === 0) {
-    return null;
-  }
-
-  return cycles
-    .filter((cycle) => (requiredUserId ? cycleIncludesUser(cycle, requiredUserId) : true))
-    .map((cycle) => ({ cycle, key: canonicalCycleKey(cycle) }))
-    .sort((left, right) => left.key.localeCompare(right.key))[0]?.cycle ?? null;
-}
-
-function toEdges(cycleNodes: string[], edgeIndex: Map<string, PairNetEdge>): PairNetEdge[] {
-  const edges: PairNetEdge[] = [];
-
-  for (let index = 0; index < cycleNodes.length; index += 1) {
-    const from = cycleNodes[index]!;
-    const to = cycleNodes[(index + 1) % cycleNodes.length]!;
-    const edge = edgeIndex.get(`${from}->${to}`);
-    if (!edge) {
-      throw new Error(`Missing edge ${from}->${to}`);
+  for (const anchor of candidateAnchors) {
+    if (best && anchor.amount_minor < best.amountMinor) {
+      break;
     }
-    edges.push(edge);
+
+    const draft = detectBestAnchoredCycleSettlement(edges, anchor);
+    if (!draft || (requiredUserId && !draft.participantUserIds.includes(requiredUserId))) {
+      continue;
+    }
+
+    if (!best || compareDrafts(draft, best) < 0) {
+      best = draft;
+    }
   }
 
-  return edges;
+  return best;
 }
 
-function canonicalCycleKey(cycle: PairNetEdge[]): string {
-  const nodes = cycle.map((edge) => edge.debtor_user_id);
+function buildAdjacency(edges: PairNetEdge[]): Adjacency {
+  const adjacency: Adjacency = new Map();
+
+  for (const edge of edges) {
+    const outgoing = adjacency.get(edge.debtor_user_id) ?? [];
+    outgoing.push(edge);
+    adjacency.set(edge.debtor_user_id, outgoing);
+  }
+
+  for (const [node, outgoing] of adjacency.entries()) {
+    adjacency.set(
+      node,
+      outgoing.sort(
+        (left, right) =>
+          left.creditor_user_id.localeCompare(right.creditor_user_id) ||
+          right.amount_minor - left.amount_minor ||
+          left.debtor_user_id.localeCompare(right.debtor_user_id),
+      ),
+    );
+  }
+
+  return adjacency;
+}
+
+function hasPathAtThreshold(
+  startNode: string,
+  targetNode: string,
+  threshold: number,
+  adjacency: Adjacency,
+): boolean {
+  if (startNode === targetNode) {
+    return true;
+  }
+
+  const queue = [startNode];
+  const visited = new Set([startNode]);
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]!;
+    for (const edge of adjacency.get(current) ?? []) {
+      if (edge.amount_minor < threshold) {
+        continue;
+      }
+
+      const next = edge.creditor_user_id;
+      if (next === targetNode) {
+        return true;
+      }
+
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+
+  return false;
+}
+
+function findShortestPathAtThreshold(
+  startNode: string,
+  targetNode: string,
+  threshold: number,
+  adjacency: Adjacency,
+): PairNetEdge[] | null {
+  const queue = [startNode];
+  const visited = new Set([startNode]);
+  const parents = new Map<string, ParentStep>();
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]!;
+
+    for (const edge of adjacency.get(current) ?? []) {
+      if (edge.amount_minor < threshold) {
+        continue;
+      }
+
+      const next = edge.creditor_user_id;
+      if (visited.has(next)) {
+        continue;
+      }
+
+      parents.set(next, {
+        previousNode: current,
+        edge,
+      });
+
+      if (next === targetNode) {
+        return rebuildPath(startNode, targetNode, parents);
+      }
+
+      visited.add(next);
+      queue.push(next);
+    }
+  }
+
+  return null;
+}
+
+function rebuildPath(
+  startNode: string,
+  targetNode: string,
+  parents: Map<string, ParentStep>,
+): PairNetEdge[] {
+  const path: PairNetEdge[] = [];
+  let current = targetNode;
+
+  while (current !== startNode) {
+    const parent = parents.get(current);
+    if (!parent) {
+      throw new Error('Missing path parent while rebuilding cycle');
+    }
+
+    path.push(parent.edge);
+    current = parent.previousNode;
+  }
+
+  return path.reverse();
+}
+
+function compareDrafts(left: CycleSettlementDraft, right: CycleSettlementDraft): number {
+  return (
+    right.amountMinor - left.amountMinor ||
+    left.participantUserIds.length - right.participantUserIds.length ||
+    canonicalCycleKey(left).localeCompare(canonicalCycleKey(right))
+  );
+}
+
+function canonicalCycleKey(draft: CycleSettlementDraft): string {
+  const nodes = draft.cycleNodes;
   let smallestIndex = 0;
 
   for (let index = 1; index < nodes.length; index += 1) {
@@ -140,89 +296,4 @@ function canonicalCycleKey(cycle: PairNetEdge[]): string {
   }
 
   return nodes.slice(smallestIndex).concat(nodes.slice(0, smallestIndex)).join('>');
-}
-
-function cycleIncludesUser(cycle: PairNetEdge[], userId: string): boolean {
-  const participantUserIds = new Set(cycle.map((edge) => edge.debtor_user_id));
-  participantUserIds.add(cycle[cycle.length - 1]!.creditor_user_id);
-  return participantUserIds.has(userId);
-}
-
-export async function proposeAutomaticCycleSettlement(
-  client: any,
-  actorUserId: string,
-  idempotencyKey: string,
-): Promise<{ status: string; proposalId?: string } | null> {
-  const [{ data: edges, error: edgesError }, { data: hashData, error: hashError }] = await Promise.all([
-    client.from('v_pair_net_edges_authoritative').select('debtor_user_id, creditor_user_id, amount_minor'),
-    client.rpc('compute_graph_snapshot_hash'),
-  ]);
-
-  if (edgesError) {
-    throw new Error(edgesError.message);
-  }
-
-  if (hashError) {
-    throw new Error(hashError.message);
-  }
-
-  if (typeof hashData !== 'string') {
-    throw new Error('Invalid graph snapshot hash');
-  }
-
-  const draft = detectFirstCycleSettlementForUser(
-    (edges ?? []).flatMap((edge) => {
-      if (typeof edge !== 'object' || edge === null || Array.isArray(edge)) {
-        return [];
-      }
-
-      const debtorUserId = edge['debtor_user_id'];
-      const creditorUserId = edge['creditor_user_id'];
-      const amountMinor = parseAmountMinor(edge['amount_minor'], 'graph edge amount_minor');
-
-      if (typeof debtorUserId !== 'string' || typeof creditorUserId !== 'string') {
-        throw new Error('Invalid graph edge participants');
-      }
-
-      return [
-        {
-          debtor_user_id: debtorUserId,
-          creditor_user_id: creditorUserId,
-          amount_minor: amountMinor,
-        },
-      ];
-    }),
-    actorUserId,
-  );
-
-  if (!draft) {
-    return null;
-  }
-
-  const { data, error } = await client.rpc('propose_cycle_settlement', {
-    p_actor_user_id: actorUserId,
-    p_idempotency_key: idempotencyKey,
-    p_graph_snapshot_hash: hashData,
-    p_graph_snapshot: edges ?? [],
-    p_movements_json: draft.movements,
-    p_participant_user_ids: draft.participantUserIds,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-    const status = data['status'];
-    const proposalId = data['proposalId'];
-
-    if (typeof status === 'string') {
-      return {
-        status,
-        ...(typeof proposalId === 'string' ? { proposalId } : {}),
-      };
-    }
-  }
-
-  return null;
 }

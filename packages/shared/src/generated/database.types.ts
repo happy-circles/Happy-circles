@@ -275,6 +275,28 @@ export interface Database {
           refreshed_at: string;
         };
       };
+      graph_cycle_jobs: {
+        Row: {
+          id: string;
+          source_type: string;
+          source_id: string;
+          actor_user_id: string;
+          anchor_user_id: string;
+          user_low_id: string;
+          user_high_id: string;
+          currency_code: string;
+          status: string;
+          attempts: number;
+          max_attempts: number;
+          locked_at: string | null;
+          locked_by: string | null;
+          last_error: string | null;
+          result_json: Json | null;
+          created_at: string;
+          updated_at: string;
+          processed_at: string | null;
+        };
+      };
       settlement_proposals: {
         Row: {
           id: string;
@@ -283,6 +305,10 @@ export interface Database {
           graph_snapshot_hash: string;
           graph_snapshot: Json;
           movements_json: Json;
+          anchor_user_low_id: string | null;
+          anchor_user_high_id: string | null;
+          currency_code: string;
+          source_graph_cycle_job_id: string | null;
           created_at: string;
           updated_at: string;
           executed_at: string | null;
