@@ -2,12 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { IdentityFlowIdentity, IdentityFlowScreen } from '@/components/identity-flow';
+import {
+  IdentityFlowIdentity,
+  IdentityFlowLogoCopy,
+  IdentityFlowScreen,
+} from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
@@ -17,7 +22,6 @@ import {
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
-import { InviteTokenStatus } from './invite-token-status';
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'identity_incomplete') {
@@ -141,9 +145,15 @@ export function InviteLinkScreen() {
         ? previewQuery.error.message
         : previewQuery.isLoading
           ? 'Consultando el estado actual del token.'
-          : preview
-            ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
-            : 'El token abre una invitacion privada.';
+        : preview
+          ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
+          : 'El token abre una invitacion privada.';
+  const contentTransitionKey =
+    !readyForPreview || previewQuery.isLoading
+      ? 'friend-invite:loading'
+      : preview
+        ? 'friend-invite:preview'
+        : 'friend-invite:empty';
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +170,7 @@ export function InviteLinkScreen() {
         });
 
         if (!cancelled) {
-          returnToRoute(router, '/sign-in');
+          returnToRoute(router, '/join?mode=sign-in');
         }
         return;
       }
@@ -237,20 +247,24 @@ export function InviteLinkScreen() {
 
   return (
     <IdentityFlowScreen
+      contentTransitionKey={contentTransitionKey}
       footer={
         <View style={styles.footer}>
           <PrimaryAction
             label="Ir al inicio"
-            onPress={() => returnToRoute(router, '/home')}
+            onPress={() => {
+              beginHomeEntryHandoff();
+              returnToRoute(router, '/home');
+            }}
             variant="ghost"
           />
         </View>
       }
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
-      scrollEnabled={false}
+      identityPosition="top"
+      message={<IdentityFlowLogoCopy subtitle={tokenSubtitle} title={tokenTitle} />}
+      scrollEnabled
     >
-      <InviteTokenStatus subtitle={tokenSubtitle} title={tokenTitle} />
-
       {message ? <MessageBanner message={message} /> : null}
 
       {preview ? (
@@ -333,7 +347,10 @@ export function InviteLinkScreen() {
           {!preview.canClaim && !preview.canApprove ? (
             <PrimaryAction
               label="Volver al inicio"
-              onPress={() => returnToRoute(router, '/home')}
+              onPress={() => {
+                beginHomeEntryHandoff();
+                returnToRoute(router, '/home');
+              }}
               variant="secondary"
             />
           ) : null}
@@ -346,6 +363,7 @@ export function InviteLinkScreen() {
 const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
+    paddingBottom: theme.spacing.xs,
   },
   title: {
     color: theme.colors.text,

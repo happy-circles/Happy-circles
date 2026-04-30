@@ -12,14 +12,30 @@ import {
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 
+const LAUNCH_TARGET_MEASURE_FRAMES = 90;
+
 export type LaunchIntroTargetKind = 'avatar' | 'brand' | 'mark';
+export type LaunchIntroTargetVisualKind = 'headerBrand' | 'identityAvatar' | 'identityMark';
+export type LaunchIntroCenterFaceSize = 'large' | 'small';
+export type LaunchIntroTargetVisualState = 'error' | 'idle' | 'loading' | 'success';
 
 export interface LaunchIntroTargetSnapshot {
+  readonly avatarEditable?: boolean;
+  readonly avatarFallbackBackgroundColor?: string;
+  readonly avatarFallbackTextColor?: string;
+  readonly avatarLabel?: string;
+  readonly avatarSize?: number;
+  readonly avatarUrl?: string | null;
+  readonly centerFaceSize?: LaunchIntroCenterFaceSize;
   readonly height: number;
   readonly id: string;
   readonly kind: LaunchIntroTargetKind;
+  readonly outerRotationDegrees?: number;
   readonly priority: number;
+  readonly stageSize: number;
   readonly updatedAt: number;
+  readonly visualState?: LaunchIntroTargetVisualState;
+  readonly visualKind: LaunchIntroTargetVisualKind;
   readonly width: number;
   readonly x: number;
   readonly y: number;
@@ -28,12 +44,14 @@ export interface LaunchIntroTargetSnapshot {
 interface LaunchIntroContextValue {
   readonly registerTarget: (target: LaunchIntroTargetSnapshot) => () => void;
   readonly target: LaunchIntroTargetSnapshot | null;
+  readonly targets: readonly LaunchIntroTargetSnapshot[];
   readonly visible: boolean;
 }
 
 const LaunchIntroContext = createContext<LaunchIntroContextValue>({
   registerTarget: () => () => undefined,
   target: null,
+  targets: [],
   visible: false,
 });
 
@@ -52,7 +70,18 @@ export function LaunchIntroVisibilityProvider({
       if (
         previous &&
         previous.kind === target.kind &&
+        previous.visualKind === target.visualKind &&
         previous.priority === target.priority &&
+        previous.stageSize === target.stageSize &&
+        previous.centerFaceSize === target.centerFaceSize &&
+        previous.avatarUrl === target.avatarUrl &&
+        previous.avatarEditable === target.avatarEditable &&
+        previous.avatarLabel === target.avatarLabel &&
+        previous.avatarSize === target.avatarSize &&
+        previous.avatarFallbackBackgroundColor === target.avatarFallbackBackgroundColor &&
+        previous.avatarFallbackTextColor === target.avatarFallbackTextColor &&
+        previous.outerRotationDegrees === target.outerRotationDegrees &&
+        previous.visualState === target.visualState &&
         Math.abs(previous.x - target.x) < 0.5 &&
         Math.abs(previous.y - target.y) < 0.5 &&
         Math.abs(previous.width - target.width) < 0.5 &&
@@ -80,13 +109,7 @@ export function LaunchIntroVisibilityProvider({
     };
   }, []);
 
-  useEffect(() => {
-    if (!value) {
-      setTargets({});
-    }
-  }, [value]);
-
-  const target = useMemo(() => {
+  const measuredTargets = useMemo(() => {
     const measuredTargets = Object.values(targets).filter(
       (entry) => entry.width > 0 && entry.height > 0,
     );
@@ -99,16 +122,19 @@ export function LaunchIntroVisibilityProvider({
       return right.updatedAt - left.updatedAt;
     });
 
-    return measuredTargets[0] ?? null;
+    return measuredTargets;
   }, [targets]);
+
+  const target = measuredTargets[0] ?? null;
 
   const contextValue = useMemo(
     () => ({
       registerTarget,
       target,
+      targets: measuredTargets,
       visible: value,
     }),
-    [registerTarget, target, value],
+    [measuredTargets, registerTarget, target, value],
   );
 
   return <LaunchIntroContext.Provider value={contextValue}>{children}</LaunchIntroContext.Provider>;
@@ -122,23 +148,52 @@ export function useLaunchIntroTarget() {
   return useContext(LaunchIntroContext).target;
 }
 
+export function useLaunchIntroTargets() {
+  return useContext(LaunchIntroContext).targets;
+}
+
 export function LaunchIntroTargetView({
+  avatarEditable,
+  avatarFallbackBackgroundColor,
+  avatarFallbackTextColor,
+  avatarLabel,
+  avatarSize,
+  avatarUrl,
+  centerFaceSize,
   children,
   disabled = false,
   kind = 'mark',
+  outerRotationDegrees,
   priority = 10,
+  stageSize,
   style,
+  visualState,
+  visualKind,
 }: {
+  readonly avatarEditable?: boolean;
+  readonly avatarFallbackBackgroundColor?: string;
+  readonly avatarFallbackTextColor?: string;
+  readonly avatarLabel?: string;
+  readonly avatarSize?: number;
+  readonly avatarUrl?: string | null;
+  readonly centerFaceSize?: LaunchIntroCenterFaceSize;
   readonly children: ReactNode;
   readonly disabled?: boolean;
   readonly kind?: LaunchIntroTargetKind;
+  readonly outerRotationDegrees?: number;
   readonly priority?: number;
+  readonly stageSize?: number;
   readonly style?: StyleProp<ViewStyle>;
+  readonly visualState?: LaunchIntroTargetVisualState;
+  readonly visualKind?: LaunchIntroTargetVisualKind;
 }) {
   const id = useId();
   const { registerTarget, visible } = useContext(LaunchIntroContext);
   const targetRef = useRef<View | null>(null);
   const unregisterRef = useRef<(() => void) | null>(null);
+  const resolvedVisualKind =
+    visualKind ??
+    (kind === 'brand' ? 'headerBrand' : kind === 'avatar' ? 'identityAvatar' : 'identityMark');
 
   const clearRegistration = useCallback(() => {
     unregisterRef.current?.();
@@ -146,36 +201,87 @@ export function LaunchIntroTargetView({
   }, []);
 
   const measureTarget = useCallback(() => {
-    if (!visible || disabled) {
+    if (disabled) {
       clearRegistration();
       return;
     }
 
     requestAnimationFrame(() => {
       targetRef.current?.measureInWindow((x, y, width, height) => {
-        if (!visible || disabled || width <= 0 || height <= 0) {
+        if (disabled || width <= 0 || height <= 0) {
           return;
         }
 
-        clearRegistration();
         unregisterRef.current = registerTarget({
+          avatarEditable,
+          avatarFallbackBackgroundColor,
+          avatarFallbackTextColor,
+          avatarLabel,
+          avatarSize,
+          avatarUrl,
+          centerFaceSize,
           height,
           id,
           kind,
+          outerRotationDegrees,
           priority,
+          stageSize: stageSize ?? Math.max(1, Math.min(width, height)),
           updatedAt: Date.now(),
+          visualState,
+          visualKind: resolvedVisualKind,
           width,
           x,
           y,
         });
       });
     });
-  }, [clearRegistration, disabled, id, kind, priority, registerTarget, visible]);
+  }, [
+    avatarEditable,
+    avatarFallbackBackgroundColor,
+    avatarFallbackTextColor,
+    avatarLabel,
+    avatarSize,
+    avatarUrl,
+    centerFaceSize,
+    clearRegistration,
+    disabled,
+    id,
+    kind,
+    outerRotationDegrees,
+    priority,
+    registerTarget,
+    resolvedVisualKind,
+    stageSize,
+    visualState,
+  ]);
 
   useEffect(() => {
     measureTarget();
-    return clearRegistration;
-  }, [clearRegistration, measureTarget]);
+    if (disabled) {
+      return clearRegistration;
+    }
+
+    let frameCount = 0;
+    let frameHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+
+    function measureUntilStable() {
+      frameCount += 1;
+      measureTarget();
+
+      if (frameCount < LAUNCH_TARGET_MEASURE_FRAMES) {
+        frameHandle = requestAnimationFrame(measureUntilStable);
+      }
+    }
+
+    frameHandle = requestAnimationFrame(measureUntilStable);
+
+    return () => {
+      if (frameHandle !== null) {
+        cancelAnimationFrame(frameHandle);
+      }
+      clearRegistration();
+    };
+  }, [clearRegistration, disabled, measureTarget]);
 
   function handleLayout() {
     measureTarget();

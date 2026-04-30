@@ -4,11 +4,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  IdentityFlowActions,
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
-  IdentityFlowMessageSlot,
+  IdentityFlowLogoCopy,
+  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
@@ -16,6 +16,7 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
+  triggerIdentityErrorHaptic,
   triggerIdentityImpactHaptic,
   triggerIdentitySelectionHaptic,
   triggerIdentitySuccessHaptic,
@@ -26,6 +27,7 @@ import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY, normalizePhoneDigits } from '@/lib/phone';
 import { buildSetupAccountHref } from '@/lib/setup-account';
+import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import {
@@ -101,14 +103,24 @@ export function AccountCreateAccountScreen() {
     : passwordValid
       ? 'valid'
       : 'invalid';
-  const tokenState: BrandVerificationState =
-    !shouldPreview || previewQuery.error || blockingMessage
+  const tokenState: BrandVerificationState = busy
+    ? 'loading'
+    : !shouldPreview || previewQuery.error || blockingMessage
       ? 'error'
       : previewQuery.isLoading
         ? 'loading'
         : canCreateAccount
           ? 'success'
           : 'idle';
+  const contentTransitionKey = !shouldPreview
+    ? 'create-account:no-token'
+    : previewQuery.isLoading
+      ? 'create-account:loading'
+      : previewQuery.error || blockingMessage
+        ? 'create-account:blocked'
+        : canCreateAccount
+          ? 'create-account:form'
+          : 'create-account:empty';
   function markFieldTouched(field: FieldName) {
     setTouchedFields((current) => {
       if (current[field]) {
@@ -194,9 +206,11 @@ export function AccountCreateAccountScreen() {
 
       if (result === 'Cuenta creada. Ahora termina tu setup.') {
         triggerIdentitySuccessHaptic();
+        beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       }
     } catch (error) {
+      triggerIdentityErrorHaptic();
       setMessage(error instanceof Error ? error.message : 'No se pudo crear la cuenta.');
     } finally {
       setBusy(false);
@@ -209,17 +223,26 @@ export function AccountCreateAccountScreen() {
 
   return (
     <IdentityFlowScreen
-      actions={
-        canCreateAccount ? (
-          <IdentityFlowActions
-            disabled={busy}
-            loading={busy}
-            onPrimaryPress={busy ? undefined : () => void handleSubmit()}
-            primaryLabel={busy ? 'Creando...' : 'Crear cuenta'}
+      contentTransitionKey={contentTransitionKey}
+      identity={<IdentityFlowIdentity centerFaceSize="small" state={tokenState} variant="status" />}
+      identityPosition="top"
+      message={
+        message ? (
+          <MessageBanner
+            message={message}
+            tone={message === 'Cuenta creada. Ahora termina tu setup.' ? 'success' : 'neutral'}
           />
-        ) : undefined
+        ) : (
+          <IdentityFlowLogoCopy
+            subtitle={
+              preview?.inviterDisplayName
+                ? `${preview.inviterDisplayName} te invito.`
+                : 'Completa tus datos para entrar.'
+            }
+            title="Crea tu cuenta"
+          />
+        )
       }
-      identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
     >
       {!shouldPreview ? (
         <View style={styles.messageBlock}>
@@ -229,12 +252,6 @@ export function AccountCreateAccountScreen() {
           />
           <PrimaryAction href="/join" label="Volver a invitacion" variant="secondary" />
         </View>
-      ) : null}
-
-      {shouldPreview && previewQuery.isLoading ? (
-        <IdentityFlowMessageSlot>
-          <MessageBanner message="Validando invitacion." tone="neutral" />
-        </IdentityFlowMessageSlot>
       ) : null}
 
       {shouldPreview && previewQuery.error ? (
@@ -253,15 +270,6 @@ export function AccountCreateAccountScreen() {
 
       {canCreateAccount ? (
         <IdentityFlowForm>
-          <IdentityFlowMessageSlot>
-            {message ? (
-              <MessageBanner
-                message={message}
-                tone={message === 'Cuenta creada. Ahora termina tu setup.' ? 'success' : 'neutral'}
-              />
-            ) : null}
-          </IdentityFlowMessageSlot>
-
           <IdentityFlowField
             error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
             icon="mail"
@@ -279,6 +287,30 @@ export function AccountCreateAccountScreen() {
               placeholder="tu@correo.com"
               placeholderTextColor={theme.colors.muted}
               value={email}
+            />
+          </IdentityFlowField>
+
+          <IdentityFlowField
+            error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
+            icon="lock-closed"
+            label="Contrasena"
+            status={
+              passwordStatus === 'invalid'
+                ? 'danger'
+                : passwordStatus === 'valid'
+                  ? 'success'
+                  : 'idle'
+            }
+          >
+            <IdentityFlowTextInput
+              autoCapitalize="none"
+              autoComplete="password"
+              onBlur={() => markFieldTouched('password')}
+              onChangeText={setPassword}
+              placeholder="Tu contrasena"
+              placeholderTextColor={theme.colors.muted}
+              secureTextEntry
+              value={password}
             />
           </IdentityFlowField>
 
@@ -343,29 +375,12 @@ export function AccountCreateAccountScreen() {
             </View>
           </IdentityFlowField>
 
-          <IdentityFlowField
-            error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
-            icon="lock-closed"
-            label="Contrasena"
-            status={
-              passwordStatus === 'invalid'
-                ? 'danger'
-                : passwordStatus === 'valid'
-                  ? 'success'
-                  : 'idle'
-            }
-          >
-            <IdentityFlowTextInput
-              autoCapitalize="none"
-              autoComplete="password"
-              onBlur={() => markFieldTouched('password')}
-              onChangeText={setPassword}
-              placeholder="Tu contrasena"
-              placeholderTextColor={theme.colors.muted}
-              secureTextEntry
-              value={password}
-            />
-          </IdentityFlowField>
+          <IdentityFlowPrimaryAction
+            disabled={busy}
+            label={busy ? 'Creando...' : 'Crear cuenta'}
+            loading={busy}
+            onPress={busy ? undefined : () => void handleSubmit()}
+          />
         </IdentityFlowForm>
       ) : null}
     </IdentityFlowScreen>

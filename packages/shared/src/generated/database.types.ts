@@ -1,10 +1,4 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export interface Database {
   public: {
@@ -71,6 +65,7 @@ export interface Database {
           id: string;
           invite_id: string;
           token: string;
+          token_hash: string | null;
           channel: string;
           source_context: string | null;
           status: string;
@@ -107,6 +102,7 @@ export interface Database {
           id: string;
           invite_id: string;
           token: string;
+          token_hash: string | null;
           channel: string;
           source_context: string | null;
           status: string;
@@ -349,7 +345,6 @@ export interface Database {
         Row: {
           id: string;
           invite_id: string;
-          token: string;
           channel: string;
           source_context: string | null;
           status: string;
@@ -385,7 +380,6 @@ export interface Database {
         Row: {
           id: string;
           invite_id: string;
-          token: string;
           channel: string;
           source_context: string | null;
           status: string;

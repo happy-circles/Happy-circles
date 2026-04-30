@@ -16,6 +16,7 @@ import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import {
   type AccountInviteListItem,
@@ -998,6 +999,14 @@ export function DashboardScreen() {
       setBusyInviteKey(null);
     }
   }
+
+  const homeEntryReady = !snapshotQuery.isLoading && (Boolean(dashboard) || Boolean(snapshotQuery.error));
+
+  useEffect(() => {
+    if (homeEntryReady) {
+      markHomeEntryReady();
+    }
+  }, [homeEntryReady]);
 
   if (snapshotQuery.isLoading || !dashboard) {
     return (

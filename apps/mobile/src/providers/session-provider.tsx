@@ -699,6 +699,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (!supabase) {
         return;
       }
+      const client = supabase;
 
       const loadId = accountLoadIdRef.current + 1;
       accountLoadIdRef.current = loadId;
@@ -709,18 +710,79 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
       const deviceId = await getOrCreateDeviceId();
       const timestamp = new Date().toISOString();
-      const devicePayload = {
-        user_id: nextSession.user.id,
-        device_id: deviceId,
+      const devicePatch = {
         platform: Platform.OS,
         device_name: getCurrentDeviceName(),
         app_version: getCurrentAppVersion(),
         last_seen_at: timestamp,
       };
+      const devicePayload = {
+        user_id: nextSession.user.id,
+        device_id: deviceId,
+        ...devicePatch,
+      };
 
-      const [profileResult, identities, maybeDeviceResult, pendingInviteIntent] = await Promise.all(
-        [
-          supabase
+      async function persistCurrentDevice(): Promise<TrustedDeviceRow> {
+        const existingResult = await client
+          .from('trusted_devices')
+          .select('*')
+          .eq('user_id', nextSession.user.id)
+          .eq('device_id', deviceId)
+          .maybeSingle();
+
+        if (existingResult.error) {
+          throw new Error(existingResult.error.message);
+        }
+
+        const existingDevice = existingResult.data as TrustedDeviceRow | null;
+
+        if (existingDevice) {
+          const updateResult = await client
+            .from('trusted_devices')
+            .update(devicePatch as never)
+            .eq('id', existingDevice.id)
+            .select('*')
+            .single();
+
+          if (updateResult.error) {
+            throw new Error(updateResult.error.message);
+          }
+
+          return updateResult.data as TrustedDeviceRow;
+        }
+
+        const insertResult = await client
+          .from('trusted_devices')
+          .insert(devicePayload as never)
+          .select('*')
+          .single();
+
+        if (!insertResult.error) {
+          return insertResult.data as TrustedDeviceRow;
+        }
+
+        if (!insertResult.error.message.includes('duplicate key')) {
+          throw new Error(insertResult.error.message);
+        }
+
+        const retryUpdateResult = await client
+          .from('trusted_devices')
+          .update(devicePatch as never)
+          .eq('user_id', nextSession.user.id)
+          .eq('device_id', deviceId)
+          .select('*')
+          .single();
+
+        if (retryUpdateResult.error) {
+          throw new Error(retryUpdateResult.error.message);
+        }
+
+        return retryUpdateResult.data as TrustedDeviceRow;
+      }
+
+      const [profileResult, identities, currentDevice, pendingInviteIntent] =
+        await Promise.all([
+          client
             .from('user_profiles')
             .select(
               'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
@@ -728,57 +790,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
             .eq('id', nextSession.user.id)
             .single(),
           resolveUserIdentities(nextSession),
-          supabase
-            .from('trusted_devices')
-            .select('*')
-            .eq('user_id', nextSession.user.id)
-            .eq('device_id', deviceId)
-            .maybeSingle(),
+          persistCurrentDevice(),
           readPendingInviteIntent(),
-        ],
-      );
+        ]);
 
       if (profileResult.error) {
         throw new Error(profileResult.error.message);
       }
 
-      if (maybeDeviceResult.error) {
-        throw new Error(maybeDeviceResult.error.message);
-      }
-
-      let currentDevice: TrustedDeviceRow | null =
-        maybeDeviceResult.data as TrustedDeviceRow | null;
-      if (!currentDevice) {
-        const insertResult = await supabase
-          .from('trusted_devices')
-          .insert({
-            ...devicePayload,
-            trust_state: 'pending',
-          } as never)
-          .select('*')
-          .single();
-
-        if (insertResult.error) {
-          throw new Error(insertResult.error.message);
-        }
-
-        currentDevice = insertResult.data;
-      } else {
-        const updateResult = await supabase
-          .from('trusted_devices')
-          .update(devicePayload as never)
-          .eq('id', currentDevice.id)
-          .select('*')
-          .single();
-
-        if (updateResult.error) {
-          throw new Error(updateResult.error.message);
-        }
-
-        currentDevice = updateResult.data;
-      }
-
-      const devicesResult = await supabase
+      const devicesResult = await client
         .from('trusted_devices')
         .select('*')
         .eq('user_id', nextSession.user.id)

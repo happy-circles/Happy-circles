@@ -19,67 +19,67 @@ enabled = true
 site_url = "http://localhost:8081"
 
 [functions.accept-financial-request]
-verify_jwt = false
+verify_jwt = true
 
 [functions.cancel-friendship-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.claim-external-friendship-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.approve-cycle-settlement]
-verify_jwt = false
+verify_jwt = true
 
 [functions.amend-financial-request]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-balance-request]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-external-friendship-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-internal-friendship-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-account-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-people-outreach]
-verify_jwt = false
+verify_jwt = true
 
 [functions.resolve-people-targets]
-verify_jwt = false
+verify_jwt = true
 
 [functions.get-account-invite-preview-public]
 verify_jwt = false
 
 [functions.activate-account-from-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.review-account-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.get-friendship-invite-preview]
-verify_jwt = false
+verify_jwt = true
 
 [functions.execute-approved-cycle-settlement]
-verify_jwt = false
+verify_jwt = true
 
 [functions.respond-internal-friendship-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.propose-cycle-settlement]
-verify_jwt = false
+verify_jwt = true
 
 [functions.propose-transaction-reversal]
-verify_jwt = false
+verify_jwt = true
 
 [functions.reject-cycle-settlement]
-verify_jwt = false
+verify_jwt = true
 
 [functions.reject-financial-request]
-verify_jwt = false
+verify_jwt = true
 
 [functions.review-external-friendship-invite]
-verify_jwt = false
+verify_jwt = true

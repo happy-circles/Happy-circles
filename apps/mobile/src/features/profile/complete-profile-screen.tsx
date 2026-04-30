@@ -5,11 +5,12 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
 
 import {
-  IdentityFlowActions,
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
+  IdentityFlowLogoCopy,
   IdentityFlowMessageSlot,
+  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
@@ -27,6 +28,7 @@ import {
 } from '@/lib/identity-flow-haptics';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
+import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { theme } from '@/lib/theme';
@@ -81,6 +83,7 @@ export function CompleteProfileScreen() {
   );
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(busy || avatarMutation.isPending);
+  const logoName = fullName.trim() || profile?.display_name?.trim();
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
@@ -341,6 +344,9 @@ export function CompleteProfileScreen() {
         triggerIdentitySuccessHaptic();
         showSnackbar('Perfil actualizado.', 'success');
         const pendingIntent = await readPendingInviteIntent();
+        if (!pendingIntent) {
+          beginHomeEntryHandoff();
+        }
         returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
         return;
       }
@@ -391,14 +397,6 @@ export function CompleteProfileScreen() {
 
   return (
     <IdentityFlowScreen
-      actions={
-        <IdentityFlowActions
-          disabled={busy}
-          loading={busy}
-          onPrimaryPress={busy ? undefined : () => void handleSave()}
-          primaryLabel={busy ? 'Guardando...' : 'Guardar y continuar'}
-        />
-      }
       identity={
         <View
           onLayout={(event) => {
@@ -414,6 +412,13 @@ export function CompleteProfileScreen() {
             variant="avatar"
           />
         </View>
+      }
+      identityPosition="top"
+      message={
+        <IdentityFlowLogoCopy
+          subtitle="Revisa tu nombre, celular y foto."
+          title={logoName ? `Hola, ${logoName}` : 'Completa tu perfil'}
+        />
       }
       overlay={
         <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
@@ -526,6 +531,13 @@ export function CompleteProfileScreen() {
           </IdentityFlowField>
         </View>
       </IdentityFlowForm>
+
+      <IdentityFlowPrimaryAction
+        disabled={busy}
+        label={busy ? 'Guardando...' : 'Guardar y continuar'}
+        loading={busy}
+        onPress={busy ? undefined : () => void handleSave()}
+      />
 
       <LoadingOverlay
         message={

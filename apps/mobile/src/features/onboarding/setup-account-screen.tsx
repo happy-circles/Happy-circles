@@ -7,17 +7,15 @@ import type { TextInput } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppTextInput } from '@/components/app-text-input';
-import { FieldBlock } from '@/components/field-block';
 import {
-  IdentityFlowActions,
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
   IdentityFlowMessageSlot,
+  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
-import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -29,6 +27,7 @@ import {
 } from '@/lib/identity-flow-haptics';
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
+import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
 import { hasProfilePhoto } from '@/lib/setup-account';
@@ -208,6 +207,9 @@ export function SetupAccountScreen() {
     }
 
     const pendingIntent = await readPendingInviteIntent();
+    if (!pendingIntent) {
+      beginHomeEntryHandoff();
+    }
     returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
   }
 
@@ -399,17 +401,6 @@ export function SetupAccountScreen() {
 
   return (
     <IdentityFlowScreen
-      actions={
-        <IdentityFlowActions
-          disabled={isSaving}
-          loading={isSaving}
-          onPrimaryPress={isSaving ? undefined : () => void handleSaveAndFinish()}
-          primaryIcon="checkmark"
-          primaryLabel={
-            isSaving ? 'Guardando...' : editPhoneMode ? 'Guardar celular' : 'Guardar y entrar'
-          }
-        />
-      }
       identity={
         <IdentityFlowIdentity
           avatarLabel={avatarLabel}
@@ -417,18 +408,21 @@ export function SetupAccountScreen() {
           disabled={avatarMutation.isPending}
           editable
           onPress={openAvatarOptions}
+          state={isSaving ? 'loading' : 'idle'}
           variant="avatar"
         />
       }
-      scrollEnabled
+      identityPosition="top"
     >
-      <IdentityFlowMessageSlot>
-        {message ? (
-          <MessageBanner message={message} tone="neutral" />
-        ) : profileErrors.photo ? (
-          <Text style={[styles.helperText, styles.helperTextDanger]}>{profileErrors.photo}</Text>
-        ) : null}
-      </IdentityFlowMessageSlot>
+      {message || profileErrors.photo ? (
+        <IdentityFlowMessageSlot>
+          {message ? (
+            <MessageBanner message={message} tone="neutral" />
+          ) : profileErrors.photo ? (
+            <Text style={[styles.helperText, styles.helperTextDanger]}>{profileErrors.photo}</Text>
+          ) : null}
+        </IdentityFlowMessageSlot>
+      ) : null}
 
       <View style={styles.setupContent}>
         <IdentityFlowForm>
@@ -454,7 +448,18 @@ export function SetupAccountScreen() {
           </IdentityFlowField>
 
           {needsPhoneInput ? (
-            <FieldBlock error={profileErrors.phoneNationalNumber ?? null} label="Celular">
+            <IdentityFlowField
+              error={profileErrors.phoneNationalNumber ?? null}
+              icon="call"
+              label="Celular"
+              status={
+                profileErrors.phoneNationalNumber
+                  ? 'danger'
+                  : phoneNationalNumber.trim().length >= 7
+                    ? 'success'
+                    : 'idle'
+              }
+            >
               <View style={styles.phoneField}>
                 <View style={styles.phoneRow}>
                   <Pressable
@@ -470,8 +475,7 @@ export function SetupAccountScreen() {
                     <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
                   </Pressable>
 
-                  <AppTextInput
-                    hasError={Boolean(profileErrors.phoneNationalNumber)}
+                  <IdentityFlowTextInput
                     keyboardType="phone-pad"
                     onChangeText={(value) => {
                       setPhoneNationalNumber(value);
@@ -508,7 +512,7 @@ export function SetupAccountScreen() {
                   </View>
                 ) : null}
               </View>
-            </FieldBlock>
+            </IdentityFlowField>
           ) : null}
         </IdentityFlowForm>
 
@@ -594,12 +598,15 @@ export function SetupAccountScreen() {
             />
           </View>
         </View>
-      </View>
 
-      <LoadingOverlay
-        title={profileBusy ? 'Guardando perfil' : 'Actualizando foto'}
-        visible={profileBusy || avatarMutation.isPending}
-      />
+        <IdentityFlowPrimaryAction
+          disabled={isSaving}
+          icon="checkmark"
+          label={isSaving ? 'Guardando...' : editPhoneMode ? 'Guardar celular' : 'Guardar y entrar'}
+          loading={isSaving}
+          onPress={isSaving ? undefined : () => void handleSaveAndFinish()}
+        />
+      </View>
       <AvatarViewerModal
         imageUrl={avatarUrl}
         label={avatarLabel}
@@ -616,7 +623,7 @@ const styles = StyleSheet.create({
     maxWidth: 460,
   },
   setupContent: {
-    gap: theme.spacing.xl,
+    gap: theme.spacing.md,
     paddingTop: theme.spacing.md,
   },
   avatarStage: {

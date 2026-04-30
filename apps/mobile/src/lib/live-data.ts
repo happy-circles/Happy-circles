@@ -329,29 +329,32 @@ export interface AccountInviteDeliveryResult {
 }
 
 export interface AccountInvitePreviewResult {
-  readonly inviteId: string;
-  readonly deliveryId: string;
+  readonly inviteId: string | null;
+  readonly deliveryId: string | null;
   readonly status:
+    | 'unavailable'
     | 'pending_activation'
     | 'pending_inviter_review'
     | 'accepted'
     | 'rejected'
     | 'canceled'
     | 'expired';
-  readonly deliveryStatus: 'issued' | 'authenticated' | 'activated' | 'revoked' | 'expired';
-  readonly channel: 'remote' | 'qr';
-  readonly expiresAt: string;
-  readonly inviteExpiresAt: string;
+  readonly deliveryStatus:
+    | 'unavailable'
+    | 'issued'
+    | 'authenticated'
+    | 'activated'
+    | 'revoked'
+    | 'expired';
+  readonly channel: 'remote' | 'qr' | null;
+  readonly expiresAt: string | null;
+  readonly inviteExpiresAt: string | null;
   readonly resolvedAt: string | null;
-  readonly inviterUserId: string;
-  readonly inviterDisplayName: string;
-  readonly intendedRecipientAlias: string | null;
-  readonly intendedRecipientPhoneE164: string | null;
-  readonly intendedRecipientPhoneLabel: string | null;
-  readonly activatedUserId: string | null;
-  readonly activatedDisplayName: string | null;
-  readonly linkedRelationshipId: string | null;
+  readonly inviterDisplayName: string | null;
+  readonly inviterAvatarPath: string | null;
+  readonly intendedRecipientPhoneMasked: string | null;
   readonly reason:
+    | 'invite_unavailable'
     | 'delivery_revoked'
     | 'delivery_expired'
     | 'pending_activation'
@@ -955,7 +958,12 @@ function requestToneForStatus(
   currentUserId: string,
   status: FinancialRequestRow['status'],
 ): PersonTimelineItemDto['tone'] {
-  if (status === 'rejected' || status === 'amended' || status === 'canceled' || status === 'expired') {
+  if (
+    status === 'rejected' ||
+    status === 'amended' ||
+    status === 'canceled' ||
+    status === 'expired'
+  ) {
     return 'neutral';
   }
 
@@ -1283,10 +1291,7 @@ function settlementProposalTotalAmount(proposal: SettlementProposalRow): number 
   );
 }
 
-function settlementSavedMovementsCount(
-  participantCount: number,
-  movementCount: number,
-): number {
+function settlementSavedMovementsCount(participantCount: number, movementCount: number): number {
   return Math.max(participantCount - movementCount, 0);
 }
 
@@ -1386,9 +1391,7 @@ function buildSettlementProposalHistoryTimelineItems(input: {
       .map((participant) => input.names.get(participant.participant_user_id) ?? 'Persona')
       .filter((name) => name !== 'Tu');
     const detail =
-      proposal.status === 'rejected'
-        ? 'Este Circle no se completo'
-        : 'Este Circle fue reemplazado';
+      proposal.status === 'rejected' ? 'Este Circle no se completo' : 'Este Circle fue reemplazado';
     const peopleLabel = otherNames.length > 0 ? `Con ${otherNames.join(', ')}` : 'Happy Circle';
 
     return [
@@ -2182,11 +2185,7 @@ function buildHistorySubtitle(
 ): string {
   const isCycleSettlement = row.subtype === 'cycle_settlement';
   const pieces = [
-    isCycleSettlement
-      ? 'Happy Circle'
-      : sourceTypeForRow(row) === 'system'
-        ? 'Sistema'
-        : 'Usuario',
+    isCycleSettlement ? 'Happy Circle' : sourceTypeForRow(row) === 'system' ? 'Sistema' : 'Usuario',
   ];
 
   const movementFlow = buildMovementFlowLabel(row, names);
@@ -2265,15 +2264,9 @@ function buildSettlementDetail(
           'Happy Circles evita aplicar una propuesta sobre saldos que ya cambiaron.',
         ]
       : proposal.status === 'approved'
-        ? [
-            'La propuesta ya fue aprobada por todos.',
-            'El siguiente paso es completar el Circle.',
-          ]
+        ? ['La propuesta ya fue aprobada por todos.', 'El siguiente paso es completar el Circle.']
         : proposal.status === 'executed'
-          ? [
-              'Completaste un Circle!',
-              'El saldo neto ya fue actualizado.',
-            ]
+          ? ['Completaste un Circle!', 'El saldo neto ya fue actualizado.']
           : ['Este Circle ya no esta activo. Puedes crear otro si los saldos cambiaron.'];
 
   return {
@@ -2358,10 +2351,10 @@ function startOfYear(value: Date): Date {
   return new Date(value.getFullYear(), 0, 1, 0, 0, 0, 0);
 }
 
-function previousRangeFromBounds(start: Date, end: Date): Pick<
-  AnalyticsRange,
-  'previousStartMs' | 'previousEndMs'
-> {
+function previousRangeFromBounds(
+  start: Date,
+  end: Date,
+): Pick<AnalyticsRange, 'previousStartMs' | 'previousEndMs'> {
   const lengthMs = end.getTime() - start.getTime() + 1;
   return {
     previousStartMs: start.getTime() - lengthMs,
@@ -2419,11 +2412,7 @@ function periodRange(period: BalanceAnalyticsPeriod, now = new Date()): Analytic
   };
 }
 
-function isWithinRange(
-  timeMs: number,
-  startMs: number | null,
-  endMs: number | null,
-): boolean {
+function isWithinRange(timeMs: number, startMs: number | null, endMs: number | null): boolean {
   if (startMs !== null && timeMs < startMs) {
     return false;
   }
@@ -2443,10 +2432,7 @@ function computeChangeRatio(current: number, previous: number): number | null {
   return (current - previous) / Math.abs(previous);
 }
 
-function formatPeriodComparison(
-  changeRatio: number | null,
-  previousLabel: string | null,
-): string {
+function formatPeriodComparison(changeRatio: number | null, previousLabel: string | null): string {
   if (changeRatio === null || !previousLabel) {
     return 'No hay comparacion disponible todavia.';
   }
@@ -2762,7 +2748,8 @@ function buildWaterfalls(input: {
 
     if (
       input.period !== 'all' &&
-      (timeMs < (input.range.currentStartMs ?? 0) || timeMs > (input.range.currentEndMs ?? Infinity))
+      (timeMs < (input.range.currentStartMs ?? 0) ||
+        timeMs > (input.range.currentEndMs ?? Infinity))
     ) {
       return false;
     }
@@ -2790,7 +2777,10 @@ function buildWaterfalls(input: {
     personGroup.netMinor += netMinor;
   }
 
-  const periodNetMinor = Array.from(byCategory.values()).reduce((total, group) => total + group.netMinor, 0);
+  const periodNetMinor = Array.from(byCategory.values()).reduce(
+    (total, group) => total + group.netMinor,
+    0,
+  );
   const startingBalanceMinor = input.currentSummary.netBalanceMinor - periodNetMinor;
 
   const buildSteps = (
@@ -2808,7 +2798,8 @@ function buildWaterfalls(input: {
     let cumulative = startingBalanceMinor;
     const steps = groups
       .filter(
-        (g) => g.iOweMinor !== 0 || g.owedToMeMinor !== 0 || g.resolvedMinor !== 0 || g.netMinor !== 0,
+        (g) =>
+          g.iOweMinor !== 0 || g.owedToMeMinor !== 0 || g.resolvedMinor !== 0 || g.netMinor !== 0,
       )
       .sort((left, right) => Math.abs(right.netMinor) - Math.abs(left.netMinor))
       .map((g): BalanceWaterfallGroupDto => {
@@ -2855,7 +2846,10 @@ function buildWaterfalls(input: {
     byCategory: buildSteps(
       Array.from(byCategory.values()).map((g) => ({
         key: g.category,
-        label: g.category === 'cycle' ? 'Cierres de sistema' : transactionCategoryLabel(g.category as TransactionCategory),
+        label:
+          g.category === 'cycle'
+            ? 'Cierres de sistema'
+            : transactionCategoryLabel(g.category as TransactionCategory),
         category: g.category,
         iOweMinor: g.iOweMinor,
         owedToMeMinor: g.owedToMeMinor,
@@ -2974,10 +2968,7 @@ function buildActiveSettlementPreview(input: {
 
   return {
     proposalId: proposal.id,
-    status:
-      proposal.status === 'approved'
-        ? 'approved'
-        : 'pending_approvals',
+    status: proposal.status === 'approved' ? 'approved' : 'pending_approvals',
     title: proposal.status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
     subtitle:
       proposal.status === 'approved'
@@ -3015,7 +3006,9 @@ function buildSettlementMetrics(input: {
       return false;
     }
     const timeMs = relevantTimestamp(proposal);
-    return timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs);
+    return (
+      timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs)
+    );
   });
   const previousExecuted = participatedProposals.filter((proposal) => {
     if (proposal.status !== 'executed') {
@@ -3029,13 +3022,19 @@ function buildSettlementMetrics(input: {
   });
   const currentRelevant = participatedProposals.filter((proposal) => {
     const timeMs = relevantTimestamp(proposal);
-    return timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs);
+    return (
+      timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs)
+    );
   });
-  const sumProposalTotal = (proposal: SettlementProposalRow) => settlementProposalTotalAmount(proposal);
+  const sumProposalTotal = (proposal: SettlementProposalRow) =>
+    settlementProposalTotalAmount(proposal);
   const sumMovementCount = (proposal: SettlementProposalRow) =>
     parseSettlementMovements(proposal.movements_json).length;
 
-  const resolvedMinor = currentExecuted.reduce((total, proposal) => total + sumProposalTotal(proposal), 0);
+  const resolvedMinor = currentExecuted.reduce(
+    (total, proposal) => total + sumProposalTotal(proposal),
+    0,
+  );
   const previousResolvedMinor = previousExecuted.reduce(
     (total, proposal) => total + sumProposalTotal(proposal),
     0,
@@ -3085,7 +3084,10 @@ function buildBalanceProjection(input: {
 
     return total;
   }, 0);
-  const pendingAmountMinor = pendingRequests.reduce((total, request) => total + request.amount_minor, 0);
+  const pendingAmountMinor = pendingRequests.reduce(
+    (total, request) => total + request.amount_minor,
+    0,
+  );
 
   return {
     pendingCount: pendingRequests.length,
@@ -3580,7 +3582,7 @@ function buildLiveSnapshot(input: {
             href: pendingItems[0].href ?? '/activity',
             amountMinor: pendingItems[0].amountMinor,
             category: pendingItems[0].category,
-      }
+          }
         : null,
       activePeople: people,
     },
@@ -3657,7 +3659,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('v_friendship_invite_deliveries_live')
       .select(
-        'id, invite_id, token, channel, source_context, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
+        'id, invite_id, channel, source_context, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
       )
       .order('created_at', { ascending: false }),
     client
@@ -3669,7 +3671,7 @@ async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
     client
       .from('v_account_invite_deliveries_live')
       .select(
-        'id, invite_id, token, channel, source_context, status, expires_at, revoked_at, first_opened_at, last_opened_at, open_count, first_app_opened_at, authenticated_user_id, authenticated_at, activation_completed_at, created_at, updated_at',
+        'id, invite_id, channel, source_context, status, expires_at, revoked_at, first_opened_at, last_opened_at, open_count, first_app_opened_at, authenticated_user_id, authenticated_at, activation_completed_at, created_at, updated_at',
       )
       .order('created_at', { ascending: false }),
     client
@@ -3797,8 +3799,12 @@ async function parseFunctionError(error: unknown) {
   if (maybeContext) {
     try {
       const cloned = maybeContext.clone();
-      const body = (await cloned.json()) as { error?: string; message?: string };
+      const body = (await cloned.json()) as { error?: string; message?: string; code?: string };
       if (typeof body.error === 'string' && body.error.length > 0) {
+        if (typeof body.code === 'string' && body.code.length > 0) {
+          return `${body.code}: ${body.error}`;
+        }
+
         return body.error;
       }
 
@@ -3828,6 +3834,7 @@ function isJwtAuthError(message: string): boolean {
     normalized.includes('jwt expired') ||
     normalized.includes('jwt malformed') ||
     normalized.includes('bad jwt') ||
+    normalized.includes('auth_required') ||
     normalized.includes('missing authorization header')
   );
 }

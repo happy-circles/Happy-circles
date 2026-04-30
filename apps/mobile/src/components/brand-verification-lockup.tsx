@@ -23,9 +23,17 @@ export const BRAND_VERIFICATION_EASING = Easing.bezier(0.16, 1, 0.3, 1);
 const DEFAULT_SIZE = 74;
 const DEFAULT_RESULT_MS = 520;
 const AVATAR_MARK_FACE_VIEW_BOX = '290 290 100 100';
+const SPIN_FULL_TURN_MS = 1200;
+const SPIN_RELEASE_MIN_MS = 220;
+const SPIN_RELEASE_MAX_MS = 640;
+const SPIN_RELEASE_EPSILON = 0.025;
 
 function createMaskId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizeSpinValue(value: number) {
+  return ((value % 1) + 1) % 1;
 }
 
 function useReducedMotion() {
@@ -56,7 +64,10 @@ function useReducedMotion() {
 
 export function BrandVerificationMark({
   center,
+  centerGlyphSize,
+  centerGlyphViewBox,
   centerSize,
+  outerRotationDegrees = 0,
   replaceCenterOnResult,
   resultTone,
   showOuterInIdle = false,
@@ -65,7 +76,10 @@ export function BrandVerificationMark({
   style,
 }: {
   readonly center?: ReactNode;
+  readonly centerGlyphSize?: number;
+  readonly centerGlyphViewBox?: string;
   readonly centerSize?: number;
+  readonly outerRotationDegrees?: number;
   readonly replaceCenterOnResult?: boolean;
   readonly resultTone?: string;
   readonly showOuterInIdle?: boolean;
@@ -85,6 +99,8 @@ export function BrandVerificationMark({
     new Animated.Value(state === 'success' || state === 'error' ? 1 : 0),
   ).current;
   const spinMotion = useRef(new Animated.Value(0)).current;
+  const spinReleaseRef = useRef<Animated.CompositeAnimation | null>(null);
+  const spinWasLoadingRef = useRef(state === 'loading');
   const maskId = useMemo(() => createMaskId('brand-verification'), []);
   const brandPalette = useMemo(() => resolveHappyCirclesPalette('brand'), []);
   const idlePalette = useMemo(
@@ -162,16 +178,61 @@ export function BrandVerificationMark({
   }, [reducedMotion, resultMotion, state]);
 
   useEffect(() => {
-    spinMotion.stopAnimation();
-    spinMotion.setValue(0);
+    if (spinReleaseRef.current) {
+      spinReleaseRef.current.stop();
+      spinReleaseRef.current = null;
+    }
 
     if (state !== 'loading' || reducedMotion) {
+      const shouldReleaseSpin = spinWasLoadingRef.current && !reducedMotion;
+      spinWasLoadingRef.current = false;
+
+      spinMotion.stopAnimation((currentValue) => {
+        const normalizedSpin = normalizeSpinValue(currentValue);
+
+        if (
+          !shouldReleaseSpin ||
+          normalizedSpin <= SPIN_RELEASE_EPSILON ||
+          normalizedSpin >= 1 - SPIN_RELEASE_EPSILON
+        ) {
+          spinMotion.setValue(0);
+          return;
+        }
+
+        spinMotion.setValue(normalizedSpin);
+
+        const remainingTurn = 1 - normalizedSpin;
+        const releaseDuration = Math.max(
+          SPIN_RELEASE_MIN_MS,
+          Math.min(SPIN_RELEASE_MAX_MS, remainingTurn * SPIN_FULL_TURN_MS),
+        );
+        const releaseAnimation = Animated.timing(spinMotion, {
+          duration: releaseDuration,
+          easing: BRAND_VERIFICATION_EASING,
+          toValue: 1,
+          useNativeDriver: true,
+        });
+
+        spinReleaseRef.current = releaseAnimation;
+        releaseAnimation.start(({ finished }) => {
+          if (finished) {
+            spinMotion.setValue(0);
+          }
+          if (spinReleaseRef.current === releaseAnimation) {
+            spinReleaseRef.current = null;
+          }
+        });
+      });
       return undefined;
     }
 
+    spinWasLoadingRef.current = true;
+    spinMotion.stopAnimation();
+    spinMotion.setValue(0);
+
     const spinLoop = Animated.loop(
       Animated.timing(spinMotion, {
-        duration: 1200,
+        duration: SPIN_FULL_TURN_MS,
         easing: Easing.linear,
         toValue: 1,
         useNativeDriver: true,
@@ -189,11 +250,20 @@ export function BrandVerificationMark({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+  const outerTransform =
+    outerRotationDegrees === 0
+      ? [{ rotate }]
+      : [{ rotate: `${outerRotationDegrees}deg` }, { rotate }];
   const defaultIdleCenterOpacity = loadingMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
   });
-  const resultLayerSize = hasCustomCenter ? resolvedCenterSize : size;
+  const defaultCenterLayerSize = hasCustomCenter
+    ? size
+    : Math.min(size, Math.max(1, centerGlyphSize ?? size));
+  const defaultCenterLayerOffset = (size - defaultCenterLayerSize) / 2;
+  const defaultCenterViewBox = hasCustomCenter ? undefined : centerGlyphViewBox;
+  const resultLayerSize = hasCustomCenter ? resolvedCenterSize : defaultCenterLayerSize;
   const resultLayerOffset = (size - resultLayerSize) / 2;
   const resultLayerScale = resultMotion.interpolate({
     inputRange: [0, 1],
@@ -208,7 +278,7 @@ export function BrandVerificationMark({
           {
             height: size,
             opacity: outerMotion,
-            transform: [{ rotate }],
+            transform: outerTransform,
             width: size,
           },
         ]}
@@ -238,25 +308,37 @@ export function BrandVerificationMark({
             style={[
               styles.logoLayer,
               {
-                height: size,
+                height: defaultCenterLayerSize,
+                left: defaultCenterLayerOffset,
                 opacity: defaultIdleCenterOpacity,
-                width: size,
+                top: defaultCenterLayerOffset,
+                width: defaultCenterLayerSize,
               },
             ]}
           >
-            <HappyCirclesCenterSvg palette={idlePalette} size={size} />
+            <HappyCirclesCenterSvg
+              palette={idlePalette}
+              size={defaultCenterLayerSize}
+              viewBox={defaultCenterViewBox}
+            />
           </Animated.View>
           <Animated.View
             style={[
               styles.logoLayer,
               {
-                height: size,
+                height: defaultCenterLayerSize,
+                left: defaultCenterLayerOffset,
                 opacity: loadingMotion,
-                width: size,
+                top: defaultCenterLayerOffset,
+                width: defaultCenterLayerSize,
               },
             ]}
           >
-            <HappyCirclesCenterSvg palette={loadingPalette} size={size} />
+            <HappyCirclesCenterSvg
+              palette={loadingPalette}
+              size={defaultCenterLayerSize}
+              viewBox={defaultCenterViewBox}
+            />
           </Animated.View>
         </>
       )}
@@ -283,7 +365,7 @@ export function BrandVerificationMark({
         <HappyCirclesCenterSvg
           palette={resultPalette}
           size={resultLayerSize}
-          viewBox={hasCustomCenter ? AVATAR_MARK_FACE_VIEW_BOX : undefined}
+          viewBox={hasCustomCenter ? AVATAR_MARK_FACE_VIEW_BOX : defaultCenterViewBox}
           wink={state === 'success'}
         />
       </Animated.View>
@@ -294,6 +376,7 @@ export function BrandVerificationMark({
 export function BrandVerificationLockup({
   center,
   centerSize,
+  outerRotationDegrees,
   replaceCenterOnResult,
   accessibilityLabel = 'Happy Circles',
   gap = HEADER_BRAND_GAP,
@@ -308,6 +391,7 @@ export function BrandVerificationLockup({
 }: {
   readonly center?: ReactNode;
   readonly centerSize?: number;
+  readonly outerRotationDegrees?: number;
   readonly replaceCenterOnResult?: boolean;
   readonly accessibilityLabel?: string;
   readonly gap?: number;
@@ -369,6 +453,7 @@ export function BrandVerificationLockup({
           <BrandVerificationMark
             center={center}
             centerSize={centerSize}
+            outerRotationDegrees={outerRotationDegrees}
             replaceCenterOnResult={replaceCenterOnResult}
             resultTone={resultTone}
             size={size}

@@ -3,24 +3,31 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { IdentityFlowIdentity, IdentityFlowScreen } from '@/components/identity-flow';
+import {
+  IdentityFlowIdentity,
+  IdentityFlowLogoCopy,
+  IdentityFlowScreen,
+} from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,
-  useReviewAccountInviteMutation,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
-import { InviteTokenStatus } from './invite-token-status';
 
 function inviteReasonLabel(reason: string): string {
+  if (reason === 'invite_unavailable') {
+    return 'Esta invitacion no esta disponible o ya no puede usarse.';
+  }
+
   if (reason === 'delivery_revoked') {
     return 'Este acceso fue reemplazado por un link mas reciente.';
   }
@@ -48,19 +55,6 @@ function inviteReasonLabel(reason: string): string {
   return 'Necesitas terminar la activacion para entrar a Happy Circles.';
 }
 
-function maskPhoneValue(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const digits = value.replaceAll(/\D/g, '');
-  if (digits.length < 4) {
-    return null;
-  }
-
-  return `***${digits.slice(-4)}`;
-}
-
 function channelLabel(channel: 'remote' | 'qr') {
   return channel === 'qr' ? 'QR temporal' : 'Invitacion privada';
 }
@@ -72,10 +66,15 @@ function isUnavailableAccountInvite(preview: {
 }) {
   return (
     ['revoked', 'expired'].includes(preview.deliveryStatus) ||
-    ['canceled', 'rejected'].includes(preview.status) ||
-    ['canceled', 'delivery_expired', 'delivery_revoked', 'expired', 'rejected'].includes(
-      preview.reason,
-    )
+    ['canceled', 'rejected', 'unavailable'].includes(preview.status) ||
+    [
+      'canceled',
+      'delivery_expired',
+      'delivery_revoked',
+      'expired',
+      'invite_unavailable',
+      'rejected',
+    ].includes(preview.reason)
   );
 }
 
@@ -84,9 +83,8 @@ export function AccountInviteScreen() {
   const params = useLocalSearchParams<{ token?: string }>();
   const session = useSession();
   const activateInvite = useActivateAccountFromInviteMutation();
-  const reviewInvite = useReviewAccountInviteMutation();
   const [message, setMessage] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'activate' | 'approve' | 'reject' | null>(null);
+  const [busyAction, setBusyAction] = useState<'activate' | null>(null);
 
   const deliveryToken = useMemo(
     () =>
@@ -98,13 +96,8 @@ export function AccountInviteScreen() {
   const previewQuery = useAccountInvitePreviewQuery(deliveryToken);
   const preview = previewQuery.data;
 
-  const isInviter = Boolean(preview && session.userId && preview.inviterUserId === session.userId);
-  const isActivatedUser = Boolean(
-    preview && session.userId && preview.activatedUserId === session.userId,
-  );
   const canActivate = preview
     ? Boolean(deliveryToken) &&
-      !isInviter &&
       session.status !== 'signed_out' &&
       session.accountAccessState !== 'active' &&
       preview.status === 'pending_activation' &&
@@ -114,6 +107,9 @@ export function AccountInviteScreen() {
   const needsSetup = !session.setupState.requiredComplete;
   const needsTrustedDevice = session.deviceTrustState !== 'trusted';
   const tokenUnavailable = preview ? isUnavailableAccountInvite(preview) : false;
+  const hasPreviewDetails = Boolean(
+    preview && !tokenUnavailable && preview.channel && preview.expiresAt,
+  );
   const tokenState: BrandVerificationState =
     !deliveryToken || previewQuery.error
       ? 'error'
@@ -144,8 +140,15 @@ export function AccountInviteScreen() {
       : previewQuery.isLoading
         ? 'Confirmando si este acceso sigue disponible.'
         : preview
-          ? `${preview.inviterDisplayName} envio este acceso privado.`
+          ? tokenUnavailable
+            ? 'No revelamos detalles de invitaciones no disponibles.'
+            : `${preview.inviterDisplayName ?? 'Alguien'} envio este acceso privado.`
           : 'Una invitacion privada te da acceso a Happy Circles.';
+  const contentTransitionKey = previewQuery.isLoading
+    ? 'account-invite:loading'
+    : preview
+      ? 'account-invite:preview'
+      : 'account-invite:empty';
 
   useEffect(() => {
     if (!deliveryToken) {
@@ -176,6 +179,7 @@ export function AccountInviteScreen() {
       if (response.status === 'accepted') {
         await clearPendingInviteIntent();
         setMessage('Cuenta activada. Ya puedes entrar a Happy Circles.');
+        beginHomeEntryHandoff();
         returnToRoute(router, '/home');
         return;
       }
@@ -185,6 +189,7 @@ export function AccountInviteScreen() {
         setMessage(
           'Tu cuenta ya quedo lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
         );
+        beginHomeEntryHandoff();
         returnToRoute(router, '/home');
         return;
       }
@@ -197,88 +202,50 @@ export function AccountInviteScreen() {
     }
   }
 
-  async function handleReview(decision: 'approve' | 'reject') {
-    if (!preview?.inviteId || busyAction) {
-      return;
-    }
-
-    setBusyAction(decision);
-    setMessage(null);
-
-    try {
-      await reviewInvite.mutateAsync({
-        inviteId: preview.inviteId,
-        decision,
-      });
-      await clearPendingInviteIntent();
-      await previewQuery.refetch();
-      setMessage(
-        decision === 'approve'
-          ? 'Listo. La cuenta quedo aprobada y la conexion fue creada.'
-          : 'Cerramos esta invitacion sin crear la conexion.',
-      );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la revision.');
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
   return (
     <IdentityFlowScreen
+      contentTransitionKey={contentTransitionKey}
       footer={
         <View style={styles.footer}>
           <PrimaryAction
             label="Ir al inicio"
-            onPress={() => returnToRoute(router, '/home')}
+            onPress={() => {
+              beginHomeEntryHandoff();
+              returnToRoute(router, '/home');
+            }}
             variant="ghost"
           />
         </View>
       }
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
-      scrollEnabled={false}
+      identityPosition="top"
+      message={<IdentityFlowLogoCopy subtitle={tokenSubtitle} title={tokenTitle} />}
+      scrollEnabled
     >
-      <InviteTokenStatus subtitle={tokenSubtitle} title={tokenTitle} />
-
       {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
       {preview ? (
         <SurfaceCard padding="lg" variant="elevated">
-          <Text style={styles.title}>{preview.inviterDisplayName}</Text>
-          <Text style={styles.helper}>
-            {channelLabel(preview.channel)} | vence{' '}
-            {new Date(preview.expiresAt).toLocaleString('es-CO')}
+          <Text style={styles.title}>
+            {preview.inviterDisplayName ?? 'Invitacion no disponible'}
           </Text>
-
-          {preview.intendedRecipientAlias || preview.intendedRecipientPhoneE164 ? (
-            <View style={styles.snapshotBlock}>
-              <Text style={styles.snapshotTitle}>Contacto pensado</Text>
-              {preview.intendedRecipientAlias ? (
-                <Text style={styles.snapshotLine}>{preview.intendedRecipientAlias}</Text>
-              ) : null}
-              {preview.intendedRecipientPhoneE164 ? (
-                <Text style={styles.snapshotLine}>
-                  {[
-                    preview.intendedRecipientPhoneLabel,
-                    maskPhoneValue(preview.intendedRecipientPhoneE164),
-                  ]
-                    .filter(Boolean)
-                    .join(' | ')}
-                </Text>
-              ) : null}
-            </View>
+          {hasPreviewDetails && preview.channel && preview.expiresAt ? (
+            <Text style={styles.helper}>
+              {channelLabel(preview.channel)} | vence{' '}
+              {new Date(preview.expiresAt).toLocaleString('es-CO')}
+            </Text>
           ) : null}
 
-          {preview.activatedDisplayName ? (
+          {preview.intendedRecipientPhoneMasked ? (
             <View style={styles.snapshotBlock}>
-              <Text style={styles.snapshotTitle}>Cuenta que ya reclamo este acceso</Text>
-              <Text style={styles.snapshotLine}>{preview.activatedDisplayName}</Text>
+              <Text style={styles.snapshotTitle}>Contacto pensado</Text>
+              <Text style={styles.snapshotLine}>{preview.intendedRecipientPhoneMasked}</Text>
             </View>
           ) : null}
 
           <Text style={styles.body}>{inviteReasonLabel(preview.reason)}</Text>
 
-          {session.status === 'signed_out' ? (
+          {session.status === 'signed_out' && !tokenUnavailable ? (
             <View style={styles.actionStack}>
               <PrimaryAction
                 href={
@@ -340,30 +307,6 @@ export function AccountInviteScreen() {
               ) : null}
             </View>
           ) : null}
-
-          {isInviter && preview.status === 'pending_inviter_review' ? (
-            <View style={styles.actionStack}>
-              <PrimaryAction
-                label={busyAction === 'approve' ? 'Confirmando...' : 'Si es esta persona'}
-                onPress={busyAction ? undefined : () => void handleReview('approve')}
-                subtitle="Aprueba la cuenta y crea la conexion."
-              />
-              <PrimaryAction
-                label={busyAction === 'reject' ? 'Cerrando...' : 'No corresponde'}
-                onPress={busyAction ? undefined : () => void handleReview('reject')}
-                variant="secondary"
-              />
-            </View>
-          ) : null}
-
-          {isActivatedUser && preview.status === 'pending_inviter_review' ? (
-            <PrimaryAction
-              label="Entrar a la app"
-              onPress={() => returnToRoute(router, '/home')}
-              subtitle="Tu cuenta ya esta activa mientras se revisa esta conexion."
-              variant="secondary"
-            />
-          ) : null}
         </SurfaceCard>
       ) : null}
     </IdentityFlowScreen>
@@ -373,6 +316,7 @@ export function AccountInviteScreen() {
 const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
+    paddingBottom: theme.spacing.xs,
   },
   title: {
     color: theme.colors.text,

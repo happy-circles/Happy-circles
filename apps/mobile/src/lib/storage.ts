@@ -1,5 +1,4 @@
 import * as SecureStore from 'expo-secure-store';
-import { AsyncStorage } from 'expo-sqlite/kv-store';
 import { Platform } from 'react-native';
 
 function canUseWebStorage(): boolean {
@@ -42,7 +41,7 @@ export const authStorageAdapter = {
       return Promise.resolve(canUseWebStorage() ? globalThis.localStorage.getItem(key) : null);
     }
 
-    return AsyncStorage.getItemAsync(key);
+    return SecureStore.getItemAsync(key);
   },
   setItem(key: string, value: string) {
     if (Platform.OS === 'web') {
@@ -52,7 +51,7 @@ export const authStorageAdapter = {
       return Promise.resolve();
     }
 
-    return AsyncStorage.setItemAsync(key, value);
+    return SecureStore.setItemAsync(key, value);
   },
   removeItem(key: string) {
     if (Platform.OS === 'web') {
@@ -62,7 +61,7 @@ export const authStorageAdapter = {
       return Promise.resolve();
     }
 
-    return AsyncStorage.removeItemAsync(key).then(() => undefined);
+    return SecureStore.deleteItemAsync(key);
   },
 };
 

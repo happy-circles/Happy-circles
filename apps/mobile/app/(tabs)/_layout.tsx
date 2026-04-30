@@ -13,7 +13,7 @@ export default function TabsLayout() {
   }
 
   if (status === 'signed_out') {
-    return <Redirect href="/sign-in" />;
+    return <Redirect href="/join?mode=sign-in" />;
   }
 
   return (

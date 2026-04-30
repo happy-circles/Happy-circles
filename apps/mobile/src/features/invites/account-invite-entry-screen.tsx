@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
@@ -12,11 +11,11 @@ import {
 } from '@/components/brand-verification-lockup';
 import {
   IDENTITY_FLOW_STAGE_SIZE,
-  IdentityFlowActions,
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
-  IdentityFlowMessageSlot,
+  IdentityFlowLogoCopy,
+  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowSecondaryAction,
   IdentityFlowTextInput,
@@ -27,9 +26,12 @@ import {
   clearAuthRouteTransitionHold,
 } from '@/lib/auth-route-transition-hold';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import {
+  triggerIdentityErrorHaptic,
   triggerIdentityImpactHaptic,
   triggerIdentitySelectionHaptic,
+  triggerIdentitySuccessHaptic,
   triggerIdentityWarningHaptic,
 } from '@/lib/identity-flow-haptics';
 import { writePendingInviteIntent } from '@/lib/invite-intent';
@@ -47,11 +49,20 @@ import {
 type SocialProvider = 'google' | 'apple';
 type SignInEntryMode = 'sign-in' | 'recover';
 type AuthEntryMode = 'remembered' | 'other';
+type JoinEntrySurface = 'auth' | 'token';
+type RememberedReauthReason = 'biometric-failed' | 'session-expired';
 
-const AUTH_STATE_TRANSITION_MS = 640;
+const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
 const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
 const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
+const AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
+const AUTH_CONTENT_EXIT_MS = 190;
+const AUTH_MODE_ROUTE_DELAY_MS = 520;
+const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 180;
+const PASSWORD_RESET_SENT_MESSAGE =
+  'Si el correo existe, enviamos un enlace para restablecer la clave.';
+const PASSWORD_RESET_RESEND_SECONDS = 60;
 
 function biometricMessage(error: string | null, label: string): string {
   if (error === 'user_cancel') {
@@ -65,21 +76,18 @@ function biometricMessage(error: string | null, label: string): string {
   return `No pudimos validar ${label}. Entra con correo y contrasena.`;
 }
 
-function buildJoinSignInHref(token: string | null): Href {
-  return {
-    pathname: '/join',
-    params: token ? { mode: 'sign-in', token } : { mode: 'sign-in' },
-  } as unknown as Href;
-}
-
 function AuthEntryIdentity({
   avatarLabel,
   avatarUrl,
+  centerFaceSize = 'small',
+  disabled,
   state,
   variant = 'brand',
 }: {
   readonly avatarLabel?: string;
   readonly avatarUrl?: string | null;
+  readonly centerFaceSize?: 'large' | 'small';
+  readonly disabled?: boolean;
   readonly state: BrandVerificationState;
   readonly variant?: 'brand' | 'remembered';
 }) {
@@ -87,6 +95,8 @@ function AuthEntryIdentity({
     <IdentityFlowIdentity
       avatarLabel={avatarLabel}
       avatarUrl={avatarUrl}
+      centerFaceSize={variant === 'brand' ? centerFaceSize : undefined}
+      disabled={disabled}
       state={state}
       variant={variant}
     />
@@ -94,41 +104,84 @@ function AuthEntryIdentity({
 }
 
 function AccountSignInEntry({
+  autoUseRememberedAccount = false,
   initialMode = 'sign-in',
-  pendingToken,
+  initialSurface = 'auth',
+  initialToken,
+  isPreviewMode = false,
 }: {
+  readonly autoUseRememberedAccount?: boolean;
   readonly initialMode?: SignInEntryMode;
-  readonly pendingToken: string | null;
+  readonly initialSurface?: JoinEntrySurface;
+  readonly initialToken: string;
+  readonly isPreviewMode?: boolean;
 }) {
   const session = useSession();
   const router = useRouter();
   const account = session.rememberedAccount;
+  const [entrySurface, setEntrySurface] = useState<JoinEntrySurface>(initialSurface);
+  const [tokenInput, setTokenInput] = useState(initialToken);
+  const [tokenTouched, setTokenTouched] = useState(false);
+  const [tokenMessage, setTokenMessage] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<SignInEntryMode>(initialMode);
   const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>('remembered');
+  const [rememberedReauthReason, setRememberedReauthReason] =
+    useState<RememberedReauthReason | null>(null);
   const [showAuthOptions, setShowAuthOptions] = useState(!account || initialMode === 'recover');
   const [authOptionsMounted, setAuthOptionsMounted] = useState(showAuthOptions);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [authErrors, setAuthErrors] = useState<{
+    readonly email?: string;
+    readonly password?: string;
+  }>({});
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [socialBusyProvider, setSocialBusyProvider] = useState<SocialProvider | null>(null);
   const [authSuccess, setAuthSuccess] = useState(false);
   const [authResultState, setAuthResultState] = useState<BrandVerificationState | null>(null);
+  const [recoveryLinkSent, setRecoveryLinkSent] = useState(false);
+  const [recoveryResendSeconds, setRecoveryResendSeconds] = useState(0);
+  const [authContentVisible, setAuthContentVisible] = useState(true);
+  const [authSurfaceTransitioning, setAuthSurfaceTransitioning] = useState(false);
+  const [transitionTargetSurface, setTransitionTargetSurface] = useState<JoinEntrySurface | null>(
+    null,
+  );
 
   const avatarUrl = account ? resolveAvatarUrl(account.avatarPath) : null;
+  const normalizedToken = useMemo(() => extractAccountInviteToken(tokenInput), [tokenInput]);
+  const shouldPreview = normalizedToken.length >= MIN_ACCOUNT_INVITE_TOKEN_LENGTH;
+  const previewQuery = useAccountInvitePreviewQuery(shouldPreview ? normalizedToken : null);
+  const preview = previewQuery.data;
+  const blockingMessage = preview
+    ? accountInviteStatusMessage(preview.status, preview.deliveryStatus)
+    : null;
+  const pendingToken = shouldPreview ? normalizedToken : null;
 
   const authRequestBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
-  const authBusy = authRequestBusy || authResultState === 'success' || authSuccess;
+  const authBusy =
+    authRequestBusy ||
+    authSurfaceTransitioning ||
+    authResultState === 'success' ||
+    authSuccess;
   const authVisualState: BrandVerificationState =
-    authResultState ?? (authRequestBusy ? 'loading' : 'idle');
+    authSurfaceTransitioning
+      ? 'loading'
+      : (authResultState ?? (authRequestBusy ? 'loading' : 'idle'));
   const isRecovery = authMode === 'recover';
   const isOtherAccountMode = showAuthOptions && authEntryMode === 'other';
   const isRememberedReauthMode =
-    showAuthOptions && authEntryMode === 'remembered' && Boolean(account) && !isRecovery;
+    showAuthOptions &&
+    authEntryMode === 'remembered' &&
+    rememberedReauthReason !== null &&
+    Boolean(account) &&
+    !isRecovery;
   const locksRememberedEmail = isRememberedReauthMode && Boolean(account?.email);
   const authOptionsMotion = useRef(new Animated.Value(showAuthOptions ? 1 : 0)).current;
   const authEntryMotion = useRef(new Animated.Value(authEntryMode === 'other' ? 1 : 0)).current;
+  const surfaceSwapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const surfaceRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -151,7 +204,7 @@ function AccountSignInEntry({
 
   useEffect(() => {
     Animated.timing(authEntryMotion, {
-      duration: 620,
+      duration: AUTH_STATE_TRANSITION_MS,
       easing: AUTH_STATE_EASING,
       toValue: authEntryMode === 'other' ? 1 : 0,
       useNativeDriver: true,
@@ -166,21 +219,108 @@ function AccountSignInEntry({
       if (successCompletionTimerRef.current) {
         clearTimeout(successCompletionTimerRef.current);
       }
+      if (surfaceSwapTimerRef.current) {
+        clearTimeout(surfaceSwapTimerRef.current);
+      }
+      if (surfaceRevealTimerRef.current) {
+        clearTimeout(surfaceRevealTimerRef.current);
+      }
       clearAuthRouteTransitionHold();
     },
     [],
   );
 
+  useEffect(() => {
+    setTokenInput(initialToken);
+    setTokenTouched(false);
+  }, [initialToken]);
+
+  useEffect(() => {
+    if (!autoUseRememberedAccount || !account || entrySurface !== 'token' || isPreviewMode) {
+      return;
+    }
+
+    transitionAuthSurface(
+      () => {
+        setEntrySurface('auth');
+        setAuthEntryMode('remembered');
+        setAuthMode('sign-in');
+        setEmail(account.email ?? '');
+        setPassword('');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setMessage(null);
+        setShowAuthOptions(false);
+      },
+      false,
+      'auth',
+    );
+  }, [account, autoUseRememberedAccount, entrySurface, isPreviewMode]);
+
+  useEffect(() => {
+    if (
+      !account ||
+      entrySurface !== 'auth' ||
+      authMode !== 'sign-in' ||
+      authEntryMode !== 'remembered' ||
+      rememberedReauthReason !== null ||
+      authSurfaceTransitioning ||
+      isPreviewMode
+    ) {
+      return;
+    }
+
+    if (!showAuthOptions && !authOptionsMounted) {
+      return;
+    }
+
+    authEntryMotion.stopAnimation();
+    authEntryMotion.setValue(0);
+    authOptionsMotion.stopAnimation();
+    authOptionsMotion.setValue(0);
+    setEmail(account.email ?? '');
+    setPassword('');
+    setAuthErrors({});
+    setAuthSuccess(false);
+    setAuthResultState(null);
+    setRememberedReauthReason(null);
+    setRecoveryLinkSent(false);
+    setRecoveryResendSeconds(0);
+    setMessage(null);
+    setAuthOptionsMounted(false);
+    setShowAuthOptions(false);
+  }, [
+    account,
+    authEntryMode,
+    authEntryMotion,
+    authMode,
+    authOptionsMotion,
+    authOptionsMounted,
+    authSurfaceTransitioning,
+    entrySurface,
+    isPreviewMode,
+    rememberedReauthReason,
+    showAuthOptions,
+  ]);
+
+  useEffect(() => {
+    if (!recoveryLinkSent || recoveryResendSeconds <= 0) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setRecoveryResendSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [recoveryLinkSent, recoveryResendSeconds]);
+
   const authOptionsAnimatedStyle = {
     opacity: authOptionsMotion,
-    transform: [
-      {
-        translateY: authOptionsMotion.interpolate({
-          inputRange: [0, 1],
-          outputRange: [12, 0],
-        }),
-      },
-    ],
   };
   const rememberedIdentityStyle = {
     opacity: authEntryMotion.interpolate({
@@ -231,6 +371,9 @@ function AccountSignInEntry({
 
     successNavigationTimerRef.current = setTimeout(() => {
       clearAuthRouteTransitionHold();
+      if (destination === '/home') {
+        beginHomeEntryHandoff();
+      }
       returnToRoute(router, destination);
     }, AUTH_SUCCESS_NAVIGATION_DELAY_MS);
 
@@ -258,12 +401,93 @@ function AccountSignInEntry({
     }
   }
 
+  function clearSurfaceTransitionTimers() {
+    if (surfaceSwapTimerRef.current) {
+      clearTimeout(surfaceSwapTimerRef.current);
+      surfaceSwapTimerRef.current = null;
+    }
+    if (surfaceRevealTimerRef.current) {
+      clearTimeout(surfaceRevealTimerRef.current);
+      surfaceRevealTimerRef.current = null;
+    }
+    setTransitionTargetSurface(null);
+  }
+
+  function transitionAuthSurface(
+    applyNextSurface: () => void,
+    waitForStageTravel: boolean,
+    targetSurface: JoinEntrySurface | null = null,
+  ) {
+    clearSurfaceTransitionTimers();
+    setTransitionTargetSurface(targetSurface);
+    setAuthSurfaceTransitioning(true);
+    setAuthContentVisible(false);
+
+    surfaceSwapTimerRef.current = setTimeout(() => {
+      surfaceSwapTimerRef.current = null;
+      applyNextSurface();
+
+      surfaceRevealTimerRef.current = setTimeout(
+        () => {
+          surfaceRevealTimerRef.current = null;
+          setAuthContentVisible(true);
+          setAuthSurfaceTransitioning(false);
+          setTransitionTargetSurface(null);
+        },
+        waitForStageTravel ? AUTH_MODE_ROUTE_DELAY_MS : AUTH_SAME_POSITION_REVEAL_DELAY_MS,
+      );
+    }, AUTH_CONTENT_EXIT_MS);
+  }
+
+  function syncJoinSurfaceParams(nextSurface: JoinEntrySurface) {
+    router.setParams(
+      pendingToken
+        ? { mode: nextSurface === 'token' ? 'token' : 'sign-in', token: pendingToken }
+        : { mode: nextSurface === 'token' ? 'token' : 'sign-in', token: undefined },
+    );
+  }
+
+  function exitToInviteEntry() {
+    if (authBusy) {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
+    Keyboard.dismiss();
+    clearAuthRouteTransitionHold();
+    clearSuccessCompletionTimer();
+    clearSurfaceTransitionTimers();
+    setMessage(null);
+    setTokenMessage(null);
+    transitionAuthSurface(
+      () => {
+        setEntrySurface('token');
+        setAuthEntryMode('remembered');
+        setAuthMode('sign-in');
+        setEmail(account?.email ?? '');
+        setPassword('');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setMessage(null);
+        setShowAuthOptions(!account);
+        syncJoinSurfaceParams('token');
+      },
+      true,
+      'token',
+    );
+  }
+
   function completeSuccessfulSignIn() {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    triggerIdentitySuccessHaptic();
     beginAuthRouteTransitionHold(
       BRAND_VERIFICATION_RESULT_MS + AUTH_SUCCESS_NAVIGATION_DELAY_MS + 1000,
     );
     setAuthResultState('success');
+    setRememberedReauthReason(null);
     setMessage(null);
 
     if (successNavigationTimerRef.current) {
@@ -279,67 +503,128 @@ function AccountSignInEntry({
   }
 
   function showAuthFailure(nextMessage: string) {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+    triggerIdentityErrorHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
     setAuthResultState('error');
     setMessage(nextMessage);
   }
 
-  function showRememberedReauthMode(nextMessage: string | null = null) {
+  function showRememberedReauthMode(
+    nextMessage: string | null = null,
+    reason: RememberedReauthReason = 'biometric-failed',
+  ) {
     if (nextMessage) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+      triggerIdentityErrorHaptic();
     }
-    authEntryMotion.stopAnimation();
-    authEntryMotion.setValue(0);
-    setAuthEntryMode('remembered');
-    setAuthMode('sign-in');
-    setEmail(account?.email ?? '');
-    setPassword('');
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    setAuthSuccess(false);
-    setAuthResultState(nextMessage ? 'error' : null);
-    setMessage(nextMessage);
-    setShowAuthOptions(true);
+    transitionAuthSurface(
+      () => {
+        authEntryMotion.stopAnimation();
+        authEntryMotion.setValue(0);
+        setAuthEntryMode('remembered');
+        setAuthMode('sign-in');
+        setEmail(account?.email ?? '');
+        setPassword('');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(nextMessage ? 'error' : null);
+        setRememberedReauthReason(reason);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setMessage(nextMessage);
+        setAuthOptionsMounted(true);
+        setShowAuthOptions(true);
+      },
+      !showAuthOptions,
+      'auth',
+    );
   }
 
   function showOtherAccountMode() {
-    setAuthEntryMode('other');
-    setAuthMode('sign-in');
-    setEmail('');
-    setPassword('');
+    if (authBusy) {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    setAuthSuccess(false);
-    setAuthResultState(null);
-    setMessage(null);
-    setShowAuthOptions(true);
+    transitionAuthSurface(
+      () => {
+        setAuthEntryMode('other');
+        setAuthMode('sign-in');
+        setEmail('');
+        setPassword('');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setMessage(null);
+        setAuthOptionsMounted(true);
+        setShowAuthOptions(true);
+      },
+      !showAuthOptions,
+      'auth',
+    );
   }
 
   function showRecoverMode() {
-    setAuthMode('recover');
+    if (authBusy) {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    setAuthSuccess(false);
-    setAuthResultState(null);
-    setMessage(null);
-    setShowAuthOptions(true);
+    transitionAuthSurface(() => {
+      setAuthMode('recover');
+      setAuthErrors({});
+      setAuthSuccess(false);
+      setAuthResultState(null);
+      setRememberedReauthReason(null);
+      setRecoveryLinkSent(false);
+      setRecoveryResendSeconds(0);
+      setMessage(null);
+      setAuthOptionsMounted(true);
+      setShowAuthOptions(true);
+    }, false, 'auth');
   }
 
   function showSignInMode() {
-    setAuthMode('sign-in');
+    if (authBusy) {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    setAuthSuccess(false);
-    setAuthResultState(null);
-    setMessage(null);
-    setShowAuthOptions(true);
+    transitionAuthSurface(() => {
+      setAuthMode('sign-in');
+      setAuthErrors({});
+      setAuthSuccess(false);
+      setAuthResultState(null);
+      setRememberedReauthReason(null);
+      setRecoveryLinkSent(false);
+      setRecoveryResendSeconds(0);
+      setMessage(null);
+      setAuthOptionsMounted(true);
+      setShowAuthOptions(true);
+    }, false, 'auth');
   }
 
   function handleEmailChange(value: string) {
     setEmail(value);
+    setAuthErrors((current) => ({ ...current, email: undefined }));
     setAuthResultState(null);
+    if (recoveryLinkSent) {
+      setRecoveryLinkSent(false);
+      setRecoveryResendSeconds(0);
+      setMessage(null);
+      return;
+    }
     if (message && !isRecovery) {
       setMessage(null);
     }
@@ -347,10 +632,52 @@ function AccountSignInEntry({
 
   function handlePasswordChange(value: string) {
     setPassword(value);
+    setAuthErrors((current) => ({ ...current, password: undefined }));
     setAuthResultState(null);
     if (message && !isRecovery) {
       setMessage(null);
     }
+  }
+
+  function validateEmailField() {
+    const resolvedEmail = locksRememberedEmail ? (account?.email ?? email) : email;
+    const trimmedEmail = resolvedEmail.trim();
+    const nextEmailError =
+      trimmedEmail.length === 0
+        ? 'Escribe tu correo.'
+        : !trimmedEmail.includes('@')
+          ? 'Escribe un correo valido.'
+          : undefined;
+
+    setAuthErrors((current) => ({ ...current, email: nextEmailError }));
+    return !nextEmailError;
+  }
+
+  function validatePasswordField() {
+    const nextPasswordError =
+      !isRecovery && password.length === 0 ? 'Escribe tu contrasena.' : undefined;
+
+    setAuthErrors((current) => ({ ...current, password: nextPasswordError }));
+    return !nextPasswordError;
+  }
+
+  function validatePasswordAuthForm() {
+    const emailValid = validateEmailField();
+    const passwordValid = isRecovery ? true : validatePasswordField();
+
+    if (!emailValid || !passwordValid) {
+      triggerIdentityWarningHaptic();
+      return false;
+    }
+
+    return true;
+  }
+
+  function runAfterKeyboardDismiss(action: () => void | Promise<void>) {
+    Keyboard.dismiss();
+    setTimeout(() => {
+      void action();
+    }, AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS);
   }
 
   async function rememberPendingToken() {
@@ -364,27 +691,18 @@ function AccountSignInEntry({
     });
   }
 
-  function inviteEntryHref(): Href {
-    if (pendingToken) {
-      return {
-        pathname: '/join',
-        params: { mode: 'token', token: pendingToken },
-      } as unknown as Href;
-    }
-
-    return {
-      pathname: '/join',
-      params: { mode: 'token' },
-    } as unknown as Href;
-  }
-
   async function handleContinue() {
     if (authBusy || !account) {
       return;
     }
 
+    triggerIdentityImpactHaptic();
+
     if (session.status === 'signed_out') {
-      showRememberedReauthMode('Tu sesion vencio. Confirma tu acceso para continuar.');
+      showRememberedReauthMode(
+        'Tu sesion vencio. Confirma tu acceso para continuar.',
+        'session-expired',
+      );
       return;
     }
 
@@ -413,6 +731,8 @@ function AccountSignInEntry({
       return;
     }
 
+    triggerIdentityImpactHaptic();
+
     beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
     clearSuccessCompletionTimer();
     setAuthSuccess(false);
@@ -439,6 +759,11 @@ function AccountSignInEntry({
 
   async function handlePasswordSignIn() {
     if (authBusy) {
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    if (!validatePasswordAuthForm()) {
       return;
     }
 
@@ -472,6 +797,11 @@ function AccountSignInEntry({
       return;
     }
 
+    triggerIdentityImpactHaptic();
+    if (!validatePasswordAuthForm()) {
+      return;
+    }
+
     setMessage(null);
     clearSuccessCompletionTimer();
     setAuthResultState(null);
@@ -479,134 +809,385 @@ function AccountSignInEntry({
 
     try {
       const result = await session.requestPasswordReset(email);
-      setMessage(result);
+      if (result === PASSWORD_RESET_SENT_MESSAGE) {
+        triggerIdentitySuccessHaptic();
+        setRecoveryLinkSent(true);
+        setRecoveryResendSeconds(PASSWORD_RESET_RESEND_SECONDS);
+        setAuthResultState(null);
+        setMessage(null);
+      } else {
+        triggerIdentityErrorHaptic();
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setAuthResultState('error');
+        setMessage(result);
+      }
     } finally {
       setPasswordBusy(false);
     }
   }
 
-  const authFooterAction =
+  function showSignInEntry() {
+    if (authBusy || entrySurface === 'auth') {
+      return;
+    }
+
+    triggerIdentitySelectionHaptic();
+    Keyboard.dismiss();
+    setTokenMessage(null);
+    transitionAuthSurface(
+      () => {
+        const nextShowAuthOptions = !account;
+        setEntrySurface('auth');
+        setAuthEntryMode(account ? 'remembered' : 'other');
+        setAuthMode('sign-in');
+        setEmail(account?.email ?? '');
+        setPassword('');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setMessage(null);
+        setAuthOptionsMounted(nextShowAuthOptions);
+        setShowAuthOptions(nextShowAuthOptions);
+        syncJoinSurfaceParams('auth');
+      },
+      !account,
+      'auth',
+    );
+  }
+
+  async function handleTokenContinue() {
+    if (authBusy || previewQuery.isFetching) {
+      return;
+    }
+
+    const token = extractAccountInviteToken(tokenInput);
+    if (token.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH) {
+      setTokenTouched(true);
+      triggerIdentityWarningHaptic();
+      setTokenMessage('Abre tu link de invitacion o pega el token completo para continuar.');
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    setTokenMessage(null);
+
+    const previewResult = await previewQuery.refetch();
+    if (previewResult.error) {
+      triggerIdentityErrorHaptic();
+      setTokenMessage(previewResult.error.message);
+      return;
+    }
+
+    const nextPreview = previewResult.data;
+    if (!nextPreview) {
+      triggerIdentityErrorHaptic();
+      setTokenMessage('No pudimos validar esta invitacion. Intenta otra vez.');
+      return;
+    }
+
+    const nextBlockingMessage = accountInviteStatusMessage(
+      nextPreview.status,
+      nextPreview.deliveryStatus,
+    );
+    if (nextBlockingMessage) {
+      triggerIdentityErrorHaptic();
+      setTokenMessage(nextBlockingMessage);
+      return;
+    }
+
+    await writePendingInviteIntent({
+      type: 'account_invite',
+      token,
+    });
+
+    triggerIdentitySuccessHaptic();
+    pushRoute(router, {
+      pathname: '/join/[token]/create-account',
+      params: { token },
+    } as unknown as Href);
+  }
+
+  const authIdentity =
     account && !isRecovery ? (
-      <IdentityFlowSecondaryAction
-        disabled={authBusy}
-        icon={isOtherAccountMode ? 'key-outline' : 'person-circle-outline'}
-        label={isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta'}
-        onPress={
-          isOtherAccountMode ? () => returnToRoute(router, inviteEntryHref()) : showOtherAccountMode
-        }
-      />
-    ) : isRecovery ? (
-      <IdentityFlowSecondaryAction
-        disabled={authBusy}
-        icon="person-circle-outline"
-        label="Iniciar sesion"
-        onPress={showSignInMode}
-      />
+      <Animated.View style={styles.rememberedProfileMotion}>
+        {showAuthOptions ? (
+          <View style={styles.authIdentityStage}>
+            <Animated.View
+              pointerEvents={isOtherAccountMode ? 'none' : 'auto'}
+              style={[styles.rememberedProfile, styles.authIdentityLayer, rememberedIdentityStyle]}
+            >
+              <AuthEntryIdentity
+                avatarLabel={account.displayName}
+                avatarUrl={avatarUrl}
+                disabled={isOtherAccountMode}
+                state={authVisualState}
+                variant="remembered"
+              />
+            </Animated.View>
+
+            <Animated.View
+              pointerEvents={isOtherAccountMode ? 'auto' : 'none'}
+              style={[
+                styles.rememberedProfile,
+                styles.authIdentityLayer,
+                otherAccountIdentityStyle,
+              ]}
+            >
+              <AuthEntryIdentity disabled={!isOtherAccountMode} state={authVisualState} />
+            </Animated.View>
+          </View>
+        ) : (
+          <Pressable
+            disabled={authBusy}
+            onPress={() => runAfterKeyboardDismiss(handleContinue)}
+            style={({ pressed }) => [
+              styles.rememberedProfile,
+              pressed && !authBusy ? styles.pressed : null,
+            ]}
+          >
+            <AuthEntryIdentity
+              avatarLabel={account.displayName}
+              avatarUrl={avatarUrl}
+              state={authVisualState}
+              variant="remembered"
+            />
+          </Pressable>
+        )}
+      </Animated.View>
     ) : (
-      <IdentityFlowSecondaryAction
-        disabled={authBusy}
-        icon="key-outline"
-        label="Volver a invitacion"
-        onPress={() => returnToRoute(router, inviteEntryHref())}
-      />
+      <Animated.View style={styles.rememberedProfileMotion}>
+        <View style={isRecovery ? undefined : styles.authIdentityStage}>
+          <View style={[styles.rememberedProfile, isRecovery ? null : styles.authIdentityLayer]}>
+            <AuthEntryIdentity state={authVisualState} />
+          </View>
+        </View>
+      </Animated.View>
     );
 
+  const secondaryAuthAction =
+    account && !isRecovery
+      ? {
+          icon: isOtherAccountMode ? 'key-outline' : 'person-circle-outline',
+          label: isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta',
+          onPress: isOtherAccountMode ? exitToInviteEntry : showOtherAccountMode,
+        }
+      : isRecovery
+        ? {
+            icon: 'person-circle-outline',
+            label: 'Iniciar sesion',
+            onPress: showSignInMode,
+          }
+        : {
+          icon: 'key-outline',
+          label: 'Volver a invitacion',
+          onPress: exitToInviteEntry,
+        };
+
+  const authPrimaryAction = (
+    <IdentityFlowPrimaryAction
+      disabled={authBusy || (isRecovery && recoveryResendSeconds > 0)}
+      icon={!showAuthOptions && account && !isRecovery ? 'arrow-forward' : undefined}
+      label={
+        !showAuthOptions && account && !isRecovery
+          ? biometricBusy
+            ? 'Validando...'
+            : 'Continuar'
+          : passwordBusy
+            ? 'Procesando...'
+            : isRecovery
+              ? recoveryLinkSent
+                ? recoveryResendSeconds > 0
+                  ? `Reenviar enlace en ${recoveryResendSeconds}s`
+                  : 'Reenviar enlace'
+                : 'Enviar enlace'
+              : 'Ingresar'
+      }
+      loading={biometricBusy || passwordBusy}
+      onPress={
+        authBusy
+          ? undefined
+          : () =>
+              void (!showAuthOptions && account && !isRecovery
+                ? handleContinue()
+                : isRecovery
+                  ? recoveryResendSeconds > 0
+                    ? undefined
+                    : handlePasswordRecovery()
+                  : handlePasswordSignIn())
+      }
+    />
+  );
+
+  const authFooterAction = (
+    <IdentityFlowSecondaryAction
+      disabled={authBusy}
+      icon={secondaryAuthAction.icon as keyof typeof Ionicons.glyphMap}
+      label={secondaryAuthAction.label}
+      onPress={authBusy ? undefined : secondaryAuthAction.onPress}
+    />
+  );
+  const authLogoTitle = isRecovery
+    ? recoveryLinkSent
+      ? 'Revisa tu correo'
+      : 'Recupera tu contrasena'
+    : !showAuthOptions && account
+      ? `Hola, ${account.displayName}`
+      : 'Ingresa a Happy Circles';
+  const authLogoSubtitle = isRecovery
+    ? recoveryLinkSent
+      ? 'Si existe la cuenta, el enlace va en camino.'
+      : 'Te enviaremos un enlace a tu correo.'
+    : !showAuthOptions && account
+      ? 'Toca para continuar.'
+      : isOtherAccountMode
+        ? 'Usa otra cuenta para continuar.'
+        : 'Usa tu correo y contrasena.';
+  const canTapSavedAccountCopy = Boolean(!showAuthOptions && account && !isRecovery);
+  const authLogoCopy = <IdentityFlowLogoCopy subtitle={authLogoSubtitle} title={authLogoTitle} />;
+  const authIdentityPosition = showAuthOptions ? 'top' : 'center';
+  const authContentTransitionKey =
+    !showAuthOptions && account && !isRecovery
+      ? 'auth:saved-account'
+      : isRecovery
+        ? 'auth:recover-form'
+        : 'auth:sign-in-form';
+  const tokenFieldError =
+    tokenTouched || tokenMessage || blockingMessage
+      ? (blockingMessage ??
+        tokenMessage ??
+        (normalizedToken.length > 0 && normalizedToken.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH
+          ? 'Pega el token completo para continuar.'
+          : null))
+      : null;
+  const tokenLogoSubtitle =
+    preview && !blockingMessage
+      ? `${preview.inviterDisplayName} te invito.`
+      : previewQuery.isFetching
+        ? 'Validando tu invitacion.'
+        : 'Pega tu codigo de invitacion para continuar.';
+  const tokenFooterAction = (
+    <IdentityFlowSecondaryAction
+      disabled={authBusy}
+      icon="person-circle-outline"
+      label="Ya tengo cuenta"
+      onPress={authBusy ? undefined : showSignInEntry}
+    />
+  );
+  const tokenIdentity =
+    authSurfaceTransitioning && transitionTargetSurface === 'auth' && account ? (
+      <AuthEntryIdentity
+        avatarLabel={account.displayName}
+        avatarUrl={avatarUrl}
+        state="loading"
+        variant="remembered"
+      />
+    ) : (
+      <IdentityFlowIdentity
+        centerFaceSize="small"
+        state={authSurfaceTransitioning || previewQuery.isFetching ? 'loading' : 'idle'}
+        variant="brand"
+      />
+    );
+  const tokenContent = (
+    <View style={styles.rememberedMain}>
+      <IdentityFlowForm>
+        <IdentityFlowField
+          error={tokenFieldError}
+          icon="key"
+          label="Codigo de invitacion"
+          status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
+        >
+          <IdentityFlowTextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onBlur={() => setTokenTouched(true)}
+            onChangeText={(value) => {
+              setTokenMessage(null);
+              setTokenInput(value);
+            }}
+            placeholder="Se llena al abrir tu link"
+            placeholderTextColor={theme.colors.muted}
+            value={tokenInput}
+          />
+        </IdentityFlowField>
+
+        <IdentityFlowPrimaryAction
+          disabled={authBusy || !shouldPreview || Boolean(blockingMessage)}
+          label={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
+          loading={previewQuery.isFetching}
+          onPress={previewQuery.isFetching ? undefined : () => void handleTokenContinue()}
+        />
+      </IdentityFlowForm>
+    </View>
+  );
+  const isTokenSurface = entrySurface === 'token';
+  const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;
+  const activeIdentityPosition = isTokenSurface ? 'center' : authIdentityPosition;
+  const activeFooterAction = isTokenSurface ? tokenFooterAction : authFooterAction;
+  const activeContentTransitionKey = isTokenSurface
+    ? 'invite-entry:token-form'
+    : authContentTransitionKey;
+  const activeMessage = isTokenSurface ? (
+    <IdentityFlowLogoCopy subtitle={tokenLogoSubtitle} title="Bienvenido a Happy Circles" />
+  ) : showAuthOptions && message ? (
+    <MessageBanner message={message} tone={authResultState === 'error' ? 'danger' : 'neutral'} />
+  ) : canTapSavedAccountCopy ? (
+    <Pressable
+      disabled={authBusy}
+      onPress={() => runAfterKeyboardDismiss(handleContinue)}
+      style={({ pressed }) => [
+        styles.logoCopyPressable,
+        pressed && !authBusy ? styles.pressed : null,
+        authBusy ? styles.actionDisabled : null,
+      ]}
+    >
+      {authLogoCopy}
+    </Pressable>
+  ) : (
+    authLogoCopy
+  );
+
   return (
-    <IdentityFlowScreen actions={authFooterAction} bodyStyle={styles.rememberedBody}>
-      <View style={[styles.rememberedMain, !isRecovery ? styles.rememberedMainRemembered : null]}>
-        {account && !isRecovery ? (
-          <Animated.View style={styles.rememberedProfileMotion}>
-            {showAuthOptions ? (
-              <View style={styles.authIdentityStage}>
-                <Animated.View
-                  pointerEvents={isOtherAccountMode ? 'none' : 'auto'}
-                  style={[
-                    styles.rememberedProfile,
-                    styles.authIdentityLayer,
-                    rememberedIdentityStyle,
-                  ]}
-                >
-                  <AuthEntryIdentity
-                    avatarLabel={account.displayName}
-                    avatarUrl={avatarUrl}
-                    state={authVisualState}
-                    variant="remembered"
-                  />
-                </Animated.View>
-
-                <Animated.View
-                  pointerEvents={isOtherAccountMode ? 'auto' : 'none'}
-                  style={[
-                    styles.rememberedProfile,
-                    styles.authIdentityLayer,
-                    otherAccountIdentityStyle,
-                  ]}
-                >
-                  <AuthEntryIdentity state={authVisualState} />
-                </Animated.View>
-              </View>
-            ) : (
-              <Pressable
-                disabled={authBusy}
-                onPress={() => void handleContinue()}
-                style={({ pressed }) => [
-                  styles.rememberedProfile,
-                  pressed && !authBusy ? styles.pressed : null,
-                ]}
-              >
-                <AuthEntryIdentity
-                  avatarLabel={account.displayName}
-                  avatarUrl={avatarUrl}
-                  state={authVisualState}
-                  variant="remembered"
-                />
-              </Pressable>
-            )}
-
-            {showAuthOptions ? (
-              <View style={styles.authMessageSlot}>
-                {message ? (
-                  <MessageBanner
-                    message={message}
-                    tone={authResultState === 'error' ? 'danger' : 'neutral'}
-                  />
-                ) : null}
-              </View>
-            ) : null}
-          </Animated.View>
-        ) : (
-          <Animated.View style={styles.rememberedProfileMotion}>
-            <View style={isRecovery ? undefined : styles.authIdentityStage}>
-              <View
-                style={[styles.rememberedProfile, isRecovery ? null : styles.authIdentityLayer]}
-              >
-                {!isRecovery ? <AuthEntryIdentity state={authVisualState} /> : null}
-                {isRecovery ? <AuthEntryIdentity state={authVisualState} /> : null}
-              </View>
-            </View>
-
-            {showAuthOptions ? (
-              <View style={styles.authMessageSlot}>
-                {message ? (
-                  <MessageBanner
-                    message={message}
-                    tone={authResultState === 'error' ? 'danger' : 'neutral'}
-                  />
-                ) : null}
-              </View>
-            ) : null}
-          </Animated.View>
-        )}
-
+    <IdentityFlowScreen
+      actions={activeFooterAction}
+      bodyStyle={styles.rememberedBody}
+      contentTransitionKey={activeContentTransitionKey}
+      contentVisible={authContentVisible}
+      identity={activeIdentity}
+      identityCenterLayout="balanced"
+      identityPosition={activeIdentityPosition}
+      message={activeMessage}
+      scrollEnabled
+    >
+      {isTokenSurface ? (
+        tokenContent
+      ) : (
+        <View style={styles.rememberedMain}>
         {authOptionsMounted ? (
           <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
             <IdentityFlowForm>
-              <IdentityFlowField icon="mail" label="Correo">
+              <IdentityFlowField
+                error={authErrors.email ?? null}
+                icon="mail"
+                label="Correo"
+                status={
+                  authErrors.email
+                    ? 'danger'
+                    : ((locksRememberedEmail ? account?.email : email) ?? '').trim().length > 0
+                      ? 'success'
+                      : 'idle'
+                }
+              >
                 <IdentityFlowTextInput
                   autoCapitalize="none"
                   autoComplete="email"
                   editable={!locksRememberedEmail}
                   keyboardType="email-address"
+                  onBlur={validateEmailField}
                   onChangeText={handleEmailChange}
                   placeholder="tu@correo.com"
                   placeholderTextColor={theme.colors.muted}
@@ -615,32 +1196,45 @@ function AccountSignInEntry({
               </IdentityFlowField>
 
               {!isRecovery ? (
-                <IdentityFlowField icon="lock-closed" label="Contrasena">
-                  <IdentityFlowTextInput
-                    autoCapitalize="none"
-                    autoComplete="password"
-                    onChangeText={handlePasswordChange}
-                    placeholder="Tu contrasena"
-                    placeholderTextColor={theme.colors.muted}
-                    secureTextEntry
-                    value={password}
-                  />
-                </IdentityFlowField>
+                <View style={styles.passwordFieldGroup}>
+                  <IdentityFlowField
+                    error={authErrors.password ?? null}
+                    icon="lock-closed"
+                    label="Contrasena"
+                    status={
+                      authErrors.password ? 'danger' : password.length > 0 ? 'success' : 'idle'
+                    }
+                  >
+                    <IdentityFlowTextInput
+                      autoCapitalize="none"
+                      autoComplete="password"
+                      onBlur={validatePasswordField}
+                      onChangeText={handlePasswordChange}
+                      placeholder="Tu contrasena"
+                      placeholderTextColor={theme.colors.muted}
+                      secureTextEntry
+                      value={password}
+                    />
+                  </IdentityFlowField>
+
+                  {showAuthOptions ? (
+                    <Pressable
+                      disabled={authBusy}
+                      onPress={authBusy ? undefined : showRecoverMode}
+                      style={({ pressed }) => [
+                        styles.forgotPasswordInline,
+                        !authErrors.password ? styles.forgotPasswordInlineLifted : null,
+                        pressed && !authBusy ? styles.pressed : null,
+                        authBusy ? styles.actionDisabled : null,
+                      ]}
+                    >
+                      <Text style={styles.forgotPasswordInlineText}>Olvide contrasena</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               ) : null}
 
-              <IdentityFlowActions
-                anchored={false}
-                disabled={authBusy}
-                loading={passwordBusy}
-                onPrimaryPress={
-                  authBusy
-                    ? undefined
-                    : () => void (isRecovery ? handlePasswordRecovery() : handlePasswordSignIn())
-                }
-                primaryLabel={
-                  passwordBusy ? 'Procesando...' : isRecovery ? 'Enviar enlace' : 'Ingresar'
-                }
-              />
+              {authPrimaryAction}
             </IdentityFlowForm>
 
             {!isRecovery ? (
@@ -649,7 +1243,7 @@ function AccountSignInEntry({
                   {session.appleSignInAvailable ? (
                     <Pressable
                       disabled={authBusy}
-                      onPress={() => void handleSocialSignIn('apple')}
+                      onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('apple'))}
                       style={({ pressed }) => [
                         styles.socialProviderButton,
                         styles.appleProviderButton,
@@ -666,7 +1260,7 @@ function AccountSignInEntry({
 
                   <Pressable
                     disabled={authBusy}
-                    onPress={() => void handleSocialSignIn('google')}
+                    onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('google'))}
                     style={({ pressed }) => [
                       styles.socialProviderButton,
                       styles.googleProviderButton,
@@ -681,22 +1275,12 @@ function AccountSignInEntry({
                     </Text>
                   </Pressable>
                 </View>
-
-                <Pressable
-                  disabled={authBusy}
-                  onPress={showRecoverMode}
-                  style={({ pressed }) => [
-                    styles.forgotPasswordButton,
-                    pressed ? styles.pressed : null,
-                  ]}
-                >
-                  <Text style={styles.inlineLinkText}>Olvide contrasena</Text>
-                </Pressable>
               </View>
             ) : null}
           </Animated.View>
         ) : null}
-      </View>
+        </View>
+      )}
     </IdentityFlowScreen>
   );
 }
@@ -708,262 +1292,40 @@ export function AccountInviteEntryScreen() {
     token?: string | string[];
   }>();
   const session = useSession();
-  const router = useRouter();
   const rawModeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const rawPreviewParam = Array.isArray(params.preview) ? params.preview[0] : params.preview;
   const rawTokenParam = Array.isArray(params.token) ? params.token[0] : params.token;
   const initialToken = useMemo(() => extractAccountInviteToken(rawTokenParam), [rawTokenParam]);
-  const [tokenInput, setTokenInput] = useState(initialToken);
-  const [message, setMessage] = useState<string | null>(null);
-  const normalizedToken = useMemo(() => extractAccountInviteToken(tokenInput), [tokenInput]);
-  const shouldPreview = normalizedToken.length >= MIN_ACCOUNT_INVITE_TOKEN_LENGTH;
-  const previewQuery = useAccountInvitePreviewQuery(shouldPreview ? normalizedToken : null);
-  const preview = previewQuery.data;
-  const blockingMessage = preview
-    ? accountInviteStatusMessage(preview.status, preview.deliveryStatus)
-    : null;
-  const pendingToken = shouldPreview ? normalizedToken : null;
   const isPreviewMode = __DEV__ && rawPreviewParam === 'true';
   const isRecoverMode = rawModeParam === 'recover' || rawModeParam === 'forgot-password';
   const isTokenEntryMode = rawModeParam === 'token' || rawModeParam === 'invite';
   const isSignInMode = rawModeParam === 'sign-in' || rawModeParam === 'login' || isRecoverMode;
-
-  useEffect(() => {
-    setTokenInput(initialToken);
-  }, [initialToken]);
-
-  if (((session.rememberedAccount && !isPreviewMode) || isSignInMode) && !isTokenEntryMode) {
-    return (
-      <AccountSignInEntry
-        initialMode={isRecoverMode ? 'recover' : 'sign-in'}
-        pendingToken={pendingToken}
-      />
-    );
-  }
-
-  async function handleContinue() {
-    const token = extractAccountInviteToken(tokenInput);
-    if (token.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH) {
-      triggerIdentityWarningHaptic();
-      setMessage('Abre tu link de invitacion o pega el token completo para continuar.');
-      return;
-    }
-
-    triggerIdentityImpactHaptic();
-    setMessage(null);
-
-    const previewResult = await previewQuery.refetch();
-    if (previewResult.error) {
-      setMessage(previewResult.error.message);
-      return;
-    }
-
-    const nextPreview = previewResult.data;
-    if (!nextPreview) {
-      setMessage('No pudimos validar esta invitacion. Intenta otra vez.');
-      return;
-    }
-
-    const nextBlockingMessage = accountInviteStatusMessage(
-      nextPreview.status,
-      nextPreview.deliveryStatus,
-    );
-    if (nextBlockingMessage) {
-      setMessage(nextBlockingMessage);
-      return;
-    }
-
-    await writePendingInviteIntent({
-      type: 'account_invite',
-      token,
-    });
-
-    pushRoute(router, {
-      pathname: '/join/[token]/create-account',
-      params: { token },
-    } as unknown as Href);
-  }
+  const initialSurface: JoinEntrySurface =
+    !isTokenEntryMode && (isSignInMode || (session.rememberedAccount && !isPreviewMode))
+      ? 'auth'
+      : 'token';
 
   return (
-    <IdentityFlowScreen
-      actions={
-        <IdentityFlowSecondaryAction
-          icon="person-circle-outline"
-          label="Ya tengo cuenta"
-          onPress={() => {
-            triggerIdentitySelectionHaptic();
-            returnToRoute(router, buildJoinSignInHref(pendingToken));
-          }}
-        />
-      }
-      bodyStyle={styles.rememberedBody}
-    >
-      <View
-        style={[styles.rememberedMain, styles.rememberedMainRemembered, styles.inviteEntryMain]}
-      >
-        <View style={styles.inviteEntryLogoCenter}>
-          <IdentityFlowIdentity
-            state={previewQuery.isFetching ? 'loading' : 'idle'}
-            variant="brand"
-          />
-        </View>
-
-        <View style={styles.inviteEntryFormAnchor}>
-          <IdentityFlowForm>
-            <IdentityFlowField
-              icon="key"
-              label="Codigo de invitacion"
-              reserveError={false}
-              status={blockingMessage || message ? 'danger' : preview ? 'success' : 'idle'}
-            >
-              <IdentityFlowTextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={(value) => {
-                  setMessage(null);
-                  setTokenInput(value);
-                }}
-                placeholder="Se llena al abrir tu link"
-                placeholderTextColor={theme.colors.muted}
-                value={tokenInput}
-              />
-            </IdentityFlowField>
-
-            <IdentityFlowMessageSlot minHeight={72}>
-              {preview && !blockingMessage ? (
-                <View style={styles.inviteSummary}>
-                  <Text style={styles.inviteLabel}>Invitacion de</Text>
-                  <Text style={styles.inviteName}>{preview.inviterDisplayName}</Text>
-                </View>
-              ) : blockingMessage ? (
-                <MessageBanner message={blockingMessage} tone="warning" />
-              ) : message ? (
-                <MessageBanner message={message} tone="neutral" />
-              ) : null}
-            </IdentityFlowMessageSlot>
-
-            <IdentityFlowActions
-              anchored={false}
-              disabled={!shouldPreview || Boolean(blockingMessage)}
-              loading={previewQuery.isFetching}
-              onPrimaryPress={previewQuery.isFetching ? undefined : () => void handleContinue()}
-              primaryLabel={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
-            />
-          </IdentityFlowForm>
-        </View>
-      </View>
-    </IdentityFlowScreen>
+    <AccountSignInEntry
+      autoUseRememberedAccount={!isTokenEntryMode && !isSignInMode}
+      initialMode={isRecoverMode ? 'recover' : 'sign-in'}
+      initialSurface={initialSurface}
+      initialToken={initialToken}
+      isPreviewMode={isPreviewMode}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardShell: {
-    backgroundColor: theme.colors.background,
-    flex: 1,
-  },
-  inviteEntryContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingBottom: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-  },
-  inviteEntryWidth: {
-    alignSelf: 'center',
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    maxWidth: 460,
-    width: '100%',
-  },
-  inviteEntryBody: {
-    flex: 1,
-    gap: 0,
-    paddingBottom: theme.spacing.sm,
-  },
-  inviteEntryMain: {
-    flex: 1,
-    justifyContent: 'center',
-    position: 'relative',
-    width: '100%',
-  },
-  inviteEntryLogoCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inviteEntryFormAnchor: {
-    left: 0,
-    marginTop: IDENTITY_FLOW_STAGE_SIZE / 2 + theme.spacing.xl,
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-  },
-  inviteEntryBrandWrap: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: theme.spacing.sm,
-    width: '100%',
-  },
-  inviteEntryLogoTarget: {
-    alignSelf: 'center',
-  },
-  inviteEntryLogoCopy: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    minHeight: 58,
-    width: '100%',
-  },
-  inviteEntryLogoTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  inviteEntryLogoSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    fontWeight: '600',
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  inviteEntryFormArea: {
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.xs,
-  },
-  inviteTokenInput: {
-    minHeight: 54,
-  },
-  rememberedContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingBottom: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-  },
-  rememberedWidth: {
-    alignSelf: 'center',
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    maxWidth: 460,
-    width: '100%',
-  },
   rememberedBody: {
     flex: 1,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   rememberedMain: {
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.lg,
+    gap: theme.spacing.sm,
     position: 'relative',
     width: '100%',
-  },
-  rememberedMainRemembered: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingBottom: theme.spacing.xxl,
-    paddingTop: 0,
   },
   rememberedProfile: {
     alignItems: 'center',
@@ -984,57 +1346,39 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  authIdentityLockup: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    width: '100%',
-  },
-  authIdentityCopy: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    minHeight: 54,
-    width: '100%',
-  },
-  authMessageSlot: {
-    justifyContent: 'flex-start',
-    minHeight: 42,
-    width: '100%',
-  },
-  rememberedTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  rememberedHint: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   socialActions: {
     gap: theme.spacing.sm,
     width: '100%',
   },
-  authFormBlock: {
-    gap: theme.spacing.md,
-    width: '100%',
-  },
-  authActionRow: {
-    paddingTop: theme.spacing.xs,
-  },
-  recoveryHelper: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '600',
-    lineHeight: 18,
-    paddingHorizontal: theme.spacing.xs,
-  },
   authSecondaryBlock: {
     alignItems: 'center',
     gap: theme.spacing.xs,
+    marginTop: theme.spacing.xl,
     width: '100%',
+  },
+  passwordFieldGroup: {
+    gap: theme.spacing.xxs,
+    width: '100%',
+  },
+  forgotPasswordInline: {
+    alignSelf: 'flex-end',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xs,
+    minHeight: 24,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 0,
+  },
+  forgotPasswordInlineLifted: {
+    transform: [{ translateY: -4 }],
+  },
+  forgotPasswordInlineText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+  },
+  logoCopyPressable: {
+    borderRadius: theme.radius.medium,
   },
   socialProviderRow: {
     flexDirection: 'row',
@@ -1072,79 +1416,10 @@ const styles = StyleSheet.create({
   appleProviderText: {
     color: theme.colors.white,
   },
-  iconFieldRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  authFieldIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.pill,
-    height: 40,
-    justifyContent: 'center',
-    marginTop: 6,
-    width: 40,
-  },
-  fieldControl: {
-    flex: 1,
-  },
-  authInputPanel: {
-    backgroundColor: theme.colors.primaryGhost,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  authInputPanelLocked: {
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  authInput: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    height: 52,
-    minHeight: 52,
-    paddingBottom: 0,
-    paddingTop: 0,
-    textAlignVertical: 'center',
-  },
-  authInputLocked: {
-    color: theme.colors.textMuted,
-  },
-  forgotPasswordButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    minHeight: 34,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
-  inlineLinkText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
   pressed: {
     opacity: 0.84,
   },
   actionDisabled: {
     opacity: 0.58,
-  },
-  inviteSummary: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    gap: theme.spacing.xxs,
-    padding: theme.spacing.md,
-  },
-  inviteLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  inviteName: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
   },
 });

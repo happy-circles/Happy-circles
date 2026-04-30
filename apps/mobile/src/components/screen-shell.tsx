@@ -22,6 +22,8 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly headerSlot?: ReactNode;
   readonly contentMode?: 'contained' | 'full';
   readonly footer?: ReactNode;
+  readonly footerDivider?: boolean;
+  readonly headerVisible?: boolean;
   readonly overlay?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
   readonly scrollEnabled?: boolean;
@@ -43,6 +45,8 @@ export function ScreenShell({
   headerSlot,
   contentMode = 'contained',
   footer,
+  footerDivider = true,
+  headerVisible = true,
   overlay,
   refresh,
   scrollEnabled = true,
@@ -72,37 +76,39 @@ export function ScreenShell({
         contentWidthStyle,
       ]}
     >
-      <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
-        {eyebrow ? (
-          <View style={styles.eyebrowBadge}>
-            <Text style={styles.eyebrowText}>{eyebrow}</Text>
+      {headerVisible ? (
+        <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+          {eyebrow ? (
+            <View style={styles.eyebrowBadge}>
+              <Text style={styles.eyebrowText}>{eyebrow}</Text>
+            </View>
+          ) : null}
+          <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
+            {headerTitle ? (
+              <>
+                {headerLeading}
+                <View style={styles.headerTitleNode}>{headerTitle}</View>
+                {headerSlot}
+              </>
+            ) : (
+              <>
+                {headerLeading}
+                <Text
+                  style={[
+                    styles.title,
+                    titleAlign === 'center' ? styles.titleCentered : null,
+                    resolvedTitleStyle,
+                  ]}
+                >
+                  {title}
+                </Text>
+                {headerSlot}
+              </>
+            )}
           </View>
-        ) : null}
-        <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
-          {headerTitle ? (
-            <>
-              {headerLeading}
-              <View style={styles.headerTitleNode}>{headerTitle}</View>
-              {headerSlot}
-            </>
-          ) : (
-            <>
-              {headerLeading}
-              <Text
-                style={[
-                  styles.title,
-                  titleAlign === 'center' ? styles.titleCentered : null,
-                  resolvedTitleStyle,
-                ]}
-              >
-                {title}
-              </Text>
-              {headerSlot}
-            </>
-          )}
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      </View>
+      ) : null}
       {children}
     </View>
   );
@@ -132,7 +138,7 @@ export function ScreenShell({
         <View style={contentStyle}>{screenContent}</View>
       )}
       {footer ? (
-        <View style={styles.footer}>
+        <View style={[styles.footer, !footerDivider ? styles.footerNoDivider : null]}>
           <View style={styles.contentWidth}>{footer}</View>
         </View>
       ) : null}
@@ -256,5 +262,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
+  },
+  footerNoDivider: {
+    borderTopWidth: 0,
   },
 });
