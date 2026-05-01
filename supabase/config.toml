@@ -81,6 +81,9 @@ verify_jwt = true
 [functions.process-graph-cycle-jobs]
 verify_jwt = false
 
+[functions.upload-avatar]
+verify_jwt = true
+
 [functions.propose-transaction-reversal]
 verify_jwt = true
 

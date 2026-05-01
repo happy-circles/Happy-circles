@@ -21,9 +21,12 @@
     "dev:landing": "pnpm --dir apps/landing run dev",
     "build:landing": "pnpm --dir apps/landing run build",
     "typecheck:landing": "pnpm --dir apps/landing run typecheck",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit --audit-level moderate && pnpm build:landing && pnpm security:check && pnpm test:supabase",
     "lint": "pnpm exec eslint .",
     "format": "pnpm exec prettier --write .",
+    "security:check": "node ./scripts/security-check.mjs",
     "test": "pnpm exec vitest run",
+    "test:supabase": "supabase db start && supabase db reset --no-seed && supabase test db",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {

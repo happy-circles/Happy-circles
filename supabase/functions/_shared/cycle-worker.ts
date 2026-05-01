@@ -3,7 +3,7 @@ const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const graphCycleWorkerSecret = Deno.env.get('GRAPH_CYCLE_WORKER_SECRET') ?? '';
 
 export function triggerGraphCycleWorker(limit = 1): void {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
+  if (!supabaseUrl || !supabaseServiceRoleKey || !graphCycleWorkerSecret) {
     return;
   }
 
@@ -12,7 +12,7 @@ export function triggerGraphCycleWorker(limit = 1): void {
     headers: {
       authorization: `Bearer ${supabaseServiceRoleKey}`,
       'content-type': 'application/json',
-      ...(graphCycleWorkerSecret ? { 'x-worker-secret': graphCycleWorkerSecret } : {}),
+      'x-worker-secret': graphCycleWorkerSecret,
     },
     body: JSON.stringify({ limit }),
   }).catch((error) => {

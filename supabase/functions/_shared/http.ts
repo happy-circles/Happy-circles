@@ -91,6 +91,8 @@ export function jsonResponse(status: number, body: unknown, requestId?: string):
     status,
     headers: {
       'content-type': 'application/json',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
       ...(requestId ? { 'x-request-id': requestId } : {}),
     },
   });

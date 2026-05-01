@@ -45,7 +45,7 @@ import {
 
 import { useSession } from '@/providers/session-provider';
 import { recordProductEventSafe } from './analytics-client';
-import { AVATAR_BUCKET, resolveAvatarUrl } from './avatar';
+import { resolveAvatarUrl } from './avatar';
 import { formatCop } from './data';
 import { buildActivityHistoryItems, compareHistoryItems } from './history-cases';
 import { createIdempotencyKey } from './idempotency';
@@ -63,8 +63,7 @@ type NonNullFields<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: NonNullable<T[P]>;
 };
 type OverrideFields<T, U> = Omit<T, keyof U> & U;
-type GeneratedFriendshipInviteRow =
-  Database['public']['Views']['v_friendship_invites_live']['Row'];
+type GeneratedFriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
 type FriendshipInviteRow = OverrideFields<
   NonNullFields<
     GeneratedFriendshipInviteRow,
@@ -75,7 +74,10 @@ type FriendshipInviteRow = OverrideFields<
 type GeneratedFriendshipInviteDeliveryRow =
   Database['public']['Views']['v_friendship_invite_deliveries_live']['Row'];
 type FriendshipInviteDeliveryRow = OverrideFields<
-  NonNullFields<GeneratedFriendshipInviteDeliveryRow, 'channel' | 'created_at' | 'id' | 'invite_id'>,
+  NonNullFields<
+    GeneratedFriendshipInviteDeliveryRow,
+    'channel' | 'created_at' | 'id' | 'invite_id'
+  >,
   { readonly status: string }
 >;
 type GeneratedAccountInviteRow = Database['public']['Views']['v_account_invites_live']['Row'];
@@ -4205,39 +4207,48 @@ export function useUpdateProfileAvatarMutation() {
       }
 
       const client = assertSupabaseClient();
-      const response = await fetch(input.uri);
-      const arrayBuffer = await response.arrayBuffer();
-      const normalizedContentType = input.contentType?.toLocaleLowerCase('en-US') ?? '';
+      const uriLower = input.uri.toLocaleLowerCase('en-US');
+      const inputContentType = input.contentType?.trim().toLocaleLowerCase('en-US') ?? '';
+      const normalizedContentType =
+        inputContentType ||
+        (uriLower.endsWith('.png')
+          ? 'image/png'
+          : uriLower.endsWith('.webp')
+            ? 'image/webp'
+            : uriLower.endsWith('.heic')
+              ? 'image/heic'
+              : uriLower.endsWith('.heif')
+                ? 'image/heif'
+                : 'image/jpeg');
       const fileExtension = normalizedContentType.includes('png')
         ? 'png'
         : normalizedContentType.includes('heic')
           ? 'heic'
-          : normalizedContentType.includes('webp')
-            ? 'webp'
-            : 'jpg';
-      const avatarPath = `${userId}/${Date.now()}.${fileExtension}`;
+          : normalizedContentType.includes('heif')
+            ? 'heif'
+            : normalizedContentType.includes('webp')
+              ? 'webp'
+              : 'jpg';
+      const formData = new FormData();
+      formData.append('avatar', {
+        name: `avatar.${fileExtension}`,
+        type: normalizedContentType,
+        uri: input.uri,
+      } as unknown as Blob);
 
-      const uploadResult = await client.storage
-        .from(AVATAR_BUCKET)
-        .upload(avatarPath, arrayBuffer, {
-          contentType: input.contentType ?? 'image/jpeg',
-          upsert: false,
-        });
+      const result = await client.functions.invoke<{ avatarPath: string }>('upload-avatar', {
+        body: formData,
+      });
 
-      if (uploadResult.error) {
-        throw new Error(uploadResult.error.message);
+      if (result.error) {
+        throw new Error(await parseFunctionError(result.error));
       }
 
-      const updateResult = await client
-        .from('user_profiles')
-        .update({ avatar_path: avatarPath } as never)
-        .eq('id', userId);
-
-      if (updateResult.error) {
-        throw new Error(updateResult.error.message);
+      if (!result.data?.avatarPath) {
+        throw new Error('No se pudo actualizar la foto.');
       }
 
-      return avatarPath;
+      return result.data.avatarPath;
     },
     onSuccess: async () => {
       await session.refreshAccountState();

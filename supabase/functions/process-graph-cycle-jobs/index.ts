@@ -3,7 +3,7 @@ import {
   parseAmountMinor,
   type PairNetEdge,
 } from '../_shared/cycle.ts';
-import { createServiceRoleClient, handlePublicRpc } from '../_shared/http.ts';
+import { createServiceRoleClient, handlePublicRpc, jsonResponse } from '../_shared/http.ts';
 
 const graphCycleWorkerSecret = Deno.env.get('GRAPH_CYCLE_WORKER_SECRET') ?? '';
 
@@ -15,14 +15,22 @@ interface ClaimedJob {
   currencyCode: string;
 }
 
-function requireWorkerAccess(request: Request): void {
+function checkWorkerAccess(request: Request): Response | null {
   if (!graphCycleWorkerSecret) {
-    return;
+    return jsonResponse(503, {
+      error: 'Worker no configurado.',
+      code: 'worker_not_configured',
+    });
   }
 
   if (request.headers.get('x-worker-secret') !== graphCycleWorkerSecret) {
-    throw new Error('Unauthorized worker');
+    return jsonResponse(403, {
+      error: 'Worker no autorizado.',
+      code: 'forbidden',
+    });
   }
+
+  return null;
 }
 
 function asRecord(value: unknown, field: string): Record<string, unknown> {
@@ -66,20 +74,9 @@ function parseEdge(value: unknown, field: string): PairNetEdge {
 }
 
 Deno.serve((request) => {
-  try {
-    requireWorkerAccess(request);
-  } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: 'Worker no autorizado.',
-        code: 'forbidden',
-        detail: error instanceof Error ? error.message : String(error),
-      }),
-      {
-        status: 403,
-        headers: { 'content-type': 'application/json' },
-      },
-    );
+  const accessResponse = checkWorkerAccess(request);
+  if (accessResponse) {
+    return accessResponse;
   }
 
   return handlePublicRpc(request, async (body) => {

@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { buildAvatarLabel } from '@/lib/avatar';
+import { buildAvatarLabel, useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 
 export interface AppAvatarProps {
@@ -22,6 +23,14 @@ export function AppAvatar({
 }: AppAvatarProps) {
   const radius = rounded ? size / 2 : Math.max(theme.radius.small, size * 0.28);
   const avatarLabel = buildAvatarLabel(label);
+  const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
+  const [hasImageError, setHasImageError] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [resolvedImageUrl]);
+
+  const canShowImage = Boolean(resolvedImageUrl && !hasImageError);
 
   return (
     <View
@@ -35,9 +44,10 @@ export function AppAvatar({
         },
       ]}
     >
-      {imageUrl ? (
+      {canShowImage ? (
         <Image
-          source={{ uri: imageUrl }}
+          onError={() => setHasImageError(true)}
+          source={{ uri: resolvedImageUrl as string }}
           style={{ borderRadius: radius, height: size, width: size }}
         />
       ) : (

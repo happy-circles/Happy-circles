@@ -122,6 +122,8 @@ pnpm test
 pnpm typecheck
 pnpm lint
 pnpm build:landing
+pnpm security:check
+pnpm test:supabase
 ```
 
 Important: do not run `npx expo ...` from the repository root. This is a pnpm monorepo and the Expo app lives in `apps/mobile`.
@@ -157,15 +159,17 @@ Backend worker variable:
 
 - `GRAPH_CYCLE_WORKER_SECRET`
 
+Production deployments must set `GRAPH_CYCLE_WORKER_SECRET`; the graph-cycle worker intentionally returns an operational error and processes no jobs when the secret is missing.
+
 Never commit real `.env` files.
 
 ## Supabase Workflow
 
 - Apply migrations in order from `supabase/migrations`.
-- Use `supabase/seed.sql` and `supabase/scripts` for demo and remote development data workflows.
+- Use `supabase/seed.sql`, `supabase/dev`, and `supabase/scripts` for demo and remote development data workflows. Demo users and demo reset helpers must not live in production migrations.
 - Deploy Edge Functions from `supabase/functions`.
 - Keep `supabase/config.toml` aligned with function auth requirements.
-- Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, security, or graph-cycle behavior.
+- Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, storage, security, or graph-cycle behavior.
 - Configure the scheduled graph-cycle fallback described in `docs/graph-cycle-worker.md` for deployed environments.
 
 ## App-Link Workflow

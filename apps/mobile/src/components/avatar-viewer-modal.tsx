@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 
 import { AppAvatar } from './app-avatar';
@@ -13,6 +15,15 @@ export interface AvatarViewerModalProps {
 }
 
 export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarViewerModalProps) {
+  const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
+  const [hasImageError, setHasImageError] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [resolvedImageUrl, visible]);
+
+  const canShowImage = Boolean(resolvedImageUrl && !hasImageError);
+
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.root}>
@@ -26,8 +37,12 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
             <Ionicons color={theme.colors.white} name="close" size={22} />
           </Pressable>
 
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.photo} />
+          {canShowImage ? (
+            <Image
+              onError={() => setHasImageError(true)}
+              source={{ uri: resolvedImageUrl as string }}
+              style={styles.photo}
+            />
           ) : (
             <AppAvatar
               fallbackBackgroundColor={theme.colors.primarySoft}

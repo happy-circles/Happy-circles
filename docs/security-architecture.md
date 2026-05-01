@@ -8,12 +8,16 @@ Happy Circles treats Supabase as the enforcement layer, not only as storage. Cli
 - User-facing public views must use `security_invoker=true` so the caller's RLS policies apply.
 - Private profile data belongs in own-profile endpoints or views. Cross-user profile surfaces should expose only `id`, `display_name`, `avatar_path`, minimal account state, and timestamps.
 - `app_settings` is public only for allowlisted runtime keys: `currency`, `app_web_origin`, and `mobile_min_supported_version`.
+- Production migrations must not create demo users, demo passwords, or demo seed/reset helpers. Demo data lives in `supabase/seed.sql`, `supabase/dev`, or explicit development scripts only.
+- Avatars are private storage objects. Clients never write the `avatars` bucket directly and never update `user_profiles.avatar_path` directly; uploads must go through the authenticated `upload-avatar` Edge Function, and reads must use short-lived signed URLs.
 
 ## Edge Functions and RPC
 
 - Authenticated Edge Functions require Supabase JWT verification and also validate the actor with `_shared/http.ts`.
 - Sensitive RPCs that accept `p_actor_user_id` are not a client contract. They are executable by `service_role` only and should be called through Edge Functions.
 - Edge errors return stable public codes and a `requestId`. Internal database or validation detail is logged server-side with that `requestId`.
+- Edge JSON responses must include `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+- Public Edge Function exceptions must be explicit in `supabase/config.toml` and covered by `pnpm security:check`. Privileged public workers must fail closed when their shared secret is missing.
 
 ## Invitation Tokens
 
@@ -33,4 +37,6 @@ Happy Circles treats Supabase as the enforcement layer, not only as storage. Cli
 - New view: `security_invoker=true`, no raw tokens, no unnecessary PII, and an introspection test.
 - New RPC: classify as public preview, authenticated read, or sensitive command. Sensitive commands should be `service_role` only.
 - New Edge Function: `verify_jwt=true` unless it is explicitly public, safe error shape, and request logging with `requestId`.
+- New storage surface: private bucket by default, no direct client writes for privileged profile fields, file type validation by MIME and magic bytes, and RLS tests for another user's object.
 - New dependency: run `pnpm audit --audit-level=moderate` and document any accepted residual risk.
+- Every pull request must pass `pnpm security:check`, `pnpm test:supabase`, lint, typecheck, tests, audit, and landing build through GitHub Actions.

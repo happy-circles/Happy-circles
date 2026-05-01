@@ -350,3 +350,4 @@ Web Bundled 33ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_f80ab8868ee3aa95
 Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_f80ab8868ee3aa95e99f27462f4f3a20\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
 Web Bundled 37ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_f80ab8868ee3aa95e99f27462f4f3a20\node_modules\expo-router\entry.js (1 module)
  LOG  [web] Logs will appear in the browser console
+ ELIFECYCLE  Command failed with exit code 1.
