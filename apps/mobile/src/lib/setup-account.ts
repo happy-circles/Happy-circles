@@ -3,7 +3,7 @@ import type { Database } from '@happy-circles/shared';
 
 type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
 
-export type SetupStep = 'profile' | 'photo' | 'security';
+export type SetupStep = 'email' | 'profile' | 'photo' | 'security';
 
 export function isLowQualityDisplayName(displayName: string | null | undefined): boolean {
   const normalized = displayName?.trim() ?? '';
@@ -26,8 +26,15 @@ export function hasProfilePhoto(profile: UserProfileRow | null): boolean {
   return Boolean(profile?.avatar_path);
 }
 
-export function derivePendingRequiredSetupSteps(profile: UserProfileRow | null): SetupStep[] {
+export function derivePendingRequiredSetupSteps(
+  profile: UserProfileRow | null,
+  emailConfirmed = true,
+): SetupStep[] {
   const pendingSteps: SetupStep[] = [];
+
+  if (!emailConfirmed) {
+    pendingSteps.push('email');
+  }
 
   if (!hasRequiredProfileInfo(profile)) {
     pendingSteps.push('profile');
@@ -46,6 +53,10 @@ export function resolveSetupStep(input: {
   readonly securityPending: boolean;
 }): SetupStep {
   const requestedStep = input.requestedStep;
+  if (requestedStep === 'email' && input.pendingRequiredSteps.includes('email')) {
+    return 'email';
+  }
+
   if (
     (requestedStep === 'profile' || requestedStep === 'photo') &&
     input.pendingRequiredSteps.includes(requestedStep)

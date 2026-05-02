@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { BalanceSummaryCard } from '@/components/balance-summary-card';
@@ -833,7 +833,9 @@ export function DashboardScreen() {
       unread: false,
     })),
   ];
-  const needsContacts = session.setupState.contactsPermissionStatus !== 'granted';
+  const needsContacts =
+    session.setupState.contactsPermissionStatus !== 'granted' &&
+    session.setupState.contactsPermissionStatus !== 'limited';
   const needsNotifications = !session.notificationsEnabled;
   const showNativeSetup = (needsContacts || needsNotifications) && setupPromptDismissed === false;
 
@@ -899,18 +901,40 @@ export function DashboardScreen() {
   }, [pendingTransactionItems, seenPendingTransactionIds, session.userId]);
 
   async function handleContactsPermission() {
+    if (session.setupState.contactsPermissionStatus === 'denied') {
+      openAppSettings(
+        'Permiso de contactos bloqueado',
+        'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+      );
+      return;
+    }
+
     setBusyNativeSetup('contacts');
     setNativeSetupMessage(null);
 
     try {
       const result = await session.requestContactsPermission();
       setNativeSetupMessage(result);
+      if (result.includes('Ajustes')) {
+        openAppSettings(
+          'Permiso de contactos bloqueado',
+          'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+        );
+      }
     } finally {
       setBusyNativeSetup(null);
     }
   }
 
   async function handleNotificationsPermission() {
+    if (session.setupState.notificationsPermissionStatus === 'denied') {
+      openAppSettings(
+        'Notificaciones bloqueadas',
+        'Abre Ajustes y permite notificaciones para activar recordatorios.',
+      );
+      return;
+    }
+
     setBusyNativeSetup('notifications');
     setNativeSetupMessage(null);
 
@@ -923,9 +947,22 @@ export function DashboardScreen() {
         }
       }
       setNativeSetupMessage(result);
+      if (result.includes('Ajustes')) {
+        openAppSettings(
+          'Notificaciones bloqueadas',
+          'Abre Ajustes y permite notificaciones para activar recordatorios.',
+        );
+      }
     } finally {
       setBusyNativeSetup(null);
     }
+  }
+
+  function openAppSettings(title: string, message: string) {
+    Alert.alert(title, message, [
+      { style: 'cancel', text: 'Ahora no' },
+      { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+    ]);
   }
 
   async function handleDismissNativeSetup() {

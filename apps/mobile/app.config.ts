@@ -1,8 +1,21 @@
 import type { ExpoConfig } from 'expo/config';
 
+function firstNonEmpty(...values: readonly (string | undefined)[]): string {
+  const value = values.find((candidate) => candidate?.trim());
+  return value?.trim() ?? '';
+}
+
 const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
 const authRedirectMode = process.env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
 const appLinkPathPrefixes = ['/invite', '/join', '/reset-password', '/setup-account', '/sign-in'];
+const appVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
+const iosBuildNumber = process.env.IOS_BUILD_NUMBER ?? '1';
+const androidVersionCode = Number.parseInt(process.env.ANDROID_VERSION_CODE ?? '1', 10);
+const supabaseUrl = firstNonEmpty(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = firstNonEmpty(
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+);
 const appWebHost = (() => {
   try {
     return new URL(appWebOrigin).host;
@@ -14,9 +27,16 @@ const appWebHost = (() => {
 const config: ExpoConfig = {
   name: 'Happy Circles',
   slug: 'happy-circles',
+  owner: 'happy-circles',
   scheme: 'happycircles',
-  version: '0.1.0',
+  version: appVersion,
+  icon: './assets/icon.png',
   orientation: 'portrait',
+  splash: {
+    image: './assets/splash.png',
+    resizeMode: 'contain',
+    backgroundColor: '#f7f8fb',
+  },
   userInterfaceStyle: 'light',
   plugins: [
     'expo-router',
@@ -30,8 +50,7 @@ const config: ExpoConfig = {
     [
       'expo-contacts',
       {
-        contactsPermission:
-          'Happy Circles usa tus contactos solo para ayudarte a asociar una invitacion privada a la persona correcta.',
+        contactsPermission: 'Happy Circles usa tus contactos para encontrar personas que ya conoces.',
       },
     ],
     [
@@ -52,15 +71,30 @@ const config: ExpoConfig = {
   },
   ios: {
     bundleIdentifier: 'com.happycircles.app',
+    buildNumber: iosBuildNumber,
     usesAppleSignIn: true,
     associatedDomains: [`applinks:${appWebHost}`],
     infoPlist: {
-      NSCameraUsageDescription: 'Use the camera to scan QR invitations in Happy Circles.',
-      NSFaceIDUsageDescription: 'Use Face ID to unlock Happy Circles quickly and securely.',
+      NSCameraUsageDescription:
+        'Happy Circles usa la camara para escanear invitaciones QR y actualizar tu foto de perfil.',
+      NSContactsUsageDescription:
+        'Happy Circles usa tus contactos para encontrar personas que ya conoces.',
+      NSFaceIDUsageDescription:
+        'Happy Circles usa Face ID para proteger cambios sensibles de tu cuenta.',
+      NSPhotoLibraryUsageDescription:
+        'Happy Circles usa tus fotos solo cuando eliges actualizar tu foto de perfil.',
+      NSPhotoLibraryAddUsageDescription:
+        'Happy Circles puede guardar imagenes cuando tu eliges compartirlas desde la app.',
     },
   },
   android: {
     package: 'com.happycircles.app',
+    versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundColor: '#f7f8fb',
+    },
+    blockedPermissions: ['android.permission.WRITE_CONTACTS', 'android.permission.RECORD_AUDIO'],
     intentFilters: [
       {
         action: 'VIEW',
@@ -75,11 +109,11 @@ const config: ExpoConfig = {
     ],
   },
   extra: {
-    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
-    supabaseAnonKey:
-      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
-      process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-      '',
+    eas: {
+      projectId: '9b63f5f3-3c81-4d3d-bc54-1a81b998d20a',
+    },
+    supabaseUrl,
+    supabaseAnonKey,
     appWebOrigin,
     authRedirectMode,
   },

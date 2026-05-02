@@ -2,7 +2,17 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import type { TextInput } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
@@ -110,6 +120,7 @@ export function SetupAccountScreen() {
   const params = useLocalSearchParams<{
     editPhone?: string | string[];
     returnTo?: string | string[];
+    step?: string | string[];
   }>();
   const session = useSession();
   const avatarMutation = useUpdateProfileAvatarMutation();
@@ -117,6 +128,7 @@ export function SetupAccountScreen() {
   const editPhoneMode =
     (Array.isArray(params.editPhone) ? params.editPhone[0] : params.editPhone) === 'true';
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const requestedStep = Array.isArray(params.step) ? params.step[0] : params.step;
 
   const initialCountry = useMemo(
     () =>
@@ -138,7 +150,7 @@ export function SetupAccountScreen() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [trustPassword, setTrustPassword] = useState('');
   const [securityBusyKey, setSecurityBusyKey] = useState<string | null>(null);
-  const [localAvatarReady, setLocalAvatarReady] = useState(false);
+  const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const [profileErrors, setProfileErrors] = useState<{
     readonly fullName?: string;
@@ -151,20 +163,25 @@ export function SetupAccountScreen() {
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
-  const avatarUrl = resolveAvatarUrl(profile?.avatar_path ?? null, profile?.updated_at ?? null);
+  const avatarUrl = resolveAvatarUrl(
+    localAvatarPath ?? profile?.avatar_path ?? null,
+    profile?.updated_at ?? null,
+  );
   const avatarLabel = fullName || profile?.display_name || profile?.email || 'Tu perfil';
+  const accountEmail = session.email ?? profile?.email ?? 'Sin correo';
   const trustActionLabel = resolveTrustActionLabel(session);
-  const hasSavedPhoto = hasProfilePhoto(profile) || localAvatarReady;
+  const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
   const phoneLabel = profile?.phone_e164 ?? 'Pendiente';
   const isSaving = profileBusy || avatarMutation.isPending;
+  const initialStepWarningShownRef = useRef(false);
 
   useEffect(() => {
     setFullName(profile?.display_name ?? '');
     setCountryIso(initialCountry.iso2);
     setPhoneNationalNumber(profile?.phone_national_number ?? '');
-    setLocalAvatarReady(false);
+    setLocalAvatarPath(null);
   }, [
     initialCountry.iso2,
     profile?.avatar_path,
@@ -199,6 +216,20 @@ export function SetupAccountScreen() {
 
     return () => clearTimeout(focusTimer);
   }, [editPhoneMode]);
+
+  useEffect(() => {
+    if (
+      initialStepWarningShownRef.current ||
+      requestedStep !== 'email' ||
+      session.isEmailConfirmed
+    ) {
+      return;
+    }
+
+    initialStepWarningShownRef.current = true;
+    triggerWarningHaptic();
+    setMessage('Confirma tu correo para poder enviar solicitudes e invitaciones.');
+  }, [requestedStep, session.isEmailConfirmed]);
 
   async function finishSetup() {
     if (returnTo === 'profile') {
@@ -254,11 +285,34 @@ export function SetupAccountScreen() {
 
     if (nextErrors.photo) {
       triggerWarningHaptic();
-      setMessage('Tu foto es obligatoria para terminar el setup.');
+      setMessage('Agrega una foto de perfil para terminar el setup.');
       return false;
     }
 
     return true;
+  }
+
+  function handleAvatarPermissionDenied(source: 'camera' | 'library', canAskAgain: boolean) {
+    const isCamera = source === 'camera';
+    const permissionMessage = isCamera
+      ? 'Necesitas permitir acceso a la camara para tomar tu foto.'
+      : 'Necesitas permitir acceso a tus fotos para elegir tu foto de perfil.';
+
+    triggerWarningHaptic();
+    setMessage(permissionMessage);
+
+    if (canAskAgain) {
+      return;
+    }
+
+    Alert.alert(
+      isCamera ? 'Permiso de camara bloqueado' : 'Permiso de fotos bloqueado',
+      `${permissionMessage} Abre Ajustes y habilita el permiso para Happy Circles.`,
+      [
+        { style: 'cancel', text: 'Ahora no' },
+        { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+      ],
+    );
   }
 
   async function handleSaveAndFinish() {
@@ -288,6 +342,12 @@ export function SetupAccountScreen() {
         return;
       }
 
+      if (!session.isEmailConfirmed) {
+        triggerWarningHaptic();
+        setMessage('Perfil guardado. Confirma tu correo o reenvia el enlace de confirmacion.');
+        return;
+      }
+
       await finishSetup();
     } finally {
       setProfileBusy(false);
@@ -301,11 +361,11 @@ export function SetupAccountScreen() {
 
     try {
       setMessage(null);
-      await avatarMutation.mutateAsync({
+      const nextAvatarPath = await avatarMutation.mutateAsync({
         uri: result.assets[0].uri,
         contentType: result.assets[0].mimeType,
       });
-      setLocalAvatarReady(true);
+      setLocalAvatarPath(nextAvatarPath);
       clearProfileError('photo');
       triggerSuccessHaptic();
       setMessage('Foto guardada.');
@@ -315,26 +375,24 @@ export function SetupAccountScreen() {
   }
 
   async function handlePickAvatar() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setMessage('Necesitas acceso a tus fotos para seguir.');
-      return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+
+      await uploadPickedAvatar(result);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo abrir tus fotos.');
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-
-    await uploadPickedAvatar(result);
   }
 
   async function handleTakeAvatarPhoto() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setMessage('Necesitas acceso a la camara para seguir.');
+      handleAvatarPermissionDenied('camera', permission.canAskAgain);
       return;
     }
 
@@ -356,6 +414,39 @@ export function SetupAccountScreen() {
 
     triggerSelectionHaptic();
 
+    if (Platform.OS === 'ios') {
+      const options = avatarUrl
+        ? ['Ver foto', 'Tomar foto', 'Elegir foto', 'Cancelar']
+        : ['Tomar foto', 'Elegir foto', 'Cancelar'];
+      const cancelButtonIndex = options.length - 1;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          cancelButtonIndex,
+          options,
+          title: 'Foto de perfil',
+        },
+        (selectedIndex) => {
+          const selectedOption = options[selectedIndex];
+
+          if (selectedOption === 'Ver foto') {
+            setAvatarViewerVisible(true);
+            return;
+          }
+
+          if (selectedOption === 'Tomar foto') {
+            void handleTakeAvatarPhoto();
+            return;
+          }
+
+          if (selectedOption === 'Elegir foto') {
+            void handlePickAvatar();
+          }
+        },
+      );
+      return;
+    }
+
     Alert.alert('Foto de perfil', undefined, [
       ...(avatarUrl ? [{ text: 'Ver foto', onPress: () => setAvatarViewerVisible(true) }] : []),
       { text: 'Tomar foto', onPress: () => void handleTakeAvatarPhoto() },
@@ -374,6 +465,23 @@ export function SetupAccountScreen() {
       return result;
     } finally {
       setSecurityBusyKey(null);
+    }
+  }
+
+  async function handleResendEmailConfirmation() {
+    if (securityBusyKey) {
+      return;
+    }
+
+    triggerImpactHaptic();
+    const result = await runSecurityAction('resend-email-confirmation', () =>
+      session.resendEmailConfirmation(),
+    );
+
+    if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
+      triggerSuccessHaptic();
+    } else {
+      triggerWarningHaptic();
     }
   }
 
@@ -425,6 +533,52 @@ export function SetupAccountScreen() {
       ) : null}
 
       <View style={styles.setupContent}>
+        {!editPhoneMode ? (
+          <View
+            style={[
+              styles.photoRequirement,
+              hasSavedPhoto ? styles.photoRequirementReady : styles.photoRequirementMissing,
+            ]}
+          >
+            <View
+              style={[
+                styles.photoRequirementIcon,
+                hasSavedPhoto
+                  ? styles.photoRequirementIconReady
+                  : styles.photoRequirementIconMissing,
+              ]}
+            >
+              <Ionicons
+                color={hasSavedPhoto ? theme.colors.success : theme.colors.danger}
+                name={hasSavedPhoto ? 'checkmark' : 'camera'}
+                size={18}
+              />
+            </View>
+            <View style={styles.photoRequirementCopy}>
+              <Text style={styles.photoRequirementTitle}>Foto de perfil</Text>
+              <Text style={styles.photoRequirementSubtitle}>
+                {hasSavedPhoto
+                  ? 'Lista para que tus circulos te reconozcan.'
+                  : 'Obligatoria para terminar el onboarding.'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={avatarMutation.isPending}
+              onPress={openAvatarOptions}
+              style={({ pressed }) => [
+                styles.photoRequirementAction,
+                pressed && !avatarMutation.isPending ? styles.pressed : null,
+                avatarMutation.isPending ? styles.disabledAction : null,
+              ]}
+            >
+              <Text style={styles.photoRequirementActionText}>
+                {hasSavedPhoto ? 'Cambiar' : 'Agregar'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <IdentityFlowForm>
           <IdentityFlowField
             error={profileErrors.fullName ?? null}
@@ -524,6 +678,39 @@ export function SetupAccountScreen() {
           </View>
 
           <View style={styles.securityList}>
+            <SecurityStatusRow
+              icon="mail"
+              status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
+              subtitle={
+                session.isEmailConfirmed
+                  ? accountEmail
+                  : 'Revisa tu bandeja o reenvia el correo'
+              }
+              title="Correo confirmado"
+              tone={session.isEmailConfirmed ? 'success' : 'danger'}
+              trailing={
+                session.isEmailConfirmed ? undefined : (
+                  <Pressable
+                    disabled={securityBusyKey !== null}
+                    onPress={() => void handleResendEmailConfirmation()}
+                    style={({ pressed }) => [
+                      styles.inlineButton,
+                      pressed && securityBusyKey === null ? styles.pressed : null,
+                      securityBusyKey !== null ? styles.disabledAction : null,
+                    ]}
+                  >
+                    <Text style={styles.inlineButtonText}>
+                      {securityBusyKey === 'resend-email-confirmation'
+                        ? 'Enviando...'
+                        : 'Reenviar'}
+                    </Text>
+                  </Pressable>
+                )
+              }
+            />
+
+            <View style={styles.separator} />
+
             <SecurityStatusRow
               icon="call"
               status={editPhoneMode ? 'Editando' : profile?.phone_e164 ? 'Listo' : 'Pendiente'}
@@ -626,6 +813,70 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     paddingTop: theme.spacing.md,
   },
+  photoRequirement: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  photoRequirementMissing: {
+    backgroundColor: theme.colors.dangerSoft,
+    borderColor: 'rgba(232, 96, 74, 0.24)',
+  },
+  photoRequirementReady: {
+    backgroundColor: theme.colors.successSoft,
+    borderColor: 'rgba(61, 186, 110, 0.2)',
+  },
+  photoRequirementIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  photoRequirementIconMissing: {
+    backgroundColor: theme.colors.surface,
+  },
+  photoRequirementIconReady: {
+    backgroundColor: theme.colors.surface,
+  },
+  photoRequirementCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  photoRequirementTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+  },
+  photoRequirementSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  photoRequirementAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 36,
+    minWidth: 76,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  photoRequirementActionText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  disabledAction: {
+    opacity: 0.58,
+  },
   avatarStage: {
     alignItems: 'center',
     gap: theme.spacing.sm,
@@ -722,6 +973,19 @@ const styles = StyleSheet.create({
   },
   inlineActionRow: {
     alignItems: 'flex-end',
+  },
+  inlineButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 9,
+  },
+  inlineButtonText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
   },
   readOnlyTitle: {
     color: theme.colors.text,

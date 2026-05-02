@@ -9,13 +9,19 @@ const extra = Constants.expoConfig?.extra as
     }
   | undefined;
 
+function firstNonEmpty(...values: readonly (string | undefined)[]): string {
+  const value = values.find((candidate) => candidate?.trim());
+  return value?.trim() ?? '';
+}
+
 export const appConfig = {
-  supabaseUrl: extra?.supabaseUrl ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+  supabaseUrl: firstNonEmpty(extra?.supabaseUrl, process.env.EXPO_PUBLIC_SUPABASE_URL),
   supabaseAnonKey:
-    extra?.supabaseAnonKey ??
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
-    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    '',
+    firstNonEmpty(
+      extra?.supabaseAnonKey,
+      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    ),
   appWebOrigin:
     extra?.appWebOrigin ??
     process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ??

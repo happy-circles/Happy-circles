@@ -128,6 +128,7 @@ export function ScreenShell({
           ref={scrollViewRef}
           style={styles.scrollView}
           contentContainerStyle={contentStyle}
+          fillViewport
           keyboardShouldPersistTaps="handled"
           refresh={refresh}
           showsVerticalScrollIndicator={false}

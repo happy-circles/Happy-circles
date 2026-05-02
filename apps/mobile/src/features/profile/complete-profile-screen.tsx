@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
 
 import {
@@ -72,6 +72,7 @@ export function CompleteProfileScreen() {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<ProfileFormErrors>({});
+  const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const fullNameInputRef = useRef<TextInput | null>(null);
   const phoneInputRef = useRef<TextInput | null>(null);
@@ -87,7 +88,10 @@ export function CompleteProfileScreen() {
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
-  const avatarUrl = resolveAvatarUrl(profile?.avatar_path ?? null, profile?.updated_at ?? null);
+  const avatarUrl = resolveAvatarUrl(
+    localAvatarPath ?? profile?.avatar_path ?? null,
+    profile?.updated_at ?? null,
+  );
   const focusTarget = typeof params.focus === 'string' ? params.focus : null;
   const isDirty =
     fullName.trim() !== (profile?.display_name ?? '').trim() ||
@@ -238,10 +242,11 @@ export function CompleteProfileScreen() {
     }
 
     try {
-      await avatarMutation.mutateAsync({
+      const nextAvatarPath = await avatarMutation.mutateAsync({
         uri: result.assets[0].uri,
         contentType: result.assets[0].mimeType,
       });
+      setLocalAvatarPath(nextAvatarPath);
       clearFieldError('avatar');
       setBanner(null);
       triggerIdentitySuccessHaptic();
@@ -256,23 +261,21 @@ export function CompleteProfileScreen() {
   }
 
   async function handlePickAvatar() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+
+      await uploadPickedAvatar(result);
+    } catch (error) {
       setBanner({
-        message: 'Necesitas permitir acceso a tus fotos para continuar.',
+        message: error instanceof Error ? error.message : 'No se pudo abrir tus fotos.',
         tone: 'danger',
       });
-      return;
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-
-    await uploadPickedAvatar(result);
   }
 
   async function handleTakeAvatarPhoto() {
@@ -302,6 +305,27 @@ export function CompleteProfileScreen() {
     }
 
     triggerIdentitySelectionHaptic();
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          cancelButtonIndex: 2,
+          options: ['Tomar foto', 'Elegir foto', 'Cancelar'],
+          title: 'Foto de perfil',
+        },
+        (selectedIndex) => {
+          if (selectedIndex === 0) {
+            void handleTakeAvatarPhoto();
+            return;
+          }
+
+          if (selectedIndex === 1) {
+            void handlePickAvatar();
+          }
+        },
+      );
+      return;
+    }
 
     Alert.alert('Foto de perfil', undefined, [
       {

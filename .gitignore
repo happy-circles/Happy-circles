@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 .expo
 .turbo
+.tmp
 .idea
 .vscode
 dist

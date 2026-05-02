@@ -726,7 +726,9 @@ export function ActivityScreen() {
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = useMemo(() => sections.find((item) => item.key === 'pending'), [sections]);
   const basePendingItems = pendingSection?.items ?? [];
-  const needsContacts = session.setupState.contactsPermissionStatus !== 'granted';
+  const needsContacts =
+    session.setupState.contactsPermissionStatus !== 'granted' &&
+    session.setupState.contactsPermissionStatus !== 'limited';
   const needsNotifications = !session.notificationsEnabled;
   const setupReminderItem = useMemo(
     () =>

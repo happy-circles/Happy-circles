@@ -394,7 +394,7 @@ function LaunchIntroOverlay({
   const latestTargetPreferenceRef = useRef(targetPreference);
   const latestStatusRef = useRef(session.status);
   const latestUnlockRef = useRef(() => session.unlock());
-  const introMotion = useRef(new Animated.Value(0)).current;
+  const introMotion = useRef(new Animated.Value(1)).current;
   const landMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
   const handoffMotion = useRef(new Animated.Value(0)).current;

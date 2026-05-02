@@ -12,7 +12,7 @@ import {
   IdentityFlowScreen,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
-import { MessageBanner } from '@/components/message-banner';
+import { MessageBanner, type MessageBannerTone } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
@@ -44,6 +44,59 @@ function countryFlag(iso2: string) {
 
 type FieldStatus = 'idle' | 'valid' | 'invalid';
 type FieldName = 'email' | 'phone' | 'password';
+
+const ACCOUNT_CREATED_SETUP_MESSAGE = 'Cuenta creada. Ahora termina tu setup.';
+const ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE = 'Cuenta creada. Revisa tu correo.';
+const ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE = 'No se pudo crear la cuenta.';
+
+function joinReadableList(items: readonly string[]) {
+  if (items.length <= 1) {
+    return items[0] ?? '';
+  }
+
+  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
+}
+
+function formatCreateAccountValidationMessage(input: {
+  readonly emailValid: boolean;
+  readonly passwordValid: boolean;
+  readonly phoneValid: boolean;
+}) {
+  const invalidFields: string[] = [];
+
+  if (!input.emailValid) {
+    invalidFields.push('correo');
+  }
+
+  if (!input.phoneValid) {
+    invalidFields.push('celular');
+  }
+
+  if (!input.passwordValid) {
+    invalidFields.push('clave');
+  }
+
+  return `Revisa ${joinReadableList(invalidFields)}.`;
+}
+
+function resolveCreateAccountMessageTone(message: string): MessageBannerTone {
+  if (
+    message === ACCOUNT_CREATED_SETUP_MESSAGE ||
+    message === ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE
+  ) {
+    return 'success';
+  }
+
+  if (message.startsWith('No se pudo')) {
+    return 'danger';
+  }
+
+  if (message.startsWith('Vista temporal de QA')) {
+    return 'neutral';
+  }
+
+  return 'warning';
+}
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -175,7 +228,13 @@ export function AccountCreateAccountScreen() {
 
     if (!emailValid || !phoneValid || !passwordValid) {
       triggerIdentityWarningHaptic();
-      setMessage(null);
+      setMessage(
+        formatCreateAccountValidationMessage({
+          emailValid,
+          passwordValid,
+          phoneValid,
+        }),
+      );
       return;
     }
 
@@ -204,14 +263,14 @@ export function AccountCreateAccountScreen() {
 
       setMessage(result);
 
-      if (result === 'Cuenta creada. Ahora termina tu setup.') {
+      if (result === ACCOUNT_CREATED_SETUP_MESSAGE) {
         triggerIdentitySuccessHaptic();
         beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       }
     } catch (error) {
       triggerIdentityErrorHaptic();
-      setMessage(error instanceof Error ? error.message : 'No se pudo crear la cuenta.');
+      setMessage(error instanceof Error ? error.message : ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -230,7 +289,7 @@ export function AccountCreateAccountScreen() {
         message ? (
           <MessageBanner
             message={message}
-            tone={message === 'Cuenta creada. Ahora termina tu setup.' ? 'success' : 'neutral'}
+            tone={resolveCreateAccountMessageTone(message)}
           />
         ) : (
           <IdentityFlowLogoCopy

@@ -93,7 +93,8 @@ function isUnavailableFriendshipInvite(reason: string) {
 export function InviteLinkScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
-  const { profileCompletionState, status } = useSession();
+  const session = useSession();
+  const { profileCompletionState, status } = session;
   const claimInvite = useClaimExternalFriendshipInviteMutation();
   const reviewInvite = useReviewExternalFriendshipInviteMutation();
   const [message, setMessage] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export function InviteLinkScreen() {
   const previewQuery = useFriendshipInvitePreviewQuery(readyForPreview ? deliveryToken : null);
   const preview = previewQuery.data;
   const tokenUnavailable = preview ? isUnavailableFriendshipInvite(preview.reason) : false;
+  const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'profile';
   const tokenState: BrandVerificationState =
     !deliveryToken || previewQuery.error
       ? 'error'
@@ -182,7 +184,7 @@ export function InviteLinkScreen() {
         });
 
         if (!cancelled) {
-          returnToRoute(router, buildSetupAccountHref('profile'));
+          returnToRoute(router, buildSetupAccountHref(setupEntryStep));
         }
       }
     }
@@ -192,7 +194,7 @@ export function InviteLinkScreen() {
     return () => {
       cancelled = true;
     };
-  }, [deliveryToken, profileCompletionState, router, status]);
+  }, [deliveryToken, profileCompletionState, router, setupEntryStep, status]);
 
   async function handleClaim() {
     if (!deliveryToken || busyAction) {

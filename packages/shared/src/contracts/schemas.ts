@@ -95,6 +95,10 @@ export const recordProductEventSchema = z.object({
   metadata: analyticsMetadataSchema.default({}),
 });
 
+export const requestAccountDeletionSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+});
+
 export const createBalanceRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   responderUserId: uuidSchema,
@@ -132,34 +136,36 @@ export const friendshipInviteDecisionSchema = z.object({
   decision: z.enum(['accept', 'reject']),
 });
 
-export const createExternalFriendshipInviteSchema = z.object({
-  idempotencyKey: idempotencyKeySchema,
-  channel: friendshipInviteChannelSchema.refine((value) => value !== 'internal', {
-    message: 'El canal externo debe ser remote o qr.',
-  }),
-  sourceContext: z.string().trim().min(1).max(80).optional(),
-  intendedRecipientAlias: z.string().trim().min(1).max(120).optional(),
-  intendedRecipientPhoneE164: z.string().trim().min(8).max(24).optional(),
-  intendedRecipientPhoneLabel: z.string().trim().min(1).max(40).optional(),
-}).superRefine((value, context) => {
-  if (value.channel === 'remote') {
-    if (!value.intendedRecipientAlias) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'La invitacion remota requiere un alias de contacto.',
-        path: ['intendedRecipientAlias'],
-      });
-    }
+export const createExternalFriendshipInviteSchema = z
+  .object({
+    idempotencyKey: idempotencyKeySchema,
+    channel: friendshipInviteChannelSchema.refine((value) => value !== 'internal', {
+      message: 'El canal externo debe ser remote o qr.',
+    }),
+    sourceContext: z.string().trim().min(1).max(80).optional(),
+    intendedRecipientAlias: z.string().trim().min(1).max(120).optional(),
+    intendedRecipientPhoneE164: z.string().trim().min(8).max(24).optional(),
+    intendedRecipientPhoneLabel: z.string().trim().min(1).max(40).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.channel === 'remote') {
+      if (!value.intendedRecipientAlias) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La invitacion remota requiere un alias de contacto.',
+          path: ['intendedRecipientAlias'],
+        });
+      }
 
-    if (!value.intendedRecipientPhoneE164) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'La invitacion remota requiere un numero de contacto.',
-        path: ['intendedRecipientPhoneE164'],
-      });
+      if (!value.intendedRecipientPhoneE164) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La invitacion remota requiere un numero de contacto.',
+          path: ['intendedRecipientPhoneE164'],
+        });
+      }
     }
-  }
-});
+  });
 
 export const friendshipInviteTokenSchema = z.object({
   deliveryToken: z.string().trim().min(12).max(128),
@@ -196,7 +202,11 @@ export const accountInviteTokenSchema = z.object({
   deliveryToken: z.string().trim().min(12).max(128),
 });
 
-export const accountInvitePreviewSchema = accountInviteTokenSchema;
+export const accountInvitePreviewSchema = accountInviteTokenSchema.extend({
+  email: z.string().trim().email().optional(),
+  phoneE164: z.string().trim().min(8).max(24).optional(),
+  recordAppOpen: z.boolean().optional(),
+});
 
 export const activateAccountFromInviteSchema = accountInviteTokenSchema.extend({
   idempotencyKey: idempotencyKeySchema,

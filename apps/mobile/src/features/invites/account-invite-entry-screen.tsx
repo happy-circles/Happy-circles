@@ -184,6 +184,8 @@ function AccountSignInEntry({
   const surfaceRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasLockedForRememberedUnlockRef = useRef(session.status === 'signed_in_locked');
+  const automaticUnlockHandledRef = useRef(false);
 
   useEffect(() => {
     if (showAuthOptions) {
@@ -304,6 +306,59 @@ function AccountSignInEntry({
     entrySurface,
     isPreviewMode,
     rememberedReauthReason,
+    showAuthOptions,
+  ]);
+
+  useEffect(() => {
+    if (session.status === 'signed_in_locked') {
+      wasLockedForRememberedUnlockRef.current = true;
+      automaticUnlockHandledRef.current = false;
+      return;
+    }
+
+    if (session.status !== 'signed_in_unlocked') {
+      wasLockedForRememberedUnlockRef.current = false;
+      automaticUnlockHandledRef.current = false;
+      return;
+    }
+
+    if (
+      !wasLockedForRememberedUnlockRef.current ||
+      automaticUnlockHandledRef.current ||
+      !account ||
+      entrySurface !== 'auth' ||
+      authMode !== 'sign-in' ||
+      authEntryMode !== 'remembered' ||
+      showAuthOptions ||
+      authSurfaceTransitioning ||
+      authSuccess ||
+      authResultState === 'success' ||
+      isPreviewMode
+    ) {
+      return;
+    }
+
+    automaticUnlockHandledRef.current = true;
+    void rememberPendingToken()
+      .catch((error) => {
+        console.warn(
+          'Failed to persist pending invite before automatic remembered-account unlock',
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .then(() => {
+        completeSuccessfulSignIn();
+      });
+  }, [
+    account,
+    authEntryMode,
+    authMode,
+    authResultState,
+    authSuccess,
+    authSurfaceTransitioning,
+    entrySurface,
+    isPreviewMode,
+    session.status,
     showAuthOptions,
   ]);
 

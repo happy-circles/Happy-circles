@@ -104,6 +104,11 @@ interface RegistrationInput extends EmailPasswordCredentials {
   readonly phoneNationalNumber: string;
 }
 
+interface AccountRegistrationPreviewResult {
+  readonly emailAlreadyRegistered?: boolean;
+  readonly phoneAlreadyRegistered?: boolean;
+}
+
 interface CompleteProfileInput {
   readonly fullName: string;
   readonly phoneCountryIso2: string;
@@ -141,6 +146,7 @@ interface RememberedAccountSnapshot {
 interface SetupState {
   readonly requiredComplete: boolean;
   readonly pendingRequiredSteps: readonly SetupStep[];
+  readonly emailConfirmed: boolean;
   readonly securityPending: boolean;
   readonly biometricsEligible: boolean;
   readonly contactsPermissionStatus: SetupPermissionStatus;
@@ -152,6 +158,7 @@ interface SessionContextValue {
   readonly status: SessionStatus;
   readonly userId: string | null;
   readonly email: string | null;
+  readonly isEmailConfirmed: boolean;
   readonly authProvider: IdentityProvider | null;
   readonly profile: UserProfileRow | null;
   readonly accountAccessState: AccountAccessState;
@@ -175,6 +182,7 @@ interface SessionContextValue {
   readonly requiresInvite: boolean;
   readonly requiresAccountActivation: boolean;
   requestPasswordReset(email: string): Promise<string>;
+  resendEmailConfirmation(): Promise<string>;
   updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
@@ -213,6 +221,7 @@ const EMPTY_LINKED_METHODS: LinkedMethods = {
 const EMPTY_SETUP_STATE: SetupState = {
   requiredComplete: false,
   pendingRequiredSteps: [],
+  emailConfirmed: false,
   securityPending: false,
   biometricsEligible: false,
   contactsPermissionStatus: 'loading',
@@ -381,10 +390,48 @@ function formatSupabaseAuthErrorMessage(message: string): string {
   }
 
   if (
+    normalized.includes('invalid login credentials') ||
+    normalized.includes('invalid credentials')
+  ) {
+    return 'Correo o clave incorrectos.';
+  }
+
+  if (normalized.includes('email not confirmed')) {
+    return 'Confirma tu correo para continuar.';
+  }
+
+  if (normalized.includes('invalid') && normalized.includes('email')) {
+    return 'Correo invalido.';
+  }
+
+  if (
+    normalized.includes('user already registered') ||
+    normalized.includes('user_already_exists') ||
+    normalized.includes('already registered') ||
+    (normalized.includes('already exists') && normalized.includes('email'))
+  ) {
+    return 'Ese correo ya existe.';
+  }
+
+  if (
+    normalized.includes('password') &&
+    (normalized.includes('weak') ||
+      normalized.includes('minimum') ||
+      normalized.includes('at least') ||
+      normalized.includes('characters'))
+  ) {
+    return 'Clave no valida. Usa 8 a 72 caracteres.';
+  }
+
+  if (
     normalized.includes('duplicate key value violates unique constraint') &&
     normalized.includes('user_profiles_phone_e164_unique_idx')
   ) {
-    return 'Ese celular ya esta vinculado a otra cuenta.';
+    return 'Ese celular ya esta vinculado.';
+  }
+
+  if (normalized.includes('database error saving new user')) {
+    return 'Ese celular ya esta vinculado.';
   }
 
   return message;
@@ -432,12 +479,33 @@ function normalizeIdentityProvider(value: string | null | undefined): IdentityPr
   return normalized ? 'unknown' : 'unknown';
 }
 
-function deriveProfileCompletionState(profile: UserProfileRow | null): ProfileCompletionState {
+function isAuthUserEmailConfirmed(
+  user: {
+    readonly confirmed_at?: string | null;
+    readonly email?: string | null;
+    readonly email_confirmed_at?: string | null;
+  } | null,
+): boolean {
+  if (!user?.email) {
+    return false;
+  }
+
+  return Boolean(user.email_confirmed_at ?? user.confirmed_at);
+}
+
+function isSessionEmailConfirmed(session: Session | null): boolean {
+  return isAuthUserEmailConfirmed(session?.user ?? null);
+}
+
+function deriveProfileCompletionState(
+  profile: UserProfileRow | null,
+  emailConfirmed: boolean,
+): ProfileCompletionState {
   if (!profile) {
     return 'loading';
   }
 
-  if (derivePendingRequiredSetupSteps(profile).length > 0) {
+  if (derivePendingRequiredSetupSteps(profile, emailConfirmed).length > 0) {
     return 'incomplete';
   }
 
@@ -596,9 +664,10 @@ async function resolveUserIdentities(currentSession: Session): Promise<readonly 
 export function SessionProvider({ children }: PropsWithChildren) {
   const authMode: AuthMode = 'supabase';
 
-  const [status, setStatus] = useState<SessionStatus>('loading');
+  const [status, setStatusState] = useState<SessionStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfileRow | null>(null);
+  const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [accountAccessState, setAccountAccessState] = useState<AccountAccessState>('loading');
   const [rememberedAccount, setRememberedAccount] = useState<RememberedAccountSnapshot | null>(
     null,
@@ -625,12 +694,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const backgroundedAtRef = useRef<number | null>(null);
   const accountLoadIdRef = useRef(0);
   const sessionRef = useRef<Session | null>(null);
+  const statusRef = useRef<SessionStatus>('loading');
+
+  const setSessionStatus = useCallback((nextStatus: SessionStatus) => {
+    statusRef.current = nextStatus;
+    setStatusState(nextStatus);
+  }, []);
 
   const clearSignedInState = useCallback(() => {
     accountLoadIdRef.current += 1;
     sessionRef.current = null;
     setSession(null);
     setProfile(null);
+    setIsEmailConfirmed(false);
     setAccountAccessState('loading');
     setLinkedMethods(EMPTY_LINKED_METHODS);
     setProfileCompletionState('loading');
@@ -781,21 +857,27 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return retryUpdateResult.data as TrustedDeviceRow;
       }
 
-      const [profileResult, identities, currentDevice, pendingInviteIntent] = await Promise.all([
-        client
-          .from('user_profiles')
-          .select(
-            'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
-          )
-          .eq('id', nextSession.user.id)
-          .single(),
-        resolveUserIdentities(nextSession),
-        persistCurrentDevice(),
-        readPendingInviteIntent(),
-      ]);
+      const [profileResult, identities, currentDevice, pendingInviteIntent, authUserResult] =
+        await Promise.all([
+          client
+            .from('user_profiles')
+            .select(
+              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+            )
+            .eq('id', nextSession.user.id)
+            .single(),
+          resolveUserIdentities(nextSession),
+          persistCurrentDevice(),
+          readPendingInviteIntent(),
+          client.auth.getUser(),
+        ]);
 
       if (profileResult.error) {
         throw new Error(profileResult.error.message);
+      }
+
+      if (authUserResult.error) {
+        throw new Error(authUserResult.error.message);
       }
 
       const devicesResult = await client
@@ -813,6 +895,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       const nextProfile = profileResult.data;
+      const nextEmailConfirmed = isAuthUserEmailConfirmed(
+        authUserResult.data.user ?? nextSession.user,
+      );
       const nextAccountAccessState =
         deriveAccountAccessState(nextProfile) === 'needs_invite' &&
         pendingInviteIntent?.type === 'account_invite'
@@ -828,9 +913,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       sessionRef.current = nextSession;
       setSession(nextSession);
       setProfile(nextProfile);
+      setIsEmailConfirmed(nextEmailConfirmed);
       setAccountAccessState(nextAccountAccessState);
       setLinkedMethods(nextLinkedMethods);
-      setProfileCompletionState(deriveProfileCompletionState(nextProfile));
+      setProfileCompletionState(deriveProfileCompletionState(nextProfile, nextEmailConfirmed));
       setDeviceTrustState(nextDeviceTrustState);
       setTrustedDevices(devicesResult.data ?? []);
       setCurrentDeviceId(deviceId);
@@ -847,17 +933,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
           );
         }
       });
-      setStatus(
+      setSessionStatus(
         resolveStatusAfterAccountLoad({
           hasSession: true,
           biometricsEnabled: options.biometricPreference ?? biometricsEnabled,
           deviceTrustState: nextDeviceTrustState,
           initialLock: options.initialLock,
-          preserveLocked: options.preserveLocked,
+          preserveLocked: options.preserveLocked && statusRef.current === 'signed_in_locked',
         }),
       );
     },
-    [biometricsEnabled],
+    [biometricsEnabled, setSessionStatus],
   );
 
   const refreshAccountState = useCallback(
@@ -871,17 +957,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
       if (!nextSession) {
         clearSignedInState();
-        setStatus('signed_out');
+        setSessionStatus('signed_out');
         return;
       }
 
       await loadAccountState(nextSession, {
         initialLock: false,
-        preserveLocked: options?.preserveLocked ?? status === 'signed_in_locked',
+        preserveLocked: options?.preserveLocked ?? statusRef.current === 'signed_in_locked',
         biometricPreference: biometricsEnabled,
       });
     },
-    [biometricsEnabled, clearSignedInState, loadAccountState, status],
+    [biometricsEnabled, clearSignedInState, loadAccountState, setSessionStatus],
   );
 
   useEffect(() => {
@@ -926,7 +1012,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
       if (!supabase) {
         clearSignedInState();
-        setStatus('signed_out');
+        setSessionStatus('signed_out');
         setHydrated(true);
         return;
       }
@@ -940,7 +1026,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (!nextSession) {
         clearSignedInState();
         setRememberedAccount(rememberedSnapshot);
-        setStatus('signed_out');
+        setSessionStatus('signed_out');
         setHydrated(true);
         return;
       }
@@ -957,7 +1043,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           error instanceof Error ? error.message : String(error),
         );
         clearSignedInState();
-        setStatus('signed_out');
+        setSessionStatus('signed_out');
       }
 
       if (active) {
@@ -982,13 +1068,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!nextSession) {
         clearSignedInState();
-        setStatus('signed_out');
+        setSessionStatus('signed_out');
         return;
       }
 
       void loadAccountState(nextSession, {
         initialLock: false,
-        preserveLocked: event !== 'SIGNED_IN' && status === 'signed_in_locked',
+        preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
         biometricPreference: biometricsEnabled,
       }).catch((error) => {
         console.warn(
@@ -1001,7 +1087,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [biometricsEnabled, clearSignedInState, hydrated, loadAccountState, status]);
+  }, [biometricsEnabled, clearSignedInState, hydrated, loadAccountState, setSessionStatus]);
 
   useEffect(() => {
     if (!supabase || !hydrated) {
@@ -1037,7 +1123,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           backgroundedAt &&
           Date.now() - backgroundedAt >= LOCK_AFTER_MS
         ) {
-          setStatus('signed_in_locked');
+          setSessionStatus('signed_in_locked');
           setStepUpFreshUntil(null);
         }
       }
@@ -1046,7 +1132,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.remove();
     };
-  }, [biometricsEnabled, refreshNativePermissionStatuses, status]);
+  }, [biometricsEnabled, refreshNativePermissionStatuses, setSessionStatus, status]);
 
   const performGoogleOAuthFlow = useCallback(
     async (mode: 'sign-in' | 'link'): Promise<string> => {
@@ -1292,6 +1378,37 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Necesitas una invitacion valida para crear una cuenta nueva.';
       }
 
+      const registrationPreview = await supabase.functions.invoke<AccountRegistrationPreviewResult>(
+        'get-account-invite-preview-public',
+        {
+          body: {
+            deliveryToken: pendingIntent.token,
+            email: normalizedEmail,
+            phoneE164,
+            recordAppOpen: false,
+          },
+        },
+      );
+
+      if (registrationPreview.error) {
+        return formatSupabaseAuthErrorMessage(registrationPreview.error.message);
+      }
+
+      if (
+        registrationPreview.data?.emailAlreadyRegistered &&
+        registrationPreview.data.phoneAlreadyRegistered
+      ) {
+        return 'Ese correo y celular ya existen.';
+      }
+
+      if (registrationPreview.data?.emailAlreadyRegistered) {
+        return 'Ese correo ya existe.';
+      }
+
+      if (registrationPreview.data?.phoneAlreadyRegistered) {
+        return 'Ese celular ya esta vinculado.';
+      }
+
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -1315,7 +1432,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Cuenta creada. Ahora termina tu setup.';
       }
 
-      return 'Cuenta creada. Revisa tu correo para confirmar y luego sigue con tu setup.';
+      return 'Cuenta creada. Revisa tu correo.';
     } catch (error) {
       return formatValidationMessage(error);
     }
@@ -1355,6 +1472,37 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
+  const resendEmailConfirmation = useCallback(async () => {
+    if (!supabase || !sessionRef.current) {
+      return 'No hay una sesion activa para reenviar el correo.';
+    }
+
+    const email = sessionRef.current.user.email?.trim().toLocaleLowerCase('en-US');
+    if (!email) {
+      return 'Esta cuenta no tiene un correo disponible para confirmar.';
+    }
+
+    if (isSessionEmailConfirmed(sessionRef.current)) {
+      await refreshAccountState();
+      return 'Tu correo ya esta confirmado.';
+    }
+
+    const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
+    const { error } = await supabase.auth.resend({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+      },
+      type: 'signup',
+    });
+
+    if (error) {
+      return formatSupabaseAuthErrorMessage(error.message);
+    }
+
+    return 'Enviamos un nuevo correo de confirmacion. Abre el enlace desde este dispositivo.';
+  }, [refreshAccountState]);
+
   const updatePassword = useCallback(
     async (input: PasswordResetInput) => {
       try {
@@ -1387,8 +1535,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     clearSignedInState();
-    setStatus('signed_out');
-  }, [clearSignedInState]);
+    setSessionStatus('signed_out');
+  }, [clearSignedInState, setSessionStatus]);
 
   const stepUpAuth = useCallback(
     async (force = false): Promise<BiometricAuthResult> => {
@@ -1416,13 +1564,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (result.success) {
         setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
         if (status === 'signed_in_locked') {
-          setStatus('signed_in_unlocked');
+          setSessionStatus('signed_in_unlocked');
         }
       }
 
       return result;
     },
-    [deviceTrustState, status, stepUpFreshUntil],
+    [deviceTrustState, setSessionStatus, status, stepUpFreshUntil],
   );
 
   const unlock = useCallback(async (): Promise<BiometricAuthResult> => {
@@ -1434,7 +1582,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     if (!biometricsEnabled) {
-      setStatus('signed_in_unlocked');
+      setSessionStatus('signed_in_unlocked');
       return {
         success: true,
         error: null,
@@ -1443,19 +1591,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     const result = await authenticateWithBiometricsResult();
     if (result.success) {
-      setStatus('signed_in_unlocked');
+      setSessionStatus('signed_in_unlocked');
       setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
     }
 
     return result;
-  }, [biometricsEnabled, status]);
+  }, [biometricsEnabled, setSessionStatus, status]);
 
   const lock = useCallback(() => {
     if (status === 'signed_in_unlocked') {
-      setStatus('signed_in_locked');
+      setSessionStatus('signed_in_locked');
       setStepUpFreshUntil(null);
     }
-  }, [status]);
+  }, [setSessionStatus, status]);
 
   const setBiometricsEnabled = useCallback(
     async (enabled: boolean): Promise<BiometricToggleResult> => {
@@ -1475,7 +1623,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         setStepUpFreshUntil(null);
 
         if (sessionRef.current && deviceTrustState === 'trusted') {
-          setStatus('signed_in_unlocked');
+          setSessionStatus('signed_in_unlocked');
         }
 
         return {
@@ -1519,7 +1667,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         message: `Happy Circles pedira ${support.label} al abrirse y volvera a entrar apenas se valide.`,
       };
     },
-    [biometricsEnabled, deviceTrustState, stepUpAuth],
+    [biometricsEnabled, deviceTrustState, setSessionStatus, stepUpAuth],
   );
 
   const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
@@ -1549,6 +1697,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       return 'Contactos no disponibles en este entorno.';
     }
 
+    if (nextStatus === 'denied') {
+      return 'Contactos bloqueados. Abre Ajustes para permitir el acceso.';
+    }
+
     return 'Puedes seguir sin contactos por ahora.';
   }, []);
 
@@ -1562,6 +1714,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
       if (nextStatus === 'unavailable') {
         return 'Notificaciones no disponibles en este entorno.';
+      }
+
+      if (nextStatus === 'denied') {
+        return 'Notificaciones bloqueadas. Abre Ajustes para activarlas.';
       }
 
       return 'Puedes seguir sin notificaciones por ahora.';
@@ -1769,7 +1925,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         if (data.user?.id !== expectedUserId) {
           await supabase.auth.signOut();
           clearSignedInState();
-          setStatus('signed_out');
+          setSessionStatus('signed_out');
           return 'La validacion abrio otra cuenta. Cerramos la sesion por seguridad.';
         }
       } else if (linkedMethods.hasGoogle) {
@@ -1782,7 +1938,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         if (data.session?.user.id !== expectedUserId) {
           await supabase.auth.signOut();
           clearSignedInState();
-          setStatus('signed_out');
+          setSessionStatus('signed_out');
           return 'Google abrio otra cuenta. Cerramos la sesion por seguridad.';
         }
       } else if (linkedMethods.hasApple) {
@@ -1794,7 +1950,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         if (result.userId !== expectedUserId) {
           await supabase.auth.signOut();
           clearSignedInState();
-          setStatus('signed_out');
+          setSessionStatus('signed_out');
           return 'Apple abrio otra cuenta. Cerramos la sesion por seguridad.';
         }
       } else {
@@ -1828,6 +1984,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       performAppleAuth,
       performGoogleOAuthFlow,
       refreshAccountState,
+      setSessionStatus,
     ],
   );
 
@@ -1883,11 +2040,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
       };
     }
 
-    const pendingRequiredSteps = derivePendingRequiredSetupSteps(profile);
+    const pendingRequiredSteps = derivePendingRequiredSetupSteps(profile, isEmailConfirmed);
 
     return {
       requiredComplete: pendingRequiredSteps.length === 0,
       pendingRequiredSteps,
+      emailConfirmed: isEmailConfirmed,
       securityPending: deviceTrustState !== 'trusted',
       biometricsEligible: biometricAvailable && deviceTrustState === 'trusted',
       contactsPermissionStatus,
@@ -1897,6 +2055,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     biometricAvailable,
     contactsPermissionStatus,
     deviceTrustState,
+    isEmailConfirmed,
     notificationsPermissionStatus,
     profile,
   ]);
@@ -1907,6 +2066,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       status,
       userId: session?.user.id ?? null,
       email: session?.user.email ?? null,
+      isEmailConfirmed,
       authProvider,
       profile,
       accountAccessState,
@@ -1933,6 +2093,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       requiresInvite: accountAccessState === 'needs_invite',
       requiresAccountActivation: accountAccessState === 'needs_activation',
       requestPasswordReset,
+      resendEmailConfirmation,
       updatePassword,
       signInWithPassword,
       registerAccount,
@@ -1967,6 +2128,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       contactsPermissionStatus,
       currentDeviceId,
       deviceTrustState,
+      isEmailConfirmed,
       appleSignInAvailable,
       clearRememberedAccount,
       linkApple,
@@ -1977,6 +2139,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       notificationsPermissionStatus,
       profile,
       profileCompletionState,
+      resendEmailConfirmation,
       requestPasswordReset,
       requestContactsPermission,
       requestNotificationsPermission,

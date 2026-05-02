@@ -31,4 +31,4 @@ jobs:
           version: latest
 
       - name: Run security gate
-        run: pnpm ci
+        run: pnpm run ci

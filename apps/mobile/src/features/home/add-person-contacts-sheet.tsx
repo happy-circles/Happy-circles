@@ -5,7 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import {
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -20,6 +22,7 @@ import { AppAvatar } from '@/components/app-avatar';
 import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { showBlockedActionAlert } from '@/lib/action-feedback';
 import {
   canReadContactsPermissionStatus,
   getContactsPermissionStatus,
@@ -52,6 +55,7 @@ import {
 } from '@/features/invites/people-outreach-utils';
 
 const CONTACT_AVATAR_COLORS = ['#e11d48', '#ea580c', '#059669', '#0891b2', '#2563eb', '#9333ea'];
+const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
 
 type EnrichedContact = {
   readonly contact: ContactCandidate;
@@ -146,6 +150,44 @@ function shouldShowInApp(resolution: PeopleTargetResolution | null): boolean {
     resolution?.status === 'already_related' ||
     resolution?.status === 'pending_friendship'
   );
+}
+
+function rankContactResolution(resolution: PeopleTargetResolution | null): number {
+  if (resolution?.status === 'active_user') {
+    return 0;
+  }
+
+  if (resolution?.status === 'pending_friendship') {
+    return 1;
+  }
+
+  if (resolution?.status === 'already_related') {
+    return 2;
+  }
+
+  if (resolution?.status === 'pending_activation') {
+    return 3;
+  }
+
+  if (resolution?.status === 'no_account') {
+    return 4;
+  }
+
+  return 5;
+}
+
+function compareEnrichedContacts(left: EnrichedContact, right: EnrichedContact): number {
+  const rankDelta = rankContactResolution(left.resolution) - rankContactResolution(right.resolution);
+  if (rankDelta !== 0) {
+    return rankDelta;
+  }
+
+  const aliasDelta = left.contact.alias.localeCompare(right.contact.alias, 'es-CO');
+  if (aliasDelta !== 0) {
+    return aliasDelta;
+  }
+
+  return left.contact.primaryPhone.phoneE164.localeCompare(right.contact.primaryPhone.phoneE164);
 }
 
 function contactMeta(phoneOption: ContactPhoneOption): string {
@@ -278,32 +320,58 @@ export function AddPersonContactsSheet({
     return contacts.filter((contact) => contact.searchKey.includes(normalizedSearch));
   }, [contacts, searchValue]);
 
-  const displayedContacts = useMemo(
-    () => filteredContacts.slice(0, searchValue.trim().length > 0 ? 60 : 36),
-    [filteredContacts, searchValue],
+  const contactResolutionWindow = useMemo(
+    () => filteredContacts.slice(0, CONTACT_TARGET_RESOLUTION_LIMIT),
+    [filteredContacts],
   );
 
-  const enrichedContacts = useMemo<readonly EnrichedContact[]>(
+  const sortedContacts = useMemo<readonly EnrichedContact[]>(
     () =>
-      displayedContacts.map((contact) => ({
-        contact,
-        resolution: targetCache[contact.primaryPhone.phoneE164] ?? null,
-      })),
-    [displayedContacts, targetCache],
+      filteredContacts
+        .map((contact) => ({
+          contact,
+          resolution: targetCache[contact.primaryPhone.phoneE164] ?? null,
+        }))
+        .sort(compareEnrichedContacts),
+    [filteredContacts, targetCache],
+  );
+
+  const displayedContacts = useMemo(
+    () => sortedContacts.slice(0, searchValue.trim().length > 0 ? 60 : 36),
+    [searchValue, sortedContacts],
   );
 
   const inAppContacts = useMemo(
-    () => enrichedContacts.filter((item) => shouldShowInApp(item.resolution)),
-    [enrichedContacts],
+    () => displayedContacts.filter((item) => shouldShowInApp(item.resolution)),
+    [displayedContacts],
   );
 
   const inviteContacts = useMemo(
-    () => enrichedContacts.filter((item) => !shouldShowInApp(item.resolution)),
-    [enrichedContacts],
+    () => displayedContacts.filter((item) => !shouldShowInApp(item.resolution)),
+    [displayedContacts],
   );
   const myQrLink = isFreshQrDelivery(myQrDelivery)
     ? buildFriendshipInviteLink(myQrDelivery.deliveryToken)
     : null;
+
+  const pendingContactOptions = useMemo<readonly EnrichedContact[]>(
+    () =>
+      pendingContactSelection
+        ? pendingContactSelection.phoneOptions
+            .map((phoneOption) => ({
+              contact: {
+                alias: pendingContactSelection.alias,
+                contactId: pendingContactSelection.contactId,
+                phoneOptions: [phoneOption],
+                primaryPhone: phoneOption,
+                searchKey: '',
+              },
+              resolution: targetCache[phoneOption.phoneE164] ?? null,
+            }))
+            .sort(compareEnrichedContacts)
+        : [],
+    [pendingContactSelection, targetCache],
+  );
 
   const mergeTargetResolutions = useCallback((resolutions: readonly PeopleTargetResolution[]) => {
     setTargetCache((current) => {
@@ -361,13 +429,13 @@ export function AddPersonContactsSheet({
   }, [loadContacts, visible]);
 
   useEffect(() => {
-    if (!visible || !canReadContacts || displayedContacts.length === 0) {
+    if (!visible || !canReadContacts || contactResolutionWindow.length === 0) {
       return;
     }
 
     const missingPhones = [
       ...new Set(
-        displayedContacts
+        contactResolutionWindow
           .map((contact) => contact.primaryPhone.phoneE164)
           .filter((phoneE164) => !targetCache[phoneE164]),
       ),
@@ -387,7 +455,7 @@ export function AddPersonContactsSheet({
       });
   }, [
     canReadContacts,
-    displayedContacts,
+    contactResolutionWindow,
     mergeTargetResolutions,
     resolvePeopleTargets,
     targetCache,
@@ -408,7 +476,14 @@ export function AddPersonContactsSheet({
 
       if (!canReadContactsPermissionStatus(nextStatus)) {
         setContacts([]);
-        setMessage('Puedes seguir conectando en persona con QR.');
+        setMessage(
+          nextStatus === 'denied'
+            ? 'Contactos bloqueados. Puedes activarlos en Ajustes.'
+            : 'Puedes seguir conectando en persona con QR.',
+        );
+        if (nextStatus === 'denied') {
+          openContactsSettings();
+        }
         return;
       }
 
@@ -426,6 +501,17 @@ export function AddPersonContactsSheet({
     } finally {
       setBusyKey(null);
     }
+  }
+
+  function openContactsSettings() {
+    Alert.alert(
+      'Permiso de contactos bloqueado',
+      'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+      [
+        { style: 'cancel', text: 'Ahora no' },
+        { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+      ],
+    );
   }
 
   async function handleExpandLimitedContactsAccess() {
@@ -596,7 +682,10 @@ export function AddPersonContactsSheet({
 
       await shareAccountInviteLink(input.alias, response.result);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar este movimiento.');
+      const failureMessage =
+        error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
+      setMessage(failureMessage);
+      showBlockedActionAlert(failureMessage, router);
     } finally {
       setBusyKey(null);
     }
@@ -690,7 +779,9 @@ export function AddPersonContactsSheet({
       }
       setMyQrDelivery(delivery);
     } catch (error) {
-      setMyQrMessage(error instanceof Error ? error.message : 'No se pudo crear tu QR.');
+      const failureMessage = error instanceof Error ? error.message : 'No se pudo crear tu QR.';
+      setMyQrMessage(failureMessage);
+      showBlockedActionAlert(failureMessage, router);
     } finally {
       setBusyKey((current) => (current === 'my-qr' ? null : current));
     }
@@ -997,8 +1088,8 @@ export function AddPersonContactsSheet({
                 : ''}
             </Text>
             <View style={styles.optionList}>
-              {pendingContactSelection?.phoneOptions.map((phoneOption) => {
-                const resolution = targetCache[phoneOption.phoneE164] ?? null;
+              {pendingContactOptions.map(({ contact, resolution }) => {
+                const phoneOption = contact.primaryPhone;
                 const action = actionMetaForResolution(resolution, false);
                 const disabled = action.disabled || busyKey === phoneOption.phoneE164;
 
@@ -1008,7 +1099,7 @@ export function AddPersonContactsSheet({
                       <Text style={styles.contactName}>{contactMeta(phoneOption)}</Text>
                       <Text style={styles.contactPhone}>
                         {resolution?.status === 'active_user'
-                          ? 'En Happy Circles'
+                          ? 'Ya esta en Happy Circles'
                           : resolution?.status === 'already_related'
                             ? 'Agregado'
                             : resolution?.status === 'pending_friendship'

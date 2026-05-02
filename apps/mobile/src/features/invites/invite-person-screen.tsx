@@ -3,7 +3,17 @@ import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Contacts from 'expo-contacts';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Modal, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
@@ -11,6 +21,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
+import { showBlockedActionAlert } from '@/lib/action-feedback';
 import { appConfig } from '@/lib/config';
 import {
   canReadContactsPermissionStatus,
@@ -53,11 +64,18 @@ type ContactCandidate = {
   readonly searchKey: string;
 };
 
+type EnrichedContact = {
+  readonly contact: ContactCandidate;
+  readonly resolution: PeopleTargetResolution | null;
+};
+
 type PendingContactSelection = {
   readonly contactId: string;
   readonly alias: string;
   readonly phoneOptions: readonly ContactPhoneOption[];
 };
+
+const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
 
 function buildAppInviteLink(deliveryToken: string): string {
   return `${appConfig.appWebOrigin.replace(/\/$/, '')}/join/${deliveryToken}`;
@@ -307,13 +325,13 @@ function badgeForResolution(resolution: PeopleTargetResolution | null): {
 
   if (resolution.status === 'active_user') {
     return {
-      label: 'En Happy Circles',
+      label: 'Ya esta en Happy Circles',
       tone: 'success',
     };
   }
 
   return {
-    label: 'Invite to app',
+    label: 'Invitar a la app',
     tone: 'warning',
   };
 }
@@ -344,6 +362,52 @@ function canPressForResolution(resolution: PeopleTargetResolution | null): boole
   }
 
   return resolution.status !== 'already_related' && resolution.status !== 'pending_friendship';
+}
+
+function shouldShowInApp(resolution: PeopleTargetResolution | null): boolean {
+  return (
+    resolution?.status === 'active_user' ||
+    resolution?.status === 'already_related' ||
+    resolution?.status === 'pending_friendship'
+  );
+}
+
+function rankContactResolution(resolution: PeopleTargetResolution | null): number {
+  if (resolution?.status === 'active_user') {
+    return 0;
+  }
+
+  if (resolution?.status === 'pending_friendship') {
+    return 1;
+  }
+
+  if (resolution?.status === 'already_related') {
+    return 2;
+  }
+
+  if (resolution?.status === 'pending_activation') {
+    return 3;
+  }
+
+  if (resolution?.status === 'no_account') {
+    return 4;
+  }
+
+  return 5;
+}
+
+function compareEnrichedContacts(left: EnrichedContact, right: EnrichedContact): number {
+  const rankDelta = rankContactResolution(left.resolution) - rankContactResolution(right.resolution);
+  if (rankDelta !== 0) {
+    return rankDelta;
+  }
+
+  const aliasDelta = left.contact.alias.localeCompare(right.contact.alias, 'es-CO');
+  if (aliasDelta !== 0) {
+    return aliasDelta;
+  }
+
+  return left.contact.primaryPhone.phoneE164.localeCompare(right.contact.primaryPhone.phoneE164);
 }
 
 function buildContactMeta(contact: ContactCandidate): string {
@@ -402,9 +466,35 @@ export function InvitePersonScreen() {
     return contacts.filter((contact) => contact.searchKey.includes(normalizedSearch));
   }, [contacts, searchValue]);
 
+  const contactResolutionWindow = useMemo(
+    () => filteredContacts.slice(0, CONTACT_TARGET_RESOLUTION_LIMIT),
+    [filteredContacts],
+  );
+
+  const sortedContacts = useMemo<readonly EnrichedContact[]>(
+    () =>
+      filteredContacts
+        .map((contact) => ({
+          contact,
+          resolution: targetCache[contact.primaryPhone.phoneE164] ?? null,
+        }))
+        .sort(compareEnrichedContacts),
+    [filteredContacts, targetCache],
+  );
+
   const displayedContacts = useMemo(
-    () => filteredContacts.slice(0, searchValue.trim().length > 0 ? 60 : 28),
-    [filteredContacts, searchValue],
+    () => sortedContacts.slice(0, searchValue.trim().length > 0 ? 60 : 28),
+    [searchValue, sortedContacts],
+  );
+
+  const inAppContacts = useMemo(
+    () => displayedContacts.filter((item) => shouldShowInApp(item.resolution)),
+    [displayedContacts],
+  );
+
+  const inviteContacts = useMemo(
+    () => displayedContacts.filter((item) => !shouldShowInApp(item.resolution)),
+    [displayedContacts],
   );
   const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
   const contactsStatusLabel =
@@ -471,13 +561,13 @@ export function InvitePersonScreen() {
   }, [loadContacts]);
 
   useEffect(() => {
-    if (!canReadContacts || displayedContacts.length === 0) {
+    if (!canReadContacts || contactResolutionWindow.length === 0) {
       return;
     }
 
     const missingPhones = [
       ...new Set(
-        displayedContacts
+        contactResolutionWindow
           .map((contact) => contact.primaryPhone.phoneE164)
           .filter((phoneE164) => !targetCache[phoneE164]),
       ),
@@ -499,7 +589,7 @@ export function InvitePersonScreen() {
       });
   }, [
     canReadContacts,
-    displayedContacts,
+    contactResolutionWindow,
     mergeTargetResolutions,
     resolvePeopleTargets,
     targetCache,
@@ -519,7 +609,14 @@ export function InvitePersonScreen() {
 
       if (!canReadContactsPermissionStatus(nextStatus)) {
         setContacts([]);
-        setMessage('Puedes seguir invitando por celular, aunque no usemos tu agenda todavia.');
+        setMessage(
+          nextStatus === 'denied'
+            ? 'Contactos bloqueados. Puedes activarlos en Ajustes.'
+            : 'Puedes seguir invitando por celular, aunque no usemos tu agenda todavia.',
+        );
+        if (nextStatus === 'denied') {
+          openContactsSettings();
+        }
         return;
       }
 
@@ -537,6 +634,17 @@ export function InvitePersonScreen() {
     } finally {
       setBusyKey(null);
     }
+  }
+
+  function openContactsSettings() {
+    Alert.alert(
+      'Permiso de contactos bloqueado',
+      'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+      [
+        { style: 'cancel', text: 'Ahora no' },
+        { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+      ],
+    );
   }
 
   async function handleExpandLimitedContactsAccess() {
@@ -714,7 +822,10 @@ export function InvitePersonScreen() {
 
       await shareAccountInviteLink(input.alias, response.result);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar este movimiento.');
+      const failureMessage =
+        error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
+      setMessage(failureMessage);
+      showBlockedActionAlert(failureMessage, router);
     } finally {
       setBusyKey(null);
     }
@@ -846,6 +957,57 @@ export function InvitePersonScreen() {
     });
   }
 
+  function renderContactSection(title: string, items: readonly EnrichedContact[]) {
+    if (items.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.contactSection}>
+        <Text style={styles.contactSectionLabel}>{title}</Text>
+        <View style={styles.contactList}>
+          {items.map(({ contact, resolution }) => {
+            const badge = badgeForResolution(resolution);
+            const actionLabel =
+              contact.phoneOptions.length > 1 ? 'Elegir numero' : actionLabelForResolution(resolution);
+            const actionEnabled =
+              contact.phoneOptions.length > 1 ? true : canPressForResolution(resolution);
+            const isBusy = busyKey === contact.primaryPhone.phoneE164;
+
+            return (
+              <SurfaceCard
+                key={`${contact.contactId}:${contact.primaryPhone.id}`}
+                padding="md"
+                variant="default"
+              >
+                <View style={styles.contactRow}>
+                  <View style={styles.contactCopy}>
+                    <View style={styles.contactTitleRow}>
+                      <Text style={styles.contactName}>{contact.alias}</Text>
+                      <StatusChip label={badge.label} tone={badge.tone} />
+                    </View>
+                    <Text style={styles.contactMeta}>{buildContactMeta(contact)}</Text>
+                  </View>
+                  <View style={styles.contactAction}>
+                    <PrimaryAction
+                      compact
+                      disabled={!actionEnabled || isBusy}
+                      label={isBusy ? 'Procesando...' : actionLabel}
+                      onPress={
+                        !actionEnabled || isBusy ? undefined : () => void handleContactPress(contact)
+                      }
+                      variant={resolution?.status === 'active_user' ? 'secondary' : 'primary'}
+                    />
+                  </View>
+                </View>
+              </SurfaceCard>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScreenShell
       footer={
@@ -912,50 +1074,10 @@ export function InvitePersonScreen() {
             ) : null}
 
             {displayedContacts.length > 0 ? (
-              <View style={styles.contactList}>
-                {displayedContacts.map((contact) => {
-                  const resolution = targetCache[contact.primaryPhone.phoneE164] ?? null;
-                  const badge = badgeForResolution(resolution);
-                  const actionLabel =
-                    contact.phoneOptions.length > 1
-                      ? 'Elegir numero'
-                      : actionLabelForResolution(resolution);
-                  const actionEnabled =
-                    contact.phoneOptions.length > 1 ? true : canPressForResolution(resolution);
-                  const isBusy = busyKey === contact.primaryPhone.phoneE164;
-
-                  return (
-                    <SurfaceCard
-                      key={`${contact.contactId}:${contact.primaryPhone.id}`}
-                      padding="md"
-                      variant="default"
-                    >
-                      <View style={styles.contactRow}>
-                        <View style={styles.contactCopy}>
-                          <View style={styles.contactTitleRow}>
-                            <Text style={styles.contactName}>{contact.alias}</Text>
-                            <StatusChip label={badge.label} tone={badge.tone} />
-                          </View>
-                          <Text style={styles.contactMeta}>{buildContactMeta(contact)}</Text>
-                        </View>
-                        <View style={styles.contactAction}>
-                          <PrimaryAction
-                            compact
-                            disabled={!actionEnabled || isBusy}
-                            label={isBusy ? 'Procesando...' : actionLabel}
-                            onPress={
-                              !actionEnabled || isBusy
-                                ? undefined
-                                : () => void handleContactPress(contact)
-                            }
-                            variant={resolution?.status === 'active_user' ? 'secondary' : 'primary'}
-                          />
-                        </View>
-                      </View>
-                    </SurfaceCard>
-                  );
-                })}
-              </View>
+              <>
+                {renderContactSection('En Happy Circles', inAppContacts)}
+                {renderContactSection('Invitar a Happy Circles', inviteContacts)}
+              </>
             ) : (
               <Text style={styles.helper}>
                 {searchValue.trim().length > 0
@@ -1171,6 +1293,14 @@ const styles = StyleSheet.create({
   },
   contactList: {
     gap: theme.spacing.sm,
+  },
+  contactSection: {
+    gap: theme.spacing.sm,
+  },
+  contactSectionLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
   },
   contactRow: {
     gap: theme.spacing.sm,

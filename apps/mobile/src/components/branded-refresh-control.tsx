@@ -34,6 +34,7 @@ interface BrandedRefreshIndicatorProps {
 
 export interface BrandedRefreshScrollViewProps
   extends Omit<ScrollViewProps, 'refreshControl'> {
+  readonly fillViewport?: boolean;
   readonly refresh?: BrandedRefreshProps;
   readonly refreshIndicatorStyle?: StyleProp<ViewStyle>;
 }
@@ -93,6 +94,7 @@ export const BrandedRefreshScrollView = forwardRef<
     bounces,
     children,
     contentContainerStyle,
+    fillViewport = false,
     onScroll,
     onScrollEndDrag,
     onTouchCancel,
@@ -276,7 +278,7 @@ export const BrandedRefreshScrollView = forwardRef<
   }
 
   return (
-    <View style={[styles.scrollWrap, style]}>
+    <View style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}>
       <ScrollView
         {...props}
         alwaysBounceVertical={refreshEnabled ? true : alwaysBounceVertical}
@@ -292,7 +294,7 @@ export const BrandedRefreshScrollView = forwardRef<
         ref={ref}
         scrollEventThrottle={scrollEventThrottle ?? 16}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
-        style={styles.innerScroll}
+        style={[styles.innerScroll, fillViewport ? styles.innerScrollFill : null]}
       >
         {children}
       </ScrollView>
@@ -312,8 +314,14 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     position: 'relative',
   },
+  scrollWrapFill: {
+    flex: 1,
+  },
   innerScroll: {
     flexShrink: 1,
+  },
+  innerScrollFill: {
+    flex: 1,
   },
   indicatorWrap: {
     alignItems: 'center',

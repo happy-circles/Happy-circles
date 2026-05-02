@@ -289,7 +289,7 @@ export function badgeForResolution(resolution: PeopleTargetResolution | null): {
 
   if (resolution.status === 'active_user') {
     return {
-      label: 'En Happy Circles',
+      label: 'Ya esta en Happy Circles',
       tone: 'success',
     };
   }

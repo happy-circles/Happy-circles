@@ -17,6 +17,11 @@ export default function LandingPage() {
             Abrir Happy Circles
           </a>
           <StoreButtonGrid />
+          <div className="footerLinks" aria-label="Legal y soporte">
+            <a href="/privacy">Privacidad</a>
+            <a href="/terms">Terminos</a>
+            <a href="/support">Soporte</a>
+          </div>
         </nav>
       </section>
     </main>

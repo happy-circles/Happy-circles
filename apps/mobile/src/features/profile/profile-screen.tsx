@@ -3,7 +3,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams } from 'expo-router';
 import type { Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import type { ScrollView, TextInput } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
@@ -16,8 +26,13 @@ import {
   triggerIdentityImpactHaptic,
   triggerIdentitySelectionHaptic,
   triggerIdentitySuccessHaptic,
+  triggerIdentityWarningHaptic,
 } from '@/lib/identity-flow-haptics';
-import { useAppSnapshot, useUpdateProfileAvatarMutation } from '@/lib/live-data';
+import {
+  useAppSnapshot,
+  useRequestAccountDeletionMutation,
+  useUpdateProfileAvatarMutation,
+} from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
@@ -26,6 +41,10 @@ import { useSession } from '@/providers/session-provider';
 
 type RowTone = 'danger' | 'muted' | 'primary' | 'success';
 type IoniconName = keyof typeof Ionicons.glyphMap;
+
+const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
+const TERMS_URL = 'https://app.happy-circles.com/terms';
+const SUPPORT_URL = 'https://app.happy-circles.com/support';
 
 function formatDeviceTitle(deviceId: string, currentDeviceId: string | null, platform: string) {
   const base = platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android' : 'Web';
@@ -54,6 +73,34 @@ function triggerImpactHaptic() {
 
 function triggerSuccessHaptic() {
   triggerIdentitySuccessHaptic();
+}
+
+function triggerWarningHaptic() {
+  triggerIdentityWarningHaptic();
+}
+
+function formatStepUpFailure(error: string | null, biometricLabel: string) {
+  if (error === 'device_untrusted') {
+    return 'Valida este dispositivo antes de eliminar tu cuenta.';
+  }
+
+  if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
+    return `Este dispositivo no puede usar ${biometricLabel} para eliminar la cuenta.`;
+  }
+
+  if (error === 'lockout') {
+    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
+  }
+
+  if (error === 'user_cancel') {
+    return `Cancelaste ${biometricLabel}.`;
+  }
+
+  if (error === 'authentication_failed') {
+    return `No se pudo validar ${biometricLabel} para eliminar la cuenta.`;
+  }
+
+  return 'No se pudo validar tu identidad para eliminar la cuenta.';
 }
 
 function resolveRowTone(tone: RowTone) {
@@ -126,8 +173,10 @@ export function ProfileScreen() {
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const avatarMutation = useUpdateProfileAvatarMutation();
+  const accountDeletionMutation = useRequestAccountDeletionMutation();
 
   const [message, setMessage] = useState<string | null>(null);
+  const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
@@ -345,8 +394,23 @@ export function ProfileScreen() {
       const result = await action();
       setMessage(result);
       return result;
+    } catch (error) {
+      const failureMessage =
+        error instanceof Error ? error.message : 'No se pudo completar esta accion.';
+      setMessage(failureMessage);
+      return failureMessage;
     } finally {
       setBusyAction(null);
+    }
+  }
+
+  async function openExternalUrl(url: string, failureMessage: string) {
+    triggerSelectionHaptic();
+
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setMessage(failureMessage);
     }
   }
 
@@ -359,9 +423,23 @@ export function ProfileScreen() {
   async function handleNotifications(nextValue: boolean) {
     triggerSelectionHaptic();
     if (nextValue) {
+      if (session.setupState.notificationsPermissionStatus === 'denied') {
+        openAppSettings(
+          'Notificaciones bloqueadas',
+          'Abre Ajustes y permite notificaciones para activar recordatorios.',
+        );
+        return;
+      }
+
       const result = await session.requestNotificationsPermission();
       if (result !== 'Recordatorios activados.') {
         setMessage(result);
+        if (result.includes('Ajustes')) {
+          openAppSettings(
+            'Notificaciones bloqueadas',
+            'Abre Ajustes y permite notificaciones para activar recordatorios.',
+          );
+        }
         return;
       }
 
@@ -379,16 +457,36 @@ export function ProfileScreen() {
     setMessage('Recordatorios desactivados.');
   }
 
+  async function handleResendEmailConfirmation() {
+    const result = await runAction('resend-email-confirmation', () =>
+      session.resendEmailConfirmation(),
+    );
+
+    if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
+      triggerSuccessHaptic();
+    } else {
+      triggerWarningHaptic();
+    }
+  }
+
+  function openAppSettings(title: string, message: string) {
+    Alert.alert(title, message, [
+      { style: 'cancel', text: 'Ahora no' },
+      { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+    ]);
+  }
+
   async function uploadPickedAvatar(result: ImagePicker.ImagePickerResult) {
     if (result.canceled || !result.assets[0]) {
       return;
     }
 
     try {
-      await avatarMutation.mutateAsync({
+      const nextAvatarPath = await avatarMutation.mutateAsync({
         uri: result.assets[0].uri,
         contentType: result.assets[0].mimeType,
       });
+      setLocalAvatarPath(nextAvatarPath);
       triggerSuccessHaptic();
       setMessage('Foto de perfil actualizada.');
     } catch (error) {
@@ -397,20 +495,18 @@ export function ProfileScreen() {
   }
 
   async function handlePickAvatar() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setMessage('Necesitas permitir acceso a tus fotos para cambiar la imagen.');
-      return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+
+      await uploadPickedAvatar(result);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo abrir tus fotos.');
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-
-    await uploadPickedAvatar(result);
   }
 
   async function handleTakeAvatarPhoto() {
@@ -438,6 +534,39 @@ export function ProfileScreen() {
 
     triggerSelectionHaptic();
 
+    if (Platform.OS === 'ios') {
+      const options = currentUserProfile?.avatarUrl
+        ? ['Ver foto', 'Tomar foto', 'Elegir foto', 'Cancelar']
+        : ['Tomar foto', 'Elegir foto', 'Cancelar'];
+      const cancelButtonIndex = options.length - 1;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          cancelButtonIndex,
+          options,
+          title: 'Foto de perfil',
+        },
+        (selectedIndex) => {
+          const selectedOption = options[selectedIndex];
+
+          if (selectedOption === 'Ver foto') {
+            setAvatarViewerVisible(true);
+            return;
+          }
+
+          if (selectedOption === 'Tomar foto') {
+            void handleTakeAvatarPhoto();
+            return;
+          }
+
+          if (selectedOption === 'Elegir foto') {
+            void handlePickAvatar();
+          }
+        },
+      );
+      return;
+    }
+
     Alert.alert('Foto de perfil', undefined, [
       ...(currentUserProfile?.avatarUrl
         ? [{ text: 'Ver foto', onPress: () => setAvatarViewerVisible(true) }]
@@ -446,6 +575,40 @@ export function ProfileScreen() {
       { text: 'Elegir foto', onPress: () => void handlePickAvatar() },
       { style: 'cancel', text: 'Cancelar' },
     ]);
+  }
+
+  async function handleRequestAccountDeletion() {
+    await runAction('request-account-deletion', async () => {
+      if (!session.isTrustedDevice) {
+        throw new Error('Valida este dispositivo antes de eliminar tu cuenta.');
+      }
+
+      const authResult = await session.stepUpAuth(true);
+      if (!authResult.success) {
+        throw new Error(formatStepUpFailure(authResult.error, session.biometricLabel));
+      }
+
+      await accountDeletionMutation.mutateAsync();
+      await session.signOut();
+
+      return 'Tu cuenta fue eliminada. Conservamos solo el ledger y auditoria minima para integridad financiera.';
+    });
+  }
+
+  function confirmAccountDeletion() {
+    triggerSelectionHaptic();
+    Alert.alert(
+      'Eliminar cuenta',
+      'Anonimizaremos tu perfil, borraremos foto y datos de contacto, revocaremos tus dispositivos y cerraremos tu sesion. Conservamos el ledger y auditoria minima para que los saldos financieros sigan siendo consistentes.',
+      [
+        { style: 'cancel', text: 'Cancelar' },
+        {
+          style: 'destructive',
+          text: 'Eliminar cuenta',
+          onPress: () => void handleRequestAccountDeletion(),
+        },
+      ],
+    );
   }
 
   return (
@@ -462,7 +625,7 @@ export function ProfileScreen() {
       <View style={styles.accountHeader}>
         <IdentityFlowIdentity
           avatarLabel={accountLabel}
-          avatarUrl={currentUserProfile?.avatarUrl ?? null}
+          avatarUrl={localAvatarPath ?? currentUserProfile?.avatarUrl ?? null}
           disabled={avatarMutation.isPending}
           editable
           onPress={openAvatarOptions}
@@ -528,7 +691,32 @@ export function ProfileScreen() {
         </View>
 
         <View style={styles.sectionList}>
-          <ProfileStatusRow icon="mail" subtitle={accountEmail} title="Correo" tone="primary" />
+          <ProfileStatusRow
+            icon="mail"
+            status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
+            subtitle={
+              session.isEmailConfirmed ? accountEmail : 'Confirma tu correo para activar invitaciones'
+            }
+            title="Correo"
+            tone={session.isEmailConfirmed ? 'success' : 'danger'}
+            trailing={
+              session.isEmailConfirmed ? undefined : (
+                <Pressable
+                  disabled={busyAction !== null}
+                  onPress={() => void handleResendEmailConfirmation()}
+                  style={({ pressed }) => [
+                    styles.inlineButton,
+                    pressed && busyAction === null ? styles.rowPressed : null,
+                    busyAction !== null ? styles.disabledButton : null,
+                  ]}
+                >
+                  <Text style={styles.inlineButtonText}>
+                    {busyAction === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
+                  </Text>
+                </Pressable>
+              )
+            }
+          />
 
           <View style={styles.separator} />
 
@@ -804,6 +992,102 @@ export function ProfileScreen() {
       </View>
 
       <View style={styles.sectionBlock}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Legal y soporte</Text>
+        </View>
+
+        <View style={styles.sectionList}>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() =>
+              void openExternalUrl(
+                PRIVACY_POLICY_URL,
+                'No pudimos abrir la politica de privacidad.',
+              )
+            }
+            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
+          >
+            <ProfileStatusRow
+              icon="shield-checkmark"
+              subtitle="Uso de datos, retencion y derechos"
+              title="Privacidad"
+              tone="primary"
+              trailing={
+                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+              }
+            />
+          </Pressable>
+
+          <View style={styles.separator} />
+
+          <Pressable
+            accessibilityRole="link"
+            onPress={() =>
+              void openExternalUrl(TERMS_URL, 'No pudimos abrir los terminos de servicio.')
+            }
+            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
+          >
+            <ProfileStatusRow
+              icon="document-text"
+              subtitle="Reglas de uso y responsabilidades"
+              title="Terminos"
+              tone="muted"
+              trailing={
+                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+              }
+            />
+          </Pressable>
+
+          <View style={styles.separator} />
+
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => void openExternalUrl(SUPPORT_URL, 'No pudimos abrir soporte.')}
+            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
+          >
+            <ProfileStatusRow
+              icon="help-circle"
+              subtitle="soporte@happy-circles.com"
+              title="Soporte"
+              tone="muted"
+              trailing={
+                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+              }
+            />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
+        </View>
+
+        <Text style={styles.sectionBody}>
+          Esta accion borra o anonimiza tus datos personales y revoca tus dispositivos. Los
+          movimientos financieros se conservan anonimizados para mantener saldos, auditoria e
+          integridad del ledger.
+        </Text>
+
+        <View style={styles.inlineActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busyAction === 'request-account-deletion'}
+            onPress={confirmAccountDeletion}
+            style={({ pressed }) => [
+              styles.inlineButtonDanger,
+              pressed ? styles.rowPressed : null,
+              busyAction === 'request-account-deletion' ? styles.disabledButton : null,
+            ]}
+          >
+            <Text style={styles.inlineButtonDangerText}>
+              {busyAction === 'request-account-deletion' ? 'Eliminando...' : 'Eliminar cuenta'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.sectionBlock}>
         <Pressable
           onPress={() => void session.signOut()}
           style={({ pressed }) => [styles.signOutRow, pressed ? styles.rowPressed : null]}
@@ -815,7 +1099,7 @@ export function ProfileScreen() {
         </Pressable>
       </View>
       <AvatarViewerModal
-        imageUrl={currentUserProfile?.avatarUrl ?? null}
+        imageUrl={localAvatarPath ?? currentUserProfile?.avatarUrl ?? null}
         label={accountLabel}
         onClose={() => setAvatarViewerVisible(false)}
         visible={avatarViewerVisible}
@@ -884,6 +1168,11 @@ const styles = StyleSheet.create({
   },
   sectionList: {
     gap: theme.spacing.sm,
+  },
+  sectionBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 19,
   },
   statusRow: {
     alignItems: 'center',
@@ -966,6 +1255,9 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.62,
   },
   signOutLabel: {
     color: theme.colors.danger,

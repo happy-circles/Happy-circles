@@ -26,6 +26,7 @@ import {
   amendFinancialRequestSchema,
   createBalanceRequestSchema,
   createPeopleOutreachSchema,
+  requestAccountDeletionSchema,
   cancelFriendshipInviteSchema,
   claimExternalFriendshipInviteSchema,
   createExternalFriendshipInviteSchema,
@@ -197,6 +198,16 @@ export interface SettlementDetailDto {
   readonly movements: readonly string[];
   readonly impactLines: readonly string[];
   readonly explainers: readonly string[];
+}
+
+export interface AccountDeletionRequestResult {
+  readonly requestId: string;
+  readonly status: 'completed';
+  readonly processedAt: string;
+  readonly retentionMode: 'anonymize_profile_retain_ledger';
+  readonly revokedDeviceCount: number;
+  readonly authUserDeleted?: boolean;
+  readonly avatarObjectsRemoved?: number;
 }
 
 export interface FriendshipInviteDto {
@@ -3855,7 +3866,7 @@ async function parseFunctionError(error: unknown) {
       const cloned = maybeContext.clone();
       const body = (await cloned.json()) as { error?: string; message?: string; code?: string };
       if (typeof body.error === 'string' && body.error.length > 0) {
-        if (typeof body.code === 'string' && body.code.length > 0) {
+        if (body.code === 'auth_required') {
           return `${body.code}: ${body.error}`;
         }
 
@@ -3942,6 +3953,10 @@ function useSensitiveMutationGuard() {
   const session = useSession();
 
   return async (actionLabel: string) => {
+    if (!session.isEmailConfirmed) {
+      throw new Error('Confirma tu correo antes de mover dinero o aprobar cambios sensibles.');
+    }
+
     if (session.profileCompletionState !== 'complete') {
       throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
     }
@@ -4252,6 +4267,24 @@ export function useUpdateProfileAvatarMutation() {
     },
     onSuccess: async () => {
       await session.refreshAccountState();
+      await invalidateAppSnapshot();
+    },
+  });
+}
+
+export function useRequestAccountDeletionMutation() {
+  return useMutation({
+    mutationFn: async () => {
+      const payload = requestAccountDeletionSchema.parse({
+        idempotencyKey: createIdempotencyKey('request_account_deletion'),
+      });
+
+      return invokeSupabaseFunction<typeof payload, AccountDeletionRequestResult>(
+        'request-account-deletion',
+        payload,
+      );
+    },
+    onSuccess: async () => {
       await invalidateAppSnapshot();
     },
   });

@@ -103,6 +103,25 @@ assert(
   exists('supabase/functions/upload-avatar/index.ts'),
   'supabase/functions/upload-avatar/index.ts: authenticated avatar upload function is required',
 );
+assert(
+  exists('supabase/functions/request-account-deletion/index.ts'),
+  'supabase/functions/request-account-deletion/index.ts: account deletion function is required',
+);
+assertContains(
+  'supabase/config.toml',
+  /\[functions\.request-account-deletion\][\s\S]*?verify_jwt\s*=\s*true/,
+  'request-account-deletion must require JWT verification',
+);
+assertContains(
+  'supabase/migrations/0037_account_deletion_requests.sql',
+  /display_name\s*=\s*'Cuenta eliminada'[\s\S]*phone_e164\s*=\s*null[\s\S]*avatar_path\s*=\s*null/i,
+  'account deletion must anonymize profile PII',
+);
+assertContains(
+  'supabase/migrations/0037_account_deletion_requests.sql',
+  /revoke\s+all\s+on\s+function\s+public\.request_account_deletion\(uuid,\s*text\)[\s\S]*grant\s+execute\s+on\s+function\s+public\.request_account_deletion\(uuid,\s*text\)[\s\S]*to\s+service_role/i,
+  'request_account_deletion RPC must only execute through service_role',
+);
 assertContains(
   'supabase/functions/upload-avatar/index.ts',
   /MAX_AVATAR_BYTES[\s\S]*avatar\.size\s*>\s*MAX_AVATAR_BYTES/,

@@ -6,7 +6,10 @@ import { Platform } from 'react-native';
 import type { Database } from '@happy-circles/shared';
 
 import { appConfig } from './config';
+import { installNativeWebCryptoShim } from './native-webcrypto';
 import { authStorageAdapter } from './storage';
+
+installNativeWebCryptoShim();
 
 const authStorage =
   Platform.OS === 'web' && typeof globalThis.localStorage !== 'undefined'

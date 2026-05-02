@@ -64,6 +64,7 @@ export function SignInScreen({ initialMode = 'sign-in' }: SignInScreenProps) {
   const isRecovery = activeMode === 'recover';
   const canShowSocialActions = activeMode === 'sign-in';
   const canShowPasswordForm = activeMode === 'sign-in' || isRecovery;
+  const canScroll = activeMode !== null || keyboardVisible || Boolean(message);
   const brandStateStyle = keyboardVisible
     ? styles.brandWrapKeyboard
     : activeMode
@@ -180,7 +181,7 @@ export function SignInScreen({ initialMode = 'sign-in' }: SignInScreenProps) {
           ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={false}
+          scrollEnabled={canScroll}
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.contentWidth, activeMode ? null : styles.contentWidthIdle]}>

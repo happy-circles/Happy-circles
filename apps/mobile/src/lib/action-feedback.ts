@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { Href } from 'expo-router';
 
+import { triggerIdentityWarningHaptic } from './identity-flow-haptics';
 import { buildSetupAccountHref } from './setup-account';
 
 interface AlertNavigation {
@@ -25,6 +26,7 @@ interface BlockedActionContext {
   readonly hasEmailPassword?: boolean;
   readonly profile?: {
     readonly displayName?: string | null;
+    readonly emailConfirmed?: boolean;
     readonly avatarPath?: string | null;
     readonly phoneE164?: string | null;
   };
@@ -119,13 +121,23 @@ function resolveBlockedAction(
     context?.profile?.displayName === undefined
       ? false
       : !((context.profile.displayName ?? '').trim().length);
-  const nextRequiredStep = !context?.profile?.phoneE164 || missingDisplayName ? 'profile' : 'photo';
+  const missingEmail =
+    normalized.includes('confirma tu correo') ||
+    normalized.includes('correo sin confirmar') ||
+    context?.profile?.emailConfirmed === false;
+  const nextRequiredStep = missingEmail
+    ? 'email'
+    : !context?.profile?.phoneE164 || missingDisplayName
+      ? 'profile'
+      : 'photo';
 
-  if (normalized.includes('completa tu perfil')) {
+  if (normalized.includes('completa tu perfil') || normalized.includes('confirma tu correo')) {
     return {
-      title: 'Completa tu perfil para continuar',
-      message: 'Antes de mover dinero necesitamos nombre usable, foto y celular unico en tu cuenta.',
-      ctaLabel: 'Completar ahora',
+      title: missingEmail ? 'Confirma tu correo para continuar' : 'Completa tu perfil para continuar',
+      message: missingEmail
+        ? 'Reenvia el correo desde tu perfil y abre el enlace de confirmacion.'
+        : 'Antes de mover dinero necesitamos nombre usable, foto y celular unico en tu cuenta.',
+      ctaLabel: missingEmail ? 'Abrir perfil' : 'Completar ahora',
       route: buildSetupAccountHref(nextRequiredStep),
     };
   }
@@ -171,6 +183,7 @@ export function showBlockedActionAlert(
     return false;
   }
 
+  triggerIdentityWarningHaptic();
   Alert.alert(resolution.title, resolution.message, [
     {
       text: 'Ahora no',

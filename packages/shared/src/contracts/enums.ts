@@ -2,10 +2,7 @@ export const CURRENCY_CODE = 'COP' as const;
 
 export type CurrencyCode = typeof CURRENCY_CODE;
 
-export const REQUEST_TYPES = [
-  'balance_increase',
-  'transaction_reversal',
-] as const;
+export const REQUEST_TYPES = ['balance_increase', 'transaction_reversal'] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
 
 export const REQUEST_STATUSES = [
@@ -108,6 +105,7 @@ export const AUDIT_ENTITY_TYPES = [
   'ledger_transaction',
   'settlement_proposal',
   'settlement_execution',
+  'user_profile',
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
@@ -140,6 +138,7 @@ export const AUDIT_EVENT_NAMES = [
   'settlement_approved',
   'settlement_rejected',
   'settlement_executed',
+  'account_deletion_completed',
 ] as const;
 export type AuditEventName = (typeof AUDIT_EVENT_NAMES)[number];
 

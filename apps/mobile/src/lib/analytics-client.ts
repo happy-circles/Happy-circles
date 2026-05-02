@@ -6,6 +6,7 @@ import {
   type AnalyticsScreenName,
 } from '@happy-circles/shared';
 
+import { appConfig } from './config';
 import { supabase } from './supabase';
 
 type AnalyticsMetadata = Partial<Record<string, string | number | boolean | null>>;
@@ -34,12 +35,70 @@ function createRandomId(prefix: string): string {
   return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2, 14)}`;
 }
 
-async function parseFunctionError(error: unknown): Promise<string> {
-  if (error instanceof Error) {
-    return error.message;
+async function wait(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+async function getCurrentAccessToken(): Promise<string | null> {
+  if (!supabase) {
+    return null;
   }
 
-  return String(error);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token ?? null;
+
+    if (accessToken) {
+      return accessToken;
+    }
+
+    if (attempt < 2) {
+      await wait(250 * (attempt + 1));
+    }
+  }
+
+  return null;
+}
+
+async function invokeAnalyticsFunction<TResult>(
+  functionName: 'record-product-event' | 'start-app-session',
+  payload: Record<string, unknown>,
+): Promise<TResult> {
+  const accessToken = await getCurrentAccessToken();
+  if (!accessToken) {
+    throw new Error('No active Supabase auth session for product analytics.');
+  }
+
+  const response = await fetch(
+    `${appConfig.supabaseUrl.replace(/\/+$/, '')}/functions/v1/${functionName}`,
+    {
+      body: JSON.stringify(payload),
+      headers: {
+        Accept: 'application/json',
+        apikey: appConfig.supabaseAnonKey,
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'x-client-info': 'happy-circles-mobile',
+      },
+      method: 'POST',
+    },
+  );
+
+  const responseText = await response.text();
+  const responseBody = responseText ? (JSON.parse(responseText) as unknown) : null;
+
+  if (!response.ok) {
+    const message =
+      responseBody && typeof responseBody === 'object' && 'error' in responseBody
+        ? String(responseBody.error)
+        : `Product analytics function ${functionName} failed with HTTP ${response.status}.`;
+
+    throw new Error(message);
+  }
+
+  return responseBody as TResult;
 }
 
 export function createAnalyticsClientSessionId(): string {
@@ -58,18 +117,12 @@ export async function startProductAnalyticsSession(
   }
 
   const payload = startAppSessionSchema.parse(input);
-  const result = await supabase.functions.invoke<{ readonly sessionId: string }>(
+  const result = await invokeAnalyticsFunction<{ readonly sessionId: string }>(
     'start-app-session',
-    {
-      body: payload,
-    },
+    payload,
   );
 
-  if (result.error) {
-    throw new Error(await parseFunctionError(result.error));
-  }
-
-  const sessionId = result.data?.sessionId ?? null;
+  const sessionId = result.sessionId ?? null;
   activeAnalyticsSessionId = sessionId;
   return sessionId;
 }
@@ -88,20 +141,9 @@ export async function recordProductEvent(input: RecordProductEventInput): Promis
     metadata: analyticsMetadataSchema.parse(input.metadata ?? {}),
   });
 
-  const result = await supabase.functions.invoke('record-product-event', {
-    body: payload,
-  });
-
-  if (result.error) {
-    throw new Error(await parseFunctionError(result.error));
-  }
+  await invokeAnalyticsFunction('record-product-event', payload);
 }
 
 export function recordProductEventSafe(input: RecordProductEventInput): void {
-  void recordProductEvent(input).catch((error) => {
-    console.warn(
-      'Failed to record product analytics event',
-      error instanceof Error ? error.message : String(error),
-    );
-  });
+  void recordProductEvent(input).catch(() => undefined);
 }

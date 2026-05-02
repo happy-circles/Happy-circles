@@ -9,9 +9,19 @@ export type ContactsPermissionStatus =
   | 'granted';
 
 function mapContactsPermissionStatus(
-  permission: Pick<Contacts.ContactsPermissionResponse, 'granted' | 'canAskAgain' | 'accessPrivileges'>,
+  permission: Pick<
+    Contacts.ContactsPermissionResponse,
+    'granted' | 'canAskAgain' | 'accessPrivileges' | 'status'
+  >,
 ): ContactsPermissionStatus {
-  if (permission.granted) {
+  const status = typeof permission.status === 'string' ? permission.status : null;
+  const hasContactsAccess =
+    permission.granted === true ||
+    status === 'granted' ||
+    permission.accessPrivileges === 'all' ||
+    permission.accessPrivileges === 'limited';
+
+  if (hasContactsAccess) {
     if (permission.accessPrivileges === 'limited') {
       return 'limited';
     }
@@ -19,7 +29,10 @@ function mapContactsPermissionStatus(
     return 'granted';
   }
 
-  if (permission.canAskAgain === false) {
+  if (
+    permission.canAskAgain === false ||
+    (status === 'denied' && permission.canAskAgain !== true)
+  ) {
     return 'denied';
   }
 
@@ -41,8 +54,9 @@ export async function requestContactsPermissionStatus(): Promise<ContactsPermiss
   }
 
   const current = await Contacts.getPermissionsAsync();
-  if (current.granted) {
-    return 'granted';
+  const currentStatus = mapContactsPermissionStatus(current);
+  if (currentStatus !== 'undetermined') {
+    return currentStatus;
   }
 
   const next = await Contacts.requestPermissionsAsync();

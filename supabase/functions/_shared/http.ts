@@ -36,6 +36,14 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
+  if (normalized.includes('actor_mismatch')) {
+    return {
+      status: 403,
+      code: 'forbidden',
+      message: 'No tienes permisos para realizar esta accion.',
+    };
+  }
+
   if (normalized.includes('permission denied') || normalized.includes('not allowed')) {
     return {
       status: 403,
@@ -49,6 +57,69 @@ function normalizeError(error: unknown): SafeError {
       status: 400,
       code: 'validation_failed',
       message: 'Solicitud invalida.',
+    };
+  }
+
+  if (normalized.includes('identity_incomplete')) {
+    return {
+      status: 400,
+      code: 'identity_incomplete',
+      message:
+        'Completa tu perfil, agrega foto, celular y confirma tu correo antes de enviar solicitudes.',
+    };
+  }
+
+  if (normalized.includes('actor_account_not_active')) {
+    return {
+      status: 403,
+      code: 'account_not_active',
+      message: 'Tu cuenta aun no esta activa para enviar invitaciones.',
+    };
+  }
+
+  if (normalized.includes('cannot_invite_self')) {
+    return {
+      status: 400,
+      code: 'cannot_invite_self',
+      message: 'No puedes enviarte una invitacion a ti mismo.',
+    };
+  }
+
+  if (normalized.includes('relationship_already_exists')) {
+    return {
+      status: 409,
+      code: 'relationship_already_exists',
+      message: 'Ya tienes a esta persona en tus contactos.',
+    };
+  }
+
+  if (
+    normalized.includes('contact_phone_required') ||
+    normalized.includes('contact_reference_required')
+  ) {
+    return {
+      status: 400,
+      code: 'contact_phone_required',
+      message: 'El contacto necesita un numero valido para enviar la invitacion.',
+    };
+  }
+
+  if (
+    normalized.includes('external_channel_required') ||
+    normalized.includes('account_invite_channel_required')
+  ) {
+    return {
+      status: 400,
+      code: 'validation_failed',
+      message: 'El tipo de invitacion no es valido.',
+    };
+  }
+
+  if (normalized.includes('actor_profile_not_found')) {
+    return {
+      status: 400,
+      code: 'profile_not_found',
+      message: 'No encontramos tu perfil. Cierra sesion y vuelve a entrar.',
     };
   }
 

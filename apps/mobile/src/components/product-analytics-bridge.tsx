@@ -74,6 +74,12 @@ function routeFromSegments(segments: readonly string[]): string {
   return route.length > 0 ? route.slice(0, 120) : 'home';
 }
 
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export function ProductAnalyticsBridge() {
   const session = useSession();
   const segments = useSegments();
@@ -93,24 +99,39 @@ export function ProductAnalyticsBridge() {
     }
 
     let active = true;
-    void startProductAnalyticsSession({
-      clientSessionId: clientSessionIdRef.current,
-      platform: Platform.OS,
-      appVersion: getCurrentAppVersion(),
-      deviceId: session.currentDeviceId,
-      startedAt: new Date().toISOString(),
-    })
-      .then((sessionId) => {
-        if (active) {
+
+    async function startAnalyticsSession() {
+      for (let attempt = 0; active && attempt < 3; attempt += 1) {
+        try {
+          const sessionId = await startProductAnalyticsSession({
+            clientSessionId: clientSessionIdRef.current,
+            platform: Platform.OS,
+            appVersion: getCurrentAppVersion(),
+            deviceId: session.currentDeviceId,
+            startedAt: new Date().toISOString(),
+          });
+
+          if (!active) {
+            return;
+          }
+
           setAnalyticsSessionId(sessionId);
+          if (sessionId) {
+            return;
+          }
+        } catch {
+          if (active) {
+            setAnalyticsSessionId(null);
+          }
         }
-      })
-      .catch((error) => {
-        console.warn(
-          'Failed to start product analytics session',
-          error instanceof Error ? error.message : String(error),
-        );
-      });
+
+        if (attempt < 2) {
+          await wait(1000 * (attempt + 1));
+        }
+      }
+    }
+
+    void startAnalyticsSession();
 
     return () => {
       active = false;

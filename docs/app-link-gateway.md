@@ -2,8 +2,8 @@
 
 Happy Circles uses two public web surfaces:
 
-- `https://www.happy-circles.com`: marketing landing and store buttons.
-- `https://app.happy-circles.com`: operational app links that should open the native app.
+- `https://app.happy-circles.com`: current public landing, legal/support pages, store buttons, and operational app links that should open the native app.
+- `https://www.happy-circles.com`: optional marketing domain once DNS is attached.
 
 The `app.happy-circles.com` routes are served by the landing Next.js project, but they behave as a gateway:
 
@@ -70,7 +70,7 @@ Keep the `happycircles://...` entries while development builds or older app vers
 
 ## External setup still required
 
-- Add `app.happy-circles.com` DNS and attach it to the Vercel project.
+- Keep `app.happy-circles.com` attached to the Vercel project; add `www.happy-circles.com` only if a separate marketing domain is needed.
 - Add the Apple Team ID to Vercel.
 - Add Android release SHA-256 certificate fingerprints to Vercel.
 - Rebuild and ship iOS/Android after changing associated domains or Android intent filters.

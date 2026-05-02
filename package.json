@@ -26,7 +26,7 @@
     "format": "pnpm exec prettier --write .",
     "security:check": "node ./scripts/security-check.mjs",
     "test": "pnpm exec vitest run",
-    "test:supabase": "supabase db start && supabase db reset --no-seed && supabase test db",
+    "test:supabase": "node ./scripts/run-supabase-tests.mjs",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {

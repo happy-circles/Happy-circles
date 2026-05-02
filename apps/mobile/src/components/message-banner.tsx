@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-type MessageBannerTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+export type MessageBannerTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 
 export interface MessageBannerProps {
   readonly message: string;
