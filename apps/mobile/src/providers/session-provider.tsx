@@ -379,6 +379,25 @@ function formatValidationMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'No se pudo completar la accion.';
 }
 
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { readonly message?: unknown }).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+
+  return 'No se pudo completar la accion.';
+}
+
 function formatSupabaseAuthErrorMessage(message: string): string {
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
@@ -1410,7 +1429,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       );
 
       if (registrationPreview.error) {
-        return formatSupabaseAuthErrorMessage(registrationPreview.error.message);
+        return formatSupabaseAuthErrorMessage(readErrorMessage(registrationPreview.error));
       }
 
       if (
@@ -1522,7 +1541,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return formatSupabaseAuthErrorMessage(error.message);
       }
 
-      return 'Enviamos un nuevo correo de confirmacion. Puedes abrir el enlace o copiar el codigo de 6 digitos.';
+      return 'Enviamos un nuevo correo de confirmacion. Puedes abrir el enlace o copiar el codigo de 8 digitos.';
     },
     [refreshAccountState],
   );

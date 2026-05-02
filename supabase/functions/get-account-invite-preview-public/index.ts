@@ -27,21 +27,39 @@ Deno.serve((request) =>
       throw error;
     }
 
-    if ((!email && !phoneE164) || typeof data !== 'object' || data === null || Array.isArray(data)) {
+    if (
+      (!email && !phoneE164) ||
+      typeof data !== 'object' ||
+      data === null ||
+      Array.isArray(data)
+    ) {
       return data;
     }
 
-    const [existingEmailProfileResult, existingPhoneProfileResult] = await Promise.all([
-      email
-        ? client.from('user_profiles').select('id').eq('email', email).limit(1).maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      phoneE164
-        ? client.from('user_profiles').select('id').eq('phone_e164', phoneE164).limit(1).maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
+    const [existingEmailProfileResult, existingAuthEmailResult, existingPhoneProfileResult] =
+      await Promise.all([
+        email
+          ? client.from('user_profiles').select('id').eq('email', email).limit(1).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        email
+          ? client.rpc('auth_email_exists', { p_email: email })
+          : Promise.resolve({ data: false, error: null }),
+        phoneE164
+          ? client
+              .from('user_profiles')
+              .select('id')
+              .eq('phone_e164', phoneE164)
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
     if (existingEmailProfileResult.error) {
       throw existingEmailProfileResult.error;
+    }
+
+    if (existingAuthEmailResult.error) {
+      throw existingAuthEmailResult.error;
     }
 
     if (existingPhoneProfileResult.error) {
@@ -50,7 +68,8 @@ Deno.serve((request) =>
 
     return {
       ...data,
-      emailAlreadyRegistered: Boolean(existingEmailProfileResult.data),
+      emailAlreadyRegistered:
+        Boolean(existingEmailProfileResult.data) || Boolean(existingAuthEmailResult.data),
       phoneAlreadyRegistered: Boolean(existingPhoneProfileResult.data),
     };
   }),

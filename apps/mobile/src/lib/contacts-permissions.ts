@@ -14,10 +14,10 @@ function mapContactsPermissionStatus(
     'granted' | 'canAskAgain' | 'accessPrivileges' | 'status'
   >,
 ): ContactsPermissionStatus {
-  const status = typeof permission.status === 'string' ? permission.status : null;
+  const status = permission.status;
   const hasContactsAccess =
     permission.granted === true ||
-    status === 'granted' ||
+    status === Contacts.PermissionStatus.GRANTED ||
     permission.accessPrivileges === 'all' ||
     permission.accessPrivileges === 'limited';
 
@@ -31,7 +31,7 @@ function mapContactsPermissionStatus(
 
   if (
     permission.canAskAgain === false ||
-    (status === 'denied' && permission.canAskAgain !== true)
+    (status === Contacts.PermissionStatus.DENIED && permission.canAskAgain !== true)
   ) {
     return 'denied';
   }

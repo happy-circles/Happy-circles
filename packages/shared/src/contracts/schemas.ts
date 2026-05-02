@@ -237,7 +237,7 @@ export const emailOtpVerificationSchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^\d{6,8}$/, 'Ingresa el codigo del correo.'),
+    .regex(/^\d{8}$/, 'Ingresa el codigo de 8 digitos.'),
   email: z.string().trim().email(),
 });
 

@@ -27,6 +27,7 @@ import {
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
+import { OtpCodeInput } from '@/components/otp-code-input';
 import { PrimaryAction } from '@/components/primary-action';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import {
@@ -171,7 +172,7 @@ export function SetupAccountScreen() {
   const avatarLabel = fullName || profile?.display_name || profile?.email || 'Tu perfil';
   const accountEmail = session.email ?? profile?.email ?? '';
   const accountEmailLabel = accountEmail || 'Sin correo';
-  const emailConfirmationCodeValid = /^\d{6,8}$/.test(emailConfirmationCode);
+  const emailConfirmationCodeValid = /^\d{8}$/.test(emailConfirmationCode);
   const trustActionLabel = resolveTrustActionLabel(session);
   const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
@@ -507,7 +508,7 @@ export function SetupAccountScreen() {
 
     if (!emailConfirmationCodeValid) {
       triggerWarningHaptic();
-      setMessage('Ingresa el codigo del correo.');
+      setMessage('Ingresa el codigo de 8 digitos del correo.');
       return;
     }
 
@@ -726,7 +727,7 @@ export function SetupAccountScreen() {
               subtitle={
                 session.isEmailConfirmed
                   ? accountEmailLabel
-                  : 'Abre el enlace o pega el codigo de 6 digitos'
+                  : 'Abre el enlace o pega el codigo de 8 digitos'
               }
               title="Correo confirmado"
               tone={session.isEmailConfirmed ? 'success' : 'danger'}
@@ -751,18 +752,12 @@ export function SetupAccountScreen() {
             {!session.isEmailConfirmed ? (
               <View style={styles.securityAction}>
                 <Text style={styles.helperText}>
-                  Usa el codigo del correo si el enlace no abre la app.
+                  Usa el codigo de 8 digitos si el enlace no abre la app.
                 </Text>
-                <AppTextInput
-                  autoCapitalize="none"
-                  keyboardType="number-pad"
-                  maxLength={8}
-                  onChangeText={(value) =>
-                    setEmailConfirmationCode(value.replace(/\D/g, '').slice(0, 8))
-                  }
-                  placeholder="00000000"
-                  placeholderTextColor={theme.colors.muted}
-                  textContentType="oneTimeCode"
+                <OtpCodeInput
+                  disabled={securityBusyKey !== null}
+                  hasError={emailConfirmationCode.length > 0 && !emailConfirmationCodeValid}
+                  onChangeText={setEmailConfirmationCode}
                   value={emailConfirmationCode}
                 />
                 <View style={styles.inlineActionRow}>

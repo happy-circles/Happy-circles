@@ -80,8 +80,16 @@ If you still test with Expo development URLs, keep those temporary development r
 In Supabase email templates:
 
 - Update the recovery template branding and copy.
+- Update the confirmation template branding and copy.
+- Include `{{ .Token }}` in the confirmation template so the app can verify the 8-digit code when a deep link does not return to Expo or the native app.
+- Keep the confirmation action using Supabase's generated action URL.
 - Keep the recovery action using Supabase's generated action URL.
 - Do not hardcode a raw app URL in the email body if Supabase already injects the action link.
+
+Suggested confirmation copy:
+
+- Subject: `Confirma tu cuenta de Happy Circles`
+- Body includes both `{{ .Token }}` and `{{ .ConfirmationURL }}`
 
 Suggested recovery copy:
 

@@ -14,6 +14,7 @@ import {
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner, type MessageBannerTone } from '@/components/message-banner';
+import { OtpCodeInput } from '@/components/otp-code-input';
 import { PrimaryAction } from '@/components/primary-action';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
@@ -152,7 +153,7 @@ export function AccountCreateAccountScreen() {
   const emailValid = isValidEmail(email);
   const phoneValid = isValidPhoneNumber(phoneNationalNumber);
   const passwordValid = isValidPassword(password);
-  const verificationCodeValid = /^\d{6,8}$/.test(verificationCode);
+  const verificationCodeValid = /^\d{8}$/.test(verificationCode);
   const emailChecked = validationAttempted || touchedFields.email;
   const phoneChecked = validationAttempted || touchedFields.phone;
   const passwordChecked = validationAttempted || touchedFields.password;
@@ -304,7 +305,7 @@ export function AccountCreateAccountScreen() {
 
     if (!verificationCodeValid) {
       triggerIdentityWarningHaptic();
-      setMessage('Ingresa el codigo del correo.');
+      setMessage('Ingresa el codigo de 8 digitos del correo.');
       return;
     }
 
@@ -358,6 +359,38 @@ export function AccountCreateAccountScreen() {
       setMessage(error instanceof Error ? error.message : 'No se pudo reenviar el correo.');
     } finally {
       setResendBusy(false);
+    }
+  }
+
+  async function handleContinueAfterEmailLink() {
+    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    setVerificationBusy(true);
+    setMessage(null);
+
+    try {
+      const result = await session.signInWithPassword({
+        email: pendingVerificationEmail,
+        password,
+      });
+      setMessage(result);
+
+      if (result === 'Sesion iniciada.') {
+        triggerIdentitySuccessHaptic();
+        setupNavigationStartedRef.current = true;
+        beginSetupEntryHandoff();
+        returnToRoute(router, buildSetupAccountHref('profile'));
+      } else {
+        triggerIdentityWarningHaptic();
+      }
+    } catch (error) {
+      triggerIdentityErrorHaptic();
+      setMessage(error instanceof Error ? error.message : 'No se pudo validar la confirmacion.');
+    } finally {
+      setVerificationBusy(false);
     }
   }
 
@@ -418,9 +451,7 @@ export function AccountCreateAccountScreen() {
 
           <IdentityFlowField
             error={
-              verificationCode.length > 0 && !verificationCodeValid
-                ? 'Debe tener entre 6 y 8 digitos.'
-                : null
+              verificationCode.length > 0 && !verificationCodeValid ? 'Debe tener 8 digitos.' : null
             }
             icon="keypad"
             label="Codigo"
@@ -428,13 +459,10 @@ export function AccountCreateAccountScreen() {
               verificationCode.length === 0 ? 'idle' : verificationCodeValid ? 'success' : 'danger'
             }
           >
-            <IdentityFlowTextInput
-              keyboardType="number-pad"
-              maxLength={8}
-              onChangeText={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 8))}
-              placeholder="00000000"
-              placeholderTextColor={theme.colors.muted}
-              textContentType="oneTimeCode"
+            <OtpCodeInput
+              disabled={verificationBusy || resendBusy}
+              hasError={verificationCode.length > 0 && !verificationCodeValid}
+              onChangeText={setVerificationCode}
               value={verificationCode}
             />
           </IdentityFlowField>
@@ -456,6 +484,16 @@ export function AccountCreateAccountScreen() {
               label={resendBusy ? 'Enviando...' : 'Reenviar codigo'}
               onPress={
                 verificationBusy || resendBusy ? undefined : () => void handleResendEmailCode()
+              }
+            />
+            <IdentityFlowSecondaryAction
+              disabled={verificationBusy || resendBusy}
+              icon="log-in-outline"
+              label="Ya confirme el enlace"
+              onPress={
+                verificationBusy || resendBusy
+                  ? undefined
+                  : () => void handleContinueAfterEmailLink()
               }
             />
             <IdentityFlowSecondaryAction
