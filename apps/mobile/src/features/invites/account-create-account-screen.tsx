@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -10,6 +10,7 @@ import {
   IdentityFlowLogoCopy,
   IdentityFlowPrimaryAction,
   IdentityFlowScreen,
+  IdentityFlowSecondaryAction,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner, type MessageBannerTone } from '@/components/message-banner';
@@ -140,12 +141,18 @@ export function AccountCreateAccountScreen() {
   });
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const setupNavigationStartedRef = useRef(false);
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
   const emailValid = isValidEmail(email);
   const phoneValid = isValidPhoneNumber(phoneNationalNumber);
   const passwordValid = isValidPassword(password);
+  const verificationCodeValid = /^\d{6,8}$/.test(verificationCode);
   const emailChecked = validationAttempted || touchedFields.email;
   const phoneChecked = validationAttempted || touchedFields.phone;
   const passwordChecked = validationAttempted || touchedFields.password;
@@ -156,24 +163,31 @@ export function AccountCreateAccountScreen() {
     : passwordValid
       ? 'valid'
       : 'invalid';
-  const tokenState: BrandVerificationState = busy
-    ? 'loading'
-    : !shouldPreview || previewQuery.error || blockingMessage
-      ? 'error'
-      : previewQuery.isLoading
-        ? 'loading'
-        : canCreateAccount
+  const tokenState: BrandVerificationState =
+    busy || verificationBusy || resendBusy
+      ? 'loading'
+      : pendingVerificationEmail
+        ? verificationCodeValid
           ? 'success'
-          : 'idle';
+          : 'idle'
+        : !shouldPreview || previewQuery.error || blockingMessage
+          ? 'error'
+          : previewQuery.isLoading
+            ? 'loading'
+            : canCreateAccount
+              ? 'success'
+              : 'idle';
   const contentTransitionKey = !shouldPreview
     ? 'create-account:no-token'
     : previewQuery.isLoading
       ? 'create-account:loading'
       : previewQuery.error || blockingMessage
         ? 'create-account:blocked'
-        : canCreateAccount
-          ? 'create-account:form'
-          : 'create-account:empty';
+        : pendingVerificationEmail
+          ? 'create-account:verify-email'
+          : canCreateAccount
+            ? 'create-account:form'
+            : 'create-account:empty';
   function markFieldTouched(field: FieldName) {
     setTouchedFields((current) => {
       if (current[field]) {
@@ -188,7 +202,7 @@ export function AccountCreateAccountScreen() {
   }
 
   useEffect(() => {
-    if (isPreviewMode) {
+    if (isPreviewMode || busy || verificationBusy || setupNavigationStartedRef.current) {
       return;
     }
 
@@ -205,7 +219,7 @@ export function AccountCreateAccountScreen() {
     }
 
     returnToRoute(router, '/join');
-  }, [isPreviewMode, router, session.status, shouldPreview, token]);
+  }, [busy, isPreviewMode, router, session.status, shouldPreview, token, verificationBusy]);
 
   useEffect(() => {
     if (!canCreateAccount || isPreviewMode) {
@@ -265,14 +279,85 @@ export function AccountCreateAccountScreen() {
 
       if (result === ACCOUNT_CREATED_SETUP_MESSAGE) {
         triggerIdentitySuccessHaptic();
+        setupNavigationStartedRef.current = true;
         beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
+      }
+
+      if (result === ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE) {
+        triggerIdentitySuccessHaptic();
+        setPendingVerificationEmail(email.trim().toLocaleLowerCase('en-US'));
+        setVerificationCode('');
       }
     } catch (error) {
       triggerIdentityErrorHaptic();
       setMessage(error instanceof Error ? error.message : ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleVerifyEmailCode() {
+    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+      return;
+    }
+
+    if (!verificationCodeValid) {
+      triggerIdentityWarningHaptic();
+      setMessage('Ingresa el codigo del correo.');
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    setVerificationBusy(true);
+    setMessage(null);
+
+    try {
+      const result = await session.verifyEmailOtp({
+        code: verificationCode,
+        email: pendingVerificationEmail,
+      });
+      setMessage(result);
+
+      if (result === 'Correo confirmado.') {
+        triggerIdentitySuccessHaptic();
+        setupNavigationStartedRef.current = true;
+        beginSetupEntryHandoff();
+        returnToRoute(router, buildSetupAccountHref('profile'));
+      } else {
+        triggerIdentityWarningHaptic();
+      }
+    } catch (error) {
+      triggerIdentityErrorHaptic();
+      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el correo.');
+    } finally {
+      setVerificationBusy(false);
+    }
+  }
+
+  async function handleResendEmailCode() {
+    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    setResendBusy(true);
+    setMessage(null);
+
+    try {
+      const result = await session.resendEmailConfirmation(pendingVerificationEmail);
+      setMessage(result);
+
+      if (result.includes('Enviamos')) {
+        triggerIdentitySuccessHaptic();
+      } else {
+        triggerIdentityWarningHaptic();
+      }
+    } catch (error) {
+      triggerIdentityErrorHaptic();
+      setMessage(error instanceof Error ? error.message : 'No se pudo reenviar el correo.');
+    } finally {
+      setResendBusy(false);
     }
   }
 
@@ -287,10 +372,7 @@ export function AccountCreateAccountScreen() {
       identityPosition="top"
       message={
         message ? (
-          <MessageBanner
-            message={message}
-            tone={resolveCreateAccountMessageTone(message)}
-          />
+          <MessageBanner message={message} tone={resolveCreateAccountMessageTone(message)} />
         ) : (
           <IdentityFlowLogoCopy
             subtitle={
@@ -327,7 +409,70 @@ export function AccountCreateAccountScreen() {
         </View>
       ) : null}
 
-      {canCreateAccount ? (
+      {pendingVerificationEmail ? (
+        <IdentityFlowForm>
+          <IdentityFlowLogoCopy
+            subtitle={`Enviamos el enlace y el codigo a ${pendingVerificationEmail}.`}
+            title="Confirma tu correo"
+          />
+
+          <IdentityFlowField
+            error={
+              verificationCode.length > 0 && !verificationCodeValid
+                ? 'Debe tener entre 6 y 8 digitos.'
+                : null
+            }
+            icon="keypad"
+            label="Codigo"
+            status={
+              verificationCode.length === 0 ? 'idle' : verificationCodeValid ? 'success' : 'danger'
+            }
+          >
+            <IdentityFlowTextInput
+              keyboardType="number-pad"
+              maxLength={8}
+              onChangeText={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 8))}
+              placeholder="00000000"
+              placeholderTextColor={theme.colors.muted}
+              textContentType="oneTimeCode"
+              value={verificationCode}
+            />
+          </IdentityFlowField>
+
+          <IdentityFlowPrimaryAction
+            disabled={verificationBusy || resendBusy}
+            icon="checkmark"
+            label={verificationBusy ? 'Confirmando...' : 'Confirmar correo'}
+            loading={verificationBusy}
+            onPress={
+              verificationBusy || resendBusy ? undefined : () => void handleVerifyEmailCode()
+            }
+          />
+
+          <View style={styles.verificationActions}>
+            <IdentityFlowSecondaryAction
+              disabled={verificationBusy || resendBusy}
+              icon="mail"
+              label={resendBusy ? 'Enviando...' : 'Reenviar codigo'}
+              onPress={
+                verificationBusy || resendBusy ? undefined : () => void handleResendEmailCode()
+              }
+            />
+            <IdentityFlowSecondaryAction
+              disabled={verificationBusy || resendBusy}
+              icon="create-outline"
+              label="Editar correo"
+              onPress={() => {
+                setPendingVerificationEmail(null);
+                setVerificationCode('');
+                setMessage(null);
+              }}
+            />
+          </View>
+        </IdentityFlowForm>
+      ) : null}
+
+      {canCreateAccount && !pendingVerificationEmail ? (
         <IdentityFlowForm>
           <IdentityFlowField
             error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
@@ -449,6 +594,10 @@ export function AccountCreateAccountScreen() {
 const styles = StyleSheet.create({
   messageBlock: {
     gap: theme.spacing.md,
+  },
+  verificationActions: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
   },
   phoneField: {
     position: 'relative',

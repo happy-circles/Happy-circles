@@ -199,8 +199,9 @@ export function ProfileScreen() {
     session.profile?.display_name ??
     session.email ??
     'Sin sesion';
-  const accountEmail =
-    currentUserProfile?.email ?? session.profile?.email ?? session.email ?? 'Sin correo';
+  const accountEmailValue =
+    currentUserProfile?.email ?? session.profile?.email ?? session.email ?? '';
+  const accountEmail = accountEmailValue || 'Sin correo';
   const reminderSummary = snapshotQuery.isLoading
     ? 'Calculando...'
     : pendingCount > 0
@@ -458,8 +459,14 @@ export function ProfileScreen() {
   }
 
   async function handleResendEmailConfirmation() {
+    if (!accountEmailValue) {
+      triggerWarningHaptic();
+      setMessage('Esta cuenta no tiene un correo disponible para reenviar.');
+      return;
+    }
+
     const result = await runAction('resend-email-confirmation', () =>
-      session.resendEmailConfirmation(),
+      session.resendEmailConfirmation(accountEmailValue),
     );
 
     if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
@@ -695,7 +702,9 @@ export function ProfileScreen() {
             icon="mail"
             status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
             subtitle={
-              session.isEmailConfirmed ? accountEmail : 'Confirma tu correo para activar invitaciones'
+              session.isEmailConfirmed
+                ? accountEmail
+                : 'Confirma tu correo para activar invitaciones'
             }
             title="Correo"
             tone={session.isEmailConfirmed ? 'success' : 'danger'}

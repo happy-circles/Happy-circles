@@ -16,6 +16,7 @@ import { AppState, Platform } from 'react-native';
 import {
   attachEmailPasswordSchema,
   completeProfileSchema,
+  emailOtpVerificationSchema,
   emailPasswordSignInSchema,
   passwordResetRequestSchema,
   passwordResetSchema,
@@ -126,6 +127,11 @@ interface PasswordResetInput {
   readonly confirmPassword: string;
 }
 
+interface EmailOtpVerificationInput {
+  readonly email: string;
+  readonly code: string;
+}
+
 interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
@@ -182,7 +188,8 @@ interface SessionContextValue {
   readonly requiresInvite: boolean;
   readonly requiresAccountActivation: boolean;
   requestPasswordReset(email: string): Promise<string>;
-  resendEmailConfirmation(): Promise<string>;
+  resendEmailConfirmation(email?: string): Promise<string>;
+  verifyEmailOtp(input: EmailOtpVerificationInput): Promise<string>;
   updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
@@ -377,7 +384,10 @@ function formatSupabaseAuthErrorMessage(message: string): string {
 
   if (
     normalized.includes('email rate limit exceeded') ||
-    normalized.includes('over_email_send_rate_limit')
+    normalized.includes('over_email_send_rate_limit') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('for security purposes')
   ) {
     return 'Supabase bloqueo temporalmente el envio de correos por exceso de intentos. Espera antes de volver a probar o revisa los limites de Auth y tu proveedor SMTP.';
   }
@@ -398,6 +408,15 @@ function formatSupabaseAuthErrorMessage(message: string): string {
 
   if (normalized.includes('email not confirmed')) {
     return 'Confirma tu correo para continuar.';
+  }
+
+  if (
+    normalized.includes('invalid otp') ||
+    normalized.includes('otp expired') ||
+    normalized.includes('token has expired') ||
+    normalized.includes('token is invalid')
+  ) {
+    return 'Codigo invalido o vencido. Revisa el correo mas reciente o pide uno nuevo.';
   }
 
   if (normalized.includes('invalid') && normalized.includes('email')) {
@@ -1472,36 +1491,71 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const resendEmailConfirmation = useCallback(async () => {
-    if (!supabase || !sessionRef.current) {
-      return 'No hay una sesion activa para reenviar el correo.';
-    }
+  const resendEmailConfirmation = useCallback(
+    async (emailInput?: string) => {
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
 
-    const email = sessionRef.current.user.email?.trim().toLocaleLowerCase('en-US');
-    if (!email) {
-      return 'Esta cuenta no tiene un correo disponible para confirmar.';
-    }
+      const email = (emailInput ?? sessionRef.current?.user.email)
+        ?.trim()
+        .toLocaleLowerCase('en-US');
+      if (!email) {
+        return 'Escribe el correo para reenviar la confirmacion.';
+      }
 
-    if (isSessionEmailConfirmed(sessionRef.current)) {
-      await refreshAccountState();
-      return 'Tu correo ya esta confirmado.';
-    }
+      if (sessionRef.current && isSessionEmailConfirmed(sessionRef.current)) {
+        await refreshAccountState();
+        return 'Tu correo ya esta confirmado.';
+      }
 
-    const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
-    const { error } = await supabase.auth.resend({
-      email,
-      options: {
-        emailRedirectTo: redirectTo,
-      },
-      type: 'signup',
-    });
+      const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
+      const { error } = await supabase.auth.resend({
+        email,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+        type: 'signup',
+      });
 
-    if (error) {
-      return formatSupabaseAuthErrorMessage(error.message);
-    }
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
 
-    return 'Enviamos un nuevo correo de confirmacion. Abre el enlace desde este dispositivo.';
-  }, [refreshAccountState]);
+      return 'Enviamos un nuevo correo de confirmacion. Puedes abrir el enlace o copiar el codigo de 6 digitos.';
+    },
+    [refreshAccountState],
+  );
+
+  const verifyEmailOtp = useCallback(
+    async (input: EmailOtpVerificationInput) => {
+      try {
+        const parsed = emailOtpVerificationSchema.parse(input);
+        const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+        const token = parsed.code.trim();
+
+        if (!supabase) {
+          return 'Supabase no esta configurado en esta app.';
+        }
+
+        const { error } = await supabase.auth.verifyOtp({
+          email: normalizedEmail,
+          token,
+          type: 'signup',
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        await refreshAccountState({ preserveLocked: false });
+        return 'Correo confirmado.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [refreshAccountState],
+  );
 
   const updatePassword = useCallback(
     async (input: PasswordResetInput) => {
@@ -2094,6 +2148,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       requiresAccountActivation: accountAccessState === 'needs_activation',
       requestPasswordReset,
       resendEmailConfirmation,
+      verifyEmailOtp,
       updatePassword,
       signInWithPassword,
       registerAccount,
@@ -2162,6 +2217,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       trustCurrentDevice,
       trustedDevices,
       unlock,
+      verifyEmailOtp,
     ],
   );
 

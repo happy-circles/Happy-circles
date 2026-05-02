@@ -148,6 +148,7 @@ export function SetupAccountScreen() {
   const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
+  const [emailConfirmationCode, setEmailConfirmationCode] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
   const [securityBusyKey, setSecurityBusyKey] = useState<string | null>(null);
   const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
@@ -168,7 +169,9 @@ export function SetupAccountScreen() {
     profile?.updated_at ?? null,
   );
   const avatarLabel = fullName || profile?.display_name || profile?.email || 'Tu perfil';
-  const accountEmail = session.email ?? profile?.email ?? 'Sin correo';
+  const accountEmail = session.email ?? profile?.email ?? '';
+  const accountEmailLabel = accountEmail || 'Sin correo';
+  const emailConfirmationCodeValid = /^\d{6,8}$/.test(emailConfirmationCode);
   const trustActionLabel = resolveTrustActionLabel(session);
   const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
@@ -473,13 +476,52 @@ export function SetupAccountScreen() {
       return;
     }
 
+    if (!accountEmail) {
+      triggerWarningHaptic();
+      setMessage('Esta cuenta no tiene un correo disponible para reenviar.');
+      return;
+    }
+
     triggerImpactHaptic();
     const result = await runSecurityAction('resend-email-confirmation', () =>
-      session.resendEmailConfirmation(),
+      session.resendEmailConfirmation(accountEmail),
     );
 
     if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
       triggerSuccessHaptic();
+    } else {
+      triggerWarningHaptic();
+    }
+  }
+
+  async function handleVerifyEmailCode() {
+    if (securityBusyKey) {
+      return;
+    }
+
+    if (!accountEmail) {
+      triggerWarningHaptic();
+      setMessage('Esta cuenta no tiene un correo disponible para confirmar.');
+      return;
+    }
+
+    if (!emailConfirmationCodeValid) {
+      triggerWarningHaptic();
+      setMessage('Ingresa el codigo del correo.');
+      return;
+    }
+
+    triggerImpactHaptic();
+    const result = await runSecurityAction('verify-email-code', () =>
+      session.verifyEmailOtp({
+        code: emailConfirmationCode,
+        email: accountEmail,
+      }),
+    );
+
+    if (result === 'Correo confirmado.') {
+      triggerSuccessHaptic();
+      setEmailConfirmationCode('');
     } else {
       triggerWarningHaptic();
     }
@@ -683,8 +725,8 @@ export function SetupAccountScreen() {
               status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
               subtitle={
                 session.isEmailConfirmed
-                  ? accountEmail
-                  : 'Revisa tu bandeja o reenvia el correo'
+                  ? accountEmailLabel
+                  : 'Abre el enlace o pega el codigo de 6 digitos'
               }
               title="Correo confirmado"
               tone={session.isEmailConfirmed ? 'success' : 'danger'}
@@ -700,14 +742,46 @@ export function SetupAccountScreen() {
                     ]}
                   >
                     <Text style={styles.inlineButtonText}>
-                      {securityBusyKey === 'resend-email-confirmation'
-                        ? 'Enviando...'
-                        : 'Reenviar'}
+                      {securityBusyKey === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
                     </Text>
                   </Pressable>
                 )
               }
             />
+            {!session.isEmailConfirmed ? (
+              <View style={styles.securityAction}>
+                <Text style={styles.helperText}>
+                  Usa el codigo del correo si el enlace no abre la app.
+                </Text>
+                <AppTextInput
+                  autoCapitalize="none"
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  onChangeText={(value) =>
+                    setEmailConfirmationCode(value.replace(/\D/g, '').slice(0, 8))
+                  }
+                  placeholder="00000000"
+                  placeholderTextColor={theme.colors.muted}
+                  textContentType="oneTimeCode"
+                  value={emailConfirmationCode}
+                />
+                <View style={styles.inlineActionRow}>
+                  <PrimaryAction
+                    compact
+                    disabled={securityBusyKey !== null}
+                    fullWidth={false}
+                    icon="checkmark"
+                    label={
+                      securityBusyKey === 'verify-email-code'
+                        ? 'Confirmando...'
+                        : 'Confirmar codigo'
+                    }
+                    loading={securityBusyKey === 'verify-email-code'}
+                    onPress={securityBusyKey ? undefined : () => void handleVerifyEmailCode()}
+                  />
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.separator} />
 

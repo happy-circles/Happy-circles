@@ -233,6 +233,14 @@ export const passwordResetRequestSchema = z.object({
   email: z.string().trim().email(),
 });
 
+export const emailOtpVerificationSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6,8}$/, 'Ingresa el codigo del correo.'),
+  email: z.string().trim().email(),
+});
+
 const phoneProfileFields = {
   phoneCountryIso2: z.string().trim().length(2),
   phoneCountryCallingCode: z.string().trim().min(2).max(6),
