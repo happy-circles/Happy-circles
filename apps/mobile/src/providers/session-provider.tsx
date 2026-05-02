@@ -10,6 +10,7 @@ import {
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { AppState, Platform } from 'react-native';
@@ -41,7 +42,11 @@ import {
   requestContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
-import { derivePendingRequiredSetupSteps, type SetupStep } from '@/lib/setup-account';
+import {
+  derivePendingRequiredSetupSteps,
+  isLowQualityDisplayName,
+  type SetupStep,
+} from '@/lib/setup-account';
 import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
@@ -106,8 +111,11 @@ interface RegistrationInput extends EmailPasswordCredentials {
 }
 
 interface AccountRegistrationPreviewResult {
+  readonly deliveryStatus?: string | null;
   readonly emailAlreadyRegistered?: boolean;
   readonly phoneAlreadyRegistered?: boolean;
+  readonly reason?: string | null;
+  readonly status?: string | null;
 }
 
 interface CompleteProfileInput {
@@ -182,6 +190,7 @@ interface SessionContextValue {
   readonly biometricAvailable: boolean;
   readonly appleSignInAvailable: boolean;
   readonly isSignedIn: boolean;
+  readonly isPasswordRecoverySession: boolean;
   readonly isLocked: boolean;
   readonly isTrustedDevice: boolean;
   readonly requiresProfileCompletion: boolean;
@@ -190,6 +199,7 @@ interface SessionContextValue {
   requestPasswordReset(email: string): Promise<string>;
   resendEmailConfirmation(email?: string): Promise<string>;
   verifyEmailOtp(input: EmailOtpVerificationInput): Promise<string>;
+  verifyPasswordRecoveryOtp(input: EmailOtpVerificationInput): Promise<string>;
   updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
@@ -201,7 +211,7 @@ interface SessionContextValue {
   attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
   trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
   revokeTrustedDevice(deviceId: string): Promise<string>;
-  refreshAccountState(options?: RefreshAccountStateOptions): Promise<void>;
+  readonly refreshAccountState: (options?: RefreshAccountStateOptions) => Promise<void>;
   signOut(): Promise<void>;
   unlock(): Promise<BiometricAuthResult>;
   lock(): void;
@@ -349,6 +359,42 @@ function extractAuthCallbackCode(url: string): string | null {
   return code && code.length > 0 ? code : null;
 }
 
+function extractUrlSearchParams(url: string): URLSearchParams {
+  const queryIndex = url.indexOf('?');
+  const hashIndex = url.indexOf('#');
+  const params = new URLSearchParams();
+
+  if (queryIndex !== -1) {
+    const queryEnd = hashIndex !== -1 && hashIndex > queryIndex ? hashIndex : url.length;
+    new URLSearchParams(url.slice(queryIndex + 1, queryEnd)).forEach((value, key) => {
+      params.set(key, value);
+    });
+  }
+
+  if (hashIndex !== -1) {
+    new URLSearchParams(url.slice(hashIndex + 1)).forEach((value, key) => {
+      params.set(key, value);
+    });
+  }
+
+  return params;
+}
+
+function isPasswordRecoveryCallbackUrl(url: string): boolean {
+  const params = extractUrlSearchParams(url);
+
+  if (params.get('type') === 'recovery') {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.pathname.startsWith('/reset-password');
+  } catch {
+    return url.includes('/reset-password') || url.includes('://reset-password');
+  }
+}
+
 function generateSecureNonce(length = 32): string {
   const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   const randomValues = new Uint8Array(length);
@@ -376,7 +422,21 @@ function formatValidationMessage(error: unknown): string {
     return firstIssue?.message ?? 'Revisa los datos e intenta otra vez.';
   }
 
-  return error instanceof Error ? error.message : 'No se pudo completar la accion.';
+  if (error instanceof Error) {
+    const normalized = error.message.trim().toLocaleLowerCase('en-US');
+
+    if (
+      normalized.includes('securestore') &&
+      normalized.includes('invalid') &&
+      normalized.includes('key')
+    ) {
+      return 'No se pudo guardar la sesion local. Cierra y abre Expo, actualiza esta version e inicia sesion otra vez.';
+    }
+
+    return error.message;
+  }
+
+  return 'No se pudo completar la accion.';
 }
 
 function readErrorMessage(error: unknown): string {
@@ -469,10 +529,19 @@ function formatSupabaseAuthErrorMessage(message: string): string {
   }
 
   if (normalized.includes('database error saving new user')) {
-    return 'Ese celular ya esta vinculado.';
+    return 'No pudimos crear la cuenta con esta invitacion. Revisa que el link siga disponible y que el celular no este vinculado.';
   }
 
   return message;
+}
+
+async function hashInviteTokenForRegistration(deliveryToken: string): Promise<string> {
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    deliveryToken.trim(),
+  );
+
+  return digest.toLocaleLowerCase('en-US');
 }
 
 function buildAppleFullName(
@@ -727,21 +796,32 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('biometria');
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
+  const [passwordRecoverySessionUserId, setPasswordRecoverySessionUserIdState] = useState<
+    string | null
+  >(null);
   const [hydrated, setHydrated] = useState(false);
 
   const backgroundedAtRef = useRef<number | null>(null);
   const accountLoadIdRef = useRef(0);
   const sessionRef = useRef<Session | null>(null);
   const statusRef = useRef<SessionStatus>('loading');
+  const passwordRecoverySessionUserIdRef = useRef<string | null>(null);
+  const welcomeEmailAttemptedUserIdsRef = useRef(new Set<string>());
 
   const setSessionStatus = useCallback((nextStatus: SessionStatus) => {
     statusRef.current = nextStatus;
     setStatusState(nextStatus);
   }, []);
 
+  const setPasswordRecoverySessionUserId = useCallback((userId: string | null) => {
+    passwordRecoverySessionUserIdRef.current = userId;
+    setPasswordRecoverySessionUserIdState(userId);
+  }, []);
+
   const clearSignedInState = useCallback(() => {
     accountLoadIdRef.current += 1;
     sessionRef.current = null;
+    setPasswordRecoverySessionUserId(null);
     setSession(null);
     setProfile(null);
     setIsEmailConfirmed(false);
@@ -753,7 +833,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setCurrentDeviceId(null);
     setAuthProvider(null);
     setStepUpFreshUntil(null);
-  }, []);
+    welcomeEmailAttemptedUserIdsRef.current.clear();
+  }, [setPasswordRecoverySessionUserId]);
 
   const refreshNativePermissionStatuses = useCallback(async () => {
     const [nextContactsPermissionStatus, nextNotificationsPermissionStatus] = await Promise.all([
@@ -765,42 +846,50 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
   }, []);
 
-  const applySessionFromUrl = useCallback(async (url: string | null) => {
-    if (!supabase || !url) {
-      return;
-    }
+  const applySessionFromUrl = useCallback(
+    async (url: string | null) => {
+      if (!supabase || !url) {
+        return;
+      }
 
-    const authCode = extractAuthCallbackCode(url);
-    if (authCode) {
-      const { error } = await supabase.auth.exchangeCodeForSession(authCode);
+      const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
+      const authCode = extractAuthCallbackCode(url);
+      if (authCode) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+
+        if (error) {
+          console.warn(
+            'Failed to exchange Supabase auth code from auth callback',
+            error instanceof Error ? error.message : String(error),
+          );
+        } else if (isPasswordRecoveryCallback && data.session) {
+          setPasswordRecoverySessionUserId(data.session.user.id);
+        }
+
+        return;
+      }
+
+      const tokens = extractAuthCallbackTokens(url);
+      if (!tokens) {
+        return;
+      }
+
+      const { data, error } = await supabase.auth.setSession({
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+      });
 
       if (error) {
         console.warn(
-          'Failed to exchange Supabase auth code from auth callback',
+          'Failed to restore Supabase session from auth callback',
           error instanceof Error ? error.message : String(error),
         );
+      } else if (isPasswordRecoveryCallback && data.session) {
+        setPasswordRecoverySessionUserId(data.session.user.id);
       }
-
-      return;
-    }
-
-    const tokens = extractAuthCallbackTokens(url);
-    if (!tokens) {
-      return;
-    }
-
-    const { error } = await supabase.auth.setSession({
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken,
-    });
-
-    if (error) {
-      console.warn(
-        'Failed to restore Supabase session from auth callback',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }, []);
+    },
+    [setPasswordRecoverySessionUserId],
+  );
 
   const loadAccountState = useCallback(
     async (
@@ -1110,6 +1199,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecoverySessionUserId(nextSession.user.id);
+      } else if (
+        event === 'SIGNED_IN' &&
+        passwordRecoverySessionUserIdRef.current !== nextSession.user.id
+      ) {
+        setPasswordRecoverySessionUserId(null);
+      }
+
       void loadAccountState(nextSession, {
         initialLock: false,
         preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
@@ -1125,7 +1223,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [biometricsEnabled, clearSignedInState, hydrated, loadAccountState, setSessionStatus]);
+  }, [
+    biometricsEnabled,
+    clearSignedInState,
+    hydrated,
+    loadAccountState,
+    setPasswordRecoverySessionUserId,
+    setSessionStatus,
+  ]);
 
   useEffect(() => {
     if (!supabase || !hydrated) {
@@ -1447,12 +1552,24 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Ese celular ya esta vinculado.';
       }
 
+      if (
+        !registrationPreview.data ||
+        registrationPreview.data.status !== 'pending_activation' ||
+        registrationPreview.data.deliveryStatus !== 'issued'
+      ) {
+        return 'Esta invitacion ya fue usada o ya no esta disponible.';
+      }
+
+      const accountInviteDeliveryTokenHash = await hashInviteTokenForRegistration(
+        pendingIntent.token,
+      );
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: parsed.password,
         options: {
           data: {
+            account_invite_delivery_token_hash: accountInviteDeliveryTokenHash,
             phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
             phone_country_calling_code: phoneCountryCallingCode,
             phone_national_number: phoneNationalNumber,
@@ -1576,12 +1693,52 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [refreshAccountState],
   );
 
+  const verifyPasswordRecoveryOtp = useCallback(
+    async (input: EmailOtpVerificationInput) => {
+      try {
+        const parsed = emailOtpVerificationSchema.parse(input);
+        const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+        const token = parsed.code.trim();
+
+        if (!supabase) {
+          return 'Supabase no esta configurado en esta app.';
+        }
+
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: normalizedEmail,
+          token,
+          type: 'recovery',
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        const nextSession = data.session ?? (await supabase.auth.getSession()).data.session;
+        if (!nextSession) {
+          return 'Codigo verificado, pero no pudimos abrir la sesion de recuperacion. Pide un enlace nuevo.';
+        }
+
+        setPasswordRecoverySessionUserId(nextSession.user.id);
+        await refreshAccountState({ preserveLocked: false });
+        return 'Codigo verificado.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [refreshAccountState, setPasswordRecoverySessionUserId],
+  );
+
   const updatePassword = useCallback(
     async (input: PasswordResetInput) => {
       try {
         const parsed = passwordResetSchema.parse(input);
 
-        if (!supabase || !sessionRef.current) {
+        if (
+          !supabase ||
+          !sessionRef.current ||
+          passwordRecoverySessionUserIdRef.current !== sessionRef.current.user.id
+        ) {
           return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
         }
 
@@ -1593,13 +1750,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
           return formatSupabaseAuthErrorMessage(error.message);
         }
 
+        setPasswordRecoverySessionUserId(null);
         await refreshAccountState();
         return 'Clave actualizada.';
       } catch (error) {
         return formatValidationMessage(error);
       }
     },
-    [refreshAccountState],
+    [refreshAccountState, setPasswordRecoverySessionUserId],
   );
 
   const signOut = useCallback(async () => {
@@ -1809,6 +1967,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
         const phoneCountryCallingCode = normalizeCallingCode(parsed.phoneCountryCallingCode);
         const phoneNationalNumber = normalizePhoneDigits(parsed.phoneNationalNumber);
         const phoneE164 = buildPhoneE164(phoneCountryCallingCode, phoneNationalNumber);
+
+        if (isLowQualityDisplayName(normalizedDisplayName)) {
+          return 'Escribe tu nombre, no el correo.';
+        }
 
         if (!supabase || !sessionRef.current) {
           return 'No hay una sesion activa.';
@@ -2133,6 +2295,47 @@ export function SessionProvider({ children }: PropsWithChildren) {
     profile,
   ]);
 
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (
+      !supabase ||
+      !userId ||
+      accountAccessState !== 'active' ||
+      !isEmailConfirmed ||
+      !setupState.requiredComplete ||
+      setupState.securityPending
+    ) {
+      return;
+    }
+
+    if (welcomeEmailAttemptedUserIdsRef.current.has(userId)) {
+      return;
+    }
+
+    welcomeEmailAttemptedUserIdsRef.current.add(userId);
+    void supabase.functions
+      .invoke('send-welcome-email', { body: {} })
+      .then(({ error }) => {
+        if (error) {
+          welcomeEmailAttemptedUserIdsRef.current.delete(userId);
+          console.warn('Failed to send welcome email', readErrorMessage(error));
+        }
+      })
+      .catch((error: unknown) => {
+        welcomeEmailAttemptedUserIdsRef.current.delete(userId);
+        console.warn(
+          'Failed to send welcome email',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+  }, [
+    accountAccessState,
+    isEmailConfirmed,
+    session?.user.id,
+    setupState.requiredComplete,
+    setupState.securityPending,
+  ]);
+
   const value = useMemo<SessionContextValue>(
     () => ({
       authMode,
@@ -2160,6 +2363,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
         status === 'signed_in_unlocked' ||
         status === 'signed_in_locked' ||
         status === 'signed_in_untrusted',
+      isPasswordRecoverySession: session
+        ? passwordRecoverySessionUserId === session.user.id
+        : false,
       isLocked: status === 'signed_in_locked',
       isTrustedDevice: deviceTrustState === 'trusted',
       requiresProfileCompletion: !setupState.requiredComplete,
@@ -2168,6 +2374,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       requestPasswordReset,
       resendEmailConfirmation,
       verifyEmailOtp,
+      verifyPasswordRecoveryOtp,
       updatePassword,
       signInWithPassword,
       registerAccount,
@@ -2211,6 +2418,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       lock,
       notificationsEnabled,
       notificationsPermissionStatus,
+      passwordRecoverySessionUserId,
       profile,
       profileCompletionState,
       resendEmailConfirmation,
@@ -2237,6 +2445,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       trustedDevices,
       unlock,
       verifyEmailOtp,
+      verifyPasswordRecoveryOtp,
     ],
   );
 

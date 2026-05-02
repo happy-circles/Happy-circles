@@ -5,21 +5,28 @@ This project uses `Supabase Auth` for email/password accounts and password recov
 - App handles sign-in, sign-up, and password reset screens.
 - Supabase generates and validates auth recovery links.
 - Resend sends the emails through your domain via Supabase custom SMTP.
+- The onboarding welcome email is sent by a Supabase Edge Function through the Resend API.
 
 ## What the app now supports
 
 - Email/password sign-in
 - Email/password registration
 - Password reset request from the sign-in screen
+- Branded confirmation and password recovery email templates
+- Branded welcome email after the required setup is complete and the account is active
 - Universal-link recovery into `https://app.happy-circles.com/reset-password`
+- Manual password recovery with the 8-digit email code when the link does not open the app
 - Setting a new password inside the mobile app after opening the recovery email
 
 Relevant files:
 
 - `apps/mobile/src/providers/session-provider.tsx`
-- `apps/mobile/src/features/auth/sign-in-screen.tsx`
+- `apps/mobile/src/features/invites/account-invite-entry-screen.tsx`
 - `apps/mobile/src/features/auth/reset-password-screen.tsx`
 - `apps/mobile/app/reset-password.tsx`
+- `supabase/templates/auth/confirmation.html`
+- `supabase/templates/auth/recovery.html`
+- `supabase/functions/send-welcome-email/index.ts`
 
 ## Recommended production configuration
 
@@ -77,24 +84,65 @@ If you still test with Expo development URLs, keep those temporary development r
 
 ## Email templates
 
-In Supabase email templates:
+The repo now includes branded Supabase Auth templates:
 
-- Update the recovery template branding and copy.
-- Update the confirmation template branding and copy.
-- Include `{{ .Token }}` in the confirmation template so the app can verify the 8-digit code when a deep link does not return to Expo or the native app.
-- Keep the confirmation action using Supabase's generated action URL.
-- Keep the recovery action using Supabase's generated action URL.
-- Do not hardcode a raw app URL in the email body if Supabase already injects the action link.
+- Confirmation: `supabase/templates/auth/confirmation.html`
+- Recovery: `supabase/templates/auth/recovery.html`
 
-Suggested confirmation copy:
+They use the Happy Circles palette from the app (`brandNavy`, `brandGreen`, `brandCoral`, soft surfaces) and keep both auth paths available:
 
-- Subject: `Confirma tu cuenta de Happy Circles`
-- Body includes both `{{ .Token }}` and `{{ .ConfirmationURL }}`
+- `{{ .ConfirmationURL }}` for the primary button.
+- `{{ .Token }}` for the manual 8-digit code fallback.
 
-Suggested recovery copy:
+Local Supabase is configured in `supabase/config.toml`:
 
-- Subject: `Restablece tu clave de Happy Circles`
-- From: `Happy Circles <auth@happy-circles.com>`
+- `auth.email.template.confirmation`
+- `auth.email.template.recovery`
+- `auth.email.otp_length = 8`
+
+For hosted Supabase projects, copy the HTML into `Authentication -> Emails -> Templates` and keep these subjects:
+
+- Confirmation subject: `Confirma tu cuenta de Happy Circles`
+- Recovery subject: `Restablece tu clave de Happy Circles`
+
+Do not replace Supabase's generated confirmation or recovery URL with a hardcoded app URL. Supabase must keep generating those action links so the Auth tokens remain valid.
+
+The invite template is intentionally unchanged.
+
+## Welcome email
+
+The welcome email is not a Supabase Auth template. It is sent by:
+
+- `supabase/functions/send-welcome-email/index.ts`
+
+The app invokes it from `apps/mobile/src/providers/session-provider.tsx` only when all of these are true:
+
+- The user is signed in.
+- The email is confirmed.
+- Required setup steps are complete: profile, phone, photo.
+- The device is trusted.
+- The account access state is `active`.
+
+The delivery is guarded by database columns on `public.user_profiles`:
+
+- `onboarding_completed_at`
+- `welcome_email_queued_at`
+- `welcome_email_sent_at`
+- `welcome_email_last_error`
+
+`welcome_email_sent_at` makes the send idempotent. The migration also marks accounts that were already complete and active before this feature as already handled, so deploying this should not send a welcome blast to existing users.
+
+Required Edge Function secrets:
+
+- `RESEND_API_KEY`
+- `APP_WEB_ORIGIN=https://app.happy-circles.com`
+- `WELCOME_EMAIL_FROM="Happy Circles <hola@happy-circles.com>"`
+- `WELCOME_EMAIL_REPLY_TO=` optional
+- `WELCOME_EMAIL_ENABLED=true`
+
+## Email OTP length
+
+The app UI expects 8-digit email codes for confirmation and recovery. Keep Supabase Email OTP length aligned with that value in Auth settings.
 
 ## Mobile deep link notes
 
@@ -116,8 +164,10 @@ For production email auth flows, the app uses HTTPS Universal Links / Android Ap
 2. Confirm the email arrives from your domain through Resend.
 3. Open the link on a phone with the app installed.
 4. Confirm the app opens on the reset-password screen.
-5. Set a new password.
-6. Sign out and sign back in with the new password.
+5. Request another reset and verify the 8-digit code manually from the recovery screen.
+6. Confirm the app opens on the reset-password screen after code verification.
+7. Set a new password.
+8. Sign out and sign back in with the new password.
 
 ## Failure modes to check first
 

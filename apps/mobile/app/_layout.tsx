@@ -1676,11 +1676,12 @@ function SessionRouteGuard() {
 
       const pendingIntent = await readPendingInviteIntent();
       const inviteAwareHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : null;
-      const joinRootHref = '/join' as unknown as Href;
+      const joinRootHref: Href = '/join';
+      const homeHref: Href = '/home';
 
       if (accountAccessState === 'needs_invite') {
         if (!isJoinRoute && !cancelled) {
-          returnToRoute(router, (inviteAwareHref ?? joinRootHref) as Href);
+          returnToRoute(router, inviteAwareHref ?? joinRootHref);
         }
         return;
       }
@@ -1706,7 +1707,7 @@ function SessionRouteGuard() {
         !isSetupAccountRoute &&
         !cancelled
       ) {
-        returnToRoute(router, (inviteAwareHref ?? joinRootHref) as Href);
+        returnToRoute(router, inviteAwareHref ?? joinRootHref);
         return;
       }
 
@@ -1728,7 +1729,7 @@ function SessionRouteGuard() {
       const nextSignedInHref =
         accountAccessState === 'active'
           ? profileCompletionState === 'complete'
-            ? (inviteAwareHref ?? '/home')
+            ? (inviteAwareHref ?? homeHref)
             : buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
           : (inviteAwareHref ?? joinRootHref);
 
@@ -1740,7 +1741,7 @@ function SessionRouteGuard() {
         if (nextSignedInHref === '/home') {
           beginHomeEntryHandoff();
         }
-        returnToRoute(router, nextSignedInHref as Href);
+        returnToRoute(router, nextSignedInHref);
       }
     }
 

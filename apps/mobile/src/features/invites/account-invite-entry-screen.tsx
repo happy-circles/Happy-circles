@@ -21,6 +21,7 @@ import {
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
+import { OtpCodeInput } from '@/components/otp-code-input';
 import {
   beginAuthRouteTransitionHold,
   clearAuthRouteTransitionHold,
@@ -62,6 +63,7 @@ const AUTH_MODE_ROUTE_DELAY_MS = 520;
 const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 180;
 const PASSWORD_RESET_SENT_MESSAGE =
   'Si el correo existe, enviamos un enlace para restablecer la clave.';
+const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Codigo verificado.';
 const PASSWORD_RESET_RESEND_SECONDS = 60;
 
 function biometricMessage(error: string | null, label: string): string {
@@ -131,6 +133,7 @@ function AccountSignInEntry({
   const [authOptionsMounted, setAuthOptionsMounted] = useState(showAuthOptions);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [authErrors, setAuthErrors] = useState<{
     readonly email?: string;
@@ -170,6 +173,7 @@ function AccountSignInEntry({
       ? 'loading'
       : (authResultState ?? (authRequestBusy ? 'loading' : 'idle'));
   const isRecovery = authMode === 'recover';
+  const recoveryCodeValid = /^\d{8}$/.test(recoveryCode);
   const isOtherAccountMode = showAuthOptions && authEntryMode === 'other';
   const isRememberedReauthMode =
     showAuthOptions &&
@@ -255,6 +259,7 @@ function AccountSignInEntry({
         setRememberedReauthReason(null);
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setMessage(null);
         setShowAuthOptions(false);
       },
@@ -292,6 +297,7 @@ function AccountSignInEntry({
     setRememberedReauthReason(null);
     setRecoveryLinkSent(false);
     setRecoveryResendSeconds(0);
+    setRecoveryCode('');
     setMessage(null);
     setAuthOptionsMounted(false);
     setShowAuthOptions(false);
@@ -527,6 +533,7 @@ function AccountSignInEntry({
         setRememberedReauthReason(null);
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setMessage(null);
         setShowAuthOptions(!account);
         syncJoinSurfaceParams('token');
@@ -588,6 +595,7 @@ function AccountSignInEntry({
         setRememberedReauthReason(reason);
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setMessage(nextMessage);
         setAuthOptionsMounted(true);
         setShowAuthOptions(true);
@@ -617,6 +625,7 @@ function AccountSignInEntry({
         setRememberedReauthReason(null);
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setMessage(null);
         setAuthOptionsMounted(true);
         setShowAuthOptions(true);
@@ -642,6 +651,7 @@ function AccountSignInEntry({
       setRememberedReauthReason(null);
       setRecoveryLinkSent(false);
       setRecoveryResendSeconds(0);
+      setRecoveryCode('');
       setMessage(null);
       setAuthOptionsMounted(true);
       setShowAuthOptions(true);
@@ -664,6 +674,7 @@ function AccountSignInEntry({
       setRememberedReauthReason(null);
       setRecoveryLinkSent(false);
       setRecoveryResendSeconds(0);
+      setRecoveryCode('');
       setMessage(null);
       setAuthOptionsMounted(true);
       setShowAuthOptions(true);
@@ -677,10 +688,19 @@ function AccountSignInEntry({
     if (recoveryLinkSent) {
       setRecoveryLinkSent(false);
       setRecoveryResendSeconds(0);
+      setRecoveryCode('');
       setMessage(null);
       return;
     }
     if (message && !isRecovery) {
+      setMessage(null);
+    }
+  }
+
+  function handleRecoveryCodeChange(value: string) {
+    setRecoveryCode(value);
+    setAuthResultState(null);
+    if (message) {
       setMessage(null);
     }
   }
@@ -868,15 +888,60 @@ function AccountSignInEntry({
         triggerIdentitySuccessHaptic();
         setRecoveryLinkSent(true);
         setRecoveryResendSeconds(PASSWORD_RESET_RESEND_SECONDS);
+        setRecoveryCode('');
         setAuthResultState(null);
         setMessage(null);
       } else {
         triggerIdentityErrorHaptic();
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setAuthResultState('error');
         setMessage(result);
       }
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  async function handlePasswordRecoveryCode() {
+    if (authBusy) {
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+    if (!validateEmailField()) {
+      return;
+    }
+
+    if (!recoveryCodeValid) {
+      triggerIdentityWarningHaptic();
+      setAuthResultState('error');
+      setMessage('Ingresa el codigo de 8 digitos del correo.');
+      return;
+    }
+
+    beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+    clearSuccessCompletionTimer();
+    setAuthResultState(null);
+    setMessage(null);
+    setPasswordBusy(true);
+
+    try {
+      const result = await session.verifyPasswordRecoveryOtp({
+        code: recoveryCode,
+        email,
+      });
+
+      if (result === PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE) {
+        triggerIdentitySuccessHaptic();
+        setRecoveryCode('');
+        setAuthResultState('success');
+        returnToRoute(router, '/reset-password');
+        return;
+      }
+
+      showAuthFailure(result);
     } finally {
       setPasswordBusy(false);
     }
@@ -904,6 +969,7 @@ function AccountSignInEntry({
         setRememberedReauthReason(null);
         setRecoveryLinkSent(false);
         setRecoveryResendSeconds(0);
+        setRecoveryCode('');
         setMessage(null);
         setAuthOptionsMounted(nextShowAuthOptions);
         setShowAuthOptions(nextShowAuthOptions);
@@ -1044,7 +1110,7 @@ function AccountSignInEntry({
 
   const authPrimaryAction = (
     <IdentityFlowPrimaryAction
-      disabled={authBusy || (isRecovery && recoveryResendSeconds > 0)}
+      disabled={authBusy}
       icon={!showAuthOptions && account && !isRecovery ? 'arrow-forward' : undefined}
       label={
         !showAuthOptions && account && !isRecovery
@@ -1055,9 +1121,7 @@ function AccountSignInEntry({
             ? 'Procesando...'
             : isRecovery
               ? recoveryLinkSent
-                ? recoveryResendSeconds > 0
-                  ? `Reenviar enlace en ${recoveryResendSeconds}s`
-                  : 'Reenviar enlace'
+                ? 'Confirmar codigo'
                 : 'Enviar enlace'
               : 'Ingresar'
       }
@@ -1069,8 +1133,8 @@ function AccountSignInEntry({
               void (!showAuthOptions && account && !isRecovery
                 ? handleContinue()
                 : isRecovery
-                  ? recoveryResendSeconds > 0
-                    ? undefined
+                  ? recoveryLinkSent
+                    ? handlePasswordRecoveryCode()
                     : handlePasswordRecovery()
                   : handlePasswordSignIn())
       }
@@ -1250,6 +1314,40 @@ function AccountSignInEntry({
                 />
               </IdentityFlowField>
 
+              {isRecovery && recoveryLinkSent ? (
+                <View style={styles.recoveryCodeBlock}>
+                  <Text style={styles.recoveryCodeHelp}>
+                    Abre el enlace o pega el codigo de 8 digitos del correo.
+                  </Text>
+                  <OtpCodeInput
+                    disabled={authBusy}
+                    hasError={recoveryCode.length > 0 && !recoveryCodeValid}
+                    onChangeText={handleRecoveryCodeChange}
+                    value={recoveryCode}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={authBusy || recoveryResendSeconds > 0}
+                    onPress={
+                      authBusy || recoveryResendSeconds > 0
+                        ? undefined
+                        : () => void handlePasswordRecovery()
+                    }
+                    style={({ pressed }) => [
+                      styles.recoveryResendButton,
+                      pressed && !authBusy && recoveryResendSeconds === 0 ? styles.pressed : null,
+                      authBusy || recoveryResendSeconds > 0 ? styles.actionDisabled : null,
+                    ]}
+                  >
+                    <Text style={styles.recoveryResendText}>
+                      {recoveryResendSeconds > 0
+                        ? `Reenviar enlace en ${recoveryResendSeconds}s`
+                        : 'Reenviar enlace'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               {!isRecovery ? (
                 <View style={styles.passwordFieldGroup}>
                   <IdentityFlowField
@@ -1414,6 +1512,29 @@ const styles = StyleSheet.create({
   passwordFieldGroup: {
     gap: theme.spacing.xxs,
     width: '100%',
+  },
+  recoveryCodeBlock: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  recoveryCodeHelp: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '600',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  recoveryResendButton: {
+    borderRadius: theme.radius.pill,
+    minHeight: 28,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xxs,
+  },
+  recoveryResendText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
   },
   forgotPasswordInline: {
     alignSelf: 'flex-end',

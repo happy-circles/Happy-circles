@@ -1,3 +1,4 @@
+import process from 'node:process';
 import type { ExpoConfig } from 'expo/config';
 
 function firstNonEmpty(...values: readonly (string | undefined)[]): string {
@@ -5,16 +6,17 @@ function firstNonEmpty(...values: readonly (string | undefined)[]): string {
   return value?.trim() ?? '';
 }
 
-const appWebOrigin = process.env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
-const authRedirectMode = process.env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
+const env = process.env;
+const appWebOrigin = env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
+const authRedirectMode = env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
 const appLinkPathPrefixes = ['/invite', '/join', '/reset-password', '/setup-account', '/sign-in'];
-const appVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
-const iosBuildNumber = process.env.IOS_BUILD_NUMBER ?? '1';
-const androidVersionCode = Number.parseInt(process.env.ANDROID_VERSION_CODE ?? '1', 10);
-const supabaseUrl = firstNonEmpty(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
+const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '1';
+const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '1', 10);
+const supabaseUrl = firstNonEmpty(env.EXPO_PUBLIC_SUPABASE_URL);
 const supabaseAnonKey = firstNonEmpty(
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 );
 const appWebHost = (() => {
   try {

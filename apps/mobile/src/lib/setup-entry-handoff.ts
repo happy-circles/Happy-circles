@@ -1,3 +1,5 @@
+import { resetIdentityFlowScrollPosition } from '@/lib/identity-flow-scroll';
+
 export interface SetupEntryHandoffRequest {
   readonly id: number;
   readonly startedAt: number;
@@ -9,6 +11,8 @@ let nextRequestId = 0;
 const listeners = new Set<SetupEntryHandoffListener>();
 
 export function beginSetupEntryHandoff() {
+  resetIdentityFlowScrollPosition();
+
   const request = {
     id: ++nextRequestId,
     startedAt: Date.now(),

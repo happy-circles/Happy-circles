@@ -508,6 +508,7 @@ export function RegisterFlowScreen() {
           <View style={styles.sheetScrollWrap}>
             <BrandedRefreshScrollView
               contentContainerStyle={styles.sheetScrollContent}
+              fillViewport
               keyboardShouldPersistTaps="handled"
               refresh={refreshConfig}
               refreshIndicatorStyle={styles.sheetRefreshIndicator}
@@ -891,10 +892,12 @@ const styles = StyleSheet.create({
     opacity: 0.92,
   },
   panelArea: {
+    flex: 1,
     flexShrink: 1,
     gap: theme.spacing.xs,
   },
   sheetScrollWrap: {
+    flex: 1,
     flexShrink: 1,
     position: 'relative',
   },

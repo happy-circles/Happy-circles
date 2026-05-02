@@ -18,6 +18,17 @@ port = 54323
 enabled = true
 site_url = "http://localhost:8081"
 
+[auth.email]
+otp_length = 8
+
+[auth.email.template.confirmation]
+subject = "Confirma tu cuenta de Happy Circles"
+content_path = "./supabase/templates/auth/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Restablece tu clave de Happy Circles"
+content_path = "./supabase/templates/auth/recovery.html"
+
 [functions.accept-financial-request]
 verify_jwt = true
 
@@ -52,6 +63,9 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.record-product-event]
+verify_jwt = true
+
+[functions.send-welcome-email]
 verify_jwt = true
 
 [functions.request-account-deletion]

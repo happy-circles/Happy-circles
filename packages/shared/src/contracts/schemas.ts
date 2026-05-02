@@ -208,6 +208,16 @@ export const accountInvitePreviewSchema = accountInviteTokenSchema.extend({
   recordAppOpen: z.boolean().optional(),
 });
 
+export const accountInviteRegistrationClaimSchema = accountInviteTokenSchema.extend({
+  deliveryTokenHash: z
+    .string()
+    .trim()
+    .regex(/^[0-9a-f]{64}$/),
+  email: z.string().trim().email(),
+  phoneE164: z.string().trim().min(8).max(24),
+  userId: uuidSchema,
+});
+
 export const activateAccountFromInviteSchema = accountInviteTokenSchema.extend({
   idempotencyKey: idempotencyKeySchema,
   currentDeviceId: z.string().trim().min(6).max(200),

@@ -91,11 +91,11 @@ begin
 
   if has_function_privilege(
     'anon',
-    'public.get_account_invite_preview_public(text,boolean,text)'::regprocedure,
+    'public.get_account_invite_preview_public(text,boolean,text,uuid)'::regprocedure,
     'EXECUTE'
   ) or has_function_privilege(
     'authenticated',
-    'public.get_account_invite_preview_public(text,boolean,text)'::regprocedure,
+    'public.get_account_invite_preview_public(text,boolean,text,uuid)'::regprocedure,
     'EXECUTE'
   ) then
     raise exception 'public preview RPC must be reachable only through its Edge Function';

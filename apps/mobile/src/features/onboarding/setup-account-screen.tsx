@@ -41,7 +41,7 @@ import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
-import { hasProfilePhoto } from '@/lib/setup-account';
+import { hasProfilePhoto, isLowQualityDisplayName } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
@@ -177,6 +177,7 @@ export function SetupAccountScreen() {
   const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
+  const fullNameIsUsable = !isLowQualityDisplayName(fullName);
   const phoneLabel = profile?.phone_e164 ?? 'Pendiente';
   const isSaving = profileBusy || avatarMutation.isPending;
   const initialStepWarningShownRef = useRef(false);
@@ -263,7 +264,7 @@ export function SetupAccountScreen() {
 
   function validateSetup() {
     const nextErrors = {
-      fullName: fullName.trim().length >= 3 ? undefined : 'Escribe un nombre usable.',
+      fullName: fullNameIsUsable ? undefined : 'Escribe tu nombre, no el correo.',
       phoneNationalNumber:
         !needsPhoneInput || phoneNationalNumber.trim().length >= 7
           ? undefined
@@ -627,9 +628,7 @@ export function SetupAccountScreen() {
             error={profileErrors.fullName ?? null}
             icon="person"
             label="Nombre"
-            status={
-              profileErrors.fullName ? 'danger' : fullName.trim().length >= 3 ? 'success' : 'idle'
-            }
+            status={profileErrors.fullName ? 'danger' : fullNameIsUsable ? 'success' : 'idle'}
           >
             <IdentityFlowTextInput
               autoCapitalize="words"

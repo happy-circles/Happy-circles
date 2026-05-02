@@ -35,7 +35,7 @@ export function ResetPasswordScreen() {
   }>({});
   const [busy, setBusy] = useState(false);
 
-  const hasRecoverySession = session.status !== 'loading' && session.isSignedIn;
+  const hasRecoverySession = session.status !== 'loading' && session.isPasswordRecoverySession;
 
   async function handleSubmit() {
     if (busy) {

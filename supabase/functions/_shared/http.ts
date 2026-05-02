@@ -123,6 +123,38 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
+  if (
+    normalized.includes('activation_profile_incomplete') ||
+    normalized.includes('activation_phone_required') ||
+    normalized.includes('activation_avatar_required')
+  ) {
+    return {
+      status: 400,
+      code: 'activation_profile_incomplete',
+      message: 'Completa tu perfil antes de activar esta invitacion.',
+    };
+  }
+
+  if (
+    normalized.includes('account_invite_already_used') ||
+    normalized.includes('account_invite_delivery_not_available') ||
+    normalized.includes('account_invite_not_open')
+  ) {
+    return {
+      status: 409,
+      code: 'invite_already_used',
+      message: 'Esta invitacion ya fue usada o ya no esta disponible.',
+    };
+  }
+
+  if (normalized.includes('account_invite_delivery_expired')) {
+    return {
+      status: 410,
+      code: 'invite_expired',
+      message: 'Esta invitacion ya vencio.',
+    };
+  }
+
   return {
     status: 400,
     code: 'request_failed',
@@ -139,6 +171,26 @@ function normalizePublicError(error: unknown): SafeError {
       status: 429,
       code: 'rate_limited',
       message: 'Intenta de nuevo mas tarde.',
+    };
+  }
+
+  if (
+    normalized.includes('account_invite_already_used') ||
+    normalized.includes('account_invite_delivery_not_available') ||
+    normalized.includes('account_invite_not_open')
+  ) {
+    return {
+      status: 409,
+      code: 'invite_already_used',
+      message: 'Esta invitacion ya fue usada o ya no esta disponible.',
+    };
+  }
+
+  if (normalized.includes('account_invite_delivery_expired')) {
+    return {
+      status: 410,
+      code: 'invite_expired',
+      message: 'Esta invitacion ya vencio.',
     };
   }
 
@@ -209,6 +261,19 @@ export async function getActorUserId(request: Request): Promise<string> {
   }
 
   return data.user.id;
+}
+
+export async function getOptionalActorUserId(request: Request): Promise<string | null> {
+  const authorization = request.headers.get('Authorization');
+  if (!authorization) {
+    return null;
+  }
+
+  try {
+    return await getActorUserId(request);
+  } catch {
+    return null;
+  }
 }
 
 export function createServiceRoleClient() {

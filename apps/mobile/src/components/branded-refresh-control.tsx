@@ -95,6 +95,7 @@ export const BrandedRefreshScrollView = forwardRef<
     children,
     contentContainerStyle,
     fillViewport = false,
+    keyboardDismissMode,
     onScroll,
     onScrollEndDrag,
     onTouchCancel,
@@ -284,15 +285,18 @@ export const BrandedRefreshScrollView = forwardRef<
         alwaysBounceVertical={refreshEnabled ? true : alwaysBounceVertical}
         bounces={refreshEnabled ? true : bounces}
         contentContainerStyle={contentContainerStyle}
-        onScroll={handleScroll}
-        onScrollEndDrag={handleScrollEndDrag}
-        onTouchCancel={handleTouchCancel}
-        onTouchEnd={handleTouchEnd}
-        onTouchMove={handleTouchMove}
-        onTouchStart={handleTouchStart}
+        keyboardDismissMode={
+          keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
+        }
+        onScroll={refreshEnabled ? handleScroll : onScroll}
+        onScrollEndDrag={refreshEnabled ? handleScrollEndDrag : onScrollEndDrag}
+        onTouchCancel={refreshEnabled ? handleTouchCancel : onTouchCancel}
+        onTouchEnd={refreshEnabled ? handleTouchEnd : onTouchEnd}
+        onTouchMove={refreshEnabled ? handleTouchMove : onTouchMove}
+        onTouchStart={refreshEnabled ? handleTouchStart : onTouchStart}
         overScrollMode={refreshEnabled ? 'never' : overScrollMode}
         ref={ref}
-        scrollEventThrottle={scrollEventThrottle ?? 16}
+        scrollEventThrottle={scrollEventThrottle ?? (refreshEnabled || onScroll ? 16 : undefined)}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
         style={[styles.innerScroll, fillViewport ? styles.innerScrollFill : null]}
       >

@@ -40,6 +40,8 @@ Production email auth redirects should use HTTPS app links:
 - `https://app.happy-circles.com/reset-password`
 - `https://app.happy-circles.com/setup-account?step=profile`
 
+Password recovery emails should also display Supabase's `{{ .Token }}`. If the app link does not open the native app, users can paste that 8-digit recovery code in the app and continue to the same reset-password screen.
+
 The mobile app defaults to:
 
 - `EXPO_PUBLIC_APP_WEB_ORIGIN=https://app.happy-circles.com`

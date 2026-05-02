@@ -9,12 +9,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   View,
   useWindowDimensions,
 } from 'react-native';
 import type {
   KeyboardEvent,
+  ScrollView,
   StyleProp,
   TextInput,
   TextStyle,
@@ -30,6 +30,7 @@ import {
 import { LaunchIntroTargetView } from '@/components/launch-intro-presence';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell, type ScreenShellProps } from '@/components/screen-shell';
+import { registerIdentityFlowScrollView } from '@/lib/identity-flow-scroll';
 import { theme } from '@/lib/theme';
 
 export const IDENTITY_FLOW_CONTENT_MAX_WIDTH = 460;
@@ -43,8 +44,6 @@ const IDENTITY_FLOW_AVATAR_OUTER_ROTATION_DEGREES = -45;
 const IDENTITY_FLOW_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const IDENTITY_FLOW_AVATAR_EDIT_PENCIL_SIZE = 32;
 const IDENTITY_FLOW_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
-const IDENTITY_FLOW_ADAPTIVE_SCROLL_DISABLE_SPACE = 56;
-const IDENTITY_FLOW_ADAPTIVE_SCROLL_ENABLE_OVERFLOW = 8;
 const IDENTITY_FLOW_FIELD_ERROR_HEIGHT = 24;
 const IDENTITY_FLOW_FOOTER_ACTIONS_MIN_HEIGHT = 56;
 export const IDENTITY_FLOW_LARGE_FACE_VIEW_BOX = '222 222 236 236';
@@ -122,25 +121,24 @@ export function IdentityFlowScreen({
   message,
   overlay,
   refresh,
-  scrollEnabled = false,
+  scrollEnabled = true,
   scrollViewRef,
 }: IdentityFlowScreenProps) {
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const keyboardTranslateY = useRef(new Animated.Value(0)).current;
+  const fallbackScrollViewRef = useRef<ScrollView | null>(null);
+  const activeScrollViewRef = scrollViewRef ?? fallbackScrollViewRef;
   const resolvedFooter =
     footer ?? (actions ? <View style={styles.footerActions}>{actions}</View> : undefined);
   const resolvedIdentityPosition =
-    identityPosition === 'auto' ? (scrollEnabled ? 'top' : 'center') : identityPosition;
+    identityPosition === 'auto' ? 'center' : identityPosition;
   const isCenterIdentity = resolvedIdentityPosition === 'center';
   const shouldReserveMessageSlot = message !== undefined || resolvedIdentityPosition === 'center';
   const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
   const contentMotion = useRef(new Animated.Value(contentVisible ? 1 : 0)).current;
   const lockedBodyHeightRef = useRef(0);
   const [bodyHeight, setBodyHeight] = useState(0);
-  const [measuredContentHeight, setMeasuredContentHeight] = useState(0);
   const [hasMeasuredBody, setHasMeasuredBody] = useState(false);
-  const [adaptiveScrollEnabled, setAdaptiveScrollEnabled] = useState(false);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const layoutReady = hasMeasuredBody && bodyHeight > 0;
   const topIdentityY = IDENTITY_FLOW_TOP_OFFSET;
   const centerRestRatio = identityCenterLayout === 'compact' ? 0.32 : 0.44;
@@ -151,9 +149,6 @@ export function IdentityFlowScreen({
     : topIdentityY;
   const topContentY = topIdentityY + IDENTITY_FLOW_STAGE_SIZE + theme.spacing.sm;
   const centerContentY = centerIdentityY + IDENTITY_FLOW_STAGE_SIZE + theme.spacing.sm;
-  const measuredContentBottom = topContentY + measuredContentHeight + theme.spacing.lg;
-  const shouldAdaptScroll = !scrollEnabled && !refresh;
-  const shouldUseScroll = scrollEnabled || adaptiveScrollEnabled;
   const identityTranslateY = identityMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [centerIdentityY, topIdentityY],
@@ -181,38 +176,22 @@ export function IdentityFlowScreen({
     lockedBodyHeightRef.current = 0;
     setBodyHeight(0);
     setHasMeasuredBody(false);
-    setAdaptiveScrollEnabled(false);
   }, [windowHeight, windowWidth]);
 
   useEffect(() => {
-    if (!shouldAdaptScroll) {
-      setAdaptiveScrollEnabled(false);
+    if (!scrollEnabled || !contentTransitionKey) {
       return;
     }
 
-    if (!layoutReady || measuredContentHeight <= 0 || keyboardVisible) {
-      return;
-    }
-
-    setAdaptiveScrollEnabled((current) => {
-      if (measuredContentBottom > bodyHeight + IDENTITY_FLOW_ADAPTIVE_SCROLL_ENABLE_OVERFLOW) {
-        return true;
-      }
-
-      if (current && measuredContentBottom > bodyHeight - IDENTITY_FLOW_ADAPTIVE_SCROLL_DISABLE_SPACE) {
-        return true;
-      }
-
-      return false;
+    requestAnimationFrame(() => {
+      activeScrollViewRef.current?.scrollTo({ animated: false, y: 0 });
     });
-  }, [
-    bodyHeight,
-    keyboardVisible,
-    layoutReady,
-    measuredContentBottom,
-    measuredContentHeight,
-    shouldAdaptScroll,
-  ]);
+  }, [activeScrollViewRef, contentTransitionKey, scrollEnabled]);
+
+  useEffect(
+    () => registerIdentityFlowScrollView(activeScrollViewRef),
+    [activeScrollViewRef],
+  );
 
   useEffect(() => {
     function animateKeyboard(toValue: number, event?: KeyboardEvent) {
@@ -228,11 +207,9 @@ export function IdentityFlowScreen({
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
       const keyboardHeight = Math.max(0, event.endCoordinates.height - keyboardVerticalOffset);
-      setKeyboardVisible(keyboardHeight > 0);
       animateKeyboard(-keyboardHeight, event);
     });
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
-      setKeyboardVisible(false);
       animateKeyboard(0, event);
     });
 
@@ -262,99 +239,87 @@ export function IdentityFlowScreen({
   }, [contentMotion, contentTransitionKey, contentVisible]);
 
   return (
-    <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
-      <Animated.View
-        style={[styles.keyboardShell, { transform: [{ translateY: keyboardTranslateY }] }]}
+    <Animated.View
+      style={[styles.keyboardShell, { transform: [{ translateY: keyboardTranslateY }] }]}
+    >
+      <ScreenShell
+        contentContainerStyle={[styles.content, contentStyle]}
+        contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
+        footer={transitionedFooter}
+        footerDivider={false}
+        headerVariant="plain"
+        headerVisible={false}
+        largeTitle={false}
+        overlay={overlay}
+        refresh={refresh}
+        scrollEnabled={scrollEnabled}
+        scrollViewRef={activeScrollViewRef}
+        title={IDENTITY_FLOW_HEADER_TITLE}
+        titleAlign="center"
       >
-        <ScreenShell
-          contentContainerStyle={[styles.content, contentStyle]}
-          contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
-          footer={transitionedFooter}
-          footerDivider={false}
-          headerVariant="plain"
-          headerVisible={false}
-          largeTitle={false}
-          overlay={overlay}
-          refresh={refresh}
-          scrollEnabled={shouldUseScroll}
-          scrollViewRef={scrollViewRef}
-          title={IDENTITY_FLOW_HEADER_TITLE}
-          titleAlign="center"
+        <View
+          pointerEvents="none"
+          style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}
         >
-          <View
-            pointerEvents="none"
-            style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}
-          >
-            <Text style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</Text>
-          </View>
-          <View
-            onLayout={(event) => {
-              const nextHeight = event.nativeEvent.layout.height;
-              if (nextHeight <= 0) {
-                return;
-              }
+          <Text style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</Text>
+        </View>
+        <View
+          onLayout={(event) => {
+            const nextHeight = event.nativeEvent.layout.height;
+            if (nextHeight <= 0) {
+              return;
+            }
 
-              if (lockedBodyHeightRef.current > 0) {
-                return;
-              }
+            if (lockedBodyHeightRef.current > 0) {
+              return;
+            }
 
-              lockedBodyHeightRef.current = nextHeight;
-              setHasMeasuredBody(true);
-              setBodyHeight(nextHeight);
-            }}
-            style={[styles.body, bodyStyle]}
-          >
-            {identity && layoutReady ? (
-              <Animated.View
-                pointerEvents="box-none"
-                style={[
-                  styles.identityMotionLayer,
-                  {
-                    opacity: layoutReady ? 1 : 0,
-                    transform: [{ translateY: identityTranslateY }],
-                  },
-                ]}
-              >
-                <View style={styles.identitySlot}>{identity}</View>
-              </Animated.View>
-            ) : null}
+            lockedBodyHeightRef.current = nextHeight;
+            setHasMeasuredBody(true);
+            setBodyHeight(nextHeight);
+          }}
+          style={[styles.body, bodyStyle]}
+        >
+          {identity && layoutReady ? (
             <Animated.View
+              pointerEvents="box-none"
               style={[
-                styles.belowIdentity,
+                styles.identityMotionLayer,
                 {
                   opacity: layoutReady ? 1 : 0,
-                  paddingTop: topContentY,
-                  transform: [{ translateY: contentTranslateY }],
+                  transform: [{ translateY: identityTranslateY }],
                 },
               ]}
             >
-              <Animated.View
-                onLayout={(event) => {
-                  const nextHeight = event.nativeEvent.layout.height;
-                  if (nextHeight <= 0) {
-                    return;
-                  }
-
-                  setMeasuredContentHeight((current) =>
-                    Math.abs(current - nextHeight) < 1 ? current : nextHeight,
-                  );
-                }}
-                style={[
-                  styles.transitionedContent,
-                  {
-                    opacity: contentMotion,
-                    transform: [{ translateY: contentEnterTranslateY }],
-                  },
-                ]}
-              >
-                {shouldReserveMessageSlot ? <View style={styles.messageSlot}>{message}</View> : null}
-                <View style={styles.contentSlot}>{children}</View>
-              </Animated.View>
+              <View style={styles.identitySlot}>{identity}</View>
             </Animated.View>
-          </View>
-        </ScreenShell>
-      </Animated.View>
-    </TouchableWithoutFeedback>
+          ) : null}
+          <Animated.View
+            style={[
+              styles.belowIdentity,
+              {
+                opacity: layoutReady ? 1 : 0,
+                paddingTop: topContentY,
+                transform: [{ translateY: contentTranslateY }],
+              },
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.transitionedContent,
+                {
+                  opacity: contentMotion,
+                  transform: [{ translateY: contentEnterTranslateY }],
+                },
+              ]}
+            >
+              {shouldReserveMessageSlot ? <View style={styles.messageSlot}>{message}</View> : null}
+              <View style={styles.contentSlot}>{children}</View>
+            </Animated.View>
+          </Animated.View>
+        </View>
+      </ScreenShell>
+    </Animated.View>
   );
 }
 

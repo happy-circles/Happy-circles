@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirma tu cuenta de Happy Circles</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      background: #f7f8fb;
+      color: #0f1728;
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+    "
+  >
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0">
+      Confirma tu correo para terminar de preparar tu cuenta en Happy Circles.
+    </div>
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="background: #f7f8fb"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px">
+          <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              max-width: 560px;
+              background: #ffffff;
+              border: 1px solid #e6ebf3;
+              border-radius: 24px;
+              overflow: hidden;
+            "
+          >
+            <tr>
+              <td style="padding: 32px 32px 20px; background: #ffffff">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td>
+                      <div style="font-size: 13px; letter-spacing: 0; color: #667085">
+                        Happy Circles
+                      </div>
+                      <h1
+                        style="
+                          margin: 10px 0 0;
+                          font-size: 28px;
+                          line-height: 1.15;
+                          color: #1a2744;
+                          font-weight: 700;
+                        "
+                      >
+                        Confirma tu correo
+                      </h1>
+                    </td>
+                    <td align="right" style="width: 92px">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td
+                            style="
+                              width: 18px;
+                              height: 18px;
+                              border-radius: 18px;
+                              background: #3dba6e;
+                            "
+                          ></td>
+                          <td style="width: 8px"></td>
+                          <td
+                            style="
+                              width: 18px;
+                              height: 18px;
+                              border-radius: 18px;
+                              background: #e8604a;
+                            "
+                          ></td>
+                        </tr>
+                        <tr>
+                          <td colspan="3" style="height: 8px"></td>
+                        </tr>
+                        <tr>
+                          <td
+                            style="
+                              width: 18px;
+                              height: 18px;
+                              border-radius: 18px;
+                              background: #1a2744;
+                            "
+                          ></td>
+                          <td style="width: 8px"></td>
+                          <td
+                            style="
+                              width: 18px;
+                              height: 18px;
+                              border-radius: 18px;
+                              background: #dfe5ef;
+                            "
+                          ></td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 0 32px 32px">
+                <p style="margin: 0 0 18px; font-size: 16px; line-height: 1.55; color: #344054">
+                  Necesitamos validar que este correo te pertenece para que puedas terminar tu setup
+                  y usar Happy Circles con seguridad.
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0">
+                  <tr>
+                    <td style="background: #1a2744; border-radius: 999px">
+                      <a
+                        href="{{ .ConfirmationURL }}"
+                        style="
+                          display: inline-block;
+                          padding: 14px 22px;
+                          color: #ffffff;
+                          text-decoration: none;
+                          font-size: 15px;
+                          font-weight: 700;
+                        "
+                        >Confirmar correo</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+                <div
+                  style="
+                    margin: 22px 0;
+                    padding: 18px;
+                    border: 1px solid #e6ebf3;
+                    border-radius: 18px;
+                    background: #f4f6fa;
+                  "
+                >
+                  <div style="font-size: 13px; line-height: 1.4; color: #667085">
+                    Si el boton no abre la app, usa este codigo:
+                  </div>
+                  <div
+                    style="
+                      margin-top: 10px;
+                      font-size: 30px;
+                      line-height: 1;
+                      color: #1a2744;
+                      font-weight: 700;
+                      letter-spacing: 4px;
+                    "
+                  >
+                    {{ .Token }}
+                  </div>
+                </div>
+                <p style="margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: #667085">
+                  Este link y codigo vencen por seguridad. Si no pediste crear una cuenta, puedes
+                  ignorar este correo.
+                </p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #98a2b3">
+                  Happy Circles mantiene cada cuenta vinculada a un correo verificado para proteger
+                  tus invitaciones, contactos y movimientos.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p
+            style="
+              max-width: 560px;
+              margin: 18px auto 0;
+              font-size: 12px;
+              line-height: 1.5;
+              color: #98a2b3;
+              text-align: center;
+            "
+          >
+            Happy Circles
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
