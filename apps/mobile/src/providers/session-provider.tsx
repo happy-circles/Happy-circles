@@ -146,6 +146,7 @@ interface TrustCurrentDeviceInput {
 
 interface RefreshAccountStateOptions {
   readonly preserveLocked?: boolean;
+  readonly preserveTrustedDeviceDuringLoad?: boolean;
 }
 
 interface RememberedAccountSnapshot {
@@ -897,6 +898,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       options: {
         readonly initialLock: boolean;
         readonly preserveLocked: boolean;
+        readonly preserveTrustedDeviceDuringLoad: boolean;
         readonly biometricPreference?: boolean;
       },
     ) => {
@@ -909,7 +911,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
       accountLoadIdRef.current = loadId;
 
       setProfileCompletionState('loading');
-      setDeviceTrustState('loading');
+      setDeviceTrustState((current) =>
+        options.preserveTrustedDeviceDuringLoad && current === 'trusted' ? 'trusted' : 'loading',
+      );
       setAuthProvider(normalizeIdentityProvider(nextSession.user.app_metadata?.provider ?? null));
 
       const deviceId = await getOrCreateDeviceId();
@@ -1091,6 +1095,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       await loadAccountState(nextSession, {
         initialLock: false,
         preserveLocked: options?.preserveLocked ?? statusRef.current === 'signed_in_locked',
+        preserveTrustedDeviceDuringLoad: options?.preserveTrustedDeviceDuringLoad ?? false,
         biometricPreference: biometricsEnabled,
       });
     },
@@ -1162,6 +1167,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         await loadAccountState(nextSession, {
           initialLock: nextBiometricsEnabled,
           preserveLocked: false,
+          preserveTrustedDeviceDuringLoad: false,
           biometricPreference: nextBiometricsEnabled,
         });
       } catch (error) {
@@ -1211,6 +1217,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       void loadAccountState(nextSession, {
         initialLock: false,
         preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
+        preserveTrustedDeviceDuringLoad: event !== 'SIGNED_IN',
         biometricPreference: biometricsEnabled,
       }).catch((error) => {
         console.warn(
@@ -1641,7 +1648,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       if (sessionRef.current && isSessionEmailConfirmed(sessionRef.current)) {
-        await refreshAccountState();
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
         return 'Tu correo ya esta confirmado.';
       }
 
@@ -1684,7 +1691,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
           return formatSupabaseAuthErrorMessage(error.message);
         }
 
-        await refreshAccountState({ preserveLocked: false });
+        await refreshAccountState({
+          preserveLocked: false,
+          preserveTrustedDeviceDuringLoad: true,
+        });
         return 'Correo confirmado.';
       } catch (error) {
         return formatValidationMessage(error);
@@ -2029,7 +2039,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           );
         }
 
-        await refreshAccountState();
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
         if (wasCompletingRequiredProfile) {
           recordProductEventSafe({
             eventName: 'registration_completed',
@@ -2064,7 +2074,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     const oauthResult = await performGoogleOAuthFlow('link');
     if (oauthResult === 'Google vinculado.') {
-      await refreshAccountState();
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
     }
 
     return oauthResult;
@@ -2082,7 +2092,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     const appleResult = await performAppleAuth('link');
     if (appleResult.message === 'Apple vinculado.') {
-      await refreshAccountState();
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
     }
 
     return appleResult.message;
@@ -2118,7 +2128,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           return formatSupabaseAuthErrorMessage(error.message);
         }
 
-        await refreshAccountState();
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
         return 'Clave agregada a tu cuenta actual.';
       } catch (error) {
         return formatValidationMessage(error);
@@ -2208,7 +2218,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return updateResult.error.message;
       }
 
-      await refreshAccountState();
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       return 'Este dispositivo ahora es confiable.';
     },
     [
@@ -2313,21 +2323,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     welcomeEmailAttemptedUserIdsRef.current.add(userId);
-    void supabase.functions
-      .invoke('send-welcome-email', { body: {} })
-      .then(({ error }) => {
-        if (error) {
-          welcomeEmailAttemptedUserIdsRef.current.delete(userId);
-          console.warn('Failed to send welcome email', readErrorMessage(error));
-        }
-      })
-      .catch((error: unknown) => {
-        welcomeEmailAttemptedUserIdsRef.current.delete(userId);
-        console.warn(
-          'Failed to send welcome email',
-          error instanceof Error ? error.message : String(error),
-        );
-      });
+    void supabase.functions.invoke('send-welcome-email', { body: {} }).catch(() => {
+      // Welcome email delivery is best-effort and should never block setup.
+    });
   }, [
     accountAccessState,
     isEmailConfirmed,

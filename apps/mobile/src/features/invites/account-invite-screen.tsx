@@ -278,7 +278,7 @@ export function AccountInviteScreen() {
         return undefined;
       }
 
-      void refreshAccountState();
+      void refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       return undefined;
     }, [deliveryToken, refreshAccountState, sessionStatus]),
   );
@@ -296,7 +296,7 @@ export function AccountInviteScreen() {
         deliveryToken,
         currentDeviceId: session.currentDeviceId,
       });
-      await session.refreshAccountState();
+      await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       await previewQuery.refetch();
 
       if (response.status === 'accepted') {
@@ -340,6 +340,7 @@ export function AccountInviteScreen() {
 
             returnToRoute(router, '/join?mode=token');
           }}
+          style={styles.secondaryActionFullWidth}
         />
       }
       bodyStyle={styles.activationBody}
@@ -407,6 +408,7 @@ export function AccountInviteScreen() {
                         : '/join',
                     )
                   }
+                  style={styles.secondaryActionFullWidth}
                 />
               </View>
             ) : null}
@@ -495,5 +497,12 @@ const styles = StyleSheet.create({
   },
   actionStack: {
     gap: theme.spacing.sm,
+    width: '100%',
+  },
+  secondaryActionFullWidth: {
+    alignSelf: 'stretch',
+    borderRadius: theme.radius.medium,
+    minWidth: 0,
+    width: '100%',
   },
 });

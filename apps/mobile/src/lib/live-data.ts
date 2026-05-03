@@ -275,6 +275,12 @@ export interface FriendshipInviteListItem extends ActivityItemDto {
   readonly intendedRecipientPhoneLabel: string | null;
   readonly ctaLabel: string;
   readonly createdAt: string;
+  readonly profileDisplayName: string;
+  readonly profileAvatarUrl: string | null;
+  readonly profilePhoneLabel: string | null;
+  readonly profileEmailLabel: string | null;
+  readonly profileReferenceLabel: string | null;
+  readonly profileRoleLabel: string | null;
 }
 
 export interface FriendshipSummary {
@@ -306,6 +312,12 @@ export interface AccountInviteListItem extends ActivityItemDto {
   readonly activatedUserAvatarUrl: string | null;
   readonly ctaLabel: string;
   readonly createdAt: string;
+  readonly profileDisplayName: string;
+  readonly profileAvatarUrl: string | null;
+  readonly profilePhoneLabel: string | null;
+  readonly profileEmailLabel: string | null;
+  readonly profileReferenceLabel: string | null;
+  readonly profileRoleLabel: string | null;
 }
 
 export interface AccountInviteSummary {
@@ -470,6 +482,15 @@ interface ActionableItem {
   readonly tone?: ActivityItemDto['tone'];
   readonly participantUserIds?: readonly string[];
   readonly createdAt: string;
+}
+
+interface InviteProfilePresentation {
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly phoneLabel: string | null;
+  readonly emailLabel: string | null;
+  readonly referenceLabel: string | null;
+  readonly roleLabel: string | null;
 }
 
 export interface AppSnapshot {
@@ -1540,6 +1561,98 @@ function buildIntendedRecipientReferenceFromParts(input: {
   return parts.length > 0 ? parts.join(' | ') : null;
 }
 
+function phoneLabelFromInviteParts(input: {
+  readonly label: string | null;
+  readonly phoneE164: string | null;
+}): string | null {
+  const label = input.label?.trim();
+  if (label) {
+    return label;
+  }
+
+  return maskInvitePhone(input.phoneE164);
+}
+
+function inviteProfileFromUser(input: {
+  readonly fallbackName?: string | null;
+  readonly names: Map<string, string>;
+  readonly profiles: Map<string, UserProfileRow>;
+  readonly referenceLabel?: string | null;
+  readonly roleLabel?: string | null;
+  readonly userId: string;
+}): InviteProfilePresentation {
+  const profile = input.profiles.get(input.userId);
+  const displayName =
+    profile?.display_name?.trim() ||
+    input.names.get(input.userId)?.trim() ||
+    input.fallbackName?.trim() ||
+    'Persona';
+
+  return {
+    displayName,
+    avatarUrl: profile ? resolveAvatarUrl(profile.avatar_path, profile.updated_at) : null,
+    phoneLabel: maskInvitePhone(profile?.phone_e164),
+    emailLabel: null,
+    referenceLabel: input.referenceLabel?.trim() || null,
+    roleLabel: input.roleLabel?.trim() || null,
+  };
+}
+
+function inviteProfileFromIntendedRecipient(input: {
+  readonly alias: string | null;
+  readonly phoneE164: string | null;
+  readonly phoneLabel: string | null;
+  readonly roleLabel?: string | null;
+}): InviteProfilePresentation {
+  const displayName = input.alias?.trim() || 'Contacto invitado';
+  const phoneLabel = phoneLabelFromInviteParts({
+    label: input.phoneLabel,
+    phoneE164: input.phoneE164,
+  });
+
+  return {
+    displayName,
+    avatarUrl: null,
+    phoneLabel,
+    emailLabel: null,
+    referenceLabel:
+      displayName !== 'Contacto invitado' && phoneLabel ? `${displayName} | ${phoneLabel}` : null,
+    roleLabel: input.roleLabel?.trim() || null,
+  };
+}
+
+function inviteProfileFromClaimantSnapshot(
+  snapshot: FriendshipClaimantSnapshot | null,
+  roleLabel?: string | null,
+): InviteProfilePresentation {
+  return {
+    displayName: snapshot?.displayName?.trim() || 'Persona',
+    avatarUrl: resolveAvatarUrl(snapshot?.avatarPath ?? null),
+    phoneLabel: snapshot?.maskedPhone ?? null,
+    emailLabel: snapshot?.maskedEmail ?? null,
+    referenceLabel: null,
+    roleLabel: roleLabel?.trim() || null,
+  };
+}
+
+function inviteProfileFields(profile: InviteProfilePresentation): {
+  readonly profileDisplayName: string;
+  readonly profileAvatarUrl: string | null;
+  readonly profilePhoneLabel: string | null;
+  readonly profileEmailLabel: string | null;
+  readonly profileReferenceLabel: string | null;
+  readonly profileRoleLabel: string | null;
+} {
+  return {
+    profileDisplayName: profile.displayName,
+    profileAvatarUrl: profile.avatarUrl,
+    profilePhoneLabel: profile.phoneLabel,
+    profileEmailLabel: profile.emailLabel,
+    profileReferenceLabel: profile.referenceLabel,
+    profileRoleLabel: profile.roleLabel,
+  };
+}
+
 function buildIntendedRecipientReference(invite: FriendshipInviteRow): string | null {
   return buildIntendedRecipientReferenceFromParts({
     alias: invite.intended_recipient_alias,
@@ -1604,6 +1717,7 @@ function buildFriendshipInviteItems(input: {
   readonly invites: readonly FriendshipInviteRow[];
   readonly deliveries: readonly FriendshipInviteDeliveryRow[];
   readonly names: Map<string, string>;
+  readonly profiles: Map<string, UserProfileRow>;
   readonly currentUserId: string;
 }): {
   readonly pendingItems: readonly FriendshipInviteListItem[];
@@ -1622,14 +1736,47 @@ function buildFriendshipInviteItems(input: {
 
     const latestDelivery = latestDeliveryByInviteId.get(invite.id);
     const claimantSnapshot = parseFriendshipClaimantSnapshot(invite.claimant_snapshot);
+    const intendedRecipientProfile = inviteProfileFromIntendedRecipient({
+      alias: invite.intended_recipient_alias,
+      phoneE164: invite.intended_recipient_phone_e164,
+      phoneLabel: invite.intended_recipient_phone_label,
+      roleLabel: 'Contacto invitado',
+    });
+    const inviterProfile = inviteProfileFromUser({
+      names: input.names,
+      profiles: input.profiles,
+      roleLabel: actorRole === 'recipient' ? 'Te envio una solicitud' : 'Contacto de confianza',
+      userId: invite.inviter_user_id,
+    });
+    const targetProfile = invite.target_user_id
+      ? inviteProfileFromUser({
+          fallbackName: invite.intended_recipient_alias,
+          names: input.names,
+          profiles: input.profiles,
+          referenceLabel: intendedRecipientProfile.referenceLabel,
+          roleLabel: 'Solicitud enviada',
+          userId: invite.target_user_id,
+        })
+      : intendedRecipientProfile;
+    const claimantProfile = inviteProfileFromClaimantSnapshot(
+      claimantSnapshot,
+      'Perfil reclamado',
+    );
+    const visibleProfile =
+      actorRole === 'sender'
+        ? invite.status === 'pending_sender_review' ||
+          (invite.flow === 'external' && invite.status !== 'pending_claim')
+          ? claimantProfile
+          : targetProfile
+        : inviterProfile;
     const inviterName =
       invite.inviter_user_id === input.currentUserId
         ? 'Tu'
-        : (input.names.get(invite.inviter_user_id) ?? 'Persona');
+        : inviterProfile.displayName;
     const targetName = invite.target_user_id
-      ? (input.names.get(invite.target_user_id) ?? 'Persona')
-      : (invite.intended_recipient_alias ?? 'Persona');
-    const claimantName = claimantSnapshot?.displayName ?? 'Persona';
+      ? targetProfile.displayName
+      : (invite.intended_recipient_alias ?? intendedRecipientProfile.displayName);
+    const claimantName = claimantProfile.displayName;
     const intendedRecipientReference = buildIntendedRecipientReference(invite);
     const pieces = [channelLabel(latestDelivery?.channel ?? invite.origin_channel)];
     if (invite.expires_at) {
@@ -1759,6 +1906,7 @@ function buildFriendshipInviteItems(input: {
         intendedRecipientAlias: invite.intended_recipient_alias,
         intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
         intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+        ...inviteProfileFields(visibleProfile),
       });
       continue;
     }
@@ -1792,6 +1940,7 @@ function buildFriendshipInviteItems(input: {
       intendedRecipientAlias: invite.intended_recipient_alias,
       intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
       intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+      ...inviteProfileFields(visibleProfile),
     });
   }
 
@@ -1872,10 +2021,22 @@ function buildAccountInviteItems(input: {
 
     const latestDelivery = latestDeliveryByInviteId.get(invite.id);
     const originChannel = normalizeAccountInviteChannel(latestDelivery?.channel);
+    const intendedRecipientProfile = inviteProfileFromIntendedRecipient({
+      alias: invite.intended_recipient_alias,
+      phoneE164: invite.intended_recipient_phone_e164,
+      phoneLabel: invite.intended_recipient_phone_label,
+      roleLabel: 'Acceso enviado',
+    });
+    const inviterProfile = inviteProfileFromUser({
+      names: input.names,
+      profiles: input.profiles,
+      roleLabel: actorRole === 'activated' ? 'Te envio un acceso privado' : 'Contacto de confianza',
+      userId: invite.inviter_user_id,
+    });
     const inviterName =
       invite.inviter_user_id === input.currentUserId
         ? 'Tu'
-        : (input.names.get(invite.inviter_user_id) ?? 'Persona');
+        : inviterProfile.displayName;
     const activatedUserProfile = invite.activated_user_id
       ? input.profiles.get(invite.activated_user_id)
       : undefined;
@@ -1885,8 +2046,23 @@ function buildAccountInviteItems(input: {
     const activatedUserAvatarUrl = activatedUserProfile
       ? resolveAvatarUrl(activatedUserProfile.avatar_path, activatedUserProfile.updated_at)
       : null;
+    const activatedInviteProfile = invite.activated_user_id
+      ? inviteProfileFromUser({
+          fallbackName: invite.intended_recipient_alias,
+          names: input.names,
+          profiles: input.profiles,
+          referenceLabel: intendedRecipientProfile.referenceLabel,
+          roleLabel: 'Cuenta activada',
+          userId: invite.activated_user_id,
+        })
+      : intendedRecipientProfile;
+    const visibleProfile = actorRole === 'inviter' ? activatedInviteProfile : inviterProfile;
     const intendedRecipientReference = buildAccountIntendedRecipientReference(invite);
-    const targetName = activatedUserDisplayName ?? invite.intended_recipient_alias ?? 'tu contacto';
+    const targetName =
+      activatedUserDisplayName ??
+      (activatedInviteProfile.displayName === 'Contacto invitado'
+        ? 'tu contacto'
+        : activatedInviteProfile.displayName);
     const expiryLabel = invite.expires_at
       ? `vence ${formatRelativeLabel(invite.expires_at)}`
       : null;
@@ -1991,6 +2167,7 @@ function buildAccountInviteItems(input: {
         activatedUserId: invite.activated_user_id,
         activatedUserDisplayName,
         activatedUserAvatarUrl,
+        ...inviteProfileFields(visibleProfile),
       });
       continue;
     }
@@ -2019,6 +2196,7 @@ function buildAccountInviteItems(input: {
       activatedUserId: invite.activated_user_id,
       activatedUserDisplayName,
       activatedUserAvatarUrl,
+      ...inviteProfileFields(visibleProfile),
     });
   }
 
@@ -3354,6 +3532,7 @@ function buildLiveSnapshot(input: {
     invites: input.friendshipInvites,
     deliveries: input.friendshipInviteDeliveries,
     names: nameByUserId,
+    profiles: profileByUserId,
     currentUserId: input.currentUserId,
   });
   const accountInviteState = buildAccountInviteItems({
@@ -4266,7 +4445,7 @@ export function useUpdateProfileAvatarMutation() {
       return result.data.avatarPath;
     },
     onSuccess: async () => {
-      await session.refreshAccountState();
+      await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       await invalidateAppSnapshot();
     },
   });

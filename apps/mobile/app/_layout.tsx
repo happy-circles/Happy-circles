@@ -988,7 +988,8 @@ function HomeEntryHandoffOverlay({
           return;
         }
 
-        const [nextTarget] = await Promise.all([waitForHomeTarget(), waitForHomeReady()]);
+        await waitForHomeReady();
+        const nextTarget = await waitForHomeTarget();
         if (!active) {
           return;
         }
@@ -1033,7 +1034,8 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      const [nextTarget] = await Promise.all([waitForHomeTarget(), waitForHomeReady()]);
+      await waitForHomeReady();
+      const nextTarget = await waitForHomeTarget();
       if (!active) {
         return;
       }

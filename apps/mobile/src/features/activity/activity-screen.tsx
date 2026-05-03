@@ -321,6 +321,8 @@ function notificationActorForItem(
   item: ActivityItemDto,
   people: readonly PersonCardDto[],
 ): NotificationActor {
+  const profileDisplayName = readStringField(item, 'profileDisplayName');
+  const profileAvatarUrl = readNullableStringField(item, 'profileAvatarUrl');
   const claimantSnapshot = readObjectField(item, 'claimantSnapshot');
   const claimantName = readStringField(claimantSnapshot, 'displayName');
   const claimantAvatarPath = readNullableStringField(claimantSnapshot, 'avatarPath');
@@ -328,6 +330,7 @@ function notificationActorForItem(
   const activatedUserAvatarUrl = readNullableStringField(item, 'activatedUserAvatarUrl');
   const intendedRecipientAlias = readStringField(item, 'intendedRecipientAlias');
   const label =
+    profileDisplayName ??
     item.counterpartyLabel ??
     activatedUserDisplayName ??
     claimantName ??
@@ -339,7 +342,10 @@ function notificationActorForItem(
   return {
     label,
     avatarUrl:
-      matchedPerson?.avatarUrl ?? activatedUserAvatarUrl ?? resolveAvatarUrl(claimantAvatarPath),
+      matchedPerson?.avatarUrl ??
+      profileAvatarUrl ??
+      activatedUserAvatarUrl ??
+      resolveAvatarUrl(claimantAvatarPath),
   };
 }
 
@@ -619,6 +625,19 @@ function buildPendingSnippetContent(item: ActivityItemDto): PendingSnippetConten
     detail: detail ?? item.subtitle,
     meta: meta ?? null,
   };
+}
+
+function buildInviteNotificationMeta(item: ActivityItemDto, fallback: string): string {
+  const profilePhoneLabel = readStringField(item, 'profilePhoneLabel');
+  const profileEmailLabel = readStringField(item, 'profileEmailLabel');
+  const profileReferenceLabel = readStringField(item, 'profileReferenceLabel');
+  const profileRoleLabel = readStringField(item, 'profileRoleLabel');
+
+  return (
+    [profilePhoneLabel, profileEmailLabel, profileReferenceLabel, profileRoleLabel, fallback]
+      .filter(Boolean)
+      .join(' | ') || fallback
+  );
 }
 
 function pendingDetailHref(
@@ -1075,7 +1094,10 @@ export function ActivityScreen() {
         context={notificationTitleForDisplay(item.title, actor.label)}
         directionLabel={category.label}
         key={item.id}
-        meta={snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow}
+        meta={buildInviteNotificationMeta(
+          item,
+          snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow,
+        )}
         onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
         statusLabel={null}
         statusTone={historyStatusTone(item.status)}

@@ -238,6 +238,10 @@ function isSentInvite(item: InviteRequestItem): boolean {
 }
 
 function displayNameForInvite(item: InviteRequestItem): string {
+  if (item.profileDisplayName && item.profileDisplayName !== 'Persona') {
+    return item.profileDisplayName;
+  }
+
   if (item.kind === 'account_invite') {
     if (item.actorRole === 'activated' && item.counterpartyLabel) {
       return item.counterpartyLabel;
@@ -276,6 +280,30 @@ function displayNameForInvite(item: InviteRequestItem): string {
   }
 
   return item.title;
+}
+
+function pushUniqueDetail(
+  details: { readonly label: string; readonly value: string }[],
+  label: string,
+  value: string | null | undefined,
+) {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue || details.some((detail) => detail.value === trimmedValue)) {
+    return;
+  }
+
+  details.push({ label, value: trimmedValue });
+}
+
+function inviteProfileDetails(item: InviteRequestItem): { readonly label: string; readonly value: string }[] {
+  const details: { readonly label: string; readonly value: string }[] = [];
+
+  pushUniqueDetail(details, 'Telefono', item.profilePhoneLabel ?? item.intendedRecipientPhoneLabel);
+  pushUniqueDetail(details, 'Correo', item.profileEmailLabel);
+  pushUniqueDetail(details, 'Referencia', item.profileReferenceLabel);
+  pushUniqueDetail(details, 'Detalle', item.profileRoleLabel);
+
+  return details;
 }
 
 function statusLabelForInvite(item: InviteRequestItem): string {
@@ -553,9 +581,11 @@ function InviteRequestRow({
   const busyPrefix = `${item.kind}:${item.inviteId}:`;
   const isBusy = Boolean(busyKey?.startsWith(busyPrefix));
   const avatarUrl =
-    item.kind === 'friendship_invite'
+    item.profileAvatarUrl ??
+    (item.kind === 'friendship_invite'
       ? resolveAvatarUrl(item.claimantSnapshot?.avatarPath ?? null)
-      : item.activatedUserAvatarUrl;
+      : item.activatedUserAvatarUrl);
+  const profileDetails = inviteProfileDetails(item);
   const fallbackPerson: PersonCardDto = {
     userId: item.inviteId,
     displayName,
@@ -661,6 +691,18 @@ function InviteRequestRow({
       statusLabel={statusLabelForInvite(item)}
       statusTone={inviteStatusTone(item)}
     >
+      {profileDetails.length > 0 ? (
+        <View style={styles.requestProfilePanel}>
+          {profileDetails.map((detail) => (
+            <View key={`${detail.label}:${detail.value}`} style={styles.requestProfileLine}>
+              <Text style={styles.requestProfileLabel}>{detail.label}</Text>
+              <Text numberOfLines={1} style={styles.requestProfileValue}>
+                {detail.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {actionContent}
     </TransactionEventCard>
   );
@@ -1461,6 +1503,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.xs,
     justifyContent: 'flex-end',
+  },
+  requestProfilePanel: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.medium,
+    gap: 6,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  requestProfileLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  requestProfileLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  requestProfileValue: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   requestIconButton: {
     alignItems: 'center',

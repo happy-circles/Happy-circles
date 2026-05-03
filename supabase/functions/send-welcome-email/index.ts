@@ -61,82 +61,99 @@ function buildWelcomeHtml(input: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Bienvenido a Happy Circles</title>
   </head>
-  <body style="margin:0;background:#f7f8fb;color:#0f1728;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;">
+  <body style="margin:0;background:#eef1f6;color:#0f1728;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Tu cuenta ya esta lista para usar Happy Circles.</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fb;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">
       <tr>
-        <td align="center" style="padding:32px 16px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:584px;background:#ffffff;border:1px solid #e6ebf3;border-radius:24px;overflow:hidden;">
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #dde4ee;border-radius:28px;overflow:hidden;">
             <tr>
-              <td style="padding:34px 34px 18px;background:#ffffff;">
+              <td style="background:#1a2744;padding:34px 34px 30px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td>
-                      <div style="font-size:13px;letter-spacing:0;color:#667085;">Happy Circles</div>
-                      <h1 style="margin:10px 0 0;font-size:30px;line-height:1.12;color:#1a2744;font-weight:700;">Tu cuenta ya esta lista</h1>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:12px;line-height:1.4;color:#dfe5ef;">Happy Circles</div>
+                      <h1 style="margin:10px 0 0;color:#ffffff;font-size:30px;line-height:1.12;font-weight:700;">Tu cuenta ya esta lista</h1>
                     </td>
-                    <td align="right" style="width:104px;">
-                      <table role="presentation" cellpadding="0" cellspacing="0">
+                    <td align="right" style="width:92px;vertical-align:middle;">
+                      <svg width="78" height="78" viewBox="120 120 440 440" role="img" aria-label="Happy Circles">
+                        <path d="M 215 340 A 125 125 0 0 1 465 340" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="40" />
+                        <path d="M 215 340 A 125 125 0 0 0 340 465" fill="none" stroke="#3dba6e" stroke-linecap="round" stroke-width="40" />
+                        <path d="M 465 340 A 125 125 0 0 1 340 465" fill="none" stroke="#e8604a" stroke-linecap="round" stroke-width="40" />
+                        <circle cx="182" cy="340" r="34" fill="#3dba6e" />
+                        <circle cx="340" cy="182" r="34" fill="#ffffff" />
+                        <circle cx="498" cy="340" r="34" fill="#e8604a" />
+                        <circle cx="340" cy="498" r="34" fill="#ffffff" />
+                        <circle cx="340" cy="340" r="50" fill="#3dba6e" />
+                        <circle cx="325" cy="331" r="7" fill="#ffffff" />
+                        <circle cx="355" cy="331" r="7" fill="#ffffff" />
+                        <path d="M 320 349 Q 340 369 360 349" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="6.5" />
+                      </svg>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px;">
+                <p style="margin:0;font-size:17px;line-height:1.58;color:#344054;">
+                  Hola ${escapedFirstName}, terminaste la configuracion principal de tu cuenta. Ya puedes conectar tus circulos, registrar movimientos y mantener los saldos claros con ${escapedDisplayName} como tu perfil.
+                </p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;border-collapse:separate;">
+                  <tr>
+                    <td style="padding:22px;background:#f7f8fb;border:1px solid #e6ebf3;border-radius:22px;">
+                      <div style="font-size:12px;line-height:1.4;color:#667085;">Listo para empezar</div>
+                      <div style="margin-top:8px;font-size:19px;line-height:1.35;color:#1a2744;font-weight:700;">Tu correo, perfil y dispositivo quedaron verificados.</div>
+                      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0 0;">
                         <tr>
-                          <td style="width:20px;height:20px;border-radius:20px;background:#3dba6e;"></td>
-                          <td style="width:8px;"></td>
-                          <td style="width:20px;height:20px;border-radius:20px;background:#e8604a;"></td>
-                        </tr>
-                        <tr>
-                          <td colspan="3" style="height:8px;"></td>
-                        </tr>
-                        <tr>
-                          <td style="width:20px;height:20px;border-radius:20px;background:#1a2744;"></td>
-                          <td style="width:8px;"></td>
-                          <td style="width:20px;height:20px;border-radius:20px;background:#dfe5ef;"></td>
+                          <td style="background:#1a2744;border-radius:999px;">
+                            <a href="${escapedAppUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:15px;line-height:1;font-weight:700;">Abrir Happy Circles</a>
+                          </td>
                         </tr>
                       </table>
                     </td>
                   </tr>
                 </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 34px 34px;">
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.58;color:#344054;">
-                  Hola ${escapedFirstName}, terminaste la configuracion principal de tu cuenta. Ya puedes conectar tus circulos, registrar movimientos y mantener los saldos claros con ${escapedDisplayName} como tu perfil.
-                </p>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="padding:18px;border:1px solid #e6ebf3;border-radius:18px;background:#f4f6fa;">
-                      <div style="font-size:14px;line-height:1.5;color:#1a2744;font-weight:700;">Lo esencial ya quedo cubierto</div>
-                      <div style="margin-top:8px;font-size:14px;line-height:1.55;color:#667085;">Correo confirmado, perfil completo y dispositivo validado para proteger tus movimientos.</div>
+                    <td style="padding:0 0 16px;">
+                      <div style="font-size:13px;line-height:1.4;color:#667085;">Que sigue</div>
                     </td>
                   </tr>
-                  <tr><td style="height:12px;"></td></tr>
                   <tr>
-                    <td style="padding:18px;border:1px solid #e6ebf3;border-radius:18px;background:#ffffff;">
-                      <div style="font-size:14px;line-height:1.5;color:#1a2744;font-weight:700;">Empieza por tus personas</div>
-                      <div style="margin-top:8px;font-size:14px;line-height:1.55;color:#667085;">Agrega contactos de confianza y crea el circulo donde quieres llevar cuentas compartidas.</div>
+                    <td style="padding:0 0 14px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="width:10px;border-radius:999px;background:#3dba6e;"></td>
+                          <td style="padding-left:14px;">
+                            <div style="font-size:14px;line-height:1.45;color:#1a2744;font-weight:700;">Conecta tus personas</div>
+                            <div style="margin-top:4px;font-size:14px;line-height:1.55;color:#667085;">Agrega contactos de confianza y arma los circulos donde quieres llevar cuentas compartidas.</div>
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
-                  <tr><td style="height:12px;"></td></tr>
                   <tr>
-                    <td style="padding:18px;border:1px solid #e6ebf3;border-radius:18px;background:#ffffff;">
-                      <div style="font-size:14px;line-height:1.5;color:#1a2744;font-weight:700;">Cada movimiento queda con contexto</div>
-                      <div style="margin-top:8px;font-size:14px;line-height:1.55;color:#667085;">Usa solicitudes, aprobaciones y saldos para que todos vean lo mismo sin conversaciones largas.</div>
-                    </td>
-                  </tr>
-                </table>
-                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0;">
-                  <tr>
-                    <td style="background:#1a2744;border-radius:999px;">
-                      <a href="${escapedAppUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Abrir Happy Circles</a>
+                    <td>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="width:10px;border-radius:999px;background:#e8604a;"></td>
+                          <td style="padding-left:14px;">
+                            <div style="font-size:14px;line-height:1.45;color:#1a2744;font-weight:700;">Registra con contexto</div>
+                            <div style="margin-top:4px;font-size:14px;line-height:1.55;color:#667085;">Usa solicitudes, aprobaciones y saldos para que todos vean lo mismo sin conversaciones largas.</div>
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:0;font-size:13px;line-height:1.5;color:#98a2b3;">
+                <p style="margin:28px 0 0;font-size:13px;line-height:1.5;color:#98a2b3;">
                   Te enviaremos correos solo cuando haya acciones importantes para tu cuenta.
                 </p>
               </td>
             </tr>
           </table>
-          <p style="max-width:584px;margin:18px auto 0;font-size:12px;line-height:1.5;color:#98a2b3;text-align:center;">
+          <p style="max-width:600px;margin:18px auto 0;font-size:12px;line-height:1.5;color:#98a2b3;text-align:center;">
             Happy Circles
           </p>
         </td>
@@ -198,7 +215,10 @@ Deno.serve((request) =>
     const { data: userResult, error: userError } = await client.auth.admin.getUserById(actorUserId);
 
     if (userError || !userResult.user) {
-      throw new Error(userError?.message ?? 'actor_profile_not_found');
+      console.error('welcome_email_auth_user_unavailable', {
+        detail: userError?.message ?? 'actor_profile_not_found',
+      });
+      return { sent: false, reason: 'auth_user_unavailable' };
     }
 
     if (!isEmailConfirmed(userResult.user as AuthUserEmailState)) {
@@ -210,7 +230,8 @@ Deno.serve((request) =>
     });
 
     if (claimError) {
-      throw new Error(claimError.message);
+      console.error('welcome_email_claim_failed', { detail: claimError.message });
+      return { sent: false, reason: 'delivery_state_unavailable' };
     }
 
     const claim = Array.isArray(claims) ? (claims[0] as WelcomeEmailClaim | undefined) : undefined;
@@ -255,7 +276,11 @@ Deno.serve((request) =>
     if (!resendResponse.ok) {
       const detail = (await resendResponse.text()).slice(0, 240);
       await releaseClaim(client, actorUserId, `resend_${resendResponse.status}: ${detail}`);
-      throw new Error('welcome_email_send_failed');
+      console.error('welcome_email_provider_rejected', {
+        detail,
+        status: resendResponse.status,
+      });
+      return { sent: false, reason: 'provider_rejected' };
     }
 
     const { error: markError } = await client.rpc('mark_welcome_email_sent', {
@@ -264,7 +289,7 @@ Deno.serve((request) =>
 
     if (markError) {
       console.error('welcome_email_mark_failed', { detail: markError.message });
-      throw new Error(markError.message);
+      return { sent: true, reason: 'tracking_failed' };
     }
 
     return { sent: true };

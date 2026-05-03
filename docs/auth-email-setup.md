@@ -94,6 +94,8 @@ They use the Happy Circles palette from the app (`brandNavy`, `brandGreen`, `bra
 - `{{ .ConfirmationURL }}` for the primary button.
 - `{{ .Token }}` for the manual 8-digit code fallback.
 
+The deep link and the manual code must live in the same email body. Do not configure a separate "link email" and "code email" for the same auth event. If two emails arrive for one sign-up or one recovery request, check for an extra hosted Supabase template/trigger or an accidental resend action.
+
 Local Supabase is configured in `supabase/config.toml`:
 
 - `auth.email.template.confirmation`

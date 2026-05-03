@@ -36,8 +36,15 @@ import {
   triggerIdentitySuccessHaptic as triggerSuccessHaptic,
   triggerIdentityWarningHaptic as triggerWarningHaptic,
 } from '@/lib/identity-flow-haptics';
-import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
-import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
+import {
+  clearPendingInviteIntent,
+  hrefForPendingInviteIntent,
+  readPendingInviteIntent,
+} from '@/lib/invite-intent';
+import {
+  useActivateAccountFromInviteMutation,
+  useUpdateProfileAvatarMutation,
+} from '@/lib/live-data';
 import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
@@ -125,6 +132,7 @@ export function SetupAccountScreen() {
   }>();
   const session = useSession();
   const avatarMutation = useUpdateProfileAvatarMutation();
+  const activateInvite = useActivateAccountFromInviteMutation();
   const profile = session.profile;
   const editPhoneMode =
     (Array.isArray(params.editPhone) ? params.editPhone[0] : params.editPhone) === 'true';
@@ -140,8 +148,12 @@ export function SetupAccountScreen() {
       DEFAULT_COUNTRY,
     [profile?.phone_country_calling_code, profile?.phone_country_iso2],
   );
+  const initialFullName = useMemo(
+    () => (isLowQualityDisplayName(profile?.display_name) ? '' : (profile?.display_name ?? '')),
+    [profile?.display_name],
+  );
 
-  const [fullName, setFullName] = useState(profile?.display_name ?? '');
+  const [fullName, setFullName] = useState(initialFullName);
   const [countryIso, setCountryIso] = useState(initialCountry.iso2);
   const [phoneNationalNumber, setPhoneNationalNumber] = useState(
     profile?.phone_national_number ?? '',
@@ -179,20 +191,15 @@ export function SetupAccountScreen() {
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
   const fullNameIsUsable = !isLowQualityDisplayName(fullName);
   const phoneLabel = profile?.phone_e164 ?? 'Pendiente';
-  const isSaving = profileBusy || avatarMutation.isPending;
+  const isSaving = profileBusy || avatarMutation.isPending || activateInvite.isPending;
   const initialStepWarningShownRef = useRef(false);
 
   useEffect(() => {
-    setFullName(profile?.display_name ?? '');
+    setFullName(initialFullName);
     setCountryIso(initialCountry.iso2);
     setPhoneNationalNumber(profile?.phone_national_number ?? '');
     setLocalAvatarPath(null);
-  }, [
-    initialCountry.iso2,
-    profile?.avatar_path,
-    profile?.display_name,
-    profile?.phone_national_number,
-  ]);
+  }, [initialFullName, initialCountry.iso2, profile?.avatar_path, profile?.phone_national_number]);
 
   useEffect(() => {
     if (
@@ -243,6 +250,39 @@ export function SetupAccountScreen() {
     }
 
     const pendingIntent = await readPendingInviteIntent();
+
+    if (pendingIntent?.type === 'account_invite') {
+      if (!session.currentDeviceId) {
+        setMessage('Perfil guardado. No pudimos identificar este telefono para activar la cuenta.');
+        return;
+      }
+
+      try {
+        const response = await activateInvite.mutateAsync({
+          deliveryToken: pendingIntent.token,
+          currentDeviceId: session.currentDeviceId,
+        });
+
+        await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+
+        if (response.status === 'accepted' || response.status === 'pending_inviter_review') {
+          await clearPendingInviteIntent();
+          beginHomeEntryHandoff();
+          returnToRoute(router, '/home');
+          return;
+        }
+
+        setMessage('Perfil guardado, pero todavia no pudimos cerrar la invitacion.');
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'Perfil guardado, pero no pudimos activar la cuenta.',
+        );
+      }
+      return;
+    }
+
     if (!pendingIntent) {
       beginHomeEntryHandoff();
     }

@@ -97,7 +97,7 @@ export function ResetPasswordScreen() {
         />
       }
       identity={<IdentityFlowIdentity state={visualState} variant="status" />}
-      identityPosition="center"
+      identityPosition="top"
       message={
         <IdentityFlowLogoCopy
           subtitle={
