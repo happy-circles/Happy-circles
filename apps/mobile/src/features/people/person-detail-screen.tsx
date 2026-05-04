@@ -19,6 +19,7 @@ import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
+import { SwipePager } from '@/components/swipe-pager';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import {
@@ -34,6 +35,7 @@ import {
   historyImpactTone,
   historyStepAmountLabel,
   toHistoryFeedItem,
+  type HistoryCaseItem,
 } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
@@ -64,6 +66,7 @@ import { useSession } from '@/providers/session-provider';
 
 type PersonSegmentKey = 'pending' | 'history';
 type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
+const PERSON_SEGMENT_KEYS: readonly PersonSegmentKey[] = ['pending', 'history'];
 
 export interface PersonDetailScreenProps {
   readonly focusItemId?: string;
@@ -117,6 +120,20 @@ function buildFinancialRequestPendingContent(item: ActivityItemDto): {
     detail: detail ?? item.subtitle,
     createdAtLabel: createdAtLabel ?? '',
   };
+}
+
+function isInviteHistoryStep(step: HistoryCaseItem): boolean {
+  return step.detail === 'Invitacion de amistad' || step.detail === 'Acceso privado';
+}
+
+function historyStepMetaLabel(step: HistoryCaseItem): string {
+  if (isInviteHistoryStep(step)) {
+    return [step.happenedAtLabel, step.subtitle].filter(Boolean).join(' - ');
+  }
+
+  return step.happenedAtLabel
+    ? `${step.happenedAtLabel} · ${transactionCategoryLabel(step.category)}`
+    : transactionCategoryLabel(step.category);
 }
 
 function pendingSnippetTone(
@@ -207,6 +224,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
+  const [visualPanelSegment, setVisualPanelSegment] =
+    useState<PersonSegmentKey>(panelSegment);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
@@ -232,6 +251,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     const focusedIds = new Set(focusedItems.map((item) => item.id));
     return [...focusedItems, ...pendingItems.filter((item) => !focusedIds.has(item.id))];
   }, [focusCandidates, pendingItems]);
+
+  useEffect(() => {
+    setVisualPanelSegment(panelSegment);
+  }, [panelSegment]);
 
   useEffect(() => {
     if (!activeAmendmentItemId || !pendingItems.some((item) => item.id === activeAmendmentItemId)) {
@@ -298,6 +321,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     setExpandedCaseIds((current) =>
       current.includes(caseId) ? current.filter((item) => item !== caseId) : [...current, caseId],
     );
+  }
+
+  function changePanelSegment(segment: PersonSegmentKey) {
+    setVisualPanelSegment(segment);
+    setPanelSegment(segment);
   }
 
   function toggleAmendment(item: ActivityItemDto) {
@@ -665,6 +693,68 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }
 
+  function renderPanelSegmentPage(segment: PersonSegmentKey) {
+    return (
+      <BrandedRefreshScrollView
+        fillViewport
+        contentContainerStyle={styles.sheetScrollContent}
+        keyboardShouldPersistTaps="handled"
+        refresh={refresh}
+        refreshIndicatorStyle={styles.refreshIndicator}
+        showsVerticalScrollIndicator={false}
+      >
+        {segment === 'pending' ? (
+          orderedPendingItems.length > 0 ? (
+            orderedPendingItems.map((item) => renderPendingItem(item))
+          ) : (
+            <EmptyState
+              description="Cuando haya algo pendiente con esta persona, aparecera aqui."
+              title="Nada pendiente"
+            />
+          )
+        ) : historyCases.length === 0 ? (
+          <EmptyState
+            description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
+            title="Sin movimientos todavia"
+          />
+        ) : (
+          historyCases.map((itemCase) => {
+            const isExpanded = expandedCaseIds.includes(itemCase.id);
+            const latest = itemCase.latest;
+            const caseMeta = historyCaseMeta(itemCase) || null;
+            const caseImpact = historyCaseImpactLabel(itemCase);
+            const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+
+            return (
+              <HistoryCaseCard
+                category={latest.category}
+                eyebrow={historyCaseEyebrow(itemCase)}
+                impact={caseImpact}
+                isCycleSnippet={itemCase.isCycleSnippet}
+                isExpanded={isExpanded}
+                key={itemCase.id}
+                meta={caseMeta}
+                onToggle={() => toggleHistoryCase(itemCase.id)}
+                statusLabel={historyCaseStatusLabel(itemCase)}
+                statusTone={historyCaseStatusTone(itemCase)}
+                steps={itemCase.steps.map((step) => ({
+                  id: step.id,
+                  title: friendlyHistoryStepLabel(step),
+                  amountLabel: historyStepAmountLabel(step),
+                  impact: historyImpactLabel(step),
+                  meta: historyStepMetaLabel(step),
+                  tone: historyImpactTone(step) as HistoryCaseTone,
+                }))}
+                title={historyCardTitle(itemCase)}
+                tone={caseTone}
+              />
+            );
+          })
+        )}
+      </BrandedRefreshScrollView>
+    );
+  }
+
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell
@@ -710,19 +800,34 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }
 
+  const hasPendingItems = person.pendingCount > 0;
+  const pendingLabel = `${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`;
+  const isSettledBalance = person.netAmountMinor === 0;
   const balanceTone =
-    person.netAmountMinor === 0
+    isSettledBalance
       ? 'neutral'
       : person.direction === 'owes_me'
         ? 'positive'
         : 'negative';
   const balanceVisual = toneVisual(balanceTone);
   const balanceSummary =
-    person.netAmountMinor === 0
+    isSettledBalance && hasPendingItems
+      ? `${pendingLabel} por resolver`
+      : isSettledBalance
       ? 'Estan al dia'
       : person.direction === 'owes_me'
         ? `Te debe ${formatCop(person.netAmountMinor)}`
         : `Debes ${formatCop(person.netAmountMinor)}`;
+  const balanceSummaryColor =
+    isSettledBalance && hasPendingItems ? theme.colors.warning : balanceVisual?.accentColor;
+  const heroMeta = hasPendingItems
+    ? isSettledBalance
+      ? 'Saldo confirmado en cero'
+      : pendingLabel
+    : person.supportText;
+  const relationshipStatus = (person as { readonly relationshipStatus?: string })
+    .relationshipStatus;
+  const canRegisterTransactions = relationshipStatus !== 'pending_invite';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -739,49 +844,45 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <Text
               style={[
                 styles.balanceSummary,
-                balanceVisual ? { color: balanceVisual.accentColor } : null,
+                balanceSummaryColor ? { color: balanceSummaryColor } : null,
               ]}
             >
               {balanceSummary}
             </Text>
-            {person.pendingCount > 0 ? (
-              <Text style={styles.heroMeta}>
-                {person.pendingCount} pendiente{person.pendingCount > 1 ? 's' : ''}
-              </Text>
-            ) : person.supportText ? (
-              <Text style={styles.heroMeta}>{person.supportText}</Text>
-            ) : null}
+            {heroMeta ? <Text style={styles.heroMeta}>{heroMeta}</Text> : null}
           </View>
 
-          <View style={styles.quickActionRowFlat}>
-            <DirectionPill
-              direction="i_owe"
-              onPress={() =>
-                pushRoute(router, {
-                  pathname: '/register',
-                  params: {
-                    personId: person.userId,
-                    direction: 'i_owe',
-                  },
-                })
-              }
-              style={styles.quickActionPill}
-            />
+          {canRegisterTransactions ? (
+            <View style={styles.quickActionRowFlat}>
+              <DirectionPill
+                direction="i_owe"
+                onPress={() =>
+                  pushRoute(router, {
+                    pathname: '/register',
+                    params: {
+                      personId: person.userId,
+                      direction: 'i_owe',
+                    },
+                  })
+                }
+                style={styles.quickActionPill}
+              />
 
-            <DirectionPill
-              direction="owes_me"
-              onPress={() =>
-                pushRoute(router, {
-                  pathname: '/register',
-                  params: {
-                    personId: person.userId,
-                    direction: 'owes_me',
-                  },
-                })
-              }
-              style={styles.quickActionPill}
-            />
-          </View>
+              <DirectionPill
+                direction="owes_me"
+                onPress={() =>
+                  pushRoute(router, {
+                    pathname: '/register',
+                    params: {
+                      personId: person.userId,
+                      direction: 'owes_me',
+                    },
+                  })
+                }
+                style={styles.quickActionPill}
+              />
+            </View>
+          ) : null}
 
           {personActiveSettlement ? (
             <PendingSnippetCard
@@ -812,30 +913,36 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         <View style={styles.panelArea}>
           <View style={styles.tabBar}>
             <Pressable
-              onPress={() => setPanelSegment('pending')}
+              onPress={() => changePanelSegment('pending')}
               style={({ pressed }) => [
                 styles.tabButton,
-                panelSegment === 'pending' ? styles.tabButtonActive : null,
+                visualPanelSegment === 'pending' ? styles.tabButtonActive : null,
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
               <Text
-                style={[styles.tabLabel, panelSegment === 'pending' ? styles.tabLabelActive : null]}
+                style={[
+                  styles.tabLabel,
+                  visualPanelSegment === 'pending' ? styles.tabLabelActive : null,
+                ]}
               >
                 Pendientes
               </Text>
             </Pressable>
             <View style={styles.tabDivider} />
             <Pressable
-              onPress={() => setPanelSegment('history')}
+              onPress={() => changePanelSegment('history')}
               style={({ pressed }) => [
                 styles.tabButton,
-                panelSegment === 'history' ? styles.tabButtonActive : null,
+                visualPanelSegment === 'history' ? styles.tabButtonActive : null,
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
               <Text
-                style={[styles.tabLabel, panelSegment === 'history' ? styles.tabLabelActive : null]}
+                style={[
+                  styles.tabLabel,
+                  visualPanelSegment === 'history' ? styles.tabLabelActive : null,
+                ]}
               >
                 Historial
               </Text>
@@ -844,65 +951,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
           {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-          <View style={styles.sheetScrollWrap}>
-            <BrandedRefreshScrollView
-              contentContainerStyle={styles.sheetScrollContent}
-              keyboardShouldPersistTaps="handled"
-              refresh={refresh}
-              refreshIndicatorStyle={styles.refreshIndicator}
-              showsVerticalScrollIndicator={false}
-            >
-              {panelSegment === 'pending' ? (
-                orderedPendingItems.length > 0 ? (
-                  orderedPendingItems.map((item) => renderPendingItem(item))
-                ) : (
-                  <EmptyState
-                    description="Cuando haya algo pendiente con esta persona, aparecera aqui."
-                    title="Nada pendiente"
-                  />
-                )
-              ) : historyCases.length === 0 ? (
-                <EmptyState
-                  description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
-                  title="Sin movimientos todavia"
-                />
-              ) : (
-                historyCases.map((itemCase) => {
-                  const isExpanded = expandedCaseIds.includes(itemCase.id);
-                  const latest = itemCase.latest;
-                  const caseMeta = historyCaseMeta(itemCase) || null;
-                  const caseImpact = historyCaseImpactLabel(itemCase);
-                  const caseTone = historyImpactTone(latest) as HistoryCaseTone;
-                  return (
-                    <HistoryCaseCard
-                      category={latest.category}
-                      eyebrow={historyCaseEyebrow(itemCase)}
-                      impact={caseImpact}
-                      isCycleSnippet={itemCase.isCycleSnippet}
-                      isExpanded={isExpanded}
-                      key={itemCase.id}
-                      meta={caseMeta}
-                      onToggle={() => toggleHistoryCase(itemCase.id)}
-                      statusLabel={historyCaseStatusLabel(itemCase)}
-                      statusTone={historyCaseStatusTone(itemCase)}
-                      steps={itemCase.steps.map((step) => ({
-                        id: step.id,
-                        title: friendlyHistoryStepLabel(step),
-                        amountLabel: historyStepAmountLabel(step),
-                        impact: historyImpactLabel(step),
-                        meta: step.happenedAtLabel
-                          ? `${step.happenedAtLabel} · ${transactionCategoryLabel(step.category)}`
-                          : transactionCategoryLabel(step.category),
-                        tone: historyImpactTone(step) as HistoryCaseTone,
-                      }))}
-                      title={historyCardTitle(itemCase)}
-                      tone={caseTone}
-                    />
-                  );
-                })
-              )}
-            </BrandedRefreshScrollView>
-          </View>
+          <SwipePager
+            accessibilityLabel="Paneles de la relacion"
+            onChange={changePanelSegment}
+            onPreviewChange={setVisualPanelSegment}
+            renderPage={(segment) => renderPanelSegmentPage(segment)}
+            style={styles.sheetScrollWrap}
+            value={panelSegment}
+            values={PERSON_SEGMENT_KEYS}
+          />
         </View>
       </View>
       <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
@@ -991,6 +1048,8 @@ const styles = StyleSheet.create({
   },
   panelArea: {
     flex: 1,
+    minHeight: 0,
+    flexShrink: 1,
     gap: theme.spacing.md,
     paddingTop: theme.spacing.xs,
   },
@@ -1028,6 +1087,9 @@ const styles = StyleSheet.create({
   },
   sheetScrollWrap: {
     flex: 1,
+    minHeight: 0,
+    flexShrink: 1,
+    position: 'relative',
   },
   sheetScrollContent: {
     gap: theme.spacing.sm,

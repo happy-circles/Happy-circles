@@ -58,7 +58,13 @@ import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
 import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
-import { addNotificationResponseListener, configureNotifications } from '@/lib/notifications';
+import {
+  addNotificationResponseListener,
+  configureNotifications,
+  getLastNotificationRoute,
+  notificationRouteFromResponse,
+  type NotificationRoute,
+} from '@/lib/notifications';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { supabase } from '@/lib/supabase';
@@ -80,12 +86,12 @@ const LAUNCH_LOGO_SIZE = IDENTITY_FLOW_STAGE_SIZE;
 const LAUNCH_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const LAUNCH_AVATAR_EDIT_PENCIL_SIZE = 32;
 const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
-const HOME_ENTRY_SPIN_MS = 780;
-const HOME_ENTRY_SUCCESS_MS = 260;
-const HOME_ENTRY_ROUTE_SETTLE_MS = 120;
-const HOME_ENTRY_LAND_MS = 980;
+const HOME_ENTRY_SPIN_MS = 360;
+const HOME_ENTRY_SUCCESS_MS = 160;
+const HOME_ENTRY_ROUTE_SETTLE_MS = 80;
+const HOME_ENTRY_LAND_MS = 560;
 const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
-const HOME_ENTRY_FADE_MS = 160;
+const HOME_ENTRY_FADE_MS = 120;
 const HOME_ENTRY_READY_WAIT_MS = 1800;
 const SETUP_ENTRY_SPIN_MS = 420;
 const SETUP_ENTRY_SUCCESS_MS = 220;
@@ -104,6 +110,33 @@ function wait(ms: number) {
 function waitForNextFrame() {
   return new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
+  });
+}
+
+async function waitForHomeEntryReadyAfter(readyVersionAtStart: number) {
+  if (getHomeEntryReadyVersion() > readyVersionAtStart) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(finish, HOME_ENTRY_READY_WAIT_MS);
+    const unsubscribe = subscribeHomeEntryReady((version) => {
+      if (version > readyVersionAtStart) {
+        finish();
+      }
+    });
+
+    function finish() {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve();
+    }
   });
 }
 
@@ -191,22 +224,37 @@ function isSameStableLaunchTarget(
 
 function NotificationBridge() {
   const router = useRouter();
+  const handledNotificationIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void configureNotifications();
 
+    let isMounted = true;
     let currentSubscription: { remove(): void } | null = null;
 
-    void addNotificationResponseListener((response) => {
-      const href = response.notification.request.content.data?.href;
-      if (typeof href === 'string') {
-        returnToRoute(router, href as Href);
+    function openNotificationRoute(route: NotificationRoute | null) {
+      if (!route || handledNotificationIdsRef.current.has(route.id)) {
+        return;
       }
+
+      handledNotificationIdsRef.current.add(route.id);
+      returnToRoute(router, route.href as Href);
+    }
+
+    void getLastNotificationRoute().then((route) => {
+      if (isMounted) {
+        openNotificationRoute(route);
+      }
+    });
+
+    void addNotificationResponseListener((response) => {
+      openNotificationRoute(notificationRouteFromResponse(response));
     }).then((subscription) => {
       currentSubscription = subscription;
     });
 
     return () => {
+      isMounted = false;
       currentSubscription?.remove();
     };
   }, [router]);
@@ -389,6 +437,7 @@ function LaunchIntroOverlay({
   const [landingTargetLocked, setLandingTargetLocked] = useState(false);
   const [lockupState, setLockupState] = useState<BrandVerificationState>('loading');
   const mountedAtRef = useRef(Date.now());
+  const homeReadyVersionAtStartRef = useRef(getHomeEntryReadyVersion());
   const unlockAttemptedRef = useRef(false);
   const latestTargetRef = useRef<LaunchIntroTargetSnapshot | null>(target);
   const latestTargetPreferenceRef = useRef(targetPreference);
@@ -518,6 +567,14 @@ function LaunchIntroOverlay({
         return timer;
       }
 
+      async function waitForHomeReadyIfNeeded() {
+        if (latestTargetPreferenceRef.current !== 'homeHeader') {
+          return;
+        }
+
+        await waitForHomeEntryReadyAfter(homeReadyVersionAtStartRef.current);
+      }
+
       async function waitForLandingTarget() {
         const startedAt = Date.now();
         const waitMs =
@@ -553,6 +610,11 @@ function LaunchIntroOverlay({
       if (reducedMotion) {
         await wait(LAUNCH_ROUTE_SETTLE_MS);
 
+        if (!active) {
+          return;
+        }
+
+        await waitForHomeReadyIfNeeded();
         if (!active) {
           return;
         }
@@ -597,6 +659,11 @@ function LaunchIntroOverlay({
 
       await wait(LAUNCH_ROUTE_SETTLE_MS);
 
+      if (!active) {
+        return;
+      }
+
+      await waitForHomeReadyIfNeeded();
       if (!active) {
         return;
       }
@@ -953,33 +1020,6 @@ function HomeEntryHandoffOverlay({
       return latestHomeTargetRef.current;
     }
 
-    async function waitForHomeReady() {
-      if (getHomeEntryReadyVersion() > requestReadyVersionAtStart) {
-        return;
-      }
-
-      await new Promise<void>((resolve) => {
-        let settled = false;
-        const timeout = setTimeout(finish, HOME_ENTRY_READY_WAIT_MS);
-        const unsubscribe = subscribeHomeEntryReady((version) => {
-          if (version > requestReadyVersionAtStart) {
-            finish();
-          }
-        });
-
-        function finish() {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearTimeout(timeout);
-          unsubscribe();
-          resolve();
-        }
-      });
-    }
-
     async function runHandoff() {
       if (reducedMotion) {
         await wait(HOME_ENTRY_ROUTE_SETTLE_MS);
@@ -988,7 +1028,7 @@ function HomeEntryHandoffOverlay({
           return;
         }
 
-        await waitForHomeReady();
+        await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
         const nextTarget = await waitForHomeTarget();
         if (!active) {
           return;
@@ -1034,7 +1074,7 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      await waitForHomeReady();
+      await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
       const nextTarget = await waitForHomeTarget();
       if (!active) {
         return;

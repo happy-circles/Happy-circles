@@ -86,9 +86,21 @@ function firstNameLabel(value: string): string {
   return firstPart && firstPart.length > 0 ? firstPart : value;
 }
 
-function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status'>): string {
+function isInviteTrajectoryItem(item: Pick<HistoryCaseItem, 'kind' | 'detail'>): boolean {
+  return (
+    item.kind === 'friendship_invite' ||
+    item.detail === 'Invitacion de amistad' ||
+    item.detail === 'Acceso privado'
+  );
+}
+
+function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status' | 'detail'>): string {
   if (item.kind === 'friendship_invite') {
     return 'Invitacion';
+  }
+
+  if (isInviteTrajectoryItem(item)) {
+    return item.detail ?? 'Invitacion';
   }
 
   if (item.kind === 'settlement') {
@@ -393,7 +405,7 @@ export function historyStatusTone(status: string): HistoryStatusTone {
 }
 
 export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
-  if (item.kind === 'friendship_invite') {
+  if (isInviteTrajectoryItem(item)) {
     return item.title;
   }
 
@@ -448,8 +460,12 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
 export function historyImpactTone(
   item: HistoryCaseItem,
 ): 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle' {
+  if (isInviteTrajectoryItem(item) && item.status === 'accepted') {
+    return 'positive';
+  }
+
   if (
-    item.kind === 'friendship_invite' &&
+    isInviteTrajectoryItem(item) &&
     (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled')
   ) {
     return 'danger';
@@ -471,7 +487,7 @@ export function historyImpactTone(
     return 'cycle';
   }
 
-  if (item.kind === 'friendship_invite') {
+  if (isInviteTrajectoryItem(item)) {
     return 'neutral';
   }
 
@@ -489,13 +505,13 @@ export function historyImpactTone(
 }
 
 export function historyImpactLabel(item: HistoryCaseItem): string | null {
-  if (item.kind === 'friendship_invite') {
+  if (isInviteTrajectoryItem(item)) {
     if (item.status === 'accepted') {
-      return 'Relacion creada';
+      return item.detail === 'Acceso privado' ? 'Acceso confirmado' : 'Relacion creada';
     }
 
     if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
-      return 'Sin relacion creada';
+      return item.detail === 'Acceso privado' ? 'Acceso cerrado' : 'Sin relacion creada';
     }
 
     return null;
@@ -545,7 +561,7 @@ export function historyCaseEyebrow<T extends HistoryCaseItem>(
     return null;
   }
 
-  if (itemCase.latest.kind === 'friendship_invite') {
+  if (isInviteTrajectoryItem(itemCase.latest)) {
     return 'Invitaciones';
   }
 
@@ -570,6 +586,33 @@ export function historyCaseImpactLabel<T extends HistoryCaseItem>(
   return 'Completaste un Circle!';
 }
 
+function inviteMismatchLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
+  if (!isInviteTrajectoryItem(itemCase.latest)) {
+    return null;
+  }
+
+  const mismatchStep = itemCase.steps.find(
+    (step) =>
+      step.title.includes('reclamo la invitacion enviada') ||
+      step.title.includes('activo el acceso enviado') ||
+      step.subtitle.includes('reclamo la invitacion enviada') ||
+      step.subtitle.includes('activo el acceso enviado'),
+  );
+
+  if (!mismatchStep) {
+    return null;
+  }
+
+  if (
+    mismatchStep.title.includes('reclamo la invitacion enviada') ||
+    mismatchStep.title.includes('activo el acceso enviado')
+  ) {
+    return mismatchStep.title;
+  }
+
+  return mismatchStep.subtitle;
+}
+
 export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
   if (itemCase.isCycleSnippet) {
     if (itemCase.latest.status === 'rejected') {
@@ -581,6 +624,15 @@ export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCas
     }
 
     return 'Happy Circle completado';
+  }
+
+  if (isInviteTrajectoryItem(itemCase.latest)) {
+    const mismatchLabel = inviteMismatchLabel(itemCase);
+    if (mismatchLabel) {
+      return mismatchLabel;
+    }
+
+    return itemCase.latest.title;
   }
 
   for (const step of itemCase.steps) {
@@ -664,9 +716,15 @@ export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
 }
 
 export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
+  if (isInviteTrajectoryItem(itemCase.latest)) {
+    const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
+    return `${itemCase.latest.detail ?? 'Invitacion'} - ${timeLabel}`;
+  }
+
   const creatorLabel =
-    (itemCase.latest.counterpartyLabel ? firstNameLabel(itemCase.latest.counterpartyLabel) : null) ||
-    (itemCase.isCycleSnippet ? 'Happy Circle' : 'Usuario');
+    (itemCase.latest.counterpartyLabel
+      ? firstNameLabel(itemCase.latest.counterpartyLabel)
+      : null) || (itemCase.isCycleSnippet ? 'Happy Circle' : 'Usuario');
   const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
 
   return `Creado por ${creatorLabel} · ${timeLabel} | ${transactionCategoryLabel(

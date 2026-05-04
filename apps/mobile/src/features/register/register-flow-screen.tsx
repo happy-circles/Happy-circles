@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  type LayoutChangeEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -53,6 +56,12 @@ type Direction = 'i_owe' | 'owes_me';
 const DEFAULT_DIRECTION: Direction = 'i_owe';
 
 const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
+const KEYBOARD_SCROLL_GAP = 16;
+const INPUT_FOCUS_SCROLL_DELAY_MS = 120;
+const MIN_KEYBOARD_SCROLL_HEIGHT = 140;
+
+type RegisterFocusTarget = 'amount' | 'person' | 'description';
+type FieldMetrics = { readonly height: number; readonly y: number };
 
 interface RegisterPerson {
   readonly userId: string;
@@ -205,9 +214,21 @@ export function RegisterFlowScreen() {
   const [description, setDescription] = useState('');
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [errors, setErrors] = useState<RegisterFormErrors>({});
+  const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+  const registerScrollRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const amountInputRef = useRef<TextInput | null>(null);
   const descriptionInputRef = useRef<TextInput | null>(null);
+  const focusedFieldRef = useRef<RegisterFocusTarget | null>(null);
+  const footerHeightRef = useRef(0);
+  const keyboardOverlapRef = useRef(0);
+  const keyboardInsetRef = useRef(0);
+  const scrollViewportHeightRef = useRef(0);
+  const fieldMetricsRef = useRef<Record<RegisterFocusTarget, FieldMetrics>>({
+    amount: { height: 0, y: 0 },
+    person: { height: 0, y: 0 },
+    description: { height: 0, y: 0 },
+  });
   const completedSaveRef = useRef(false);
   const showBusyOverlay = useDelayedBusy(createRequest.isPending);
 
@@ -284,6 +305,10 @@ export function RegisterFlowScreen() {
         })
       : null;
   const canShowForm = !snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0;
+  const keyboardAwareScrollContentStyle = [
+    styles.sheetScrollContent,
+    keyboardOverlap > 0 ? { paddingBottom: theme.spacing.xxl + keyboardOverlap } : null,
+  ];
   const isDirty =
     amount.trim().length > 0 ||
     category !== DEFAULT_TRANSACTION_CATEGORY ||
@@ -315,6 +340,67 @@ export function RegisterFlowScreen() {
     );
   });
 
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return undefined;
+    }
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      const nextKeyboardInset = Math.max(0, event.endCoordinates.height);
+      keyboardInsetRef.current = nextKeyboardInset;
+      const nextOverlap = updateKeyboardOverlap(nextKeyboardInset);
+      if (nextOverlap > 0 && focusedFieldRef.current) {
+        scrollFormToField(focusedFieldRef.current, 40);
+      }
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      keyboardInsetRef.current = 0;
+      focusedFieldRef.current = null;
+      updateKeyboardOverlap(0);
+      registerScrollRef.current?.scrollTo({ animated: true, y: 0 });
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  function updateKeyboardOverlap(nextKeyboardInset = keyboardInsetRef.current): number {
+    const nextOverlap = Math.max(0, nextKeyboardInset - footerHeightRef.current - theme.spacing.lg);
+    keyboardOverlapRef.current = nextOverlap;
+    setKeyboardOverlap(nextOverlap);
+    return nextOverlap;
+  }
+
+  function recordFieldOffset(field: RegisterFocusTarget) {
+    return (event: LayoutChangeEvent) => {
+      fieldMetricsRef.current[field] = {
+        height: event.nativeEvent.layout.height,
+        y: event.nativeEvent.layout.y,
+      };
+    };
+  }
+
+  function scrollFormToField(field: RegisterFocusTarget, delayMs = INPUT_FOCUS_SCROLL_DELAY_MS) {
+    focusedFieldRef.current = field;
+    setTimeout(() => {
+      const fieldMetrics = fieldMetricsRef.current[field];
+      const visibleScrollHeight = Math.max(
+        MIN_KEYBOARD_SCROLL_HEIGHT,
+        scrollViewportHeightRef.current - keyboardOverlapRef.current,
+      );
+      const fieldBottomOffset = Math.max(
+        theme.spacing.sm,
+        visibleScrollHeight - fieldMetrics.height - theme.spacing.md - KEYBOARD_SCROLL_GAP,
+      );
+      const targetY = Math.max(0, fieldMetrics.y - fieldBottomOffset);
+      registerScrollRef.current?.scrollTo({ animated: true, y: targetY });
+    }, delayMs);
+  }
+
   function clearFieldError(field: keyof RegisterFormErrors) {
     setErrors((current) => {
       if (!current[field]) {
@@ -341,6 +427,7 @@ export function RegisterFlowScreen() {
 
   function focusPersonSearch() {
     setTimeout(() => {
+      scrollFormToField('person');
       searchInputRef.current?.focus();
     }, 160);
   }
@@ -389,11 +476,13 @@ export function RegisterFlowScreen() {
     }
 
     if (nextErrors.amount) {
+      scrollFormToField('amount');
       amountInputRef.current?.focus();
       return;
     }
 
     if (nextErrors.description) {
+      scrollFormToField('description');
       descriptionInputRef.current?.focus();
     }
   }
@@ -401,8 +490,9 @@ export function RegisterFlowScreen() {
   function openInviteFlow(suggestedName?: string) {
     closePersonSearch();
     pushRoute(router, {
-      pathname: '/invite',
+      pathname: '/people',
       params: {
+        addPerson: '1',
         inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
         amountMinor: amountMinor > 0 ? String(amountMinor) : undefined,
         direction,
@@ -505,11 +595,17 @@ export function RegisterFlowScreen() {
         <View style={styles.panelArea}>
           {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-          <View style={styles.sheetScrollWrap}>
+          <View
+            onLayout={(event) => {
+              scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+            }}
+            style={styles.sheetScrollWrap}
+          >
             <BrandedRefreshScrollView
-              contentContainerStyle={styles.sheetScrollContent}
+              contentContainerStyle={keyboardAwareScrollContentStyle}
               fillViewport
               keyboardShouldPersistTaps="handled"
+              ref={registerScrollRef}
               refresh={refreshConfig}
               refreshIndicatorStyle={styles.sheetRefreshIndicator}
               showsVerticalScrollIndicator={false}
@@ -547,6 +643,7 @@ export function RegisterFlowScreen() {
                 <>
                   <View style={styles.formContent}>
                     <View
+                      onLayout={recordFieldOffset('amount')}
                       style={[styles.amountCard, errors.amount ? styles.amountCardError : null]}
                     >
                       <View style={styles.amountDisplayRow}>
@@ -560,6 +657,7 @@ export function RegisterFlowScreen() {
                         </Text>
                         <NativeTextInput
                           keyboardType="number-pad"
+                          onFocus={() => scrollFormToField('amount')}
                           onChangeText={(value) => {
                             setAmount(sanitizeAmountInput(value));
                             clearFieldError('amount');
@@ -620,7 +718,7 @@ export function RegisterFlowScreen() {
                       />
                     </View>
 
-                    <View style={styles.fieldStack}>
+                    <View onLayout={recordFieldOffset('person')} style={styles.fieldStack}>
                       <View style={styles.labelRow}>
                         <Text style={styles.sectionLabel}>Persona</Text>
                         {errors.personId ? (
@@ -673,6 +771,7 @@ export function RegisterFlowScreen() {
                           <AppTextInput
                             autoCapitalize="words"
                             clearButtonMode="while-editing"
+                            onFocus={() => scrollFormToField('person')}
                             onChangeText={setQuery}
                             placeholder="Buscar otra persona"
                             placeholderTextColor={theme.colors.muted}
@@ -765,7 +864,7 @@ export function RegisterFlowScreen() {
                       />
                     </View>
 
-                    <View style={styles.fieldStack}>
+                    <View onLayout={recordFieldOffset('description')} style={styles.fieldStack}>
                       <View style={styles.labelRow}>
                         <Text style={styles.sectionLabel}>Nota</Text>
                         {errors.description ? (
@@ -774,6 +873,7 @@ export function RegisterFlowScreen() {
                       </View>
                       <AppTextInput
                         hasError={Boolean(errors.description)}
+                        onFocus={() => scrollFormToField('description')}
                         onChangeText={(value) => {
                           setDescription(value);
                           clearFieldError('description');
@@ -794,7 +894,13 @@ export function RegisterFlowScreen() {
         </View>
 
         {canShowForm ? (
-          <View style={styles.footer}>
+          <View
+            onLayout={(event) => {
+              footerHeightRef.current = event.nativeEvent.layout.height;
+              updateKeyboardOverlap();
+            }}
+            style={styles.footer}
+          >
             <View style={styles.footerSummary}>
               <Text numberOfLines={1} style={styles.footerSummaryText}>
                 {summaryText
@@ -851,6 +957,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
     gap: theme.spacing.xs,
+    height: '90%',
     maxHeight: '90%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
@@ -903,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   sheetScrollContent: {
     gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    paddingBottom: theme.spacing.xxl,
   },
   sheetRefreshIndicator: {
     top: theme.spacing.xs,

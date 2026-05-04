@@ -1,4 +1,7 @@
-import { resetIdentityFlowScrollPosition } from '@/lib/identity-flow-scroll';
+import {
+  resetIdentityFlowScrollPosition,
+  resetIdentityFlowScrollPositionForHandoff,
+} from '@/lib/identity-flow-scroll';
 
 export interface HomeEntryHandoffRequest {
   readonly id: number;
@@ -14,8 +17,10 @@ let readyVersion = 0;
 const listeners = new Set<HomeEntryHandoffListener>();
 const readyListeners = new Set<HomeEntryReadyListener>();
 
-export function beginHomeEntryHandoff() {
-  resetIdentityFlowScrollPosition();
+export function beginHomeEntryHandoff(options?: { readonly skipScrollReset?: boolean }) {
+  if (!options?.skipScrollReset) {
+    resetIdentityFlowScrollPosition();
+  }
 
   const request = {
     id: ++nextRequestId,
@@ -24,6 +29,11 @@ export function beginHomeEntryHandoff() {
   };
 
   listeners.forEach((listener) => listener(request));
+}
+
+export async function beginHomeEntryHandoffAfterScrollReset() {
+  await resetIdentityFlowScrollPositionForHandoff();
+  beginHomeEntryHandoff({ skipScrollReset: true });
 }
 
 export function subscribeHomeEntryHandoff(listener: HomeEntryHandoffListener) {

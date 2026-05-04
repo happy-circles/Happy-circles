@@ -74,7 +74,7 @@ The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage
 - `supabase/functions`: Supabase Edge Functions for authenticated commands, public previews, analytics writes, and graph-cycle processing.
 - `supabase/tests`: SQL-level verification fixtures for ledger/cache consistency, cycle proposals, invite flows, security hardening, analytics, and graph jobs.
 - `docs/adr`: architectural decision records for ledger truth, request-first negotiation, pair-net modeling, deterministic cycle settlement, and snapshot validation.
-- `docs`: operational notes for authentication, email delivery, app links, analytics, security, graph worker scheduling, and Figma planning.
+- `docs`: operational notes for authentication, email delivery, app links, analytics, security, graph worker scheduling, release readiness, and UX/copy standards.
 
 ## Architectural Principles
 
@@ -199,8 +199,8 @@ Production setup still requires DNS, Vercel domain attachment, Apple Team ID, An
 - `docs/security-architecture.md`: RLS, Edge Function, invite-token, device-trust, and migration rules.
 - `docs/analytics-data-model.md`: product analytics schema, privacy rules, and metric sources.
 - `docs/graph-cycle-worker.md`: durable graph job queue and scheduled worker fallback.
-- `docs/figma/app-house-blueprint.md`: Figma topology, foundations, components, screens, and prototype map.
-- `docs/figma/system-flows.md`: Mermaid system flows for the Figma-first UX process.
+- `docs/store-release-readiness.md`: App Store and Play Store release checklist.
+- `docs/ux-copy-standards.md`: visible copy, UI state, and design source guidance.
 
 ## Current Implementation Status
 

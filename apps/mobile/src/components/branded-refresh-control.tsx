@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import * as Haptics from 'expo-haptics';
 import type {
   GestureResponderEvent,
@@ -17,16 +18,22 @@ const PULL_TRIGGER_DISTANCE = 84;
 const PULL_MAX_DISTANCE = 124;
 const PULL_RELEASE_DISTANCE = 64;
 const PULL_VISIBLE_DISTANCE = 18;
+const PULL_CLOSE_DURATION_MS = 210;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface BrandedRefreshProps {
+  readonly contentOffsetEnabled?: boolean;
+  readonly indicatorVisible?: boolean;
+  readonly indicatorLogoVisible?: boolean;
   readonly label?: string;
   readonly onRefresh: () => void | Promise<void>;
+  readonly onPullStateChange?: (active: boolean) => void;
   readonly refreshing: boolean;
 }
 
 interface BrandedRefreshIndicatorProps {
   readonly label?: string;
+  readonly logoVisible?: boolean;
   readonly pullDistance?: Animated.Value;
   readonly style?: StyleProp<ViewStyle>;
   readonly visible: boolean;
@@ -35,12 +42,14 @@ interface BrandedRefreshIndicatorProps {
 export interface BrandedRefreshScrollViewProps
   extends Omit<ScrollViewProps, 'refreshControl'> {
   readonly fillViewport?: boolean;
+  readonly fixedHeader?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
   readonly refreshIndicatorStyle?: StyleProp<ViewStyle>;
 }
 
 export function BrandedRefreshIndicator({
   label = 'Sincronizando',
+  logoVisible = true,
   pullDistance,
   style,
   visible,
@@ -78,7 +87,7 @@ export function BrandedRefreshIndicator({
   return (
     <Animated.View pointerEvents="none" style={[styles.indicatorWrap, animatedStyle, style]}>
       <View style={styles.indicator}>
-        <HappyCirclesMotion size={64} variant="refresh" />
+        {logoVisible ? <HappyCirclesMotion size={64} variant="refresh" /> : null}
         <Text style={styles.indicatorText}>{label}</Text>
       </View>
     </Animated.View>
@@ -95,6 +104,7 @@ export const BrandedRefreshScrollView = forwardRef<
     children,
     contentContainerStyle,
     fillViewport = false,
+    fixedHeader,
     keyboardDismissMode,
     onScroll,
     onScrollEndDrag,
@@ -120,10 +130,26 @@ export const BrandedRefreshScrollView = forwardRef<
   const releaseHandledRef = useRef(false);
   const thresholdHapticFiredRef = useRef(false);
   const refreshingRef = useRef(Boolean(refresh?.refreshing));
-  const [pulling, setPulling] = useState(false);
+  const pullingRef = useRef(false);
+  const settlingRef = useRef(false);
+  const closeFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pulling, setPullingState] = useState(false);
+  const [settling, setSettlingState] = useState(false);
+
+  const setPulling = useCallback((nextPulling: boolean) => {
+    pullingRef.current = nextPulling;
+    setPullingState(nextPulling);
+  }, []);
+
+  const setSettling = useCallback((nextSettling: boolean) => {
+    settlingRef.current = nextSettling;
+    setSettlingState(nextSettling);
+  }, []);
 
   const refreshEnabled = Boolean(refresh);
-  const visible = pulling || Boolean(refresh?.refreshing);
+  const visible = pulling || settling || Boolean(refresh?.refreshing);
+  const shouldShowIndicator = visible && refresh?.indicatorVisible !== false;
+  const shouldOffsetContent = refreshEnabled && refresh?.contentOffsetEnabled === true;
 
   const triggerThresholdHaptic = useCallback(() => {
     void Haptics.selectionAsync().catch(() => undefined);
@@ -133,24 +159,63 @@ export const BrandedRefreshScrollView = forwardRef<
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   }, []);
 
+  const clearCloseFallback = useCallback(() => {
+    if (closeFallbackTimeoutRef.current) {
+      clearTimeout(closeFallbackTimeoutRef.current);
+      closeFallbackTimeoutRef.current = null;
+    }
+  }, []);
+
+  const forceClosePull = useCallback(() => {
+    if (refreshingRef.current) {
+      return;
+    }
+
+    latestPullRef.current = 0;
+    pullDistance.stopAnimation();
+    pullDistance.setValue(0);
+    setPulling(false);
+    setSettling(false);
+    clearCloseFallback();
+  }, [clearCloseFallback, pullDistance, setPulling, setSettling]);
+
   const closePull = useCallback(() => {
+    const shouldSettle =
+      latestPullRef.current >= PULL_VISIBLE_DISTANCE ||
+      pullingRef.current ||
+      settlingRef.current ||
+      refreshingRef.current;
+
+    clearCloseFallback();
     latestPullRef.current = 0;
     thresholdHapticFiredRef.current = false;
+    if (!refreshingRef.current) {
+      setPulling(false);
+    }
+    setSettling(shouldSettle);
     Animated.timing(pullDistance, {
-      duration: 210,
+      duration: PULL_CLOSE_DURATION_MS,
       easing: Easing.out(Easing.cubic),
       toValue: 0,
       useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start(({ finished }) => {
       if (finished && !refreshingRef.current) {
+        clearCloseFallback();
         setPulling(false);
+        setSettling(false);
       }
     });
-  }, [pullDistance]);
+
+    if (shouldSettle) {
+      closeFallbackTimeoutRef.current = setTimeout(forceClosePull, PULL_CLOSE_DURATION_MS + 140);
+    }
+  }, [clearCloseFallback, forceClosePull, pullDistance, setPulling, setSettling]);
 
   const openPull = useCallback(
     (distance: number) => {
+      clearCloseFallback();
       latestPullRef.current = distance;
+      setSettling(false);
       if (distance >= PULL_TRIGGER_DISTANCE && !thresholdHapticFiredRef.current) {
         thresholdHapticFiredRef.current = true;
         triggerThresholdHaptic();
@@ -165,14 +230,17 @@ export const BrandedRefreshScrollView = forwardRef<
       }
       pullDistance.setValue(distance);
     },
-    [pullDistance, triggerThresholdHaptic],
+    [clearCloseFallback, pullDistance, setPulling, setSettling, triggerThresholdHaptic],
   );
 
   useEffect(() => {
     refreshingRef.current = Boolean(refresh?.refreshing);
 
     if (refresh?.refreshing) {
+      clearCloseFallback();
+      latestPullRef.current = PULL_RELEASE_DISTANCE;
       setPulling(true);
+      setSettling(false);
       Animated.spring(pullDistance, {
         damping: 16,
         mass: 0.8,
@@ -186,7 +254,13 @@ export const BrandedRefreshScrollView = forwardRef<
     if (startYRef.current === null) {
       closePull();
     }
-  }, [closePull, pullDistance, refresh?.refreshing]);
+  }, [clearCloseFallback, closePull, pullDistance, refresh?.refreshing, setPulling, setSettling]);
+
+  useEffect(() => () => clearCloseFallback(), [clearCloseFallback]);
+
+  useEffect(() => {
+    refresh?.onPullStateChange?.(visible);
+  }, [refresh, visible]);
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextY = event.nativeEvent.contentOffset.y;
@@ -248,7 +322,10 @@ export const BrandedRefreshScrollView = forwardRef<
     startScrollYRef.current = 0;
 
     if (nextShouldRefresh && refresh) {
+      clearCloseFallback();
+      latestPullRef.current = PULL_RELEASE_DISTANCE;
       setPulling(true);
+      setSettling(false);
       triggerRefreshHaptic();
       Animated.spring(pullDistance, {
         damping: 16,
@@ -257,7 +334,14 @@ export const BrandedRefreshScrollView = forwardRef<
         toValue: PULL_RELEASE_DISTANCE,
         useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start();
-      void refresh.onRefresh();
+      void Promise.resolve()
+        .then(() => refresh.onRefresh())
+        .catch(() => undefined)
+        .finally(() => {
+          if (!refreshingRef.current) {
+            closePull();
+          }
+        });
     } else if (!refresh?.refreshing) {
       closePull();
     }
@@ -278,12 +362,36 @@ export const BrandedRefreshScrollView = forwardRef<
     onScrollEndDrag?.(event);
   }
 
+  const offsetContentStyle = shouldOffsetContent
+    ? {
+        transform: [
+          {
+            translateY: pullDistance.interpolate({
+              inputRange: [0, PULL_RELEASE_DISTANCE, PULL_MAX_DISTANCE],
+              outputRange: [0, PULL_RELEASE_DISTANCE, PULL_MAX_DISTANCE],
+              extrapolate: 'clamp',
+            }),
+          },
+        ],
+      }
+    : null;
+
+  const scrollChildren = shouldOffsetContent ? (
+    <Animated.View
+      style={[fillViewport ? styles.offsetContentFill : null, offsetContentStyle]}
+    >
+      {children}
+    </Animated.View>
+  ) : (
+    children
+  );
+
   return (
     <View style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}>
       <ScrollView
         {...props}
-        alwaysBounceVertical={refreshEnabled ? true : alwaysBounceVertical}
-        bounces={refreshEnabled ? true : bounces}
+        alwaysBounceVertical={refreshEnabled ? !shouldOffsetContent : alwaysBounceVertical}
+        bounces={refreshEnabled ? !shouldOffsetContent : bounces}
         contentContainerStyle={contentContainerStyle}
         keyboardDismissMode={
           keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
@@ -300,13 +408,19 @@ export const BrandedRefreshScrollView = forwardRef<
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
         style={[styles.innerScroll, fillViewport ? styles.innerScrollFill : null]}
       >
-        {children}
+        {scrollChildren}
       </ScrollView>
+      {shouldOffsetContent && fixedHeader ? (
+        <View pointerEvents="none" style={styles.fixedHeaderOverlay}>
+          {fixedHeader}
+        </View>
+      ) : null}
       <BrandedRefreshIndicator
         label={refresh?.label}
+        logoVisible={refresh?.indicatorLogoVisible}
         pullDistance={pullDistance}
         style={refreshIndicatorStyle}
-        visible={visible}
+        visible={shouldShowIndicator}
       />
     </View>
   );
@@ -326,6 +440,16 @@ const styles = StyleSheet.create({
   },
   innerScrollFill: {
     flex: 1,
+  },
+  offsetContentFill: {
+    flexGrow: 1,
+  },
+  fixedHeaderOverlay: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 20,
   },
   indicatorWrap: {
     alignItems: 'center',

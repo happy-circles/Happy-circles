@@ -4,10 +4,12 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Happy Circles | Finanzas entre amigos',
-  description: 'Abre Happy Circles y descarga la app para iOS o Android.',
+  description:
+    'Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.',
   openGraph: {
     title: 'Happy Circles',
-    description: 'Tu app de finanzas entre amigos.',
+    description:
+      'Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.',
     siteName: 'Happy Circles',
     type: 'website',
   },

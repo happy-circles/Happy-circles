@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -37,6 +38,7 @@ export interface ProjectionForecastCardProps {
   readonly pendingIncomingMinor: number;
   readonly pendingOutgoingMinor: number;
   readonly projectedBalanceMinor: number;
+  readonly style?: StyleProp<ViewStyle>;
   readonly totalIOweMinor: number;
   readonly totalOwedToMeMinor: number;
 }
@@ -71,6 +73,7 @@ export function ProjectionForecastCard({
   pendingIncomingMinor,
   pendingOutgoingMinor,
   projectedBalanceMinor,
+  style,
   totalIOweMinor,
   totalOwedToMeMinor,
 }: ProjectionForecastCardProps) {
@@ -229,7 +232,7 @@ export function ProjectionForecastCard({
   const dividerX = (balanceRightEdge + firstForecastLeft) / 2;
 
   return (
-    <SurfaceCard padding="none" style={styles.card} variant="elevated">
+    <SurfaceCard padding="none" style={[styles.card, style]} variant="elevated">
       <View style={styles.body}>
         <View style={styles.summaryRow}>
           <View style={styles.projectedStack}>

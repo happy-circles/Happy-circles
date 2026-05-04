@@ -275,12 +275,21 @@ export interface FriendshipInviteListItem extends ActivityItemDto {
   readonly intendedRecipientPhoneLabel: string | null;
   readonly ctaLabel: string;
   readonly createdAt: string;
+  readonly profileUserId: string | null;
+  readonly profileHref: string | null;
+  readonly profileTimelineItems: readonly PersonTimelineItemDto[];
   readonly profileDisplayName: string;
   readonly profileAvatarUrl: string | null;
   readonly profilePhoneLabel: string | null;
   readonly profileEmailLabel: string | null;
   readonly profileReferenceLabel: string | null;
   readonly profileRoleLabel: string | null;
+  readonly intendedProfileDisplayName: string | null;
+  readonly intendedProfilePhoneLabel: string | null;
+  readonly respondingProfileDisplayName: string | null;
+  readonly respondingProfileAvatarUrl: string | null;
+  readonly respondingProfilePhoneLabel: string | null;
+  readonly respondingProfileEmailLabel: string | null;
 }
 
 export interface FriendshipSummary {
@@ -312,12 +321,21 @@ export interface AccountInviteListItem extends ActivityItemDto {
   readonly activatedUserAvatarUrl: string | null;
   readonly ctaLabel: string;
   readonly createdAt: string;
+  readonly profileUserId: string | null;
+  readonly profileHref: string | null;
+  readonly profileTimelineItems: readonly PersonTimelineItemDto[];
   readonly profileDisplayName: string;
   readonly profileAvatarUrl: string | null;
   readonly profilePhoneLabel: string | null;
   readonly profileEmailLabel: string | null;
   readonly profileReferenceLabel: string | null;
   readonly profileRoleLabel: string | null;
+  readonly intendedProfileDisplayName: string | null;
+  readonly intendedProfilePhoneLabel: string | null;
+  readonly respondingProfileDisplayName: string | null;
+  readonly respondingProfileAvatarUrl: string | null;
+  readonly respondingProfilePhoneLabel: string | null;
+  readonly respondingProfileEmailLabel: string | null;
 }
 
 export interface AccountInviteSummary {
@@ -493,12 +511,16 @@ interface InviteProfilePresentation {
   readonly roleLabel: string | null;
 }
 
+type LivePersonDetailDto = PersonDetailDto & {
+  readonly relationshipStatus?: 'active' | 'pending_invite';
+};
+
 export interface AppSnapshot {
   readonly dashboard: DashboardDto;
   readonly balanceOverview: BalanceOverviewDto;
   readonly balanceAnalytics: BalanceAnalyticsDto;
   readonly people: readonly PersonCardDto[];
-  readonly peopleById: Readonly<Record<string, PersonDetailDto>>;
+  readonly peopleById: Readonly<Record<string, LivePersonDetailDto>>;
   readonly currentUserProfile: {
     readonly displayName: string;
     readonly email: string;
@@ -526,6 +548,44 @@ interface CreateRequestInput {
 }
 
 const APP_SNAPSHOT_QUERY_KEY = 'app-snapshot';
+const LIVE_SNAPSHOT_TIMEOUT_MS = 20_000;
+
+function createSnapshotAbortSignal(parentSignal?: AbortSignal) {
+  const controller = new AbortController();
+  let timedOut = false;
+  let rejectTimeout: (error: Error) => void = () => undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    rejectTimeout = reject;
+  });
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    rejectTimeout(
+      new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.'),
+    );
+  }, LIVE_SNAPSHOT_TIMEOUT_MS);
+
+  const abortFromParent = () => {
+    controller.abort();
+  };
+
+  if (parentSignal?.aborted) {
+    abortFromParent();
+  } else {
+    parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  return {
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      parentSignal?.removeEventListener('abort', abortFromParent);
+    },
+    signal: controller.signal,
+    timeoutPromise,
+    wasTimedOut: () => timedOut,
+  };
+}
 
 function assertSupabaseClient() {
   if (!supabase) {
@@ -1635,6 +1695,37 @@ function inviteProfileFromClaimantSnapshot(
   };
 }
 
+function inviteProfileFromClaimant(input: {
+  readonly claimantUserId: string | null;
+  readonly names: Map<string, string>;
+  readonly profiles: Map<string, UserProfileRow>;
+  readonly snapshot: FriendshipClaimantSnapshot | null;
+}): InviteProfilePresentation {
+  const snapshotProfile = inviteProfileFromClaimantSnapshot(input.snapshot, 'Perfil reclamado');
+
+  if (!input.claimantUserId) {
+    return snapshotProfile;
+  }
+
+  const userProfile = inviteProfileFromUser({
+    fallbackName: input.snapshot?.displayName,
+    names: input.names,
+    profiles: input.profiles,
+    roleLabel: 'Perfil reclamado',
+    userId: input.claimantUserId,
+  });
+
+  return {
+    displayName:
+      userProfile.displayName !== 'Persona' ? userProfile.displayName : snapshotProfile.displayName,
+    avatarUrl: userProfile.avatarUrl ?? snapshotProfile.avatarUrl,
+    phoneLabel: snapshotProfile.phoneLabel ?? userProfile.phoneLabel,
+    emailLabel: snapshotProfile.emailLabel ?? userProfile.emailLabel,
+    referenceLabel: userProfile.referenceLabel ?? snapshotProfile.referenceLabel,
+    roleLabel: userProfile.roleLabel ?? snapshotProfile.roleLabel,
+  };
+}
+
 function inviteProfileFields(profile: InviteProfilePresentation): {
   readonly profileDisplayName: string;
   readonly profileAvatarUrl: string | null;
@@ -1650,6 +1741,42 @@ function inviteProfileFields(profile: InviteProfilePresentation): {
     profileEmailLabel: profile.emailLabel,
     profileReferenceLabel: profile.referenceLabel,
     profileRoleLabel: profile.roleLabel,
+  };
+}
+
+function inviteProfileHref(
+  profileUserId: string | null,
+  inviteId: string,
+  panel: 'pending' | 'history',
+): string | null {
+  return profileUserId
+    ? `/person/${encodeURIComponent(profileUserId)}?panel=${panel}&focus=${encodeURIComponent(inviteId)}`
+    : null;
+}
+
+function intendedInviteProfileFields(profile: InviteProfilePresentation): {
+  readonly intendedProfileDisplayName: string | null;
+  readonly intendedProfilePhoneLabel: string | null;
+} {
+  return {
+    intendedProfileDisplayName:
+      profile.displayName === 'Contacto invitado' ? null : profile.displayName,
+    intendedProfilePhoneLabel: profile.phoneLabel,
+  };
+}
+
+function respondingInviteProfileFields(profile: InviteProfilePresentation | null): {
+  readonly respondingProfileDisplayName: string | null;
+  readonly respondingProfileAvatarUrl: string | null;
+  readonly respondingProfilePhoneLabel: string | null;
+  readonly respondingProfileEmailLabel: string | null;
+} {
+  return {
+    respondingProfileDisplayName:
+      profile && profile.displayName !== 'Persona' ? profile.displayName : null,
+    respondingProfileAvatarUrl: profile?.avatarUrl ?? null,
+    respondingProfilePhoneLabel: profile?.phoneLabel ?? null,
+    respondingProfileEmailLabel: profile?.emailLabel ?? null,
   };
 }
 
@@ -1713,6 +1840,235 @@ function buildLatestDeliveryByInviteId(
   return map;
 }
 
+function inviteTimelineEvent(input: {
+  readonly id: string;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly status: string;
+  readonly sourceLabel: string;
+  readonly detail: 'Invitacion de amistad' | 'Acceso privado';
+  readonly happenedAt: string | null | undefined;
+  readonly originInviteId: string;
+  readonly tone?: PersonTimelineItemDto['tone'];
+}): PersonTimelineItemDto | null {
+  if (!input.happenedAt) {
+    return null;
+  }
+
+  return {
+    id: input.id,
+    title: input.title,
+    subtitle: input.subtitle,
+    amountMinor: 0,
+    tone: input.tone ?? 'neutral',
+    kind: 'system',
+    status: input.status,
+    sourceType: 'user',
+    sourceLabel: input.sourceLabel,
+    detail: input.detail,
+    happenedAt: input.happenedAt,
+    happenedAtLabel: formatRelativeLabel(input.happenedAt),
+    originRequestId: input.originInviteId,
+  };
+}
+
+function uniqueTimelineItemsById(
+  items: readonly (PersonTimelineItemDto | null)[],
+): PersonTimelineItemDto[] {
+  const seenIds = new Set<string>();
+  const uniqueItems: PersonTimelineItemDto[] = [];
+
+  for (const item of items) {
+    if (!item || seenIds.has(item.id)) {
+      continue;
+    }
+
+    seenIds.add(item.id);
+    uniqueItems.push(item);
+  }
+
+  return uniqueItems;
+}
+
+function inviteTerminalTone(status: string): PersonTimelineItemDto['tone'] {
+  if (status === 'accepted') {
+    return 'positive';
+  }
+
+  if (status === 'rejected' || status === 'expired' || status === 'canceled') {
+    return 'negative';
+  }
+
+  return 'neutral';
+}
+
+function isSpecificInviteName(value: string | null | undefined): boolean {
+  const normalized = value?.trim().toLocaleLowerCase('es-CO');
+  return Boolean(
+    normalized &&
+    normalized !== 'persona' &&
+    normalized !== 'contacto invitado' &&
+    normalized !== 'tu contacto' &&
+    normalized !== 'tu',
+  );
+}
+
+function inviteNamesMatch(left: string | null | undefined, right: string | null | undefined) {
+  return left?.trim().toLocaleLowerCase('es-CO') === right?.trim().toLocaleLowerCase('es-CO');
+}
+
+function relevantInviteTargetLabel(input: {
+  readonly intendedRecipientReference: string | null;
+  readonly targetName: string;
+}): string {
+  if (isSpecificInviteName(input.targetName)) {
+    return input.targetName;
+  }
+
+  const [referenceName] = input.intendedRecipientReference
+    ?.split('|')
+    .map((part) => part.trim())
+    .filter(Boolean) ?? [null];
+
+  return referenceName ?? input.targetName;
+}
+
+function friendshipInviteCurrentStatusTitle(input: {
+  readonly actionState: FriendshipInviteListItem['actionState'];
+  readonly actorRole: FriendshipInviteListItem['actorRole'];
+  readonly claimantName: string;
+  readonly inviterName: string;
+  readonly targetName: string;
+}): string {
+  if (input.actionState === 'requires_you_response') {
+    return 'Pendiente de tu respuesta';
+  }
+
+  if (input.actionState === 'requires_you_review') {
+    return `${input.claimantName} espera tu validacion`;
+  }
+
+  if (input.actionState === 'waiting_sender_review') {
+    return `Esperando validacion de ${input.inviterName}`;
+  }
+
+  if (input.actionState === 'pending_claim') {
+    return `Esperando a ${input.targetName}`;
+  }
+
+  return input.actorRole === 'sender'
+    ? `Esperando respuesta de ${input.targetName}`
+    : 'Solicitud enviada';
+}
+
+function buildFriendshipInviteTimeline(input: {
+  readonly invite: FriendshipInviteRow;
+  readonly deliveries: readonly FriendshipInviteDeliveryRow[];
+  readonly actorRole: FriendshipInviteListItem['actorRole'];
+  readonly actionState: FriendshipInviteListItem['actionState'];
+  readonly inviterName: string;
+  readonly targetName: string;
+  readonly claimantName: string;
+  readonly intendedRecipientReference: string | null;
+}): readonly PersonTimelineItemDto[] {
+  const sourceLabel = input.actorRole === 'sender' ? 'Tu' : input.inviterName;
+  const deliveryRows = [...input.deliveries].sort((left, right) =>
+    left.created_at.localeCompare(right.created_at),
+  );
+  const claimedDelivery = [...deliveryRows].reverse().find((delivery) => delivery.claimed_at);
+  const targetReference = relevantInviteTargetLabel({
+    intendedRecipientReference: input.intendedRecipientReference,
+    targetName: input.targetName,
+  });
+  const claimedByDifferentPerson =
+    isSpecificInviteName(input.claimantName) &&
+    isSpecificInviteName(targetReference) &&
+    !inviteNamesMatch(input.claimantName, targetReference);
+  const claimedEvent =
+    claimedDelivery || input.invite.claimant_user_id
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:claimed`,
+          title:
+            claimedByDifferentPerson && input.actorRole !== 'claimant'
+              ? `${input.claimantName} reclamo la invitacion enviada a ${targetReference}`
+              : input.actorRole === 'claimant'
+                ? 'Reclamaste la invitacion'
+                : `${input.claimantName} reclamo la invitacion`,
+          subtitle: claimedByDifferentPerson ? 'Requiere verificacion' : 'Solicitud reclamada',
+          status:
+            input.actionState === 'requires_you_review' ||
+            input.actionState === 'waiting_sender_review'
+              ? input.actionState
+              : 'posted',
+          sourceLabel: input.claimantName,
+          detail: 'Invitacion de amistad',
+          happenedAt: claimedDelivery?.claimed_at ?? input.invite.updated_at,
+          originInviteId: input.invite.id,
+        })
+      : null;
+  const currentStatusEvent =
+    input.actionState !== 'history'
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:current:${input.actionState}`,
+          title: friendshipInviteCurrentStatusTitle(input),
+          subtitle:
+            input.actionState === 'requires_you_review' ||
+            input.actionState === 'waiting_sender_review'
+              ? 'Por verificar'
+              : 'Solicitud de amistad',
+          status: input.actionState,
+          sourceLabel,
+          detail: 'Invitacion de amistad',
+          happenedAt: input.invite.updated_at ?? input.invite.created_at,
+          originInviteId: input.invite.id,
+        })
+      : null;
+  const terminalEvent =
+    input.actionState === 'history'
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:resolved`,
+          title:
+            input.invite.status === 'accepted'
+              ? input.actorRole === 'sender'
+                ? `Amistad conectada con ${input.claimantName !== 'Persona' ? input.claimantName : input.targetName}`
+                : `Amistad conectada con ${input.inviterName}`
+              : input.invite.status === 'rejected'
+                ? 'La invitacion fue rechazada'
+                : input.invite.status === 'expired'
+                  ? 'La invitacion expiro'
+                  : 'La invitacion fue cancelada',
+          subtitle: claimedByDifferentPerson
+            ? `${input.claimantName} reclamo la invitacion enviada a ${targetReference}`
+            : 'Solicitud de amistad',
+          status: input.invite.status,
+          sourceLabel,
+          detail: 'Invitacion de amistad',
+          happenedAt: input.invite.resolved_at ?? input.invite.updated_at,
+          originInviteId: input.invite.id,
+          tone: inviteTerminalTone(input.invite.status),
+        })
+      : null;
+
+  return uniqueTimelineItemsById([
+    inviteTimelineEvent({
+      id: `${input.invite.id}:created`,
+      title:
+        input.actorRole === 'sender'
+          ? `Invitacion enviada a ${targetReference}`
+          : `${input.inviterName} envio la invitacion`,
+      subtitle: 'Solicitud de amistad',
+      status: 'posted',
+      sourceLabel,
+      detail: 'Invitacion de amistad',
+      happenedAt: input.invite.created_at,
+      originInviteId: input.invite.id,
+    }),
+    claimedEvent,
+    currentStatusEvent,
+    terminalEvent,
+  ]).sort((left, right) => Date.parse(left.happenedAt ?? '') - Date.parse(right.happenedAt ?? ''));
+}
+
 function buildFriendshipInviteItems(input: {
   readonly invites: readonly FriendshipInviteRow[];
   readonly deliveries: readonly FriendshipInviteDeliveryRow[];
@@ -1725,16 +2081,22 @@ function buildFriendshipInviteItems(input: {
   readonly summary: FriendshipSummary;
 } {
   const latestDeliveryByInviteId = buildLatestDeliveryByInviteId(input.deliveries);
+  const deliveriesByInviteId = groupBy(input.deliveries, (delivery) => delivery.invite_id);
   const pendingItems: FriendshipInviteListItem[] = [];
   const historyItems: FriendshipInviteListItem[] = [];
 
   for (const invite of input.invites) {
-    const actorRole = getFriendshipActorRole(invite, input.currentUserId);
+    const latestDelivery = latestDeliveryByInviteId.get(invite.id);
+    const claimantUserId = invite.claimant_user_id ?? latestDelivery?.claimed_by_user_id ?? null;
+    let actorRole = getFriendshipActorRole(invite, input.currentUserId);
+    if (actorRole === 'none' && claimantUserId === input.currentUserId) {
+      actorRole = 'claimant';
+    }
+
     if (actorRole === 'none') {
       continue;
     }
 
-    const latestDelivery = latestDeliveryByInviteId.get(invite.id);
     const claimantSnapshot = parseFriendshipClaimantSnapshot(invite.claimant_snapshot);
     const intendedRecipientProfile = inviteProfileFromIntendedRecipient({
       alias: invite.intended_recipient_alias,
@@ -1758,10 +2120,12 @@ function buildFriendshipInviteItems(input: {
           userId: invite.target_user_id,
         })
       : intendedRecipientProfile;
-    const claimantProfile = inviteProfileFromClaimantSnapshot(
-      claimantSnapshot,
-      'Perfil reclamado',
-    );
+    const claimantProfile = inviteProfileFromClaimant({
+      claimantUserId,
+      names: input.names,
+      profiles: input.profiles,
+      snapshot: claimantSnapshot,
+    });
     const visibleProfile =
       actorRole === 'sender'
         ? invite.status === 'pending_sender_review' ||
@@ -1769,10 +2133,17 @@ function buildFriendshipInviteItems(input: {
           ? claimantProfile
           : targetProfile
         : inviterProfile;
+    const visibleProfileUserId =
+      actorRole === 'sender'
+        ? invite.status === 'pending_sender_review' ||
+          (invite.flow === 'external' && invite.status !== 'pending_claim')
+          ? claimantUserId
+          : invite.target_user_id
+        : invite.inviter_user_id;
+    const respondingProfile =
+      invite.flow === 'external' && (claimantUserId || claimantSnapshot) ? claimantProfile : null;
     const inviterName =
-      invite.inviter_user_id === input.currentUserId
-        ? 'Tu'
-        : inviterProfile.displayName;
+      invite.inviter_user_id === input.currentUserId ? 'Tu' : inviterProfile.displayName;
     const targetName = invite.target_user_id
       ? targetProfile.displayName
       : (invite.intended_recipient_alias ?? intendedRecipientProfile.displayName);
@@ -1791,12 +2162,12 @@ function buildFriendshipInviteItems(input: {
     if (invite.status === 'pending_recipient') {
       if (actorRole === 'recipient') {
         title = `${inviterName} quiere conectar contigo`;
-        subtitle = `${channelLabel(invite.origin_channel)} | responde en la app`;
+        subtitle = 'Responde esta solicitud';
         actionState = 'requires_you_response';
         status = 'requires_you_response';
       } else {
         title = `Esperando a ${targetName}`;
-        subtitle = `${channelLabel(invite.origin_channel)} | invitacion interna pendiente`;
+        subtitle = 'Solicitud pendiente';
         actionState = 'waiting_other_side';
         status = 'waiting_other_side';
       }
@@ -1808,7 +2179,6 @@ function buildFriendshipInviteItems(input: {
             : 'QR temporal activo'
           : `Invitacion lista para ${invite.intended_recipient_alias ?? 'tu contacto'}`;
       subtitle = [
-        channelLabel(latestDelivery?.channel ?? invite.origin_channel),
         intendedRecipientReference,
         latestDelivery?.expires_at
           ? `vence ${formatRelativeLabel(latestDelivery.expires_at)}`
@@ -1820,12 +2190,10 @@ function buildFriendshipInviteItems(input: {
       status = 'pending_claim';
     } else if (invite.status === 'pending_sender_review') {
       if (actorRole === 'sender') {
-        title = `Verifica a ${claimantName}`;
+        title = `${claimantName} reclamo la invitacion para ${targetName}`;
         subtitle = [
-          channelLabel(latestDelivery?.channel ?? invite.origin_channel),
           intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
-          claimantSnapshot?.maskedEmail,
-          claimantSnapshot?.maskedPhone,
+          'Por verificar',
         ]
           .filter(Boolean)
           .join(' | ');
@@ -1833,7 +2201,7 @@ function buildFriendshipInviteItems(input: {
         status = 'requires_you_review';
       } else {
         title = `Esperando validacion de ${inviterName}`;
-        subtitle = `${channelLabel(latestDelivery?.channel ?? invite.origin_channel)} | ya reclamaste esta invitacion`;
+        subtitle = 'Ya reclamaste esta invitacion';
         actionState = 'waiting_sender_review';
         status = 'waiting_sender_review';
       }
@@ -1847,12 +2215,12 @@ function buildFriendshipInviteItems(input: {
           ? actorRole === 'sender'
             ? invite.flow === 'external'
               ? autoAcceptedByPhoneMatch
-                ? `${claimantName} entro con el telefono esperado`
+                ? `${claimantName} acepto tu invitacion`
                 : `Confirmaste a ${claimantName}`
               : `${targetName} acepto tu invitacion`
             : actorRole === 'claimant'
               ? autoAcceptedByPhoneMatch
-                ? `Tu telefono coincidio y la conexion quedo creada`
+                ? 'Conexion creada'
                 : `${inviterName} confirmo esta conexion`
               : `Aceptaste la invitacion de ${inviterName}`
           : invite.status === 'rejected'
@@ -1869,7 +2237,6 @@ function buildFriendshipInviteItems(input: {
                 : 'Esta invitacion vencio'
               : 'Invitacion cancelada';
       subtitle = [
-        channelLabel(latestDelivery?.channel ?? invite.origin_channel),
         actorRole === 'sender' ? intendedRecipientReference : null,
         formatRelativeLabel(happenedAt),
       ]
@@ -1895,7 +2262,9 @@ function buildFriendshipInviteItems(input: {
         counterpartyLabel:
           actorRole === 'sender'
             ? invite.flow === 'external'
-              ? (claimantSnapshot?.displayName ?? invite.intended_recipient_alias ?? undefined)
+              ? claimantProfile.displayName !== 'Persona'
+                ? claimantProfile.displayName
+                : (invite.intended_recipient_alias ?? undefined)
               : targetName
             : inviterName !== 'Tu'
               ? inviterName
@@ -1906,7 +2275,21 @@ function buildFriendshipInviteItems(input: {
         intendedRecipientAlias: invite.intended_recipient_alias,
         intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
         intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+        profileUserId: visibleProfileUserId,
+        profileHref: inviteProfileHref(visibleProfileUserId, invite.id, 'history'),
+        profileTimelineItems: buildFriendshipInviteTimeline({
+          invite,
+          deliveries: deliveriesByInviteId.get(invite.id) ?? [],
+          actorRole,
+          actionState: 'history',
+          inviterName,
+          targetName,
+          claimantName,
+          intendedRecipientReference,
+        }),
         ...inviteProfileFields(visibleProfile),
+        ...intendedInviteProfileFields(targetProfile),
+        ...respondingInviteProfileFields(respondingProfile),
       });
       continue;
     }
@@ -1937,10 +2320,30 @@ function buildFriendshipInviteItems(input: {
       expiresAt: invite.expires_at,
       resolvedAt: invite.resolved_at,
       claimantSnapshot,
+      counterpartyLabel:
+        actorRole === 'sender' &&
+        invite.flow === 'external' &&
+        claimantProfile.displayName !== 'Persona'
+          ? claimantProfile.displayName
+          : undefined,
       intendedRecipientAlias: invite.intended_recipient_alias,
       intendedRecipientPhoneE164: invite.intended_recipient_phone_e164,
       intendedRecipientPhoneLabel: invite.intended_recipient_phone_label,
+      profileUserId: visibleProfileUserId,
+      profileHref: inviteProfileHref(visibleProfileUserId, invite.id, 'pending'),
+      profileTimelineItems: buildFriendshipInviteTimeline({
+        invite,
+        deliveries: deliveriesByInviteId.get(invite.id) ?? [],
+        actorRole,
+        actionState,
+        inviterName,
+        targetName,
+        claimantName,
+        intendedRecipientReference,
+      }),
       ...inviteProfileFields(visibleProfile),
+      ...intendedInviteProfileFields(targetProfile),
+      ...respondingInviteProfileFields(respondingProfile),
     });
   }
 
@@ -1998,6 +2401,134 @@ function buildLatestAccountDeliveryByInviteId(
   return map;
 }
 
+function accountInviteCurrentStatusTitle(input: {
+  readonly actionState: AccountInviteListItem['actionState'];
+  readonly inviterName: string;
+  readonly targetName: string;
+}): string {
+  if (input.actionState === 'requires_you_review') {
+    return `${input.targetName} espera tu validacion`;
+  }
+
+  if (input.actionState === 'waiting_sender_review') {
+    return `Esperando validacion de ${input.inviterName}`;
+  }
+
+  return `Esperando activacion de ${input.targetName}`;
+}
+
+function buildAccountInviteTimeline(input: {
+  readonly invite: AccountInviteRow;
+  readonly deliveries: readonly AccountInviteDeliveryRow[];
+  readonly actorRole: AccountInviteListItem['actorRole'];
+  readonly actionState: AccountInviteListItem['actionState'];
+  readonly inviterName: string;
+  readonly targetName: string;
+  readonly intendedRecipientReference: string | null;
+}): readonly PersonTimelineItemDto[] {
+  const sourceLabel = input.actorRole === 'inviter' ? 'Tu' : input.inviterName;
+  const deliveryRows = [...input.deliveries].sort((left, right) =>
+    left.created_at.localeCompare(right.created_at),
+  );
+  const activationDelivery = [...deliveryRows]
+    .reverse()
+    .find((delivery) => delivery.activation_completed_at);
+  const targetReference = relevantInviteTargetLabel({
+    intendedRecipientReference: input.intendedRecipientReference,
+    targetName: input.targetName,
+  });
+  const activatedByDifferentPerson =
+    isSpecificInviteName(input.targetName) &&
+    isSpecificInviteName(targetReference) &&
+    !inviteNamesMatch(input.targetName, targetReference);
+  const activationEvent =
+    activationDelivery || input.invite.activated_user_id || input.invite.activated_at
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:activated`,
+          title:
+            activatedByDifferentPerson && input.actorRole !== 'activated'
+              ? `${input.targetName} activo el acceso enviado a ${targetReference}`
+              : input.actorRole === 'activated'
+                ? 'Activaste el acceso privado'
+                : `${input.targetName} activo el acceso privado`,
+          subtitle: activatedByDifferentPerson ? 'Requiere verificacion' : 'Acceso privado',
+          status:
+            input.actionState === 'requires_you_review' ||
+            input.actionState === 'waiting_sender_review'
+              ? input.actionState
+              : 'posted',
+          sourceLabel: input.targetName,
+          detail: 'Acceso privado',
+          happenedAt:
+            activationDelivery?.activation_completed_at ??
+            input.invite.activated_at ??
+            input.invite.updated_at,
+          originInviteId: input.invite.id,
+        })
+      : null;
+  const currentStatusEvent =
+    input.actionState !== 'history'
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:current:${input.actionState}`,
+          title: accountInviteCurrentStatusTitle(input),
+          subtitle:
+            input.actionState === 'requires_you_review' ||
+            input.actionState === 'waiting_sender_review'
+              ? 'Por verificar'
+              : 'Acceso privado',
+          status: input.actionState,
+          sourceLabel,
+          detail: 'Acceso privado',
+          happenedAt: input.invite.updated_at ?? input.invite.created_at,
+          originInviteId: input.invite.id,
+        })
+      : null;
+  const terminalEvent =
+    input.actionState === 'history'
+      ? inviteTimelineEvent({
+          id: `${input.invite.id}:resolved`,
+          title:
+            input.invite.status === 'accepted'
+              ? input.actorRole === 'inviter'
+                ? `Acceso confirmado para ${input.targetName}`
+                : `Acceso confirmado por ${input.inviterName}`
+              : input.invite.status === 'rejected'
+                ? 'El acceso fue rechazado'
+                : input.invite.status === 'expired'
+                  ? 'El acceso expiro'
+                  : 'El acceso fue cancelado',
+          subtitle: activatedByDifferentPerson
+            ? `${input.targetName} activo el acceso enviado a ${targetReference}`
+            : 'Acceso privado',
+          status: input.invite.status,
+          sourceLabel,
+          detail: 'Acceso privado',
+          happenedAt: input.invite.resolved_at ?? input.invite.updated_at,
+          originInviteId: input.invite.id,
+          tone: inviteTerminalTone(input.invite.status),
+        })
+      : null;
+
+  return uniqueTimelineItemsById([
+    inviteTimelineEvent({
+      id: `${input.invite.id}:created`,
+      title:
+        input.actorRole === 'inviter'
+          ? `Acceso privado enviado a ${targetReference}`
+          : `${input.inviterName} te envio un acceso privado`,
+      subtitle: 'Acceso privado',
+      status: 'posted',
+      sourceLabel,
+      detail: 'Acceso privado',
+      happenedAt: input.invite.created_at,
+      originInviteId: input.invite.id,
+    }),
+    activationEvent,
+    currentStatusEvent,
+    terminalEvent,
+  ]).sort((left, right) => Date.parse(left.happenedAt ?? '') - Date.parse(right.happenedAt ?? ''));
+}
+
 function buildAccountInviteItems(input: {
   readonly invites: readonly AccountInviteRow[];
   readonly deliveries: readonly AccountInviteDeliveryRow[];
@@ -2010,6 +2541,7 @@ function buildAccountInviteItems(input: {
   readonly summary: AccountInviteSummary;
 } {
   const latestDeliveryByInviteId = buildLatestAccountDeliveryByInviteId(input.deliveries);
+  const deliveriesByInviteId = groupBy(input.deliveries, (delivery) => delivery.invite_id);
   const pendingItems: AccountInviteListItem[] = [];
   const historyItems: AccountInviteListItem[] = [];
 
@@ -2034,9 +2566,7 @@ function buildAccountInviteItems(input: {
       userId: invite.inviter_user_id,
     });
     const inviterName =
-      invite.inviter_user_id === input.currentUserId
-        ? 'Tu'
-        : inviterProfile.displayName;
+      invite.inviter_user_id === input.currentUserId ? 'Tu' : inviterProfile.displayName;
     const activatedUserProfile = invite.activated_user_id
       ? input.profiles.get(invite.activated_user_id)
       : undefined;
@@ -2057,6 +2587,9 @@ function buildAccountInviteItems(input: {
         })
       : intendedRecipientProfile;
     const visibleProfile = actorRole === 'inviter' ? activatedInviteProfile : inviterProfile;
+    const visibleProfileUserId =
+      actorRole === 'inviter' ? invite.activated_user_id : invite.inviter_user_id;
+    const respondingProfile = invite.activated_user_id ? activatedInviteProfile : null;
     const intendedRecipientReference = buildAccountIntendedRecipientReference(invite);
     const targetName =
       activatedUserDisplayName ??
@@ -2066,22 +2599,8 @@ function buildAccountInviteItems(input: {
     const expiryLabel = invite.expires_at
       ? `vence ${formatRelativeLabel(invite.expires_at)}`
       : null;
-    const deliveryMeta =
-      latestDelivery?.status === 'authenticated'
-        ? 'link abierto'
-        : latestDelivery?.status === 'activated'
-          ? 'cuenta activada'
-          : null;
-
     let title = 'Invitacion de acceso';
-    let subtitle = [
-      channelLabel(originChannel),
-      intendedRecipientReference,
-      deliveryMeta,
-      expiryLabel,
-    ]
-      .filter(Boolean)
-      .join(' | ');
+    let subtitle = [intendedRecipientReference, expiryLabel].filter(Boolean).join(' | ');
     let actionState: AccountInviteListItem['actionState'] = 'history';
     let status = invite.status;
     let ctaLabel = 'Ver';
@@ -2097,11 +2616,10 @@ function buildAccountInviteItems(input: {
       ctaLabel = originChannel === 'qr' ? 'QR activo' : 'Compartir';
     } else if (invite.status === 'pending_inviter_review') {
       if (actorRole === 'inviter') {
-        title = `Verifica a ${targetName}`;
+        title = `${targetName} activo el acceso privado`;
         subtitle = [
-          channelLabel(originChannel),
           intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
-          invite.activated_at ? `activada ${formatRelativeLabel(invite.activated_at)}` : null,
+          'Por verificar',
         ]
           .filter(Boolean)
           .join(' | ');
@@ -2110,7 +2628,7 @@ function buildAccountInviteItems(input: {
         ctaLabel = 'Verificar';
       } else {
         title = `Esperando validacion de ${inviterName}`;
-        subtitle = `${channelLabel(originChannel)} | ya activaste este acceso`;
+        subtitle = 'Ya activaste este acceso';
         actionState = 'waiting_sender_review';
         status = 'waiting_sender_review';
       }
@@ -2122,7 +2640,7 @@ function buildAccountInviteItems(input: {
         invite.status === 'accepted'
           ? actorRole === 'inviter'
             ? autoAcceptedByPhoneMatch
-              ? `${targetName} entro con el telefono esperado`
+              ? `${targetName} activo el acceso privado`
               : `Confirmaste a ${targetName}`
             : `${inviterName} confirmo tu acceso`
           : invite.status === 'rejected'
@@ -2135,7 +2653,6 @@ function buildAccountInviteItems(input: {
                 : 'Este acceso vencio'
               : 'Invitacion de acceso cancelada';
       subtitle = [
-        channelLabel(originChannel),
         actorRole === 'inviter' ? intendedRecipientReference : null,
         formatRelativeLabel(happenedAt),
       ]
@@ -2167,7 +2684,20 @@ function buildAccountInviteItems(input: {
         activatedUserId: invite.activated_user_id,
         activatedUserDisplayName,
         activatedUserAvatarUrl,
+        profileUserId: visibleProfileUserId,
+        profileHref: inviteProfileHref(visibleProfileUserId, invite.id, 'history'),
+        profileTimelineItems: buildAccountInviteTimeline({
+          invite,
+          deliveries: deliveriesByInviteId.get(invite.id) ?? [],
+          actorRole,
+          actionState: 'history',
+          inviterName,
+          targetName,
+          intendedRecipientReference,
+        }),
         ...inviteProfileFields(visibleProfile),
+        ...intendedInviteProfileFields(intendedRecipientProfile),
+        ...respondingInviteProfileFields(respondingProfile),
       });
       continue;
     }
@@ -2196,7 +2726,20 @@ function buildAccountInviteItems(input: {
       activatedUserId: invite.activated_user_id,
       activatedUserDisplayName,
       activatedUserAvatarUrl,
+      profileUserId: visibleProfileUserId,
+      profileHref: inviteProfileHref(visibleProfileUserId, invite.id, 'pending'),
+      profileTimelineItems: buildAccountInviteTimeline({
+        invite,
+        deliveries: deliveriesByInviteId.get(invite.id) ?? [],
+        actorRole,
+        actionState,
+        inviterName,
+        targetName,
+        intendedRecipientReference,
+      }),
       ...inviteProfileFields(visibleProfile),
+      ...intendedInviteProfileFields(intendedRecipientProfile),
+      ...respondingInviteProfileFields(respondingProfile),
     });
   }
 
@@ -2215,6 +2758,148 @@ function buildAccountInviteItems(input: {
       historyCount: historyItems.length,
     },
   };
+}
+
+type VisibleInviteProfileItem = FriendshipInviteListItem | AccountInviteListItem;
+
+function inviteProfileItemTimestamp(item: ActivityItemDto): string {
+  const createdAt = (item as { readonly createdAt?: unknown }).createdAt;
+  if (typeof createdAt === 'string' && createdAt.length > 0) {
+    return createdAt;
+  }
+
+  return item.happenedAt ?? '';
+}
+
+function sortInviteProfilePendingItems(items: readonly ActivityItemDto[]): ActivityItemDto[] {
+  return [...items].sort(
+    (left, right) =>
+      Date.parse(inviteProfileItemTimestamp(right)) - Date.parse(inviteProfileItemTimestamp(left)),
+  );
+}
+
+function inviteProfileDisplayName(
+  userId: string,
+  item: VisibleInviteProfileItem,
+  names: Map<string, string>,
+  profiles: Map<string, UserProfileRow>,
+): string {
+  const profileName = profiles.get(userId)?.display_name?.trim();
+  if (profileName) {
+    return profileName;
+  }
+
+  const knownName = names.get(userId)?.trim();
+  if (knownName && knownName !== 'Tu') {
+    return knownName;
+  }
+
+  if (item.profileDisplayName && item.profileDisplayName !== 'Persona') {
+    return item.profileDisplayName;
+  }
+
+  return item.counterpartyLabel ?? 'Persona';
+}
+
+function inviteProfileAvatarUrl(
+  userId: string,
+  item: VisibleInviteProfileItem,
+  profiles: Map<string, UserProfileRow>,
+): string | null {
+  const profile = profiles.get(userId);
+  return profile
+    ? resolveAvatarUrl(profile.avatar_path, profile.updated_at)
+    : item.profileAvatarUrl;
+}
+
+function groupInviteProfileItems<T extends VisibleInviteProfileItem>(
+  items: readonly T[],
+): Map<string, T[]> {
+  const groupedItems = new Map<string, T[]>();
+
+  for (const item of items) {
+    if (!item.profileUserId) {
+      continue;
+    }
+
+    const existingItems = groupedItems.get(item.profileUserId);
+    if (existingItems) {
+      existingItems.push(item);
+    } else {
+      groupedItems.set(item.profileUserId, [item]);
+    }
+  }
+
+  return groupedItems;
+}
+
+function upsertInviteProfilePeople(input: {
+  readonly peopleById: Record<string, LivePersonDetailDto>;
+  readonly pendingItems: readonly VisibleInviteProfileItem[];
+  readonly historyItems: readonly VisibleInviteProfileItem[];
+  readonly names: Map<string, string>;
+  readonly profiles: Map<string, UserProfileRow>;
+}) {
+  const pendingByUserId = groupInviteProfileItems(input.pendingItems);
+  const historyByUserId = groupInviteProfileItems(input.historyItems);
+  const profileUserIds = new Set([...pendingByUserId.keys(), ...historyByUserId.keys()]);
+
+  for (const userId of profileUserIds) {
+    const pendingItems = (pendingByUserId.get(userId) ?? []).map((item) => ({
+      ...item,
+      href: item.profileHref ?? item.href,
+    }));
+    const historyItems = historyByUserId.get(userId) ?? [];
+    const anchorItem = pendingItems[0] ?? historyItems[0];
+    if (!anchorItem) {
+      continue;
+    }
+
+    const existingPerson = input.peopleById[userId];
+    const displayName =
+      existingPerson?.displayName ??
+      inviteProfileDisplayName(userId, anchorItem, input.names, input.profiles);
+    const avatarUrl =
+      existingPerson?.avatarUrl ?? inviteProfileAvatarUrl(userId, anchorItem, input.profiles);
+    const nextPendingItems = sortInviteProfilePendingItems([
+      ...pendingItems,
+      ...(existingPerson?.pendingItems ?? []),
+    ]);
+    const inviteTimelineItems = [...pendingItems, ...historyItems].flatMap(
+      (item) => item.profileTimelineItems,
+    );
+    const nextTimeline = sortHistoryItems([
+      ...inviteTimelineItems,
+      ...(existingPerson?.timeline ?? []),
+    ]);
+    const pendingLabel = `${nextPendingItems.length} pendiente${
+      nextPendingItems.length > 1 ? 's' : ''
+    }`;
+    const supportText =
+      nextPendingItems.length > 0
+        ? `Tienes ${pendingLabel} con ${displayName}.`
+        : (existingPerson?.supportText ?? `Sin movimientos registrados con ${displayName}.`);
+    const netAmountMinor = existingPerson?.netAmountMinor ?? 0;
+    const headline =
+      nextPendingItems.length > 0 && netAmountMinor === 0
+        ? `${pendingLabel} por resolver con ${displayName}`
+        : (existingPerson?.headline ?? `Con ${displayName} estan al dia`);
+
+    input.peopleById[userId] = {
+      userId,
+      displayName,
+      avatarUrl,
+      direction: existingPerson?.direction ?? 'settled',
+      netAmountMinor,
+      pendingCount: nextPendingItems.length,
+      headline,
+      supportText,
+      pendingItems: nextPendingItems,
+      pendingRequest: existingPerson?.pendingRequest,
+      timeline: nextTimeline,
+      relationshipStatus: existingPerson?.relationshipStatus ?? 'pending_invite',
+    };
+  }
 }
 
 function historyToneForRow(
@@ -3586,8 +4271,8 @@ function buildLiveSnapshot(input: {
     })
     .sort(sortPeople);
 
-  const peopleById = Object.fromEntries(
-    people.map((person): [string, PersonDetailDto] => {
+  const peopleById: Record<string, LivePersonDetailDto> = Object.fromEntries(
+    people.map((person): [string, LivePersonDetailDto] => {
       const relationship = relationshipsByCounterpartyId.get(person.userId);
       const requests = relationship ? (requestsByRelationshipId.get(relationship.id) ?? []) : [];
       const latestPendingRequest = requests.find((request) => request.status === 'pending');
@@ -3645,16 +4330,21 @@ function buildLiveSnapshot(input: {
         }),
       ].sort(compareHistoryItems);
 
+      const pendingLabel = `${person.pendingCount} pendiente${
+        person.pendingCount > 1 ? 's' : ''
+      }`;
       const headline =
         person.netAmountMinor === 0
-          ? `Con ${person.displayName} estan al dia`
+          ? person.pendingCount > 0
+            ? `${pendingLabel} por resolver con ${person.displayName}`
+            : `Con ${person.displayName} estan al dia`
           : person.direction === 'owes_me'
             ? `${person.displayName} te debe`
             : `Le debes a ${person.displayName}`;
 
       const supportText =
         person.pendingCount > 0
-          ? `Tienes ${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''} con ${person.displayName}.`
+          ? `Tienes ${pendingLabel} con ${person.displayName}.`
           : person.lastActivityLabel;
 
       const pendingRequest = latestPendingRequest
@@ -3680,10 +4370,19 @@ function buildLiveSnapshot(input: {
           pendingItems,
           pendingRequest,
           timeline,
+          relationshipStatus: 'active',
         },
       ];
     }),
   );
+  const relationshipPeopleById: Record<string, PersonDetailDto> = { ...peopleById };
+  upsertInviteProfilePeople({
+    peopleById,
+    pendingItems: [...friendshipState.pendingItems, ...accountInviteState.pendingItems],
+    historyItems: [...friendshipState.historyItems, ...accountInviteState.historyItems],
+    names: nameByUserId,
+    profiles: profileByUserId,
+  });
 
   const pendingRequests = input.financialRequests
     .filter((request) => request.status === 'pending')
@@ -3724,7 +4423,7 @@ function buildLiveSnapshot(input: {
 
   const historyItems = uniqueActivityItemsById(
     sortHistoryItems([
-      ...buildActivityHistoryItems(peopleById),
+      ...buildActivityHistoryItems(relationshipPeopleById),
       ...friendshipState.historyItems,
       ...accountInviteState.historyItems,
     ]),
@@ -3870,166 +4569,212 @@ function buildLiveSnapshot(input: {
   };
 }
 
-async function fetchLiveSnapshot(currentUserId: string): Promise<AppSnapshot> {
+async function fetchLiveSnapshot(
+  currentUserId: string,
+  requestSignal?: AbortSignal,
+): Promise<AppSnapshot> {
   const client = assertSupabaseClient();
-  const [
-    profilesResult,
-    friendshipInvitesResult,
-    friendshipInviteDeliveriesResult,
-    accountInvitesResult,
-    accountInviteDeliveriesResult,
-    relationshipsResult,
-    openDebtsResult,
-    requestsResult,
-    historyResult,
-    inboxItemsResult,
-    settlementProposalsResult,
-    settlementParticipantsResult,
-    auditResult,
-  ] = await Promise.all([
-    client
-      .from('user_profiles')
-      .select(
-        'id, display_name, email, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
-      ),
-    client
-      .from('v_friendship_invites_live')
-      .select(
-        'id, inviter_user_id, target_user_id, claimant_user_id, relationship_id, flow, origin_channel, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, claimant_snapshot, source_context, expires_at, resolved_at, created_at, updated_at',
-      )
-      .order('created_at', { ascending: false }),
-    client
-      .from('v_friendship_invite_deliveries_live')
-      .select(
-        'id, invite_id, channel, source_context, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
-      )
-      .order('created_at', { ascending: false }),
-    client
-      .from('v_account_invites_live')
-      .select(
-        'id, inviter_user_id, activated_user_id, linked_relationship_id, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, source_context, expires_at, activated_at, resolved_at, created_at, updated_at',
-      )
-      .order('created_at', { ascending: false }),
-    client
-      .from('v_account_invite_deliveries_live')
-      .select(
-        'id, invite_id, channel, source_context, status, expires_at, revoked_at, first_opened_at, last_opened_at, open_count, first_app_opened_at, authenticated_user_id, authenticated_at, activation_completed_at, created_at, updated_at',
-      )
-      .order('created_at', { ascending: false }),
-    client
-      .from('relationships')
-      .select('id, user_low_id, user_high_id, status, created_at, updated_at')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false }),
-    client.from('v_open_debts').select('*'),
-    client
-      .from('financial_requests')
-      .select(
-        'id, relationship_id, request_type, status, creator_user_id, responder_user_id, debtor_user_id, creditor_user_id, amount_minor, currency_code, description, category, parent_request_id, target_ledger_transaction_id, created_at, updated_at, resolved_at',
-      )
-      .order('created_at', { ascending: false }),
-    client.from('v_relationship_history').select('*').order('happened_at', { ascending: false }),
-    client
-      .from('v_inbox_items')
-      .select('owner_user_id, item_id, item_kind, subtype, status, created_at')
-      .eq('owner_user_id', currentUserId)
-      .order('created_at', { ascending: false }),
-    client
-      .from('settlement_proposals')
-      .select(
-        'id, created_by_user_id, status, graph_snapshot_hash, graph_snapshot, movements_json, anchor_user_low_id, anchor_user_high_id, currency_code, source_graph_cycle_job_id, created_at, updated_at, executed_at',
-      )
-      .order('created_at', { ascending: false }),
-    client
-      .from('settlement_proposal_participants')
-      .select('id, settlement_proposal_id, participant_user_id, decision, decided_at, created_at'),
-    client
-      .from('audit_events')
-      .select(
-        'id, actor_user_id, entity_type, entity_id, event_name, request_id, metadata_json, created_at',
-      )
-      .order('created_at', { ascending: false })
-      .limit(20),
-  ]);
+  const snapshotAbort = createSnapshotAbortSignal(requestSignal);
+  const { signal } = snapshotAbort;
 
-  if (profilesResult.error) {
-    throw new Error(profilesResult.error.message);
+  try {
+    const snapshotResultsPromise = Promise.all([
+      client
+        .from('user_profiles')
+        .select(
+          'id, display_name, email, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+        )
+        .abortSignal(signal),
+      client
+        .from('v_friendship_invites_live')
+        .select(
+          'id, inviter_user_id, target_user_id, claimant_user_id, relationship_id, flow, origin_channel, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, claimant_snapshot, source_context, expires_at, resolved_at, created_at, updated_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('v_friendship_invite_deliveries_live')
+        .select(
+          'id, invite_id, channel, source_context, status, created_at, updated_at, expires_at, claimed_at, claimed_by_user_id, revoked_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('v_account_invites_live')
+        .select(
+          'id, inviter_user_id, activated_user_id, linked_relationship_id, status, resolution_actor, resolution_reason, intended_recipient_alias, intended_recipient_phone_e164, intended_recipient_phone_label, source_context, expires_at, activated_at, resolved_at, created_at, updated_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('v_account_invite_deliveries_live')
+        .select(
+          'id, invite_id, channel, source_context, status, expires_at, revoked_at, first_opened_at, last_opened_at, open_count, first_app_opened_at, authenticated_user_id, authenticated_at, activation_completed_at, created_at, updated_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('relationships')
+        .select('id, user_low_id, user_high_id, status, created_at, updated_at')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client.from('v_open_debts').select('*').abortSignal(signal),
+      client
+        .from('financial_requests')
+        .select(
+          'id, relationship_id, request_type, status, creator_user_id, responder_user_id, debtor_user_id, creditor_user_id, amount_minor, currency_code, description, category, parent_request_id, target_ledger_transaction_id, created_at, updated_at, resolved_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('v_relationship_history')
+        .select('*')
+        .order('happened_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('v_inbox_items')
+        .select('owner_user_id, item_id, item_kind, subtype, status, created_at')
+        .eq('owner_user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('settlement_proposals')
+        .select(
+          'id, created_by_user_id, status, graph_snapshot_hash, graph_snapshot, movements_json, anchor_user_low_id, anchor_user_high_id, currency_code, source_graph_cycle_job_id, created_at, updated_at, executed_at',
+        )
+        .order('created_at', { ascending: false })
+        .abortSignal(signal),
+      client
+        .from('settlement_proposal_participants')
+        .select('id, settlement_proposal_id, participant_user_id, decision, decided_at, created_at')
+        .abortSignal(signal),
+      client
+        .from('audit_events')
+        .select(
+          'id, actor_user_id, entity_type, entity_id, event_name, request_id, metadata_json, created_at',
+        )
+        .order('created_at', { ascending: false })
+        .limit(20)
+        .abortSignal(signal),
+    ]);
+    void snapshotResultsPromise.catch(() => undefined);
+
+    const [
+      profilesResult,
+      friendshipInvitesResult,
+      friendshipInviteDeliveriesResult,
+      accountInvitesResult,
+      accountInviteDeliveriesResult,
+      relationshipsResult,
+      openDebtsResult,
+      requestsResult,
+      historyResult,
+      inboxItemsResult,
+      settlementProposalsResult,
+      settlementParticipantsResult,
+      auditResult,
+    ] = await Promise.race([snapshotResultsPromise, snapshotAbort.timeoutPromise]);
+
+    if (snapshotAbort.wasTimedOut()) {
+      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
+    }
+
+    if (requestSignal?.aborted) {
+      throw new Error('Sincronizacion cancelada.');
+    }
+
+    if (profilesResult.error) {
+      throw new Error(profilesResult.error.message);
+    }
+
+    if (friendshipInvitesResult.error) {
+      throw new Error(friendshipInvitesResult.error.message);
+    }
+
+    if (friendshipInviteDeliveriesResult.error) {
+      throw new Error(friendshipInviteDeliveriesResult.error.message);
+    }
+
+    if (accountInvitesResult.error) {
+      throw new Error(accountInvitesResult.error.message);
+    }
+
+    if (accountInviteDeliveriesResult.error) {
+      throw new Error(accountInviteDeliveriesResult.error.message);
+    }
+
+    if (relationshipsResult.error) {
+      throw new Error(relationshipsResult.error.message);
+    }
+
+    if (openDebtsResult.error) {
+      throw new Error(openDebtsResult.error.message);
+    }
+
+    if (requestsResult.error) {
+      throw new Error(requestsResult.error.message);
+    }
+
+    if (historyResult.error) {
+      throw new Error(historyResult.error.message);
+    }
+
+    if (inboxItemsResult.error) {
+      throw new Error(inboxItemsResult.error.message);
+    }
+
+    if (settlementProposalsResult.error) {
+      throw new Error(settlementProposalsResult.error.message);
+    }
+
+    if (settlementParticipantsResult.error) {
+      throw new Error(settlementParticipantsResult.error.message);
+    }
+
+    if (auditResult.error) {
+      throw new Error(auditResult.error.message);
+    }
+
+    return buildLiveSnapshot({
+      currentUserId,
+      profiles: profilesResult.data ?? [],
+      friendshipInvites: (friendshipInvitesResult.data ?? []) as readonly FriendshipInviteRow[],
+      friendshipInviteDeliveries: (friendshipInviteDeliveriesResult.data ??
+        []) as readonly FriendshipInviteDeliveryRow[],
+      accountInvites: (accountInvitesResult.data ?? []) as readonly AccountInviteRow[],
+      accountInviteDeliveries: (accountInviteDeliveriesResult.data ??
+        []) as readonly AccountInviteDeliveryRow[],
+      relationships: relationshipsResult.data ?? [],
+      openDebts: (openDebtsResult.data ?? []) as readonly OpenDebtRow[],
+      financialRequests: requestsResult.data ?? [],
+      history: (historyResult.data ?? []) as readonly RelationshipHistoryRow[],
+      inboxItems: (inboxItemsResult.data ?? []) as readonly InboxItemRow[],
+      settlementProposals: settlementProposalsResult.data ?? [],
+      settlementParticipants: settlementParticipantsResult.data ?? [],
+      auditEvents: auditResult.data ?? [],
+    });
+  } catch (error) {
+    if (snapshotAbort.wasTimedOut()) {
+      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
+    }
+
+    if (requestSignal?.aborted) {
+      throw new Error('Sincronizacion cancelada.');
+    }
+
+    throw error;
+  } finally {
+    snapshotAbort.cleanup();
   }
-
-  if (friendshipInvitesResult.error) {
-    throw new Error(friendshipInvitesResult.error.message);
-  }
-
-  if (friendshipInviteDeliveriesResult.error) {
-    throw new Error(friendshipInviteDeliveriesResult.error.message);
-  }
-
-  if (accountInvitesResult.error) {
-    throw new Error(accountInvitesResult.error.message);
-  }
-
-  if (accountInviteDeliveriesResult.error) {
-    throw new Error(accountInviteDeliveriesResult.error.message);
-  }
-
-  if (relationshipsResult.error) {
-    throw new Error(relationshipsResult.error.message);
-  }
-
-  if (openDebtsResult.error) {
-    throw new Error(openDebtsResult.error.message);
-  }
-
-  if (requestsResult.error) {
-    throw new Error(requestsResult.error.message);
-  }
-
-  if (historyResult.error) {
-    throw new Error(historyResult.error.message);
-  }
-
-  if (inboxItemsResult.error) {
-    throw new Error(inboxItemsResult.error.message);
-  }
-
-  if (settlementProposalsResult.error) {
-    throw new Error(settlementProposalsResult.error.message);
-  }
-
-  if (settlementParticipantsResult.error) {
-    throw new Error(settlementParticipantsResult.error.message);
-  }
-
-  if (auditResult.error) {
-    throw new Error(auditResult.error.message);
-  }
-
-  return buildLiveSnapshot({
-    currentUserId,
-    profiles: profilesResult.data ?? [],
-    friendshipInvites: (friendshipInvitesResult.data ?? []) as readonly FriendshipInviteRow[],
-    friendshipInviteDeliveries: (friendshipInviteDeliveriesResult.data ??
-      []) as readonly FriendshipInviteDeliveryRow[],
-    accountInvites: (accountInvitesResult.data ?? []) as readonly AccountInviteRow[],
-    accountInviteDeliveries: (accountInviteDeliveriesResult.data ??
-      []) as readonly AccountInviteDeliveryRow[],
-    relationships: relationshipsResult.data ?? [],
-    openDebts: (openDebtsResult.data ?? []) as readonly OpenDebtRow[],
-    financialRequests: requestsResult.data ?? [],
-    history: (historyResult.data ?? []) as readonly RelationshipHistoryRow[],
-    inboxItems: (inboxItemsResult.data ?? []) as readonly InboxItemRow[],
-    settlementProposals: settlementProposalsResult.data ?? [],
-    settlementParticipants: settlementParticipantsResult.data ?? [],
-    auditEvents: auditResult.data ?? [],
-  });
 }
 
-async function fetchAppSnapshot(userId: string | null) {
+async function fetchAppSnapshot(userId: string | null, signal?: AbortSignal) {
   if (!userId) {
     throw new Error('No hay una sesion lista para cargar datos.');
   }
 
-  return fetchLiveSnapshot(userId);
+  return fetchLiveSnapshot(userId, signal);
 }
 
 async function parseFunctionError(error: unknown) {
@@ -4181,7 +4926,7 @@ export function useAppSnapshot() {
   return useQuery({
     queryKey: [APP_SNAPSHOT_QUERY_KEY, userId ?? 'signed-out'],
     enabled: Boolean(userId),
-    queryFn: () => fetchAppSnapshot(userId),
+    queryFn: ({ signal }) => fetchAppSnapshot(userId, signal),
   });
 }
 

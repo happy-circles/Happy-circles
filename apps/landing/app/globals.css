@@ -152,6 +152,26 @@ a {
   overflow-wrap: break-word;
 }
 
+.landingHighlights {
+  color: var(--brand-navy);
+  display: grid;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 6px;
+  justify-self: center;
+  line-height: 1.35;
+  list-style: none;
+  margin: 4px 0 0;
+  max-width: 310px;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.landingHighlights li {
+  overflow-wrap: break-word;
+}
+
 .landingActions {
   display: grid;
   gap: 12px;

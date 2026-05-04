@@ -12,6 +12,11 @@ interface NotificationSupport {
   readonly reason?: string;
 }
 
+export interface NotificationRoute {
+  readonly id: string;
+  readonly href: string;
+}
+
 export type NotificationPermissionStatus = 'unavailable' | 'undetermined' | 'denied' | 'granted';
 
 function isExpoGo(): boolean {
@@ -174,6 +179,33 @@ export async function scheduleDeferredReminder(
       seconds: Math.max(minutes * 60, 60),
     },
   });
+}
+
+export function notificationRouteFromResponse(
+  response: NotificationResponse | null | undefined,
+): NotificationRoute | null {
+  if (!response) {
+    return null;
+  }
+
+  const href = response.notification.request.content.data?.href;
+  if (typeof href !== 'string' || href.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    id: response.notification.request.identifier,
+    href,
+  };
+}
+
+export async function getLastNotificationRoute(): Promise<NotificationRoute | null> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return null;
+  }
+
+  return notificationRouteFromResponse(await Notifications.getLastNotificationResponseAsync());
 }
 
 export function addNotificationResponseListener(

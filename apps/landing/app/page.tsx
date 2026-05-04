@@ -8,7 +8,11 @@ export default function LandingPage() {
           <HappyCirclesMark />
           <div className="brandCopy">
             <h1 id="landing-title">Happy Circles</h1>
-            <p>Tu app de finanzas entre amigos.</p>
+            <p>Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.</p>
+            <ul className="landingHighlights" aria-label="Beneficios principales">
+              <li>Saldos confirmados por ambas partes</li>
+              <li>Invitaciones privadas para cada círculo</li>
+            </ul>
           </div>
         </div>
 
@@ -19,7 +23,7 @@ export default function LandingPage() {
           <StoreButtonGrid />
           <div className="footerLinks" aria-label="Legal y soporte">
             <a href="/privacy">Privacidad</a>
-            <a href="/terms">Terminos</a>
+            <a href="/terms">Términos</a>
             <a href="/support">Soporte</a>
           </div>
         </nav>

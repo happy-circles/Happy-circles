@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link, type Href } from 'expo-router';
+import { Link, useRouter, type Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
@@ -27,6 +28,8 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly badgeIcon?: keyof typeof Ionicons.glyphMap;
   readonly category?: string | null;
   readonly context: string;
+  readonly contentHref?: Href;
+  readonly onContentPress?: () => void;
   readonly directionLabel?: string | null;
   readonly href?: Href;
   readonly meta?: string | null;
@@ -79,9 +82,11 @@ export function TransactionEventCard({
   category,
   children,
   context,
+  contentHref,
   directionLabel,
   href,
   meta,
+  onContentPress,
   onPress,
   pending = false,
   pendingHighlightColor,
@@ -95,6 +100,7 @@ export function TransactionEventCard({
   compactMetaLayout = 'inline',
   directionLayout = 'stacked',
 }: TransactionEventCardProps) {
+  const router = useRouter();
   type CompactMetaSegment = {
     readonly key: 'context' | 'time' | 'category';
     readonly kind: 'badge' | 'text' | 'category';
@@ -114,6 +120,18 @@ export function TransactionEventCard({
     ? withAlpha(pendingHighlightColor, 0.22)
     : styles.pendingCard.borderColor;
   const hasAction = Boolean(href || onPress);
+  const hasContentAction = !hasAction && Boolean(contentHref || onContentPress);
+  function handleContentPress() {
+    if (onContentPress) {
+      onContentPress();
+      return;
+    }
+
+    if (contentHref) {
+      pushRoute(router, contentHref);
+    }
+  }
+
   const metaParts =
     meta
       ?.split('|')
@@ -121,9 +139,7 @@ export function TransactionEventCard({
       .filter((part) => part.length > 0) ?? [];
   const metaPrimary = metaParts[0] ?? null;
   const metaCategoryLabel =
-    categoryPlacement === 'meta'
-      ? metaParts[1] ?? transactionCategoryLabel(safeCategory)
-      : null;
+    categoryPlacement === 'meta' ? (metaParts[1] ?? transactionCategoryLabel(safeCategory)) : null;
   const compactMetaSegments: CompactMetaSegment[] = [];
 
   if (context) {
@@ -166,7 +182,18 @@ export function TransactionEventCard({
       variant={variant}
     >
       <View style={[styles.body, compact ? styles.bodyCompact : null]}>
-        <View style={[styles.leading, compact ? styles.leadingCompact : null]}>
+        <Pressable
+          accessibilityLabel={hasContentAction ? `Abrir perfil de ${actorLabel}` : undefined}
+          accessibilityRole={hasContentAction ? 'button' : undefined}
+          disabled={!hasContentAction}
+          onPress={hasContentAction ? handleContentPress : undefined}
+          style={({ pressed }) => [
+            styles.leading,
+            compact ? styles.leadingCompact : null,
+            hasContentAction ? styles.leadingAction : null,
+            pressed ? styles.leadingPressed : null,
+          ]}
+        >
           <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
             <AppAvatar
               fallbackBackgroundColor={actorFallbackColor}
@@ -271,11 +298,7 @@ export function TransactionEventCard({
                         </View>
                       ) : segment.kind === 'category' ? (
                         <View style={styles.compactMetaCategory}>
-                          <Ionicons
-                            color={theme.colors.textMuted}
-                            name={categoryIcon}
-                            size={11}
-                          />
+                          <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
                           <Text numberOfLines={1} style={styles.compactMetaText}>
                             {segment.label}
                           </Text>
@@ -325,11 +348,13 @@ export function TransactionEventCard({
               </>
             )}
           </View>
-        </View>
+        </Pressable>
 
         <View style={[styles.side, compact ? styles.sideCompact : null]}>
           {unread ? <View style={styles.unreadDot} /> : null}
-          {statusLabel ? <StatusChip compact={compact} label={statusLabel} tone={statusTone} /> : null}
+          {statusLabel ? (
+            <StatusChip compact={compact} label={statusLabel} tone={statusTone} />
+          ) : null}
           <View style={[styles.amountLine, compact ? styles.amountLineCompact : null]}>
             <View
               style={[
@@ -428,6 +453,12 @@ const styles = StyleSheet.create({
   },
   leadingCompact: {
     gap: 10,
+  },
+  leadingAction: {
+    borderRadius: theme.radius.medium,
+  },
+  leadingPressed: {
+    opacity: 0.72,
   },
   avatarWrap: {
     height: 48,

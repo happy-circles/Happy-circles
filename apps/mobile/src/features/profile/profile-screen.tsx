@@ -183,8 +183,10 @@ export function ProfileScreen() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const accountOffsetRef = useRef(0);
   const methodsOffsetRef = useRef(0);
   const deviceOffsetRef = useRef(0);
+  const accountMeasuredRef = useRef(false);
   const methodsMeasuredRef = useRef(false);
   const deviceMeasuredRef = useRef(false);
   const trustPasswordInputRef = useRef<TextInput | null>(null);
@@ -192,7 +194,9 @@ export function ProfileScreen() {
   const pendingScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const delayedFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [highlightTarget, setHighlightTarget] = useState<'methods' | 'device' | null>(null);
+  const [highlightTarget, setHighlightTarget] = useState<
+    'account' | 'methods' | 'device' | null
+  >(null);
 
   const accountLabel =
     currentUserProfile?.displayName ??
@@ -276,6 +280,15 @@ export function ProfileScreen() {
             ? 'methods'
             : focusTarget;
 
+      const scrollToAccount = () => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, accountOffsetRef.current - 24),
+          animated: true,
+        });
+        setHighlightTarget('account');
+        queueHighlightReset();
+      };
+
       const scrollToMethods = () => {
         scrollViewRef.current?.scrollTo({
           y: Math.max(0, methodsOffsetRef.current - 24),
@@ -330,6 +343,19 @@ export function ProfileScreen() {
         }
 
         scrollToDevice();
+        return true;
+      }
+
+      if (
+        resolvedFocusTarget === 'notifications' ||
+        sectionTarget === 'notifications' ||
+        sectionTarget === 'account'
+      ) {
+        if (!accountMeasuredRef.current) {
+          return false;
+        }
+
+        scrollToAccount();
         return true;
       }
 
@@ -618,10 +644,38 @@ export function ProfileScreen() {
     );
   }
 
+  function confirmSignOut() {
+    triggerSelectionHaptic();
+    Alert.alert(
+      'Cerrar sesion',
+      'Al cerrar sesion, la biometria dejara de abrir esta cuenta hasta que vuelvas a entrar con tu contrasena. Despues, si la biometria sigue activa, podras desbloquear la app como siempre.',
+      [
+        { style: 'cancel', text: 'Cancelar' },
+        {
+          style: 'destructive',
+          text: 'Cerrar sesion',
+          onPress: () => void session.signOut(),
+        },
+      ],
+    );
+  }
+
   return (
     <ScreenShell
       contentContainerStyle={styles.centeredContent}
       contentWidthStyle={styles.contentWidth}
+      headerLeading={<View style={styles.headerActionPlaceholder} />}
+      headerSlot={
+        <Pressable
+          accessibilityLabel="Cerrar sesion"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={confirmSignOut}
+          style={({ pressed }) => [styles.headerSignOutButton, pressed ? styles.rowPressed : null]}
+        >
+          <Ionicons color={theme.colors.danger} name="log-out-outline" size={20} />
+        </Pressable>
+      }
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
@@ -692,7 +746,13 @@ export function ProfileScreen() {
         </View>
       ) : null}
 
-      <View style={styles.sectionBlock}>
+      <View
+        onLayout={(event) => {
+          accountMeasuredRef.current = true;
+          accountOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+        style={[styles.sectionBlock, highlightTarget === 'account' ? styles.focusPanel : null]}
+      >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Cuenta</Text>
         </View>
@@ -1072,13 +1132,11 @@ export function ProfileScreen() {
           <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
         </View>
 
-        <Text style={styles.sectionBody}>
-          Esta accion borra o anonimiza tus datos personales y revoca tus dispositivos. Los
-          movimientos financieros se conservan anonimizados para mantener saldos, auditoria e
-          integridad del ledger.
-        </Text>
+        <View style={styles.accountDeletionRow}>
+          <Text style={[styles.sectionBody, styles.accountDeletionBody]}>
+            Esta accion es irreversible.
+          </Text>
 
-        <View style={styles.inlineActionRow}>
           <Pressable
             accessibilityRole="button"
             disabled={busyAction === 'request-account-deletion'}
@@ -1096,17 +1154,6 @@ export function ProfileScreen() {
         </View>
       </View>
 
-      <View style={styles.sectionBlock}>
-        <Pressable
-          onPress={() => void session.signOut()}
-          style={({ pressed }) => [styles.signOutRow, pressed ? styles.rowPressed : null]}
-        >
-          <View style={[styles.statusIcon, styles.signOutIcon]}>
-            <Ionicons color={theme.colors.danger} name="log-out-outline" size={20} />
-          </View>
-          <Text style={styles.signOutLabel}>Cerrar sesion</Text>
-        </Pressable>
-      </View>
       <AvatarViewerModal
         imageUrl={localAvatarPath ?? currentUserProfile?.avatarUrl ?? null}
         label={accountLabel}
@@ -1121,6 +1168,17 @@ const styles = StyleSheet.create({
   centeredContent: {},
   contentWidth: {
     maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
+  },
+  headerActionPlaceholder: {
+    width: 40,
+  },
+  headerSignOutButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
   accountHeader: {
     alignItems: 'center',
@@ -1182,6 +1240,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 19,
+  },
+  accountDeletionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  accountDeletionBody: {
+    flex: 1,
   },
   statusRow: {
     alignItems: 'center',
@@ -1267,19 +1334,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.62,
-  },
-  signOutLabel: {
-    color: theme.colors.danger,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-  },
-  signOutRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    minHeight: 56,
-  },
-  signOutIcon: {
-    backgroundColor: theme.colors.dangerSoft,
   },
 });

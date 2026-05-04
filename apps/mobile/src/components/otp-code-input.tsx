@@ -82,6 +82,9 @@ export function OtpCodeInput({
 
 const styles = StyleSheet.create({
   container: {
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: 10,
     width: '100%',
   },
   hiddenInput: {
@@ -91,8 +94,9 @@ const styles = StyleSheet.create({
     width: 1,
   },
   boxRow: {
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
     justifyContent: 'center',
     width: '100%',
   },
@@ -105,8 +109,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    maxWidth: 44,
-    minWidth: 28,
+    maxWidth: 40,
+    minWidth: 22,
   },
   boxActive: {
     borderColor: theme.colors.primary,
@@ -117,9 +121,9 @@ const styles = StyleSheet.create({
   },
   digit: {
     color: theme.colors.text,
-    fontSize: theme.typography.title3,
+    fontSize: 18,
     fontWeight: '800',
-    lineHeight: 24,
+    lineHeight: 22,
     textAlign: 'center',
   },
   disabled: {

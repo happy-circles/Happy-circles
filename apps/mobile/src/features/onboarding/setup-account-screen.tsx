@@ -45,7 +45,7 @@ import {
   useActivateAccountFromInviteMutation,
   useUpdateProfileAvatarMutation,
 } from '@/lib/live-data';
-import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
+import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
 import { hasProfilePhoto, isLowQualityDisplayName } from '@/lib/setup-account';
@@ -267,7 +267,7 @@ export function SetupAccountScreen() {
 
         if (response.status === 'accepted' || response.status === 'pending_inviter_review') {
           await clearPendingInviteIntent();
-          beginHomeEntryHandoff();
+          await beginHomeEntryHandoffAfterScrollReset();
           returnToRoute(router, '/home');
           return;
         }
@@ -284,7 +284,7 @@ export function SetupAccountScreen() {
     }
 
     if (!pendingIntent) {
-      beginHomeEntryHandoff();
+      await beginHomeEntryHandoffAfterScrollReset();
     }
     returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
   }

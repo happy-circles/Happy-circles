@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
@@ -44,6 +45,62 @@ export interface PendingFinancialRequestCardProps {
   readonly onPress?: () => void;
 }
 
+type ResponseActionTone = 'primary' | 'neutral' | 'danger';
+
+interface ResponseActionButtonProps {
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly label: string;
+  readonly tone?: ResponseActionTone;
+  readonly disabled?: boolean;
+  readonly onPress?: () => void;
+}
+
+function ResponseActionButton({
+  icon,
+  label,
+  tone = 'neutral',
+  disabled = false,
+  onPress,
+}: ResponseActionButtonProps) {
+  const iconColor = (() => {
+    if (tone === 'primary') {
+      return theme.colors.white;
+    }
+
+    if (tone === 'danger') {
+      return theme.colors.danger;
+    }
+
+    return theme.colors.primary;
+  })();
+
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={disabled ? undefined : onPress}
+      style={({ pressed }) => [
+        styles.responseAction,
+        tone === 'primary' ? styles.responseActionPrimary : null,
+        tone === 'danger' ? styles.responseActionDanger : null,
+        pressed && !disabled ? styles.responseActionPressed : null,
+        disabled ? styles.responseActionDisabled : null,
+      ]}
+    >
+      <Ionicons color={iconColor} name={icon} size={15} />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.responseActionText,
+          tone === 'primary' ? styles.responseActionPrimaryText : null,
+          tone === 'danger' ? styles.responseActionDangerText : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function PendingFinancialRequestCard({
   counterpartyName,
   responseState,
@@ -73,7 +130,9 @@ export function PendingFinancialRequestCard({
   onPress,
 }: PendingFinancialRequestCardProps) {
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
-  const safeCategory = isUserTransactionCategory(category) ? category : DEFAULT_TRANSACTION_CATEGORY;
+  const safeCategory = isUserTransactionCategory(category)
+    ? category
+    : DEFAULT_TRANSACTION_CATEGORY;
   const createdByText = createdByLabel === 'Tu' ? 'Creado por ti' : `Creado por ${createdByLabel}`;
 
   return (
@@ -94,38 +153,36 @@ export function PendingFinancialRequestCard({
     >
       {responseState === 'requires_you' ? (
         <>
-          <View style={styles.actionRow}>
-            <View style={styles.actionSlot}>
-              <PrimaryAction
-                label={busyAccept ? 'Aceptando...' : 'Aceptar'}
-                compact
-                loading={busyAccept}
-                onPress={busyAccept || busyReject || busyAmendment ? undefined : onAccept}
-              />
-            </View>
-          </View>
-          <View style={styles.inlineActionRow}>
-            <Pressable
-              onPress={busyAccept || busyReject || busyAmendment ? undefined : onReject}
-              style={({ pressed }) => [styles.inlineAction, pressed ? styles.inlineActionPressed : null]}
-            >
-              <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-                {busyReject ? 'Enviando...' : 'No aceptar'}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={busyAccept || busyReject || busyAmendment ? undefined : onToggleAmendment}
-              style={({ pressed }) => [styles.inlineAction, pressed ? styles.inlineActionPressed : null]}
-            >
-              <Text style={styles.inlineActionText}>
-                {showAmendment ? 'Ocultar cambio' : 'Cambiar monto'}
-              </Text>
-            </Pressable>
+          <View style={styles.responseActionRail}>
+            <ResponseActionButton
+              disabled={busyAccept || busyReject || busyAmendment}
+              icon={busyAccept ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'}
+              label={busyAccept ? 'Aceptando' : 'Aceptar'}
+              onPress={onAccept}
+              tone="primary"
+            />
+            <ResponseActionButton
+              disabled={busyAccept || busyReject || busyAmendment}
+              icon={busyReject ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
+              label={busyReject ? 'Enviando' : 'No aceptar'}
+              onPress={onReject}
+              tone="danger"
+            />
+            <ResponseActionButton
+              disabled={busyAccept || busyReject || busyAmendment}
+              icon={showAmendment ? 'chevron-up-circle-outline' : 'create-outline'}
+              label={showAmendment ? 'Ocultar' : 'Cambiar monto'}
+              onPress={onToggleAmendment}
+            />
           </View>
 
           {showAmendment ? (
             <View style={styles.amendmentPanel}>
-              <FieldBlock error={amendmentAmountError} hint="Escribe el valor en pesos." label="Monto">
+              <FieldBlock
+                error={amendmentAmountError}
+                hint="Escribe el valor en pesos."
+                label="Monto"
+              >
                 <AppTextInput
                   hasError={Boolean(amendmentAmountError)}
                   keyboardType="number-pad"
@@ -156,7 +213,10 @@ export function PendingFinancialRequestCard({
                 />
               </FieldBlock>
 
-              <FieldBlock hint="Puedes cambiarla si el contexto nuevo lo necesita." label="Categoria">
+              <FieldBlock
+                hint="Puedes cambiarla si el contexto nuevo lo necesita."
+                label="Categoria"
+              >
                 <TransactionCategoryPicker
                   onChange={onChangeAmendmentCategory ?? (() => undefined)}
                   value={amendmentCategory}
@@ -169,7 +229,9 @@ export function PendingFinancialRequestCard({
                     label={busyAmendment ? 'Enviando...' : 'Enviar nuevo monto'}
                     compact
                     loading={busyAmendment}
-                    onPress={busyAccept || busyReject || busyAmendment ? undefined : onSubmitAmendment}
+                    onPress={
+                      busyAccept || busyReject || busyAmendment ? undefined : onSubmitAmendment
+                    }
                   />
                 </View>
               </View>
@@ -189,23 +251,48 @@ const styles = StyleSheet.create({
   actionSlot: {
     flex: 1,
   },
-  inlineActionRow: {
+  responseActionRail: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: 4,
+    padding: 4,
   },
-  inlineAction: {
-    paddingVertical: 2,
+  responseAction: {
+    alignItems: 'center',
+    borderRadius: theme.radius.small,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 6,
   },
-  inlineActionPressed: {
-    opacity: 0.62,
+  responseActionPrimary: {
+    backgroundColor: theme.colors.primary,
   },
-  inlineActionText: {
+  responseActionDanger: {
+    backgroundColor: theme.colors.dangerSoft,
+  },
+  responseActionPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
+  },
+  responseActionDisabled: {
+    opacity: 0.58,
+  },
+  responseActionText: {
     color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
   },
-  inlineActionDangerText: {
+  responseActionPrimaryText: {
+    color: theme.colors.white,
+  },
+  responseActionDangerText: {
     color: theme.colors.danger,
   },
   amendmentPanel: {

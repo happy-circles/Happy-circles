@@ -1,14 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  InteractionManager,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { InteractionManager, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
@@ -20,11 +13,11 @@ import { FieldBlock } from '@/components/field-block';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { SwipePager } from '@/components/swipe-pager';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
-import { historyStatusTone } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
@@ -152,6 +145,12 @@ const NOTIFICATION_CATEGORIES: readonly NotificationCategoryMeta[] = [
     backgroundColor: theme.colors.successSoft,
   },
 ];
+const NOTIFICATION_CATEGORY_KEYS: readonly NotificationCategoryKey[] = [
+  'all',
+  'transactions',
+  'friends',
+  'reminders',
+];
 
 function avatarColorForLabel(label: string): string {
   let hash = 0;
@@ -268,6 +267,7 @@ function nameFromInviteTitle(title: string): string | null {
     /^(.+) quiere conectar contigo$/i,
     /^Esperando a (.+)$/i,
     /^Verifica a (.+)$/i,
+    /^(.+) reclamo la invitacion para .+$/i,
     /^Invitacion lista para (.+)$/i,
     /^QR temporal para (.+)$/i,
     /^Esperando validacion de (.+)$/i,
@@ -317,24 +317,68 @@ function personIdFromHref(href: string | undefined): string | null {
   }
 }
 
+function shouldShowRespondingInviteActor(item: ActivityItemDto): boolean {
+  const actorRole = readStringField(item, 'actorRole');
+  const actionState = readStringField(item, 'actionState');
+  const flow = readStringField(item, 'flow');
+
+  if (item.kind === 'friendship_invite') {
+    return actorRole === 'sender' && flow === 'external' && actionState !== 'pending_claim';
+  }
+
+  if (item.kind === 'account_invite') {
+    return actorRole === 'inviter';
+  }
+
+  return false;
+}
+
 function notificationActorForItem(
   item: ActivityItemDto,
   people: readonly PersonCardDto[],
 ): NotificationActor {
   const profileDisplayName = readStringField(item, 'profileDisplayName');
   const profileAvatarUrl = readNullableStringField(item, 'profileAvatarUrl');
+  const respondingProfileDisplayName = readStringField(item, 'respondingProfileDisplayName');
+  const respondingProfileAvatarUrl = readNullableStringField(item, 'respondingProfileAvatarUrl');
+  const actorRole = readStringField(item, 'actorRole');
   const claimantSnapshot = readObjectField(item, 'claimantSnapshot');
   const claimantName = readStringField(claimantSnapshot, 'displayName');
   const claimantAvatarPath = readNullableStringField(claimantSnapshot, 'avatarPath');
   const activatedUserDisplayName = readStringField(item, 'activatedUserDisplayName');
   const activatedUserAvatarUrl = readNullableStringField(item, 'activatedUserAvatarUrl');
   const intendedRecipientAlias = readStringField(item, 'intendedRecipientAlias');
+  const actorProfileDisplayName =
+    profileDisplayName && profileDisplayName !== 'Persona' ? profileDisplayName : null;
+  const activatedActorDisplayName =
+    activatedUserDisplayName && activatedUserDisplayName !== 'Persona'
+      ? activatedUserDisplayName
+      : null;
+  const snapshotClaimantName = claimantName && claimantName !== 'Persona' ? claimantName : null;
+  const showRespondingActor = shouldShowRespondingInviteActor(item);
+  const canUseIntendedRecipientAlias =
+    item.kind === 'friendship_invite'
+      ? actorRole === 'sender'
+      : item.kind === 'account_invite'
+        ? actorRole === 'inviter'
+        : true;
+  const inviteActorDisplayName =
+    item.kind === 'friendship_invite' || item.kind === 'account_invite'
+      ? showRespondingActor
+        ? (respondingProfileDisplayName ??
+          actorProfileDisplayName ??
+          activatedActorDisplayName ??
+          snapshotClaimantName ??
+          nameFromInviteTitle(item.title))
+        : (actorProfileDisplayName ?? nameFromInviteTitle(item.title))
+      : null;
   const label =
-    profileDisplayName ??
+    inviteActorDisplayName ??
+    actorProfileDisplayName ??
     item.counterpartyLabel ??
-    activatedUserDisplayName ??
-    claimantName ??
-    intendedRecipientAlias ??
+    (showRespondingActor ? activatedActorDisplayName : null) ??
+    (showRespondingActor ? snapshotClaimantName : null) ??
+    (canUseIntendedRecipientAlias ? intendedRecipientAlias : null) ??
     nameFromInviteTitle(item.title) ??
     (notificationCategoryForItem(item) === 'reminders' ? 'Happy Circles' : 'Persona');
   const matchedPerson = personByLabel(people, label);
@@ -343,9 +387,10 @@ function notificationActorForItem(
     label,
     avatarUrl:
       matchedPerson?.avatarUrl ??
+      (showRespondingActor ? respondingProfileAvatarUrl : null) ??
       profileAvatarUrl ??
-      activatedUserAvatarUrl ??
-      resolveAvatarUrl(claimantAvatarPath),
+      (showRespondingActor ? activatedUserAvatarUrl : null) ??
+      (showRespondingActor ? resolveAvatarUrl(claimantAvatarPath) : null),
   };
 }
 
@@ -507,7 +552,7 @@ function buildPendingCardPresentation(
       eyebrow: 'Nueva invitacion',
       primaryAction: {
         key: 'accept',
-        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar invitacion', 'Aceptando...'),
+        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar', 'Aceptando...'),
       },
       secondaryAction: {
         key: 'reject',
@@ -521,11 +566,11 @@ function buildPendingCardPresentation(
       eyebrow: 'Por verificar',
       primaryAction: {
         key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Si es esta persona', 'Confirmando...'),
+        label: actionLabel(item.id, busyKey, 'approve', 'Aceptar', 'Confirmando...'),
       },
       secondaryAction: {
         key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'No es', 'Cerrando...'),
+        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Cerrando...'),
       },
     };
   }
@@ -557,11 +602,11 @@ function buildPendingCardPresentation(
       eyebrow: 'Por verificar',
       primaryAction: {
         key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Si es esta persona', 'Confirmando...'),
+        label: actionLabel(item.id, busyKey, 'approve', 'Aceptar', 'Confirmando...'),
       },
       secondaryAction: {
         key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'No es', 'Cerrando...'),
+        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Cerrando...'),
       },
     };
   }
@@ -628,16 +673,21 @@ function buildPendingSnippetContent(item: ActivityItemDto): PendingSnippetConten
 }
 
 function buildInviteNotificationMeta(item: ActivityItemDto, fallback: string): string {
-  const profilePhoneLabel = readStringField(item, 'profilePhoneLabel');
   const profileEmailLabel = readStringField(item, 'profileEmailLabel');
-  const profileReferenceLabel = readStringField(item, 'profileReferenceLabel');
-  const profileRoleLabel = readStringField(item, 'profileRoleLabel');
 
-  return (
-    [profilePhoneLabel, profileEmailLabel, profileReferenceLabel, profileRoleLabel, fallback]
-      .filter(Boolean)
-      .join(' | ') || fallback
-  );
+  return [profileEmailLabel, fallback].filter(Boolean).join(' | ') || fallback;
+}
+
+function inviteNotificationStatusTone(status: string): 'primary' | 'warning' | 'neutral' {
+  if (status === 'requires_you_response' || status === 'requires_you_review') {
+    return 'warning';
+  }
+
+  if (status === 'waiting_sender_review' || status === 'waiting_other_side') {
+    return 'primary';
+  }
+
+  return 'neutral';
 }
 
 function pendingDetailHref(
@@ -740,6 +790,8 @@ export function ActivityScreen() {
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>(
     requestedCategory ?? initialCategoryFromDomain(requestedDomain),
   );
+  const [visualActiveCategory, setVisualActiveCategory] =
+    useState<NotificationCategoryKey>(activeCategory);
   const [setupPromptDismissed, setSetupPromptDismissed] = useState(false);
 
   const sections = snapshotQuery.data?.activitySections ?? [];
@@ -764,10 +816,6 @@ export function ActivityScreen() {
     [basePendingItems, setupReminderItem],
   );
   const people = snapshotQuery.data?.people ?? [];
-  const activePendingItems = useMemo(
-    () => allPendingItems.filter((item) => matchesNotificationCategory(item, activeCategory)),
-    [activeCategory, allPendingItems],
-  );
   const categoryCounts = useMemo(() => {
     const counts: Record<NotificationCategoryKey, number> = {
       all: allPendingItems.length,
@@ -783,10 +831,10 @@ export function ActivityScreen() {
 
     return counts;
   }, [allPendingItems]);
-  const activeCategoryMeta =
-    NOTIFICATION_CATEGORIES.find((option) => option.key === activeCategory) ??
-    NOTIFICATION_CATEGORIES[0];
-  const hasVisibleNotifications = activePendingItems.length > 0;
+
+  useEffect(() => {
+    setVisualActiveCategory(activeCategory);
+  }, [activeCategory]);
 
   useEffect(() => {
     if (requestedCategory) {
@@ -827,6 +875,11 @@ export function ActivityScreen() {
 
   function closeNotifications() {
     backOrReturnTo(router, '/home');
+  }
+
+  function changeActiveCategory(category: NotificationCategoryKey) {
+    setVisualActiveCategory(category);
+    setActiveCategory(category);
   }
 
   function openNotificationTarget(target: NotificationTarget) {
@@ -988,16 +1041,55 @@ export function ActivityScreen() {
 
     const cardPresentation = buildPendingCardPresentation(item, busyKey);
     const snippetContent = buildPendingSnippetContent(item);
+    const isInviteNotification =
+      item.kind === 'friendship_invite' || item.kind === 'account_invite';
     const hasInlineActions = Boolean(
       cardPresentation.primaryAction || cardPresentation.secondaryAction,
     );
+    const inviteProfileHref = isInviteNotification
+      ? (readStringField(item, 'profileHref') as RouterHref | null)
+      : null;
     const actionContent = hasInlineActions ? (
-      <View style={styles.cardActionStack}>
-        {cardPresentation.primaryAction ? (
-          <View style={styles.primaryActionSlot}>
-            <PrimaryAction
-              compact
-              label={cardPresentation.primaryAction.label}
+      isInviteNotification ? (
+        <View
+          style={[
+            styles.inviteActionRow,
+            cardPresentation.primaryAction ? null : styles.inviteSingleActionRow,
+          ]}
+        >
+          {cardPresentation.secondaryAction ? (
+            <Pressable
+              accessibilityLabel={cardPresentation.secondaryAction.label}
+              disabled={Boolean(busyKey)}
+              onPress={
+                busyKey
+                  ? undefined
+                  : () =>
+                      void handlePendingAction(
+                        item.id,
+                        item.kind,
+                        item.status,
+                        cardPresentation.secondaryAction!.key,
+                      )
+              }
+              style={({ pressed }) => [
+                styles.inviteDecisionButton,
+                styles.inviteSecondaryButton,
+                cardPresentation.primaryAction ? null : styles.inviteDecisionButtonSolo,
+                pressed ? styles.inlineActionPressed : null,
+                busyKey ? styles.actionDisabled : null,
+              ]}
+            >
+              <Text style={[styles.inviteDecisionText, styles.inviteSecondaryText]}>
+                {cardPresentation.secondaryAction.label}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {cardPresentation.primaryAction ? (
+            <Pressable
+              accessibilityLabel={cardPresentation.primaryAction.label}
+              disabled={Boolean(busyKey)}
               onPress={
                 busyKey
                   ? undefined
@@ -1009,34 +1101,66 @@ export function ActivityScreen() {
                         cardPresentation.primaryAction!.key,
                       )
               }
-            />
-          </View>
-        ) : null}
+              style={({ pressed }) => [
+                styles.inviteDecisionButton,
+                styles.invitePrimaryButton,
+                pressed ? styles.inlineActionPressed : null,
+                busyKey ? styles.actionDisabled : null,
+              ]}
+            >
+              <Text style={[styles.inviteDecisionText, styles.invitePrimaryText]}>
+                {cardPresentation.primaryAction.label}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.cardActionStack}>
+          {cardPresentation.primaryAction ? (
+            <View style={styles.primaryActionSlot}>
+              <PrimaryAction
+                compact
+                label={cardPresentation.primaryAction.label}
+                onPress={
+                  busyKey
+                    ? undefined
+                    : () =>
+                        void handlePendingAction(
+                          item.id,
+                          item.kind,
+                          item.status,
+                          cardPresentation.primaryAction!.key,
+                        )
+                }
+              />
+            </View>
+          ) : null}
 
-        {cardPresentation.secondaryAction ? (
-          <Pressable
-            onPress={
-              busyKey
-                ? undefined
-                : () =>
-                    void handlePendingAction(
-                      item.id,
-                      item.kind,
-                      item.status,
-                      cardPresentation.secondaryAction!.key,
-                    )
-            }
-            style={({ pressed }) => [
-              styles.inlineAction,
-              pressed ? styles.inlineActionPressed : null,
-            ]}
-          >
-            <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-              {cardPresentation.secondaryAction.label}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
+          {cardPresentation.secondaryAction ? (
+            <Pressable
+              onPress={
+                busyKey
+                  ? undefined
+                  : () =>
+                      void handlePendingAction(
+                        item.id,
+                        item.kind,
+                        item.status,
+                        cardPresentation.secondaryAction!.key,
+                      )
+              }
+              style={({ pressed }) => [
+                styles.inlineAction,
+                pressed ? styles.inlineActionPressed : null,
+              ]}
+            >
+              <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+                {cardPresentation.secondaryAction.label}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )
     ) : null;
 
     if (notificationCategoryForItem(item) === 'transactions') {
@@ -1091,16 +1215,20 @@ export function ActivityScreen() {
         categoryPlacement="meta"
         compact
         compactMetaLayout="stacked"
+        contentHref={inviteProfileHref ?? undefined}
         context={notificationTitleForDisplay(item.title, actor.label)}
-        directionLabel={category.label}
         key={item.id}
         meta={buildInviteNotificationMeta(
           item,
           snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow,
         )}
-        onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-        statusLabel={null}
-        statusTone={historyStatusTone(item.status)}
+        onPress={
+          detailHref && !hasInlineActions && !inviteProfileHref
+            ? () => openNotificationTarget(detailHref)
+            : undefined
+        }
+        statusLabel={cardPresentation.eyebrow}
+        statusTone={inviteNotificationStatusTone(item.status)}
         unread
       >
         {actionContent}
@@ -1266,6 +1394,48 @@ export function ActivityScreen() {
     }
   }
 
+  function renderNotificationPage(categoryKey: NotificationCategoryKey) {
+    const categoryItems = allPendingItems.filter((item) =>
+      matchesNotificationCategory(item, categoryKey),
+    );
+    const categoryMeta =
+      NOTIFICATION_CATEGORIES.find((option) => option.key === categoryKey) ??
+      NOTIFICATION_CATEGORIES[0];
+    const hasNotifications = categoryItems.length > 0;
+
+    return (
+      <BrandedRefreshScrollView
+        fillViewport
+        contentContainerStyle={styles.sheetScrollContent}
+        keyboardShouldPersistTaps="handled"
+        refresh={refresh}
+        refreshIndicatorStyle={styles.sheetRefreshIndicator}
+        showsVerticalScrollIndicator={false}
+      >
+        {!hasNotifications ? (
+          <EmptyState
+            description={
+              categoryKey === 'all'
+                ? 'Cuando haya algo por responder o revisar, aparecera aqui.'
+                : `Cuando haya actividad de ${categoryMeta.label.toLocaleLowerCase(
+                    'es-CO',
+                  )}, aparecera aqui.`
+            }
+            title={
+              categoryKey === 'all'
+                ? 'Sin notificaciones'
+                : `Sin ${categoryMeta.label.toLocaleLowerCase('es-CO')}`
+            }
+          />
+        ) : (
+          <NotificationSection title="Pendientes">
+            {categoryItems.map((item) => renderPendingCard(item))}
+          </NotificationSection>
+        )}
+      </BrandedRefreshScrollView>
+    );
+  }
+
   if (snapshotQuery.isLoading) {
     return (
       <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
@@ -1315,54 +1485,30 @@ export function ActivityScreen() {
             horizontal
             contentContainerStyle={styles.notificationTabs}
             showsHorizontalScrollIndicator={false}
+            style={styles.notificationTabsScroll}
           >
             {NOTIFICATION_CATEGORIES.map((category) => (
               <NotificationCategoryTab
                 count={categoryCounts[category.key]}
                 key={category.key}
                 meta={category}
-                onPress={() => setActiveCategory(category.key)}
-                selected={activeCategory === category.key}
+                onPress={() => changeActiveCategory(category.key)}
+                selected={visualActiveCategory === category.key}
               />
             ))}
           </ScrollView>
 
           {message ? <MessageBanner message={message} /> : null}
 
-          <View style={styles.sheetScrollWrap}>
-            <BrandedRefreshScrollView
-              contentContainerStyle={styles.sheetScrollContent}
-              keyboardShouldPersistTaps="handled"
-              refresh={refresh}
-              refreshIndicatorStyle={styles.sheetRefreshIndicator}
-              showsVerticalScrollIndicator={false}
-            >
-              {!hasVisibleNotifications ? (
-                <EmptyState
-                  description={
-                    activeCategory === 'all'
-                      ? 'Cuando haya algo por responder o revisar, aparecera aqui.'
-                      : `Cuando haya actividad de ${activeCategoryMeta.label.toLocaleLowerCase(
-                          'es-CO',
-                        )}, aparecera aqui.`
-                  }
-                  title={
-                    activeCategory === 'all'
-                      ? 'Sin notificaciones'
-                      : `Sin ${activeCategoryMeta.label.toLocaleLowerCase('es-CO')}`
-                  }
-                />
-              ) : (
-                <>
-                  {activePendingItems.length > 0 ? (
-                    <NotificationSection title="Pendientes">
-                      {activePendingItems.map((item) => renderPendingCard(item))}
-                    </NotificationSection>
-                  ) : null}
-                </>
-              )}
-            </BrandedRefreshScrollView>
-          </View>
+          <SwipePager
+            accessibilityLabel="Categorias de notificaciones"
+            onChange={changeActiveCategory}
+            onPreviewChange={setVisualActiveCategory}
+            renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
+            style={styles.sheetScrollWrap}
+            value={activeCategory}
+            values={NOTIFICATION_CATEGORY_KEYS}
+          />
         </View>
       </View>
     </SafeAreaView>
@@ -1387,6 +1533,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
     gap: theme.spacing.md,
+    height: '88%',
     maxHeight: '88%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
@@ -1416,16 +1563,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   panelArea: {
+    flex: 1,
+    minHeight: 0,
     flexShrink: 1,
     gap: theme.spacing.md,
   },
   notificationTabs: {
-    alignItems: 'stretch',
+    alignItems: 'center',
     borderBottomColor: theme.colors.hairline,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: theme.spacing.md,
     flexDirection: 'row',
     minWidth: '100%',
+  },
+  notificationTabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   notificationTab: {
     alignItems: 'center',
@@ -1467,12 +1620,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sheetScrollWrap: {
+    flex: 1,
+    minHeight: 0,
     flexShrink: 1,
     position: 'relative',
   },
   sheetScrollContent: {
     gap: theme.spacing.md,
     paddingBottom: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
   },
   sheetRefreshIndicator: {
     top: theme.spacing.xs,
@@ -1507,6 +1663,51 @@ const styles = StyleSheet.create({
   },
   cardActionStack: {
     gap: theme.spacing.xs,
+  },
+  inviteActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+    paddingTop: theme.spacing.xs,
+  },
+  inviteSingleActionRow: {
+    justifyContent: 'flex-end',
+  },
+  inviteDecisionButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  inviteDecisionButtonSolo: {
+    flex: 0,
+    minWidth: 112,
+  },
+  invitePrimaryButton: {
+    backgroundColor: theme.colors.success,
+  },
+  inviteSecondaryButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.danger,
+    borderWidth: 1,
+  },
+  inviteDecisionText: {
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  invitePrimaryText: {
+    color: theme.colors.white,
+  },
+  inviteSecondaryText: {
+    color: theme.colors.danger,
+  },
+  actionDisabled: {
+    opacity: 0.46,
   },
   actionRow: {
     flexDirection: 'row',

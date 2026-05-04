@@ -15,11 +15,11 @@ import {
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { showBlockedActionAlert } from '@/lib/action-feedback';
@@ -30,6 +30,7 @@ import {
   requestContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
+import { formatCop } from '@/lib/data';
 import {
   type AccountInviteDeliveryResult,
   type FriendshipInviteDeliveryResult,
@@ -60,6 +61,12 @@ const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
 type EnrichedContact = {
   readonly contact: ContactCandidate;
   readonly resolution: PeopleTargetResolution | null;
+};
+
+type AddPersonTransactionContext = {
+  readonly amountMinor: number;
+  readonly description: string | null;
+  readonly direction: 'i_owe' | 'owes_me';
 };
 
 function contactAvatarColor(contact: ContactCandidate): string {
@@ -281,11 +288,13 @@ export function AddPersonContactsSheet({
   currentUserAvatarUrl,
   currentUserLabel,
   onClose,
+  transactionContext,
   visible,
 }: {
   readonly currentUserAvatarUrl?: string | null;
   readonly currentUserLabel: string;
   readonly onClose: () => void;
+  readonly transactionContext?: AddPersonTransactionContext | null;
   readonly visible: boolean;
 }) {
   const router = useRouter();
@@ -560,9 +569,9 @@ export function AddPersonContactsSheet({
   async function shareAccountInviteLink(alias: string, delivery: AccountInviteDeliveryResult) {
     const inviteLink = buildAppInviteLink(delivery.deliveryToken);
     const shareMessage = buildAccountInviteShareMessage({
-      amountMinor: null,
-      description: null,
-      direction: null,
+      amountMinor: transactionContext?.amountMinor ?? null,
+      description: transactionContext?.description ?? null,
+      direction: transactionContext?.direction ?? null,
       inviteLink,
       inviteeAlias: alias,
     });
@@ -892,14 +901,29 @@ export function AddPersonContactsSheet({
               </View>
             </View>
 
+            {transactionContext ? (
+              <View style={styles.contextBlock}>
+                <Text style={styles.contextLabel}>Contexto</Text>
+                <Text style={styles.contextBody}>
+                  {transactionContext.direction === 'i_owe' ? 'Salida' : 'Entrada'} de{' '}
+                  {formatCop(transactionContext.amountMinor)}
+                  {transactionContext.description && transactionContext.description.trim().length > 0
+                    ? ` por ${transactionContext.description.trim()}`
+                    : ''}
+                </Text>
+              </View>
+            ) : null}
+
             <View style={styles.searchWrap}>
               <Ionicons color={theme.colors.textMuted} name="search-outline" size={18} />
-              <AppTextInput
+              <TextInput
                 autoCapitalize="words"
                 autoCorrect={false}
+                cursorColor={theme.colors.primary}
                 onChangeText={setSearchValue}
                 placeholder="Buscar en contactos"
                 placeholderTextColor={theme.colors.muted}
+                selectionColor={theme.colors.primary}
                 style={styles.searchInput}
                 value={searchValue}
               />
@@ -1217,6 +1241,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  contextBlock: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.large,
+    borderWidth: 1,
+    gap: 4,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  contextLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  contextBody: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    lineHeight: 20,
+  },
   qrActionButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
@@ -1244,24 +1287,25 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     alignItems: 'center',
-    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.xs,
-    minHeight: 50,
+    minHeight: 52,
     paddingHorizontal: theme.spacing.sm,
   },
   searchInput: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-    borderRadius: 0,
-    borderWidth: 0,
-    elevation: 0,
+    color: theme.colors.text,
     flex: 1,
-    minHeight: 48,
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+    minHeight: 50,
+    minWidth: 0,
     paddingHorizontal: 0,
     paddingVertical: 0,
+    textAlignVertical: 'center',
   },
   sheetContent: {
     gap: theme.spacing.md,

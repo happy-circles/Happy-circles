@@ -1,4 +1,13 @@
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  forwardRef,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
 import {
@@ -9,6 +18,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput as NativeTextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -16,7 +26,7 @@ import type {
   KeyboardEvent,
   ScrollView,
   StyleProp,
-  TextInput,
+  TextInput as TextInputHandle,
   TextStyle,
   ViewStyle,
 } from 'react-native';
@@ -50,11 +60,22 @@ export const IDENTITY_FLOW_LARGE_FACE_VIEW_BOX = '222 222 236 236';
 const IDENTITY_FLOW_MESSAGE_SLOT_HEIGHT = 72;
 const IDENTITY_FLOW_TOP_OFFSET = theme.spacing.xxs * 2 + 28 + theme.spacing.lg;
 const IDENTITY_FLOW_STAGE_TRANSITION_MS = 520;
+const IDENTITY_FLOW_KEYBOARD_FIELD_GAP = theme.spacing.md;
+const IDENTITY_FLOW_KEYBOARD_FALLBACK_SHIFT_RATIO = 0.28;
+const IDENTITY_FLOW_KEYBOARD_MIN_SHIFT = 104;
 
 export type IdentityFlowFieldStatus = 'danger' | 'idle' | 'success' | 'warning';
 export type IdentityFlowCenterFaceSize = 'large' | 'small';
 export type IdentityFlowCenterLayout = 'balanced' | 'compact';
 export type IdentityFlowIdentityPosition = 'auto' | 'center' | 'top';
+
+type MeasurableFocusedInput = {
+  measureInWindow?: (
+    callback: (x: number, y: number, width: number, height: number) => void,
+  ) => void;
+};
+
+const IdentityFlowKeyboardAvoidanceContext = createContext<(() => void) | null>(null);
 
 function resolveFieldVisual(status: IdentityFlowFieldStatus) {
   if (status === 'success') {
@@ -128,10 +149,10 @@ export function IdentityFlowScreen({
   const keyboardTranslateY = useRef(new Animated.Value(0)).current;
   const fallbackScrollViewRef = useRef<ScrollView | null>(null);
   const activeScrollViewRef = scrollViewRef ?? fallbackScrollViewRef;
+  const keyboardEventRef = useRef<KeyboardEvent | null>(null);
   const resolvedFooter =
     footer ?? (actions ? <View style={styles.footerActions}>{actions}</View> : undefined);
-  const resolvedIdentityPosition =
-    identityPosition === 'auto' ? 'center' : identityPosition;
+  const resolvedIdentityPosition = identityPosition === 'auto' ? 'center' : identityPosition;
   const isCenterIdentity = resolvedIdentityPosition === 'center';
   const shouldReserveMessageSlot = message !== undefined || resolvedIdentityPosition === 'center';
   const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
@@ -172,6 +193,68 @@ export function IdentityFlowScreen({
     </Animated.View>
   ) : undefined;
 
+  const animateKeyboard = useCallback(
+    (toValue: number, event?: KeyboardEvent) => {
+      Animated.timing(keyboardTranslateY, {
+        duration: Math.max(event?.duration ?? 180, 120),
+        easing: Easing.out(Easing.cubic),
+        toValue,
+        useNativeDriver: true,
+      }).start();
+    },
+    [keyboardTranslateY],
+  );
+
+  const adjustKeyboardForFocusedInput = useCallback(
+    (event = keyboardEventRef.current) => {
+      if (!event) {
+        return;
+      }
+
+      const keyboardHeight = Math.max(0, event.endCoordinates.height - keyboardVerticalOffset);
+      const keyboardTop = Math.min(
+        windowHeight,
+        event.endCoordinates.screenY + keyboardVerticalOffset,
+      );
+      const focusedInput = NativeTextInput.State.currentlyFocusedInput() as
+        | MeasurableFocusedInput
+        | null
+        | undefined;
+
+      if (!focusedInput?.measureInWindow) {
+        animateKeyboard(
+          -Math.min(keyboardHeight, windowHeight * IDENTITY_FLOW_KEYBOARD_FALLBACK_SHIFT_RATIO),
+          event,
+        );
+        return;
+      }
+
+      focusedInput.measureInWindow((_x, y, _width, height) => {
+        const focusedBottom = y + height;
+
+        keyboardTranslateY.stopAnimation((currentTranslate) => {
+          const originalFocusedBottom = focusedBottom - currentTranslate;
+          const overlap = Math.max(
+            0,
+            originalFocusedBottom + IDENTITY_FLOW_KEYBOARD_FIELD_GAP - keyboardTop,
+          );
+          const desiredLift = Math.max(
+            overlap,
+            Math.min(IDENTITY_FLOW_KEYBOARD_MIN_SHIFT, keyboardHeight),
+          );
+          const targetTranslate = -Math.min(desiredLift, keyboardHeight);
+
+          animateKeyboard(targetTranslate, event);
+        });
+      });
+    },
+    [animateKeyboard, keyboardTranslateY, keyboardVerticalOffset, windowHeight],
+  );
+
+  const scheduleKeyboardAdjustment = useCallback(() => {
+    requestAnimationFrame(() => adjustKeyboardForFocusedInput());
+  }, [adjustKeyboardForFocusedInput]);
+
   useEffect(() => {
     lockedBodyHeightRef.current = 0;
     setBodyHeight(0);
@@ -188,28 +271,18 @@ export function IdentityFlowScreen({
     });
   }, [activeScrollViewRef, contentTransitionKey, scrollEnabled]);
 
-  useEffect(
-    () => registerIdentityFlowScrollView(activeScrollViewRef),
-    [activeScrollViewRef],
-  );
+  useEffect(() => registerIdentityFlowScrollView(activeScrollViewRef), [activeScrollViewRef]);
 
   useEffect(() => {
-    function animateKeyboard(toValue: number, event?: KeyboardEvent) {
-      Animated.timing(keyboardTranslateY, {
-        duration: Math.max(event?.duration ?? 180, 120),
-        easing: Easing.out(Easing.cubic),
-        toValue,
-        useNativeDriver: true,
-      }).start();
-    }
-
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      const keyboardHeight = Math.max(0, event.endCoordinates.height - keyboardVerticalOffset);
-      animateKeyboard(-keyboardHeight, event);
+      keyboardEventRef.current = event;
+      requestAnimationFrame(() => adjustKeyboardForFocusedInput(event));
+      setTimeout(() => adjustKeyboardForFocusedInput(event), 80);
     });
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
+      keyboardEventRef.current = null;
       animateKeyboard(0, event);
     });
 
@@ -217,7 +290,7 @@ export function IdentityFlowScreen({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [keyboardTranslateY, keyboardVerticalOffset]);
+  }, [adjustKeyboardForFocusedInput, animateKeyboard]);
 
   useEffect(() => {
     Animated.timing(identityMotion, {
@@ -239,87 +312,88 @@ export function IdentityFlowScreen({
   }, [contentMotion, contentTransitionKey, contentVisible]);
 
   return (
-    <Animated.View
-      style={[styles.keyboardShell, { transform: [{ translateY: keyboardTranslateY }] }]}
-    >
-      <ScreenShell
-        contentContainerStyle={[styles.content, contentStyle]}
-        contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
-        footer={transitionedFooter}
-        footerDivider={false}
-        headerVariant="plain"
-        headerVisible={false}
-        largeTitle={false}
-        overlay={overlay}
-        refresh={refresh}
-        scrollEnabled={scrollEnabled}
-        scrollViewRef={activeScrollViewRef}
-        title={IDENTITY_FLOW_HEADER_TITLE}
-        titleAlign="center"
+    <IdentityFlowKeyboardAvoidanceContext.Provider value={scheduleKeyboardAdjustment}>
+      <Animated.View
+        style={[styles.keyboardShell, { transform: [{ translateY: keyboardTranslateY }] }]}
       >
-        <View
-          pointerEvents="none"
-          style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}
+        <ScreenShell
+          contentContainerStyle={[styles.content, contentStyle]}
+          contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
+          footer={transitionedFooter}
+          footerDivider={false}
+          headerVariant="plain"
+          headerVisible={false}
+          largeTitle={false}
+          overlay={overlay}
+          refresh={refresh}
+          scrollEnabled={scrollEnabled}
+          scrollViewRef={activeScrollViewRef}
+          title={IDENTITY_FLOW_HEADER_TITLE}
+          titleAlign="center"
         >
-          <Text style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</Text>
-        </View>
-        <View
-          onLayout={(event) => {
-            const nextHeight = event.nativeEvent.layout.height;
-            if (nextHeight <= 0) {
-              return;
-            }
+          <View pointerEvents="none" style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}>
+            <Text style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</Text>
+          </View>
+          <View
+            onLayout={(event) => {
+              const nextHeight = event.nativeEvent.layout.height;
+              if (nextHeight <= 0) {
+                return;
+              }
 
-            if (lockedBodyHeightRef.current > 0) {
-              return;
-            }
+              if (lockedBodyHeightRef.current > 0) {
+                return;
+              }
 
-            lockedBodyHeightRef.current = nextHeight;
-            setHasMeasuredBody(true);
-            setBodyHeight(nextHeight);
-          }}
-          style={[styles.body, bodyStyle]}
-        >
-          {identity && layoutReady ? (
+              lockedBodyHeightRef.current = nextHeight;
+              setHasMeasuredBody(true);
+              setBodyHeight(nextHeight);
+            }}
+            style={[styles.body, bodyStyle]}
+          >
+            {identity && layoutReady ? (
+              <Animated.View
+                pointerEvents="box-none"
+                style={[
+                  styles.identityMotionLayer,
+                  {
+                    opacity: layoutReady ? 1 : 0,
+                    transform: [{ translateY: identityTranslateY }],
+                  },
+                ]}
+              >
+                <View style={styles.identitySlot}>{identity}</View>
+              </Animated.View>
+            ) : null}
             <Animated.View
-              pointerEvents="box-none"
               style={[
-                styles.identityMotionLayer,
+                styles.belowIdentity,
                 {
                   opacity: layoutReady ? 1 : 0,
-                  transform: [{ translateY: identityTranslateY }],
+                  paddingTop: topContentY,
+                  transform: [{ translateY: contentTranslateY }],
                 },
               ]}
             >
-              <View style={styles.identitySlot}>{identity}</View>
+              <Animated.View
+                style={[
+                  styles.transitionedContent,
+                  {
+                    opacity: contentMotion,
+                    transform: [{ translateY: contentEnterTranslateY }],
+                  },
+                ]}
+              >
+                {shouldReserveMessageSlot ? (
+                  <View style={styles.messageSlot}>{message}</View>
+                ) : null}
+                <View style={styles.contentSlot}>{children}</View>
+              </Animated.View>
             </Animated.View>
-          ) : null}
-          <Animated.View
-            style={[
-              styles.belowIdentity,
-              {
-                opacity: layoutReady ? 1 : 0,
-                paddingTop: topContentY,
-                transform: [{ translateY: contentTranslateY }],
-              },
-            ]}
-          >
-            <Animated.View
-              style={[
-                styles.transitionedContent,
-                {
-                  opacity: contentMotion,
-                  transform: [{ translateY: contentEnterTranslateY }],
-                },
-              ]}
-            >
-              {shouldReserveMessageSlot ? <View style={styles.messageSlot}>{message}</View> : null}
-              <View style={styles.contentSlot}>{children}</View>
-            </Animated.View>
-          </Animated.View>
-        </View>
-      </ScreenShell>
-    </Animated.View>
+          </View>
+        </ScreenShell>
+      </Animated.View>
+    </IdentityFlowKeyboardAvoidanceContext.Provider>
   );
 }
 
@@ -558,10 +632,22 @@ export function IdentityFlowField({
 }
 
 export const IdentityFlowTextInput = forwardRef<
-  TextInput,
+  TextInputHandle,
   AppTextInputProps & { readonly style?: StyleProp<TextStyle> }
 >(function IdentityFlowTextInput({ style, ...props }, ref) {
-  return <AppTextInput {...props} ref={ref} style={[styles.textInput, style]} />;
+  const scheduleKeyboardAdjustment = useContext(IdentityFlowKeyboardAvoidanceContext);
+
+  return (
+    <AppTextInput
+      {...props}
+      onFocus={(event) => {
+        props.onFocus?.(event);
+        scheduleKeyboardAdjustment?.();
+      }}
+      ref={ref}
+      style={[styles.textInput, style]}
+    />
+  );
 });
 
 export function IdentityFlowMessageSlot({

@@ -101,10 +101,10 @@ function buildAccountInviteShareMessage(input: {
         ? ` por ${input.description.trim()}`
         : '';
 
-    return `${prefix} te comparti un acceso privado a Happy Circles para registrar ${movementText}${descriptionText}. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+    return `${prefix} te compartí un acceso privado a Happy Circles para registrar ${movementText}${descriptionText}. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
   }
 
-  return `${prefix} te comparti un acceso privado a Happy Circles para que entres y te conectes conmigo. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+  return `${prefix} te compartí un acceso privado a Happy Circles para que entres y te conectes conmigo. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
 }
 
 function maskPhoneValue(value: string): string {
@@ -325,7 +325,7 @@ function badgeForResolution(resolution: PeopleTargetResolution | null): {
 
   if (resolution.status === 'active_user') {
     return {
-      label: 'Ya esta en Happy Circles',
+      label: 'Ya está en Happy Circles',
       tone: 'success',
     };
   }
@@ -342,11 +342,11 @@ function actionLabelForResolution(resolution: PeopleTargetResolution | null): st
   }
 
   if (resolution.status === 'already_related') {
-    return 'Ya estan conectados';
+    return 'Ya están conectados';
   }
 
   if (resolution.status === 'pending_friendship' || resolution.status === 'pending_activation') {
-    return 'Ya tiene una invitacion pendiente';
+    return 'Ya tiene una invitación pendiente';
   }
 
   if (resolution.status === 'active_user') {
@@ -422,7 +422,7 @@ function buildContactMeta(contact: ContactCandidate): string {
     return primaryLine;
   }
 
-  return `${primaryLine} · ${contact.phoneOptions.length} numeros`;
+  return `${primaryLine} · ${contact.phoneOptions.length} números`;
 }
 
 export function InvitePersonScreen() {
@@ -499,10 +499,10 @@ export function InvitePersonScreen() {
   const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
   const contactsStatusLabel =
     contactsPermissionStatus === 'granted'
-      ? 'Badges activos'
+      ? 'Agenda activa'
       : contactsPermissionStatus === 'limited'
         ? 'Agenda parcial'
-        : 'Sin agenda todavia';
+        : 'Sin agenda todavía';
   const contactsStatusTone =
     contactsPermissionStatus === 'granted'
       ? 'success'
@@ -511,10 +511,15 @@ export function InvitePersonScreen() {
         : 'warning';
   const contactsHelperMessage =
     contactsPermissionStatus === 'limited'
-      ? 'Tu telefono solo compartio los contactos seleccionados. Si quieres ver mas, amplia el acceso desde aqui.'
-      : 'Verde significa que ya existe una cuenta activa en Happy Circles. Naranja significa que todavia necesita acceso.';
+      ? 'Tu teléfono solo compartió los contactos seleccionados. Si quieres ver más, amplía el acceso desde aquí.'
+      : 'Verde significa que ya existe una cuenta activa en Happy Circles. Naranja significa que todavía necesita acceso.';
 
   const manualPhoneE164 = useMemo(() => buildManualPhoneE164(manualPhone), [manualPhone]);
+  const manualInviteActionLabel = !manualPhoneE164
+    ? 'Ingresa un celular'
+    : busyKey === manualPhoneE164
+      ? 'Preparando invitación...'
+      : 'Revisar contacto';
 
   const mergeTargetResolutions = useCallback((resolutions: readonly PeopleTargetResolution[]) => {
     setTargetCache((current) => {
@@ -612,7 +617,7 @@ export function InvitePersonScreen() {
         setMessage(
           nextStatus === 'denied'
             ? 'Contactos bloqueados. Puedes activarlos en Ajustes.'
-            : 'Puedes seguir invitando por celular, aunque no usemos tu agenda todavia.',
+            : 'Puedes seguir invitando por celular, aunque no usemos tu agenda todavía.',
         );
         if (nextStatus === 'denied') {
           openContactsSettings();
@@ -624,8 +629,8 @@ export function InvitePersonScreen() {
       setContacts(nextContacts);
       setMessage(
         nextStatus === 'limited'
-          ? `Tu telefono compartio ${nextContacts.length} contactos con numero. Si quieres ver mas, amplia el acceso.`
-          : 'Tu agenda ya quedo lista para revisar quien ya esta en Happy Circles.',
+          ? `Tu teléfono compartió ${nextContacts.length} contactos con número. Si quieres ver más, amplía el acceso.`
+          : 'Tu agenda ya quedó lista para revisar quién ya está en Happy Circles.',
       );
     } catch (error) {
       setMessage(
@@ -670,8 +675,8 @@ export function InvitePersonScreen() {
       setContacts(nextContacts);
       setMessage(
         nextStatus === 'limited'
-          ? `Seguimos con acceso parcial. Ahora vemos ${nextContacts.length} contactos con numero.`
-          : `Listo. Ahora vemos ${nextContacts.length} contactos con numero en tu agenda.`,
+          ? `Seguimos con acceso parcial. Ahora vemos ${nextContacts.length} contactos con número.`
+          : `Listo. Ahora vemos ${nextContacts.length} contactos con número en tu agenda.`,
       );
     } catch (error) {
       setMessage(
@@ -709,13 +714,13 @@ export function InvitePersonScreen() {
 
     try {
       await Share.share({
-        title: 'Invitacion a Happy Circles',
+        title: 'Invitación a Happy Circles',
         message: shareMessage,
       });
       setMessage(`Listo. Ya puedes compartir el acceso privado con ${alias}.`);
     } catch {
       await Clipboard.setStringAsync(inviteLink);
-      setMessage(`No pudimos abrir el menu para compartir. Copiamos el link privado de ${alias}.`);
+      setMessage(`No pudimos abrir el menú para compartir. Copiamos el link privado de ${alias}.`);
     }
   }
 
@@ -846,7 +851,7 @@ export function InvitePersonScreen() {
       await ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164));
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
+        error instanceof Error ? error.message : 'No se pudo revisar los números de este contacto.',
       );
     }
 
@@ -872,7 +877,7 @@ export function InvitePersonScreen() {
   function navigateToInviteToken(rawValue: string) {
     const token = extractInviteToken(rawValue);
     if (!token) {
-      setMessage('Pega un link completo o un codigo valido de invitacion.');
+      setMessage('Pega un link completo o un código válido de invitación.');
       return;
     }
 
@@ -926,7 +931,7 @@ export function InvitePersonScreen() {
 
     const permission = await requestCameraPermission();
     if (!permission.granted) {
-      setMessage('Necesitamos permiso de camara para escanear QR.');
+      setMessage('Necesitamos permiso de cámara para escanear QR.');
       return;
     }
 
@@ -942,7 +947,7 @@ export function InvitePersonScreen() {
     const token = extractInviteToken(result.data);
     if (!token) {
       setScannerLocked(true);
-      setMessage('Ese QR no parece ser una invitacion valida de Happy Circles.');
+      setMessage('Ese QR no parece ser una invitación válida de Happy Circles.');
       setTimeout(() => {
         setScannerLocked(false);
       }, 1200);
@@ -969,7 +974,7 @@ export function InvitePersonScreen() {
           {items.map(({ contact, resolution }) => {
             const badge = badgeForResolution(resolution);
             const actionLabel =
-              contact.phoneOptions.length > 1 ? 'Elegir numero' : actionLabelForResolution(resolution);
+              contact.phoneOptions.length > 1 ? 'Elegir número' : actionLabelForResolution(resolution);
             const actionEnabled =
               contact.phoneOptions.length > 1 ? true : canPressForResolution(resolution);
             const isBusy = busyKey === contact.primaryPhone.phoneE164;
@@ -1083,15 +1088,15 @@ export function InvitePersonScreen() {
                 {searchValue.trim().length > 0
                   ? 'No encontramos contactos con ese filtro.'
                   : contactsPermissionStatus === 'limited'
-                    ? 'No encontramos mas contactos compartidos con numeros utiles. Amplia el acceso para ver el resto.'
-                    : 'No encontramos contactos con numeros utiles en esta agenda.'}
+                    ? 'No encontramos más contactos compartidos con números útiles. Amplía el acceso para ver el resto.'
+                    : 'No encontramos contactos con números útiles en esta agenda.'}
               </Text>
             )}
           </View>
         ) : (
           <View style={styles.stack}>
             <Text style={styles.helper}>
-              Puedes dar permiso a tus contactos para ver rapidamente quien ya esta en Happy
+              Puedes dar permiso a tus contactos para ver rápidamente quién ya está en Happy
               Circles, o seguir por celular manual.
             </Text>
             {contactsPermissionStatus !== 'unavailable' ? (
@@ -1108,7 +1113,6 @@ export function InvitePersonScreen() {
       <SurfaceCard padding="md" variant="default">
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Invitar por celular</Text>
-          <StatusChip label="Fallback light" tone="neutral" />
         </View>
 
         <View style={styles.stack}>
@@ -1132,11 +1136,11 @@ export function InvitePersonScreen() {
           <Text style={styles.helper}>
             {manualPhoneE164
               ? `Usaremos ${manualPhoneE164}`
-              : 'Si no empieza por +, asumimos el codigo de Colombia por defecto.'}
+              : 'Si no empieza por +, asumimos el código de Colombia por defecto.'}
           </Text>
           <PrimaryAction
             disabled={!manualPhoneE164 || Boolean(busyKey)}
-            label={busyKey === manualPhoneE164 ? 'Preparando...' : 'Resolver este contacto'}
+            label={manualInviteActionLabel}
             onPress={busyKey ? undefined : () => void handleManualInvite()}
           />
         </View>
@@ -1144,8 +1148,7 @@ export function InvitePersonScreen() {
 
       <SurfaceCard padding="md" variant="muted">
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ya tienes una invitacion de amistad</Text>
-          <StatusChip label="Receiver" tone="primary" />
+          <Text style={styles.sectionTitle}>Ya tienes una invitación de amistad</Text>
         </View>
 
         <View style={styles.stack}>
@@ -1153,7 +1156,7 @@ export function InvitePersonScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setManualInviteInput}
-            placeholder="Pega el link o codigo"
+            placeholder="Pega el link o código"
             placeholderTextColor={theme.colors.muted}
             value={manualInviteInput}
           />
@@ -1163,11 +1166,11 @@ export function InvitePersonScreen() {
             variant="secondary"
           />
           <PrimaryAction
-            label="Abrir invitacion"
+            label="Abrir invitación"
             onPress={busyKey ? undefined : handleSubmitManualInvite}
           />
           <PrimaryAction
-            label={scannerOpen ? 'Cerrar scanner' : 'Escanear QR'}
+            label={scannerOpen ? 'Cerrar escáner' : 'Escanear QR'}
             onPress={() => void handleOpenScanner()}
             variant="ghost"
           />
@@ -1196,10 +1199,10 @@ export function InvitePersonScreen() {
             onPress={() => setPendingContactSelection(null)}
           />
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Elige el numero</Text>
+            <Text style={styles.modalTitle}>Elige el número</Text>
             <Text style={styles.helper}>
               {pendingContactSelection
-                ? `${pendingContactSelection.alias} tiene varios numeros. Elige el correcto.`
+                ? `${pendingContactSelection.alias} tiene varios números. Elige el correcto.`
                 : ''}
             </Text>
             <View style={styles.modalActions}>

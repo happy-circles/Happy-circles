@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import {
   IdentityFlowField,
@@ -43,6 +51,22 @@ function countryFlag(iso2: string) {
     .toUpperCase()
     .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
+
+const COUNTRY_OPTION_HEIGHT = 42;
+const COUNTRY_MENU_VISIBLE_OPTIONS = 4;
+const COUNTRY_MENU_HEIGHT = COUNTRY_OPTION_HEIGHT * COUNTRY_MENU_VISIBLE_OPTIONS;
+const COUNTRY_MENU_CONTENT_HEIGHT = COUNTRY_OPTION_HEIGHT * COUNTRY_OPTIONS.length;
+const COUNTRY_MENU_MAX_SCROLL_Y = Math.max(COUNTRY_MENU_CONTENT_HEIGHT - COUNTRY_MENU_HEIGHT, 1);
+const COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT = Math.min(
+  COUNTRY_MENU_HEIGHT,
+  Math.max(
+    36,
+    Math.round((COUNTRY_MENU_HEIGHT / COUNTRY_MENU_CONTENT_HEIGHT) * COUNTRY_MENU_HEIGHT),
+  ),
+);
+const COUNTRY_MENU_SCROLLBAR_TRAVEL = COUNTRY_MENU_HEIGHT - COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT;
+const countryMenuScrollWebStyle =
+  Platform.OS === 'web' ? ({ overscrollBehavior: 'contain' } as unknown as ViewStyle) : null;
 
 type FieldStatus = 'idle' | 'valid' | 'invalid';
 type FieldName = 'email' | 'phone' | 'password';
@@ -133,6 +157,7 @@ export function AccountCreateAccountScreen() {
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY.iso2);
   const [phoneNationalNumber, setPhoneNationalNumber] = useState('');
   const [countryMenuOpen, setCountryMenuOpen] = useState(false);
+  const [countryMenuScrollY, setCountryMenuScrollY] = useState(0);
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [touchedFields, setTouchedFields] = useState<Record<FieldName, boolean>>({
@@ -150,6 +175,10 @@ export function AccountCreateAccountScreen() {
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
+  const countryMenuScrollbarTop = Math.min(
+    COUNTRY_MENU_SCROLLBAR_TRAVEL,
+    (countryMenuScrollY / COUNTRY_MENU_MAX_SCROLL_Y) * COUNTRY_MENU_SCROLLBAR_TRAVEL,
+  );
   const emailValid = isValidEmail(email);
   const phoneValid = isValidPhoneNumber(phoneNationalNumber);
   const passwordValid = isValidPassword(password);
@@ -575,7 +604,7 @@ export function AccountCreateAccountScreen() {
                 >
                   <Text style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</Text>
                   <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
-                  <Ionicons color={theme.colors.textMuted} name="chevron-down" size={14} />
+                  <Ionicons color={theme.colors.brandGreen} name="chevron-down" size={13} />
                 </Pressable>
 
                 <IdentityFlowTextInput
@@ -592,26 +621,62 @@ export function AccountCreateAccountScreen() {
 
               {countryMenuOpen ? (
                 <View style={styles.countryMenu}>
-                  {COUNTRY_OPTIONS.map((country, index) => (
-                    <Pressable
-                      key={country.iso2}
-                      onPress={() => {
-                        triggerIdentitySelectionHaptic();
-                        setCountryIso(country.iso2);
-                        setCountryMenuOpen(false);
-                      }}
+                  <ScrollView
+                    bounces={false}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                    onScroll={(event) => setCountryMenuScrollY(event.nativeEvent.contentOffset.y)}
+                    onMoveShouldSetResponder={() => true}
+                    onStartShouldSetResponder={() => true}
+                    persistentScrollbar
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator
+                    style={[styles.countryMenuScroll, countryMenuScrollWebStyle]}
+                  >
+                    {COUNTRY_OPTIONS.map((country, index) => {
+                      const selected = country.iso2 === selectedCountry.iso2;
+
+                      return (
+                        <Pressable
+                          key={country.iso2}
+                          onPress={() => {
+                            triggerIdentitySelectionHaptic();
+                            setCountryIso(country.iso2);
+                            setCountryMenuOpen(false);
+                          }}
+                          style={[
+                            styles.countryOption,
+                            selected ? styles.countryOptionSelected : null,
+                            index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
+                          ]}
+                        >
+                          <View style={styles.countryOptionLabel}>
+                            <Text style={styles.countryFlag}>{countryFlag(country.iso2)}</Text>
+                            <Text style={styles.countryLabel}>{country.label}</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.countryCode,
+                              selected ? styles.countryCodeSelected : null,
+                            ]}
+                          >
+                            {country.callingCode}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <View pointerEvents="none" style={styles.countryMenuScrollbarTrack}>
+                    <View
                       style={[
-                        styles.countryOption,
-                        index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
+                        styles.countryMenuScrollbarThumb,
+                        {
+                          height: COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT,
+                          transform: [{ translateY: countryMenuScrollbarTop }],
+                        },
                       ]}
-                    >
-                      <View style={styles.countryOptionLabel}>
-                        <Text style={styles.countryFlag}>{countryFlag(country.iso2)}</Text>
-                        <Text style={styles.countryLabel}>{country.label}</Text>
-                      </View>
-                      <Text style={styles.countryCode}>{country.callingCode}</Text>
-                    </Pressable>
-                  ))}
+                    />
+                  </View>
                 </View>
               ) : null}
             </View>
@@ -648,25 +713,26 @@ const styles = StyleSheet.create({
   },
   callingCodeBox: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.successSoft,
+    borderColor: 'rgba(61, 186, 110, 0.24)',
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 6,
+    gap: theme.spacing.xxs,
     height: 56,
     justifyContent: 'center',
-    minWidth: 104,
-    paddingHorizontal: theme.spacing.sm,
+    minWidth: 88,
+    paddingHorizontal: theme.spacing.xs,
   },
   countryFlag: {
-    fontSize: theme.typography.body,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 21,
   },
   callingCodeText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
+    color: theme.colors.brandNavy,
+    fontSize: theme.typography.callout,
     fontWeight: '700',
+    lineHeight: 20,
   },
   phoneInput: {
     flex: 1,
@@ -678,28 +744,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     left: 0,
     marginTop: theme.spacing.xs,
+    maxHeight: COUNTRY_MENU_HEIGHT,
     overflow: 'hidden',
-    paddingVertical: 2,
     position: 'absolute',
     top: '100%',
-    width: 236,
+    width: 220,
     zIndex: 30,
     ...theme.shadow.floating,
+  },
+  countryMenuScroll: {
+    maxHeight: COUNTRY_MENU_HEIGHT,
+  },
+  countryMenuScrollbarTrack: {
+    backgroundColor: 'rgba(61, 186, 110, 0.14)',
+    borderRadius: theme.radius.pill,
+    bottom: theme.spacing.xxs,
+    position: 'absolute',
+    right: theme.spacing.xxs,
+    top: theme.spacing.xxs,
+    width: 4,
+  },
+  countryMenuScrollbarThumb: {
+    backgroundColor: theme.colors.brandGreen,
+    borderRadius: theme.radius.pill,
+    width: 4,
   },
   countryOption: {
     alignItems: 'center',
     borderBottomColor: theme.colors.hairline,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
+    height: COUNTRY_OPTION_HEIGHT,
     justifyContent: 'space-between',
-    minHeight: 40,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+  },
+  countryOptionSelected: {
+    backgroundColor: theme.colors.successSoft,
   },
   countryOptionLabel: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.xs,
+    minWidth: 0,
   },
   countryOptionLast: {
     borderBottomWidth: 0,
@@ -708,11 +794,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.footnote,
     fontWeight: '600',
+    flexShrink: 1,
   },
   countryCode: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
+    marginLeft: theme.spacing.sm,
+  },
+  countryCodeSelected: {
+    color: theme.colors.brandGreen,
   },
   pressed: {
     opacity: 0.9,

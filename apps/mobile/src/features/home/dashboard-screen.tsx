@@ -10,12 +10,19 @@ import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
 import { HappyCircleCard } from '@/components/happy-circle-card';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
+import { SwipePager } from '@/components/swipe-pager';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import {
+  HEADER_BRAND_GAP,
+  HEADER_BRAND_TITLE_SIZE as BASE_HEADER_BRAND_TITLE_SIZE,
+  HEADER_BRAND_TITLE_WIDTH as BASE_HEADER_BRAND_TITLE_WIDTH,
+} from '@/components/brand-lockup';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import {
@@ -33,19 +40,22 @@ import {
   markPendingTransactionIdsSeen,
 } from '@/lib/pending-transaction-views';
 import { dismissSetupPrompt, getSetupPromptDismissed } from '@/lib/setup-reminder';
-import { transactionCategoryLabel } from '@/lib/transaction-categories';
+import { buildHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
+import {
+  transactionCategoryBackgroundColor,
+  transactionCategoryColor,
+  transactionCategoryIcon,
+} from '@/lib/transaction-categories';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   isConsolidatedTransactionItem,
+  isCycleTransactionItem,
   isPendingTransactionItem,
-  transactionAccentColor,
   transactionAmountIsVoided,
   transactionAmountLabel,
-  transactionDirectionLabel,
   transactionFocusId,
   transactionStatusLabel,
-  transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
@@ -54,10 +64,26 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 const RECENT_TRANSACTION_LIMIT = 8;
+const PEOPLE_TILE_WIDTH = 68;
+const PEOPLE_TILE_CIRCLE_SIZE = 56;
+const PEOPLE_TILE_AVATAR_SIZE = 52;
+const PEOPLE_TILE_LABEL_LINE_HEIGHT = 15;
+const HOME_HEADER_ACTION_SIZE = 48;
+const HOME_HEADER_AVATAR_SIZE = 40;
+const HOME_HEADER_BRAND_LOGO_SIZE = 60;
+const HOME_HEADER_BRAND_TITLE_SIZE = 22;
+const HOME_HEADER_BRAND_TITLE_WIDTH =
+  HOME_HEADER_BRAND_TITLE_SIZE * (BASE_HEADER_BRAND_TITLE_WIDTH / BASE_HEADER_BRAND_TITLE_SIZE);
+const HOME_HEADER_BRAND_LOCKUP_WIDTH =
+  HOME_HEADER_BRAND_LOGO_SIZE + HEADER_BRAND_GAP + HOME_HEADER_BRAND_TITLE_WIDTH;
+const HOME_REFRESH_PILL_HORIZONTAL_PADDING = theme.spacing.sm;
+const HOME_REFRESH_PILL_VERTICAL_PADDING = 5;
+const HOME_REFRESH_PILL_BORDER_WIDTH = 1;
 type InviteRequestsTab = 'received' | 'sent' | 'history';
 type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel';
 type InviteRequestItem = FriendshipInviteListItem | AccountInviteListItem;
 type TransactionTargetPanel = 'pending' | 'history';
+const INVITE_REQUEST_TABS: readonly InviteRequestsTab[] = ['received', 'sent', 'history'];
 
 function initialsBackgroundColor(person: PersonCardDto): string {
   const source = `${person.userId}:${person.displayName}`;
@@ -131,22 +157,95 @@ function splitSubtitle(value: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-function homeTransactionMeta(item: ActivityItemDto, actorLabel: string): string {
-  const subtitleParts = splitSubtitle(item.subtitle);
-  const creatorLabel =
-    item.kind === 'financial_request'
-      ? (subtitleParts[0] ?? 'Persona')
-      : item.category === 'cycle' ||
-          item.kind === 'settlement' ||
-          item.kind === 'settlement_proposal'
-        ? 'Happy Circle'
-        : firstName(actorLabel);
-  const timeLabel = item.happenedAtLabel ?? subtitleParts[subtitleParts.length - 1] ?? 'Reciente';
-  const createdByText = creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
+function compactTransactionSign(item: ActivityItemDto): '+' | '-' | 'cycle' | 'neutral' {
+  if (isCycleTransactionItem(item)) {
+    return 'cycle';
+  }
 
-  return `${createdByText} · ${timeLabel} | ${transactionCategoryLabel(
-    transactionVisualCategory(item),
-  )}`;
+  if (transactionAmountIsVoided(item)) {
+    return 'neutral';
+  }
+
+  if (item.tone === 'positive') {
+    return '+';
+  }
+
+  if (item.tone === 'negative') {
+    return '-';
+  }
+
+  return 'neutral';
+}
+
+function compactTransactionAmountLabel(item: ActivityItemDto): string | null {
+  const amountLabel = transactionAmountLabel(item);
+  const sign = compactTransactionSign(item);
+
+  if (!amountLabel) {
+    return sign === 'cycle' ? 'Circle' : null;
+  }
+
+  if (sign === '+') {
+    return `+ ${amountLabel}`;
+  }
+
+  if (sign === '-') {
+    return `- ${amountLabel}`;
+  }
+
+  return amountLabel;
+}
+
+function compactTransactionCreatorLabel(item: ActivityItemDto, actorLabel: string): string {
+  if (isCycleTransactionItem(item)) {
+    return 'Happy Circle';
+  }
+
+  const subtitleParts = splitSubtitle(item.subtitle);
+  if (item.kind === 'financial_request' && subtitleParts[0]) {
+    return subtitleParts[0];
+  }
+
+  const titleCreator = item.title.match(
+    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
+  )?.[1];
+  if (titleCreator?.trim()) {
+    return titleCreator.trim();
+  }
+
+  const subtitleCreator = subtitleParts[0];
+  if (
+    subtitleCreator &&
+    subtitleCreator !== 'Usuario' &&
+    subtitleCreator !== 'Sistema' &&
+    subtitleCreator !== 'Happy Circle'
+  ) {
+    return subtitleCreator;
+  }
+
+  if (item.sourceType === 'system') {
+    return 'Sistema';
+  }
+
+  return firstName(actorLabel);
+}
+
+function compactTransactionTimeLabel(item: ActivityItemDto): string {
+  const subtitleParts = splitSubtitle(item.subtitle);
+
+  return (
+    item.happenedAtLabel ??
+    subtitleParts[subtitleParts.length - 1] ??
+    (item.happenedAt ? formatRelativeLabel(item.happenedAt) : 'reciente')
+  );
+}
+
+function compactTransactionMeta(item: ActivityItemDto, actorLabel: string): string {
+  const creatorLabel = compactTransactionCreatorLabel(item, actorLabel);
+  const createdByText =
+    creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
+
+  return `${createdByText} - ${compactTransactionTimeLabel(item)}`;
 }
 
 function personIdFromHref(href: string | undefined): string | null {
@@ -237,7 +336,23 @@ function isSentInvite(item: InviteRequestItem): boolean {
   );
 }
 
+function shouldShowRespondingInviteProfile(item: InviteRequestItem): boolean {
+  if (item.kind === 'friendship_invite') {
+    return (
+      item.actorRole === 'sender' &&
+      item.flow === 'external' &&
+      item.actionState !== 'pending_claim'
+    );
+  }
+
+  return item.actorRole === 'inviter' && Boolean(item.activatedUserId);
+}
+
 function displayNameForInvite(item: InviteRequestItem): string {
+  if (shouldShowRespondingInviteProfile(item) && item.respondingProfileDisplayName) {
+    return item.respondingProfileDisplayName;
+  }
+
   if (item.profileDisplayName && item.profileDisplayName !== 'Persona') {
     return item.profileDisplayName;
   }
@@ -248,8 +363,8 @@ function displayNameForInvite(item: InviteRequestItem): string {
     }
 
     return (
-      item.activatedUserDisplayName ??
-      item.intendedRecipientAlias ??
+      (item.actorRole === 'inviter' ? item.activatedUserDisplayName : null) ??
+      (item.actorRole === 'inviter' ? item.intendedRecipientAlias : null) ??
       item.counterpartyLabel ??
       item.title
     );
@@ -259,6 +374,7 @@ function displayNameForInvite(item: InviteRequestItem): string {
     /^(.+) quiere conectar contigo$/i,
     /^Esperando a (.+)$/i,
     /^Verifica a (.+)$/i,
+    /^(.+) reclamo la invitacion para .+$/i,
     /^Invitacion lista para (.+)$/i,
     /^QR temporal para (.+)$/i,
     /^Esperando validacion de (.+)$/i,
@@ -267,15 +383,18 @@ function displayNameForInvite(item: InviteRequestItem): string {
   for (const pattern of patterns) {
     const match = item.title.match(pattern);
     if (match?.[1]) {
-      return match[1].trim();
+      const matchedName = match[1].trim();
+      if (matchedName && matchedName !== 'Persona') {
+        return matchedName;
+      }
     }
   }
 
-  if (item.claimantSnapshot?.displayName) {
+  if (shouldShowRespondingInviteProfile(item) && item.claimantSnapshot?.displayName) {
     return item.claimantSnapshot.displayName;
   }
 
-  if (item.intendedRecipientAlias) {
+  if (item.actorRole === 'sender' && item.intendedRecipientAlias) {
     return item.intendedRecipientAlias;
   }
 
@@ -288,20 +407,22 @@ function pushUniqueDetail(
   value: string | null | undefined,
 ) {
   const trimmedValue = value?.trim();
-  if (!trimmedValue || details.some((detail) => detail.value === trimmedValue)) {
+  if (
+    !trimmedValue ||
+    details.some((detail) => detail.label === label && detail.value === trimmedValue)
+  ) {
     return;
   }
 
   details.push({ label, value: trimmedValue });
 }
 
-function inviteProfileDetails(item: InviteRequestItem): { readonly label: string; readonly value: string }[] {
+function inviteProfileDetails(
+  item: InviteRequestItem,
+): { readonly label: string; readonly value: string }[] {
   const details: { readonly label: string; readonly value: string }[] = [];
 
-  pushUniqueDetail(details, 'Telefono', item.profilePhoneLabel ?? item.intendedRecipientPhoneLabel);
   pushUniqueDetail(details, 'Correo', item.profileEmailLabel);
-  pushUniqueDetail(details, 'Referencia', item.profileReferenceLabel);
-  pushUniqueDetail(details, 'Detalle', item.profileRoleLabel);
 
   return details;
 }
@@ -459,7 +580,7 @@ function PersonTile({ person }: { readonly person: PersonCardDto }) {
             fallbackTextColor={theme.colors.white}
             imageUrl={person.avatarUrl ?? null}
             label={person.displayName}
-            size={48}
+            size={PEOPLE_TILE_AVATAR_SIZE}
           />
         </View>
         <Text numberOfLines={1} style={styles.peopleTileLabel}>
@@ -467,6 +588,19 @@ function PersonTile({ person }: { readonly person: PersonCardDto }) {
         </Text>
       </Pressable>
     </Link>
+  );
+}
+
+function HomeRefreshPinnedBrand({ active }: { readonly active: boolean }) {
+  return (
+    <View style={styles.homeRefreshPinnedBrand}>
+      {active ? (
+        <View style={styles.homeRefreshPill}>
+          <HappyCirclesMotion size={HOME_HEADER_BRAND_LOGO_SIZE} variant="refresh" />
+          <Text style={styles.homeRefreshPillText}>Sincronizando</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -483,51 +617,75 @@ function TransactionPreviewCard({
   readonly people: readonly PersonCardDto[];
   readonly unread?: boolean;
 }) {
+  const sign = compactTransactionSign(item);
   const name =
-    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
+    sign === 'cycle'
       ? 'Happy Circle'
       : (item.counterpartyLabel ?? 'Persona');
-  const context = '';
-  const meta = homeTransactionMeta(item, name);
   const person = transactionPersonForItem(people, item);
   const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
   const href = transactionPersonHref(person, item, targetPanel);
-  const recentStatusLabel = !isPending && item.status === 'rejected' ? transactionStatusLabel(item) : null;
-  const fallbackPerson: PersonCardDto = {
-    userId: person?.userId ?? item.id,
-    displayName: name,
-    avatarUrl: null,
-    direction: 'settled',
-    lastActivityLabel: '',
-    netAmountMinor: 0,
-    pendingCount: 0,
-  };
+  const amountLabel = compactTransactionAmountLabel(item);
+  const meta = compactTransactionMeta(item, name);
+  const category = transactionVisualCategory(item);
+  const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+  const statusLabel = isPending ? 'Pendiente' : transactionStatusLabel(item);
+  const content = (
+    <View
+      style={[
+        styles.transactionPreviewRow,
+        highlightPending ? styles.transactionPreviewRowPending : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.transactionPreviewCategory,
+          { backgroundColor: transactionCategoryBackgroundColor(category) },
+        ]}
+      >
+        <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={15} />
+      </View>
+
+      <View style={styles.transactionPreviewCopy}>
+        <View style={styles.transactionPreviewTitleRow}>
+          <Text numberOfLines={1} style={styles.transactionPreviewName}>
+            {name}
+          </Text>
+          {unread ? <View style={styles.transactionPreviewUnreadDot} /> : null}
+        </View>
+        <Text numberOfLines={1} style={styles.transactionPreviewMeta}>
+          {meta}
+        </Text>
+      </View>
+
+      <View style={styles.transactionPreviewSide}>
+        {amountLabel ? (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.transactionPreviewAmount,
+              { color: transactionToneColor(item) },
+              transactionAmountIsVoided(item) ? styles.transactionPreviewAmountVoided : null,
+            ]}
+          >
+            {amountLabel}
+          </Text>
+        ) : null}
+        {statusLabel && (isPending || transactionAmountIsVoided(item)) ? (
+          <Text numberOfLines={1} style={styles.transactionPreviewStatus}>
+            {statusLabel}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
-    <TransactionEventCard
-      accentColor={transactionAccentColor(item)}
-      actorAvatarUrl={person?.avatarUrl ?? null}
-      actorFallbackColor={initialsBackgroundColor(fallbackPerson)}
-      actorLabel={name}
-      amountColor={transactionToneColor(item)}
-      amountLabel={transactionAmountLabel(item)}
-      amountStruckThrough={transactionAmountIsVoided(item)}
-      category={transactionVisualCategory(item)}
-      categoryPlacement="meta"
-      compact
-      compactMetaLayout={isPending ? 'inline' : 'stacked'}
-      context={context}
-      contextVariant={isPending ? 'badge' : 'text'}
-      directionLayout={isPending ? 'floating' : 'stacked'}
-      directionLabel={isPending ? transactionDirectionLabel(item) : null}
-      href={href}
-      meta={meta}
-      pending={highlightPending}
-      pendingHighlightColor={highlightPending ? transactionAccentColor(item) : undefined}
-      statusLabel={isPending ? null : recentStatusLabel}
-      statusTone={transactionStatusTone(item)}
-      unread={unread}
-    />
+    <Link href={href} asChild>
+      <Pressable style={({ pressed }) => [pressed ? styles.quickActionPressed : null]}>
+        {content}
+      </Pressable>
+    </Link>
   );
 }
 
@@ -580,11 +738,17 @@ function InviteRequestRow({
     .join(' | ');
   const busyPrefix = `${item.kind}:${item.inviteId}:`;
   const isBusy = Boolean(busyKey?.startsWith(busyPrefix));
+  const showRespondingProfile = shouldShowRespondingInviteProfile(item);
   const avatarUrl =
+    (showRespondingProfile ? item.respondingProfileAvatarUrl : null) ??
     item.profileAvatarUrl ??
     (item.kind === 'friendship_invite'
-      ? resolveAvatarUrl(item.claimantSnapshot?.avatarPath ?? null)
-      : item.activatedUserAvatarUrl);
+      ? showRespondingProfile
+        ? resolveAvatarUrl(item.claimantSnapshot?.avatarPath ?? null)
+        : null
+      : showRespondingProfile
+        ? item.activatedUserAvatarUrl
+        : null);
   const profileDetails = inviteProfileDetails(item);
   const fallbackPerson: PersonCardDto = {
     userId: item.inviteId,
@@ -596,67 +760,63 @@ function InviteRequestRow({
     pendingCount: 0,
   };
 
-  const actionContent = (
+  const actionContent =
     item.actionState === 'requires_you_response' ? (
       <View style={styles.requestActions}>
-        <>
-          <Pressable
-            disabled={isBusy}
-            onPress={() => onAction(item, 'accept')}
-            style={({ pressed }) => [
-              styles.requestIconButton,
-              styles.requestAcceptButton,
-              pressed ? styles.quickActionPressed : null,
-              isBusy ? styles.actionDisabled : null,
-            ]}
-          >
-            <Ionicons color={theme.colors.white} name="checkmark" size={18} />
-          </Pressable>
-          <Pressable
-            disabled={isBusy}
-            onPress={() => onAction(item, 'reject')}
-            style={({ pressed }) => [
-              styles.requestIconButton,
-              styles.requestRejectButton,
-              pressed ? styles.quickActionPressed : null,
-              isBusy ? styles.actionDisabled : null,
-            ]}
-          >
-            <Ionicons color={theme.colors.white} name="close" size={18} />
-          </Pressable>
-        </>
+        <Pressable
+          disabled={isBusy}
+          onPress={() => onAction(item, 'reject')}
+          style={({ pressed }) => [
+            styles.requestDecisionButton,
+            styles.requestSecondaryButton,
+            pressed ? styles.quickActionPressed : null,
+            isBusy ? styles.actionDisabled : null,
+          ]}
+        >
+          <Text style={[styles.requestDecisionText, styles.requestSecondaryText]}>Rechazar</Text>
+        </Pressable>
+        <Pressable
+          disabled={isBusy}
+          onPress={() => onAction(item, 'accept')}
+          style={({ pressed }) => [
+            styles.requestDecisionButton,
+            styles.requestPrimaryButton,
+            pressed ? styles.quickActionPressed : null,
+            isBusy ? styles.actionDisabled : null,
+          ]}
+        >
+          <Text style={[styles.requestDecisionText, styles.requestPrimaryText]}>Aceptar</Text>
+        </Pressable>
       </View>
     ) : item.actionState === 'requires_you_review' ? (
       <View style={styles.requestActions}>
-        <>
-          <Pressable
-            disabled={isBusy}
-            onPress={() => onAction(item, 'approve')}
-            style={({ pressed }) => [
-              styles.requestIconButton,
-              styles.requestAcceptButton,
-              pressed ? styles.quickActionPressed : null,
-              isBusy ? styles.actionDisabled : null,
-            ]}
-          >
-            <Ionicons color={theme.colors.white} name="checkmark" size={18} />
-          </Pressable>
-          <Pressable
-            disabled={isBusy}
-            onPress={() => onAction(item, 'reject')}
-            style={({ pressed }) => [
-              styles.requestIconButton,
-              styles.requestRejectButton,
-              pressed ? styles.quickActionPressed : null,
-              isBusy ? styles.actionDisabled : null,
-            ]}
-          >
-            <Ionicons color={theme.colors.white} name="close" size={18} />
-          </Pressable>
-        </>
+        <Pressable
+          disabled={isBusy}
+          onPress={() => onAction(item, 'reject')}
+          style={({ pressed }) => [
+            styles.requestDecisionButton,
+            styles.requestSecondaryButton,
+            pressed ? styles.quickActionPressed : null,
+            isBusy ? styles.actionDisabled : null,
+          ]}
+        >
+          <Text style={[styles.requestDecisionText, styles.requestSecondaryText]}>Rechazar</Text>
+        </Pressable>
+        <Pressable
+          disabled={isBusy}
+          onPress={() => onAction(item, 'approve')}
+          style={({ pressed }) => [
+            styles.requestDecisionButton,
+            styles.requestPrimaryButton,
+            pressed ? styles.quickActionPressed : null,
+            isBusy ? styles.actionDisabled : null,
+          ]}
+        >
+          <Text style={[styles.requestDecisionText, styles.requestPrimaryText]}>Aceptar</Text>
+        </Pressable>
       </View>
     ) : item.kind === 'friendship_invite' && item.actionState === 'pending_claim' ? (
-      <View style={styles.requestActions}>
+      <View style={[styles.requestActions, styles.requestSingleActionRow]}>
         <Pressable
           disabled={isBusy}
           onPress={() => onAction(item, 'cancel')}
@@ -669,8 +829,7 @@ function InviteRequestRow({
           <Text style={styles.sentCancelText}>Cancelar</Text>
         </Pressable>
       </View>
-    ) : null
-  );
+    ) : null;
 
   return (
     <TransactionEventCard
@@ -685,8 +844,8 @@ function InviteRequestRow({
       categoryPlacement="meta"
       compact
       compactMetaLayout="stacked"
+      contentHref={item.profileHref ? (item.profileHref as Href) : undefined}
       context={inviteContextForDisplay(item, displayName)}
-      directionLabel="Solicitud"
       meta={meta || subtitle}
       statusLabel={statusLabelForInvite(item)}
       statusTone={inviteStatusTone(item)}
@@ -706,6 +865,30 @@ function InviteRequestRow({
       {actionContent}
     </TransactionEventCard>
   );
+}
+
+function inviteRequestEmptyTitle(tab: InviteRequestsTab): string {
+  if (tab === 'received') {
+    return 'Sin solicitudes recibidas';
+  }
+
+  if (tab === 'sent') {
+    return 'Sin solicitudes enviadas';
+  }
+
+  return 'Sin historial';
+}
+
+function inviteRequestEmptyDescription(tab: InviteRequestsTab): string {
+  if (tab === 'received') {
+    return 'Cuando alguien quiera conectar contigo, aparecera aqui.';
+  }
+
+  if (tab === 'history') {
+    return 'Las solicitudes resueltas y vencidas apareceran aqui.';
+  }
+
+  return 'Las invitaciones que envies quedaran en esta pestana.';
 }
 
 function InviteRequestsSheet({
@@ -731,12 +914,47 @@ function InviteRequestsSheet({
   readonly sentItems: readonly InviteRequestItem[];
   readonly visible: boolean;
 }) {
-  const items =
-    activeTab === 'received'
-      ? receivedItems
-      : activeTab === 'sent'
-        ? sentItems
-        : historyItems;
+  const [visualTab, setVisualTab] = useState<InviteRequestsTab>(activeTab);
+
+  useEffect(() => {
+    setVisualTab(activeTab);
+  }, [activeTab]);
+
+  function changeTab(tab: InviteRequestsTab) {
+    setVisualTab(tab);
+    onChangeTab(tab);
+  }
+
+  function renderRequestPage(tab: InviteRequestsTab) {
+    const items = tab === 'received' ? receivedItems : tab === 'sent' ? sentItems : historyItems;
+
+    return (
+      <ScrollView
+        contentContainerStyle={[
+          styles.requestList,
+          items.length === 0 ? styles.requestListEmpty : null,
+        ]}
+        showsVerticalScrollIndicator={false}
+        style={styles.requestScroll}
+      >
+        {items.length === 0 ? (
+          <View style={styles.sheetEmpty}>
+            <Text style={styles.sheetEmptyTitle}>{inviteRequestEmptyTitle(tab)}</Text>
+            <Text style={styles.sheetEmptyText}>{inviteRequestEmptyDescription(tab)}</Text>
+          </View>
+        ) : (
+          items.map((item) => (
+            <InviteRequestRow
+              busyKey={busyKey}
+              item={item}
+              key={`${item.kind}:${item.inviteId}`}
+              onAction={onAction}
+            />
+          ))
+        )}
+      </ScrollView>
+    );
+  }
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
@@ -753,55 +971,32 @@ function InviteRequestsSheet({
             <InviteRequestTabButton
               count={receivedItems.length}
               label="Recibidas"
-              onPress={() => onChangeTab('received')}
-              selected={activeTab === 'received'}
+              onPress={() => changeTab('received')}
+              selected={visualTab === 'received'}
             />
             <InviteRequestTabButton
               count={sentItems.length}
               label="Enviadas"
-              onPress={() => onChangeTab('sent')}
-              selected={activeTab === 'sent'}
+              onPress={() => changeTab('sent')}
+              selected={visualTab === 'sent'}
             />
             <InviteRequestTabButton
               count={historyItems.length}
               label="Historico"
-              onPress={() => onChangeTab('history')}
-              selected={activeTab === 'history'}
+              onPress={() => changeTab('history')}
+              selected={visualTab === 'history'}
             />
           </View>
           {message ? <MessageBanner message={message} tone="neutral" /> : null}
-          <ScrollView
-            contentContainerStyle={styles.requestList}
-            showsVerticalScrollIndicator={false}
-          >
-            {items.length === 0 ? (
-              <View style={styles.sheetEmpty}>
-                <Text style={styles.sheetEmptyTitle}>
-                  {activeTab === 'received'
-                    ? 'Sin solicitudes recibidas'
-                    : activeTab === 'sent'
-                      ? 'Sin solicitudes enviadas'
-                      : 'Sin historial'}
-                </Text>
-                <Text style={styles.sheetEmptyText}>
-                  {activeTab === 'received'
-                    ? 'Cuando alguien quiera conectar contigo, aparecera aqui.'
-                    : activeTab === 'history'
-                      ? 'Las solicitudes resueltas y vencidas apareceran aqui.'
-                    : 'Las invitaciones que envies quedaran en esta pestaña.'}
-                </Text>
-              </View>
-            ) : (
-              items.map((item) => (
-                <InviteRequestRow
-                  busyKey={busyKey}
-                  item={item}
-                  key={`${item.kind}:${item.inviteId}`}
-                  onAction={onAction}
-                />
-              ))
-            )}
-          </ScrollView>
+          <SwipePager
+            accessibilityLabel="Pestanas de solicitudes"
+            onChange={changeTab}
+            onPreviewChange={setVisualTab}
+            renderPage={(tab) => renderRequestPage(tab)}
+            style={styles.requestPager}
+            value={activeTab}
+            values={INVITE_REQUEST_TABS}
+          />
         </View>
       </View>
     </Modal>
@@ -812,6 +1007,17 @@ export function DashboardScreen() {
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
+  const [homeRefreshActive, setHomeRefreshActive] = useState(false);
+  const homeRefresh = useMemo(
+    () => ({
+      ...refresh,
+      contentOffsetEnabled: true,
+      indicatorVisible: false,
+      indicatorLogoVisible: false,
+      onPullStateChange: setHomeRefreshActive,
+    }),
+    [refresh],
+  );
   const homeIntent = useHomeNavigationIntent();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
@@ -856,8 +1062,12 @@ export function DashboardScreen() {
   const pendingTransactionItems = (pendingSection?.items ?? [])
     .filter(isPendingTransactionItem)
     .slice(0, 2);
-  const recentTransactionItems = (historySection?.items ?? [])
-    .filter(isConsolidatedTransactionItem)
+  const recentTransactionItems = buildHistoryCases(
+    (historySection?.items ?? [])
+      .filter(isConsolidatedTransactionItem)
+      .filter(isHistoryCaseItem),
+  )
+    .map((itemCase) => itemCase.latest)
     .slice(0, RECENT_TRANSACTION_LIMIT);
   const transactionPreviewItems = [
     ...pendingTransactionItems.map((item) => ({
@@ -1016,11 +1226,7 @@ export function DashboardScreen() {
   function openInviteRequests() {
     setInviteMessage(null);
     setInviteTab(
-      receivedInviteItems.length > 0
-        ? 'received'
-        : sentInviteItems.length > 0
-          ? 'sent'
-          : 'history',
+      receivedInviteItems.length > 0 ? 'received' : sentInviteItems.length > 0 ? 'sent' : 'history',
     );
     setInviteSheetVisible(true);
   }
@@ -1079,18 +1285,54 @@ export function DashboardScreen() {
     }
   }
 
-  const homeEntryReady = !snapshotQuery.isLoading && (Boolean(dashboard) || Boolean(snapshotQuery.error));
-
   useEffect(() => {
-    if (homeEntryReady) {
-      markHomeEntryReady();
-    }
-  }, [homeEntryReady]);
+    let secondFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        markHomeEntryReady();
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) {
+        cancelAnimationFrame(secondFrame);
+      }
+    };
+  }, []);
+
+  if (snapshotQuery.error && !dashboard) {
+    return (
+      <ScreenShell
+        headerTitle={
+          <HeaderBrandTitle
+            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
+            logoVisible={!homeRefreshActive}
+            refreshActive={homeRefreshActive}
+            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
+          />
+        }
+        headerVariant="plain"
+        pinHeaderDuringRefresh
+        refresh={homeRefresh}
+        refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
+        title="Happy Circles"
+        titleAlign="center"
+      >
+        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+      </ScreenShell>
+    );
+  }
 
   if (snapshotQuery.isLoading || !dashboard) {
     return (
       <ScreenShell
-        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+        headerTitle={
+          <HeaderBrandTitle
+            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
+            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
+          />
+        }
         headerVariant="plain"
         title="Happy Circles"
         titleAlign="center"
@@ -1121,9 +1363,18 @@ export function DashboardScreen() {
   if (snapshotQuery.error) {
     return (
       <ScreenShell
-        headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+        headerTitle={
+          <HeaderBrandTitle
+            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
+            logoVisible={!homeRefreshActive}
+            refreshActive={homeRefreshActive}
+            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
+          />
+        }
         headerVariant="plain"
-        refresh={refresh}
+        pinHeaderDuringRefresh
+        refresh={homeRefresh}
+        refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
         title="Happy Circles"
         titleAlign="center"
       >
@@ -1145,16 +1396,25 @@ export function DashboardScreen() {
             <AppAvatar
               imageUrl={currentUserProfile?.avatarUrl ?? null}
               label={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
-              size={34}
+              size={HOME_HEADER_AVATAR_SIZE}
             />
           </Pressable>
         </Link>
       }
-      headerTitle={<HeaderBrandTitle logoSize={68} titleSize={30} />}
+      headerTitle={
+        <HeaderBrandTitle
+          logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
+          logoVisible={!homeRefreshActive}
+          refreshActive={homeRefreshActive}
+          titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
+        />
+      }
       headerSlot={<NotificationBellButton count={dashboard.urgentCount} href="/activity" />}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
-      refresh={refresh}
+      pinHeaderDuringRefresh
+      refresh={homeRefresh}
+      refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
       title="Happy Circles"
       titleAlign="center"
     >
@@ -1278,6 +1538,31 @@ const styles = StyleSheet.create({
   homeContent: {
     gap: theme.spacing.xl,
   },
+  homeRefreshPinnedBrand: {
+    height: HOME_HEADER_BRAND_LOGO_SIZE,
+    position: 'relative',
+    width: HOME_HEADER_BRAND_LOCKUP_WIDTH,
+  },
+  homeRefreshPill: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: HOME_REFRESH_PILL_BORDER_WIDTH,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    left: -(HOME_REFRESH_PILL_HORIZONTAL_PADDING + HOME_REFRESH_PILL_BORDER_WIDTH),
+    paddingHorizontal: HOME_REFRESH_PILL_HORIZONTAL_PADDING,
+    paddingVertical: HOME_REFRESH_PILL_VERTICAL_PADDING,
+    position: 'absolute',
+    top: -(HOME_REFRESH_PILL_VERTICAL_PADDING + HOME_REFRESH_PILL_BORDER_WIDTH),
+    ...theme.shadow.card,
+  },
+  homeRefreshPillText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
@@ -1334,9 +1619,9 @@ const styles = StyleSheet.create({
   profileButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 42,
+    height: HOME_HEADER_ACTION_SIZE,
     justifyContent: 'center',
-    width: 42,
+    width: HOME_HEADER_ACTION_SIZE,
   },
   quickActionPressed: {
     opacity: 0.6,
@@ -1358,7 +1643,7 @@ const styles = StyleSheet.create({
   peopleTile: {
     alignItems: 'center',
     gap: 6,
-    width: 68,
+    width: PEOPLE_TILE_WIDTH,
   },
   shortcutCircle: {
     alignItems: 'center',
@@ -1366,10 +1651,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accent,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 56,
+    height: PEOPLE_TILE_CIRCLE_SIZE,
     justifyContent: 'center',
     position: 'relative',
-    width: 56,
+    width: PEOPLE_TILE_CIRCLE_SIZE,
   },
   shortcutCircleDashed: {
     borderStyle: 'dashed',
@@ -1398,22 +1683,100 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.pill,
     borderWidth: 2,
-    height: 56,
+    height: PEOPLE_TILE_CIRCLE_SIZE,
     justifyContent: 'center',
-    width: 56,
+    width: PEOPLE_TILE_CIRCLE_SIZE,
   },
   peopleTileLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.caption,
     fontWeight: '700',
-    maxWidth: 68,
+    includeFontPadding: false,
+    lineHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
+    maxWidth: PEOPLE_TILE_WIDTH,
+    minHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
     textAlign: 'center',
   },
   dashboardSettlementContainer: {
     paddingHorizontal: theme.spacing.lg,
   },
   transactionList: {
+    gap: 6,
+  },
+  transactionPreviewRow: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    flexDirection: 'row',
     gap: theme.spacing.sm,
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
+  },
+  transactionPreviewRowPending: {
+    backgroundColor: '#fffaf0',
+    borderColor: 'rgba(249, 115, 22, 0.14)',
+  },
+  transactionPreviewCategory: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  transactionPreviewCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
+  },
+  transactionPreviewTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minWidth: 0,
+  },
+  transactionPreviewName: {
+    color: theme.colors.text,
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  transactionPreviewUnreadDot: {
+    backgroundColor: '#2f80ed',
+    borderRadius: theme.radius.pill,
+    height: 6,
+    width: 6,
+  },
+  transactionPreviewMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  transactionPreviewSide: {
+    alignItems: 'flex-end',
+    gap: 1,
+    maxWidth: 112,
+  },
+  transactionPreviewAmount: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 17,
+    textAlign: 'right',
+  },
+  transactionPreviewAmountVoided: {
+    opacity: 0.68,
+    textDecorationLine: 'line-through',
+  },
+  transactionPreviewStatus: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 12,
+    textAlign: 'right',
   },
   sheetScrim: {
     backgroundColor: theme.colors.overlay,
@@ -1432,7 +1795,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
     gap: theme.spacing.sm,
-    maxHeight: '76%',
+    height: '82%',
+    maxHeight: '88%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
@@ -1495,13 +1859,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   requestList: {
+    flexGrow: 1,
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
+  },
+  requestListEmpty: {
+    justifyContent: 'center',
+    paddingBottom: theme.spacing.xl,
+  },
+  requestPager: {
+    flex: 1,
+    minHeight: 0,
+  },
+  requestScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   requestActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+    paddingTop: theme.spacing.xs,
+  },
+  requestSingleActionRow: {
     justifyContent: 'flex-end',
   },
   requestProfilePanel: {
@@ -1529,18 +1910,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
-  requestIconButton: {
+  requestDecisionButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 34,
+    flex: 1,
     justifyContent: 'center',
-    width: 34,
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.sm,
   },
-  requestAcceptButton: {
+  requestPrimaryButton: {
     backgroundColor: theme.colors.success,
   },
-  requestRejectButton: {
-    backgroundColor: theme.colors.danger,
+  requestSecondaryButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.danger,
+    borderWidth: 1,
+  },
+  requestDecisionText: {
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  requestPrimaryText: {
+    color: theme.colors.white,
+  },
+  requestSecondaryText: {
+    color: theme.colors.danger,
   },
   actionDisabled: {
     opacity: 0.46,
@@ -1550,7 +1946,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   sentCancelText: {
     color: theme.colors.danger,

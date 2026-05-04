@@ -25,6 +25,8 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly footerDivider?: boolean;
   readonly headerVisible?: boolean;
   readonly overlay?: ReactNode;
+  readonly pinHeaderDuringRefresh?: boolean;
+  readonly refreshPinnedHeaderTitle?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
   readonly scrollEnabled?: boolean;
   readonly scrollViewRef?: RefObject<ScrollView | null>;
@@ -48,6 +50,8 @@ export function ScreenShell({
   footerDivider = true,
   headerVisible = true,
   overlay,
+  pinHeaderDuringRefresh = false,
+  refreshPinnedHeaderTitle,
   refresh,
   scrollEnabled = true,
   scrollViewRef,
@@ -67,48 +71,76 @@ export function ScreenShell({
             ? styles.largeTitle
             : styles.compactTitle;
 
-  const screenContent = (
-    <View
-      style={[
-        styles.contentWidth,
-        !shouldUseScroll ? styles.contentWidthFixed : null,
-        contentMode === 'full' ? styles.contentWidthFull : null,
-        contentWidthStyle,
-      ]}
-    >
-      {headerVisible ? (
-        <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
-          {eyebrow ? (
-            <View style={styles.eyebrowBadge}>
-              <Text style={styles.eyebrowText}>{eyebrow}</Text>
-            </View>
-          ) : null}
-          <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
-            {headerTitle ? (
-              <>
-                {headerLeading}
-                <View style={styles.headerTitleNode}>{headerTitle}</View>
-                {headerSlot}
-              </>
-            ) : (
-              <>
-                {headerLeading}
-                <Text
-                  style={[
-                    styles.title,
-                    titleAlign === 'center' ? styles.titleCentered : null,
-                    resolvedTitleStyle,
-                  ]}
-                >
-                  {title}
-                </Text>
-                {headerSlot}
-              </>
-            )}
-          </View>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+  const headerNode = headerVisible ? (
+    <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+      {eyebrow ? (
+        <View style={styles.eyebrowBadge}>
+          <Text style={styles.eyebrowText}>{eyebrow}</Text>
         </View>
       ) : null}
+      <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
+        {headerTitle ? (
+          <>
+            {headerLeading}
+            <View style={styles.headerTitleNode}>{headerTitle}</View>
+            {headerSlot}
+          </>
+        ) : (
+          <>
+            {headerLeading}
+            <Text
+              style={[
+                styles.title,
+                titleAlign === 'center' ? styles.titleCentered : null,
+                resolvedTitleStyle,
+              ]}
+            >
+              {title}
+            </Text>
+            {headerSlot}
+          </>
+        )}
+      </View>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    </View>
+  ) : null;
+
+  const contentWidthStyles = [
+    styles.contentWidth,
+    !shouldUseScroll ? styles.contentWidthFixed : null,
+    contentMode === 'full' ? styles.contentWidthFull : null,
+    contentWidthStyle,
+  ];
+  const shouldPinHeader =
+    shouldUseScroll && pinHeaderDuringRefresh && refresh?.contentOffsetEnabled === true;
+  const pinnedHeaderNode =
+    shouldPinHeader && refreshPinnedHeaderTitle && headerVisible ? (
+      <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+        <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
+          {headerLeading ? (
+            <View pointerEvents="none" style={styles.pinnedHeaderPlaceholder}>
+              {headerLeading}
+            </View>
+          ) : null}
+          <View style={styles.headerTitleNode}>{refreshPinnedHeaderTitle}</View>
+          {headerSlot ? (
+            <View pointerEvents="none" style={styles.pinnedHeaderPlaceholder}>
+              {headerSlot}
+            </View>
+          ) : null}
+        </View>
+      </View>
+    ) : null;
+  const fixedHeader = shouldPinHeader ? (
+    <View style={styles.fixedRefreshHeader}>
+      <View style={[contentWidthStyles, styles.contentWidthNoGrow]}>
+        {pinnedHeaderNode ?? headerNode}
+      </View>
+    </View>
+  ) : undefined;
+  const scrollBody = (
+    <View style={contentWidthStyles}>
+      {headerNode}
       {children}
     </View>
   );
@@ -129,14 +161,15 @@ export function ScreenShell({
           style={styles.scrollView}
           contentContainerStyle={contentStyle}
           fillViewport
+          fixedHeader={fixedHeader}
           keyboardShouldPersistTaps="handled"
           refresh={refresh}
           showsVerticalScrollIndicator={false}
         >
-          {screenContent}
+          {scrollBody}
         </BrandedRefreshScrollView>
       ) : (
-        <View style={contentStyle}>{screenContent}</View>
+        <View style={contentStyle}>{scrollBody}</View>
       )}
       {footer ? (
         <View style={[styles.footer, !footerDivider ? styles.footerNoDivider : null]}>
@@ -183,6 +216,13 @@ const styles = StyleSheet.create({
   contentWidthFixed: {
     flex: 1,
   },
+  contentWidthNoGrow: {
+    flexGrow: 0,
+  },
+  fixedRefreshHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+  },
   contentWidthFull: {
     maxWidth: '100%',
   },
@@ -223,6 +263,9 @@ const styles = StyleSheet.create({
   },
   heroHeaderCentered: {
     justifyContent: 'center',
+  },
+  pinnedHeaderPlaceholder: {
+    opacity: 0,
   },
   headerTitleNode: {
     alignItems: 'center',

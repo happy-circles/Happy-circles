@@ -16,16 +16,16 @@ export async function dismissSetupPrompt(userId: string | null): Promise<void> {
   await setStoredItem(storageKey(userId), 'true');
 }
 
-function setupReminderSubtitle(needsContacts: boolean, needsNotifications: boolean): string {
-  if (needsContacts && needsNotifications) {
-    return 'Activa contactos y recordatorios cuando quieras terminar la configuracion.';
-  }
-
+function setupReminderSubtitle(needsContacts: boolean): string {
   if (needsContacts) {
-    return 'Permite contactos cuando quieras encontrar personas mas rapido.';
+    return 'Contactos pendientes.';
   }
 
-  return 'Activa recordatorios cuando quieras recibir avisos sobre pendientes.';
+  return 'Recordatorios pendientes.';
+}
+
+function setupReminderHref(needsContacts: boolean): string {
+  return needsContacts ? '/people?addPerson=1' : '/profile?focus=notifications';
 }
 
 export function buildSetupReminderItem({
@@ -43,13 +43,11 @@ export function buildSetupReminderItem({
     id: 'local-setup-reminder',
     kind: 'system_note',
     sourceType: 'system',
-    title: 'Termina los ajustes de la app',
-    subtitle: setupReminderSubtitle(needsContacts, needsNotifications),
+    title: 'Ajuste pendiente',
+    subtitle: setupReminderSubtitle(needsContacts),
     status: 'pending',
-    detail: needsContacts
-      ? 'Puedes retomarlo desde Personas o Perfil.'
-      : 'Puedes retomarlo desde Perfil.',
-    href: needsContacts ? '/people' : '/profile',
+    detail: needsContacts ? 'Abrir Personas.' : 'Abrir Recordatorios.',
+    href: setupReminderHref(needsContacts),
     counterpartyLabel: 'Happy Circles',
   };
 }

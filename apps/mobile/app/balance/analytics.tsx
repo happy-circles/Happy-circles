@@ -1,7 +1,30 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { BalanceAnalyticsScreen } from '@/features/balance/balance-analytics-screen';
+import {
+  BalanceOverviewScreen,
+  type BalanceFocus,
+} from '@/features/balance/balance-overview-screen';
 import { theme } from '@/lib/theme';
+
+function segmentToFocus(segment: string | null): BalanceFocus {
+  if (segment === 'people') {
+    return 'people';
+  }
+
+  if (segment === 'categories') {
+    return 'categories';
+  }
+
+  if (segment === 'settlements') {
+    return 'settlements';
+  }
+
+  if (segment === 'projection') {
+    return 'projection';
+  }
+
+  return 'balance';
+}
 
 export default function BalanceAnalyticsRoute() {
   const params = useLocalSearchParams<{ segment?: string }>();
@@ -11,7 +34,7 @@ export default function BalanceAnalyticsRoute() {
     <>
       <Stack.Screen
         options={{
-          title: 'Analitica',
+          title: 'Balance',
           headerBackTitle: '',
           headerShadowVisible: false,
           headerStyle: { backgroundColor: theme.colors.background },
@@ -19,7 +42,7 @@ export default function BalanceAnalyticsRoute() {
           headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
         }}
       />
-      <BalanceAnalyticsScreen initialSegment={initialSegment} />
+      <BalanceOverviewScreen initialFocus={segmentToFocus(initialSegment)} />
     </>
   );
 }

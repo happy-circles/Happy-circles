@@ -5,6 +5,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
+const NOTIFICATION_BUTTON_SIZE = 48;
+const NOTIFICATION_ICON_SIZE = 24;
+
 export interface NotificationBellButtonProps {
   readonly count: number;
   readonly href: Href;
@@ -32,7 +35,7 @@ export function NotificationBellButton({ count, href }: NotificationBellButtonPr
         <Ionicons
           color={hasUnread ? theme.colors.primary : theme.colors.text}
           name={hasUnread ? 'notifications' : 'notifications-outline'}
-          size={20}
+          size={NOTIFICATION_ICON_SIZE}
         />
         {hasUnread ? (
           <View style={styles.badge}>
@@ -51,10 +54,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.hairline,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 42,
+    height: NOTIFICATION_BUTTON_SIZE,
     justifyContent: 'center',
     position: 'relative',
-    width: 42,
+    width: NOTIFICATION_BUTTON_SIZE,
     ...theme.shadow.card,
   },
   buttonActive: {

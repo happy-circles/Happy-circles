@@ -1,7 +1,7 @@
 export const noActiveRelationshipsEmptyState = {
   title: 'Todavia no tienes relaciones activas',
   description:
-    'Primero conecta con alguien desde Personas. Puedes compartir una invitacion privada o pegar una que te hayan mandado.',
-  actionLabel: 'Abrir Personas',
-  actionSubtitle: 'Desde ahi puedes invitar o entrar con un link o codigo.',
+    'Primero agrega a alguien desde tu agenda, por invitacion privada o con QR en persona.',
+  actionLabel: 'Agregar personas',
+  actionSubtitle: 'Busca contactos, envia solicitudes o comparte tu QR.',
 } as const;

@@ -1,25 +1,32 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
-import { AppTextInput } from '@/components/app-text-input';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { PersonRow } from '@/components/person-row';
-import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 
 export function PeopleIndexScreen() {
+  const params = useLocalSearchParams<{
+    addPerson?: string;
+    amountMinor?: string;
+    description?: string;
+    direction?: string;
+  }>();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const people = snapshotQuery.data?.dashboard.activePeople ?? [];
+  const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const [personQuery, setPersonQuery] = useState('');
+  const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<{
     readonly imageUrl: string | null;
     readonly label: string;
@@ -34,6 +41,28 @@ export function PeopleIndexScreen() {
       person.displayName.toLocaleLowerCase('es-CO').includes(normalizedQuery),
     );
   }, [people, normalizedQuery]);
+  const transactionContext = useMemo(() => {
+    const amountMinor =
+      typeof params.amountMinor === 'string' ? Number.parseInt(params.amountMinor, 10) : Number.NaN;
+    const direction: 'i_owe' | 'owes_me' | null =
+      params.direction === 'i_owe' ? 'i_owe' : params.direction === 'owes_me' ? 'owes_me' : null;
+
+    if (!Number.isFinite(amountMinor) || amountMinor <= 0 || !direction) {
+      return null;
+    }
+
+    return {
+      amountMinor,
+      description: typeof params.description === 'string' ? params.description : null,
+      direction,
+    };
+  }, [params.amountMinor, params.description, params.direction]);
+
+  useEffect(() => {
+    if (params.addPerson === '1') {
+      setAddPersonSheetVisible(true);
+    }
+  }, [params.addPerson]);
 
   if (snapshotQuery.isLoading) {
     return (
@@ -57,11 +86,12 @@ export function PeopleIndexScreen() {
   return (
     <ScreenShell
       headerSlot={
-        <Link href="/invite" asChild>
-          <Pressable style={({ pressed }) => [styles.addButton, pressed ? styles.pressed : null]}>
-            <Ionicons color={theme.colors.text} name="person-add-outline" size={18} />
-          </Pressable>
-        </Link>
+        <Pressable
+          onPress={() => setAddPersonSheetVisible(true)}
+          style={({ pressed }) => [styles.addButton, pressed ? styles.pressed : null]}
+        >
+          <Ionicons color={theme.colors.text} name="person-add-outline" size={18} />
+        </Pressable>
       }
       headerVariant="plain"
       largeTitle={false}
@@ -69,29 +99,27 @@ export function PeopleIndexScreen() {
       title="Personas"
     >
       {people.length > 0 ? (
-        <AppTextInput
-          autoCapitalize="words"
-          clearButtonMode="while-editing"
-          onChangeText={setPersonQuery}
-          placeholder="Buscar persona"
-          placeholderTextColor={theme.colors.muted}
-          style={styles.searchInput}
-          value={personQuery}
-        />
+        <View style={styles.searchWrap}>
+          <Ionicons color={theme.colors.textMuted} name="search-outline" size={18} />
+          <TextInput
+            autoCapitalize="words"
+            clearButtonMode="while-editing"
+            cursorColor={theme.colors.primary}
+            onChangeText={setPersonQuery}
+            placeholder="Buscar persona"
+            placeholderTextColor={theme.colors.muted}
+            selectionColor={theme.colors.primary}
+            style={styles.searchInput}
+            value={personQuery}
+          />
+        </View>
       ) : null}
 
       {people.length === 0 ? (
-        <View style={styles.onboardingStack}>
-          <EmptyState
-            description={noActiveRelationshipsEmptyState.description}
-            title={noActiveRelationshipsEmptyState.title}
-          />
-          <PrimaryAction
-            href="/invite"
-            label={noActiveRelationshipsEmptyState.actionLabel}
-            subtitle={noActiveRelationshipsEmptyState.actionSubtitle}
-          />
-        </View>
+        <EmptyState
+          description={noActiveRelationshipsEmptyState.description}
+          title={noActiveRelationshipsEmptyState.title}
+        />
       ) : filteredPeople.length === 0 ? (
         <EmptyState
           description="Prueba con otro nombre o borra la busqueda para ver toda tu red."
@@ -119,6 +147,13 @@ export function PeopleIndexScreen() {
         onClose={() => setAvatarPreview(null)}
         visible={avatarPreview !== null}
       />
+      <AddPersonContactsSheet
+        currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
+        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+        onClose={() => setAddPersonSheetVisible(false)}
+        transactionContext={transactionContext}
+        visible={addPersonSheetVisible}
+      />
     </ScreenShell>
   );
 }
@@ -145,13 +180,27 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.62,
   },
-  searchInput: {
-    borderRadius: theme.radius.large,
-    minHeight: 44,
-    paddingVertical: theme.spacing.xs,
+  searchWrap: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.sm,
   },
-  onboardingStack: {
-    gap: theme.spacing.sm,
+  searchInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+    minHeight: 50,
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
   },
   list: {
     gap: theme.spacing.sm,

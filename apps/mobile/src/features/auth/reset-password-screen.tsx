@@ -46,7 +46,7 @@ export function ResetPasswordScreen() {
     const nextErrors = {
       password: password.length >= 8 ? undefined : 'Debe tener al menos 8 caracteres.',
       confirmPassword:
-        confirmPassword === password ? undefined : 'Las contrasenas deben coincidir.',
+        confirmPassword === password ? undefined : 'Las contraseñas deben coincidir.',
     };
 
     if (nextErrors.password || nextErrors.confirmPassword) {
@@ -105,14 +105,14 @@ export function ResetPasswordScreen() {
               ? 'Elige una clave segura para tu cuenta.'
               : 'Pide un enlace nuevo para continuar.'
           }
-          title={hasRecoverySession ? 'Restablece tu contrasena' : 'Enlace no disponible'}
+          title={hasRecoverySession ? 'Restablece tu contraseña' : 'Enlace no disponible'}
         />
       }
     >
       <IdentityFlowMessageSlot>
         {!hasRecoverySession ? (
           <MessageBanner
-            message="Este enlace ya no es valido o no se pudo abrir en la app. Pide uno nuevo desde Ingresar."
+            message="Este enlace ya no es válido o no se pudo abrir en la app. Pide uno nuevo desde Ingresar."
             tone="warning"
           />
         ) : message ? (
@@ -123,77 +123,81 @@ export function ResetPasswordScreen() {
         ) : null}
       </IdentityFlowMessageSlot>
 
-      <IdentityFlowForm>
-        <IdentityFlowField
-          error={errors.password ?? null}
-          icon="lock-closed"
-          label="Nueva contrasena"
-          status={errors.password ? 'danger' : password.length >= 8 ? 'success' : 'idle'}
-        >
-          <IdentityFlowTextInput
-            autoCapitalize="none"
-            autoComplete="new-password"
-            onBlur={() =>
-              setErrors((current) => ({
-                ...current,
-                password:
-                  password.length > 0 && password.length < 8
-                    ? 'Debe tener al menos 8 caracteres.'
-                    : undefined,
-              }))
-            }
-            onChangeText={(value) => {
-              setPassword(value);
-              setErrors((current) => ({ ...current, password: undefined }));
-            }}
-            placeholder="Minimo 8 caracteres"
-            secureTextEntry
-            value={password}
-          />
-        </IdentityFlowField>
+      {hasRecoverySession ? (
+        <>
+          <IdentityFlowForm>
+            <IdentityFlowField
+              error={errors.password ?? null}
+              icon="lock-closed"
+              label="Nueva contraseña"
+              status={errors.password ? 'danger' : password.length >= 8 ? 'success' : 'idle'}
+            >
+              <IdentityFlowTextInput
+                autoCapitalize="none"
+                autoComplete="new-password"
+                onBlur={() =>
+                  setErrors((current) => ({
+                    ...current,
+                    password:
+                      password.length > 0 && password.length < 8
+                        ? 'Debe tener al menos 8 caracteres.'
+                        : undefined,
+                  }))
+                }
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setErrors((current) => ({ ...current, password: undefined }));
+                }}
+                placeholder="Mínimo 8 caracteres"
+                secureTextEntry
+                value={password}
+              />
+            </IdentityFlowField>
 
-        <IdentityFlowField
-          error={errors.confirmPassword ?? null}
-          icon="shield-checkmark"
-          label="Confirmar contrasena"
-          status={
-            errors.confirmPassword
-              ? 'danger'
-              : confirmPassword.length > 0 && confirmPassword === password
-                ? 'success'
-                : 'idle'
-          }
-        >
-          <IdentityFlowTextInput
-            autoCapitalize="none"
-            autoComplete="new-password"
-            onBlur={() =>
-              setErrors((current) => ({
-                ...current,
-                confirmPassword:
-                  confirmPassword.length > 0 && confirmPassword !== password
-                    ? 'Las contrasenas deben coincidir.'
-                    : undefined,
-              }))
-            }
-            onChangeText={(value) => {
-              setConfirmPassword(value);
-              setErrors((current) => ({ ...current, confirmPassword: undefined }));
-            }}
-            placeholder="Repite la nueva clave"
-            secureTextEntry
-            value={confirmPassword}
-          />
-        </IdentityFlowField>
-      </IdentityFlowForm>
+            <IdentityFlowField
+              error={errors.confirmPassword ?? null}
+              icon="shield-checkmark"
+              label="Confirmar contraseña"
+              status={
+                errors.confirmPassword
+                  ? 'danger'
+                  : confirmPassword.length > 0 && confirmPassword === password
+                    ? 'success'
+                    : 'idle'
+              }
+            >
+              <IdentityFlowTextInput
+                autoCapitalize="none"
+                autoComplete="new-password"
+                onBlur={() =>
+                  setErrors((current) => ({
+                    ...current,
+                    confirmPassword:
+                      confirmPassword.length > 0 && confirmPassword !== password
+                        ? 'Las contraseñas deben coincidir.'
+                        : undefined,
+                  }))
+                }
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  setErrors((current) => ({ ...current, confirmPassword: undefined }));
+                }}
+                placeholder="Repite la nueva clave"
+                secureTextEntry
+                value={confirmPassword}
+              />
+            </IdentityFlowField>
+          </IdentityFlowForm>
 
-      <IdentityFlowPrimaryAction
-        disabled={!hasRecoverySession || busy}
-        icon="checkmark"
-        label={busy ? 'Actualizando...' : 'Guardar nueva clave'}
-        loading={busy}
-        onPress={busy || !hasRecoverySession ? undefined : () => void handleSubmit()}
-      />
+          <IdentityFlowPrimaryAction
+            disabled={busy}
+            icon="checkmark"
+            label={busy ? 'Actualizando...' : 'Guardar nueva clave'}
+            loading={busy}
+            onPress={busy ? undefined : () => void handleSubmit()}
+          />
+        </>
+      ) : null}
     </IdentityFlowScreen>
   );
 }

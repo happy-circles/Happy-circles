@@ -25,14 +25,14 @@ interface SetupAction {
 
 function bodyCopy(needsContacts: boolean, needsNotifications: boolean): string {
   if (needsContacts && needsNotifications) {
-    return 'Activa contactos y recordatorios cuando estes listo. No bloquean tu entrada.';
+    return 'Contactos y recordatorios pendientes.';
   }
 
   if (needsContacts) {
-    return 'Permite contactos para encontrar personas mas rapido. Puedes seguir sin hacerlo.';
+    return 'Contactos pendientes.';
   }
 
-  return 'Activa recordatorios para no dejar pendientes por revisar.';
+  return 'Recordatorios pendientes.';
 }
 
 function ActionRow({
@@ -113,7 +113,7 @@ export function SetupPromptCard({
           />
         </View>
         <View style={styles.copy}>
-          <Text style={styles.title}>Termina los ajustes de la app</Text>
+          <Text style={styles.title}>Ajustes pendientes</Text>
           <Text style={styles.body}>{bodyCopy(needsContacts, needsNotifications)}</Text>
         </View>
         <Pressable

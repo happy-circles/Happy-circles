@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-const MINIMUM_REFRESH_MS = 650;
+const MINIMUM_REFRESH_MS = 500;
 
 interface SnapshotRefreshTarget {
   readonly isLoading: boolean;
@@ -34,6 +34,8 @@ export function useSnapshotRefresh(snapshotQuery: SnapshotRefreshTarget) {
 
     try {
       await snapshotQuery.refetch();
+    } catch {
+      // React Query keeps the request error in query state; the refresh affordance should close.
     } finally {
       const elapsedMs = Date.now() - startedAt;
       await wait(Math.max(0, MINIMUM_REFRESH_MS - elapsedMs));
@@ -43,9 +45,12 @@ export function useSnapshotRefresh(snapshotQuery: SnapshotRefreshTarget) {
     }
   }, [refreshing, snapshotQuery]);
 
-  return {
-    label: 'Sincronizando',
-    onRefresh,
-    refreshing,
-  };
+  return useMemo(
+    () => ({
+      label: 'Sincronizando',
+      onRefresh,
+      refreshing,
+    }),
+    [onRefresh, refreshing],
+  );
 }
