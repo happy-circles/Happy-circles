@@ -154,6 +154,18 @@ export interface PendingActionDto {
   readonly category?: TransactionCategory;
 }
 
+export interface PendingRequestHistoryStepDto {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly amountMinor: number;
+  readonly category?: TransactionCategory;
+  readonly createdAtLabel: string;
+  readonly createdByLabel: string;
+  readonly status: string;
+  readonly isCurrent: boolean;
+}
+
 export interface ActivityItemDto {
   readonly id: string;
   readonly title: string;
@@ -171,6 +183,7 @@ export interface ActivityItemDto {
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
   readonly counterpartyLabel?: string;
+  readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
   readonly kind:
     | 'financial_request'
     | 'settlement_proposal'

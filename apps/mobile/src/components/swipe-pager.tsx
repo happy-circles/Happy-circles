@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -48,6 +48,8 @@ export function SwipePager<T extends string>({
   const activeIndexRef = useRef(0);
   const settledIndexRef = useRef(0);
   const previewIndexRef = useRef(0);
+  const programmaticTargetIndexRef = useRef<number | null>(null);
+  const isUserDraggingRef = useRef(false);
   const valuesRef = useRef(values);
   const onChangeRef = useRef(onChange);
   const onPreviewChangeRef = useRef(onPreviewChange);
@@ -69,7 +71,7 @@ export function SwipePager<T extends string>({
     onPreviewChangeRef.current = onPreviewChange;
   }, [onPreviewChange]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeIndexRef.current = activeIndex;
     previewIndexRef.current = activeIndex;
   }, [activeIndex]);
@@ -83,7 +85,7 @@ export function SwipePager<T extends string>({
     [],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (pageWidth <= 0 || values.length === 0) {
       return;
     }
@@ -96,21 +98,34 @@ export function SwipePager<T extends string>({
       return;
     }
 
-    const animated = hasSyncedInitialPositionRef.current;
+    const hasSyncedPosition = hasSyncedInitialPositionRef.current;
     const nextX = activeIndex * pageWidth;
     clearSettleTimer();
+    isUserDraggingRef.current = false;
     latestOffsetRef.current = nextX;
     settledIndexRef.current = activeIndex;
     previewIndexRef.current = activeIndex;
     syncedWidthRef.current = pageWidth;
     hasSyncedInitialPositionRef.current = true;
-    scrollRef.current?.scrollTo({ animated, x: nextX, y: 0 });
+    programmaticTargetIndexRef.current = hasSyncedPosition ? activeIndex : null;
+    scrollRef.current?.scrollTo({ animated: false, x: nextX, y: 0 });
   }, [activeIndex, pageWidth, values.length]);
 
   function clearSettleTimer() {
     if (settleTimerRef.current) {
       clearTimeout(settleTimerRef.current);
       settleTimerRef.current = null;
+    }
+  }
+
+  function updatePreviewIndex(nextIndex: number, currentValues = valuesRef.current) {
+    const previousPreviewIndex = previewIndexRef.current;
+    const nextPreviewValue = currentValues[nextIndex];
+
+    previewIndexRef.current = nextIndex;
+
+    if (nextPreviewValue && nextIndex !== previousPreviewIndex) {
+      onPreviewChangeRef.current?.(nextPreviewValue);
     }
   }
 
@@ -121,14 +136,32 @@ export function SwipePager<T extends string>({
       return;
     }
 
+    const programmaticTargetIndex = programmaticTargetIndexRef.current;
+
+    if (programmaticTargetIndex !== null && activeIndexRef.current === programmaticTargetIndex) {
+      const targetX = programmaticTargetIndex * pageWidth;
+
+      latestOffsetRef.current = targetX;
+      settledIndexRef.current = programmaticTargetIndex;
+      syncedWidthRef.current = pageWidth;
+      updatePreviewIndex(programmaticTargetIndex, currentValues);
+      programmaticTargetIndexRef.current = null;
+
+      if (Math.abs(offsetX - targetX) > 1) {
+        scrollRef.current?.scrollTo({ animated: false, x: targetX, y: 0 });
+      }
+
+      return;
+    }
+
     const nextIndex = clampIndex(Math.round(offsetX / pageWidth), currentValues.length - 1);
     const nextX = nextIndex * pageWidth;
     const nextValue = currentValues[nextIndex];
 
     latestOffsetRef.current = nextX;
     settledIndexRef.current = nextIndex;
-    previewIndexRef.current = nextIndex;
     syncedWidthRef.current = pageWidth;
+    updatePreviewIndex(nextIndex, currentValues);
 
     if (Math.abs(offsetX - nextX) > 1) {
       scrollRef.current?.scrollTo({ animated: true, x: nextX, y: 0 });
@@ -156,6 +189,22 @@ export function SwipePager<T extends string>({
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const offsetX = event.nativeEvent.contentOffset.x;
+
+    if (programmaticTargetIndexRef.current !== null && !isUserDraggingRef.current) {
+      const targetIndex = programmaticTargetIndexRef.current;
+      const targetX = targetIndex * pageWidth;
+
+      if (pageWidth > 0 && Math.abs(offsetX - targetX) <= 1) {
+        latestOffsetRef.current = targetX;
+        settledIndexRef.current = targetIndex;
+        syncedWidthRef.current = pageWidth;
+        updatePreviewIndex(targetIndex);
+        programmaticTargetIndexRef.current = null;
+      }
+
+      return;
+    }
+
     latestOffsetRef.current = offsetX;
 
     if (pageWidth <= 0 || valuesRef.current.length === 0) {
@@ -168,13 +217,14 @@ export function SwipePager<T extends string>({
     );
 
     if (nextPreviewIndex !== previewIndexRef.current) {
-      const nextPreviewValue = valuesRef.current[nextPreviewIndex];
-      previewIndexRef.current = nextPreviewIndex;
-
-      if (nextPreviewValue) {
-        onPreviewChangeRef.current?.(nextPreviewValue);
-      }
+      updatePreviewIndex(nextPreviewIndex);
     }
+  }
+
+  function handleScrollBeginDrag() {
+    isUserDraggingRef.current = true;
+    programmaticTargetIndexRef.current = null;
+    clearSettleTimer();
   }
 
   function handleMomentumScrollBegin() {
@@ -184,6 +234,7 @@ export function SwipePager<T extends string>({
   function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     clearSettleTimer();
     settleToOffset(event.nativeEvent.contentOffset.x);
+    isUserDraggingRef.current = false;
   }
 
   function handleScrollEndDrag() {
@@ -191,6 +242,7 @@ export function SwipePager<T extends string>({
     settleTimerRef.current = setTimeout(() => {
       settleTimerRef.current = null;
       settleToOffset(latestOffsetRef.current);
+      isUserDraggingRef.current = false;
     }, 120);
   }
 
@@ -210,6 +262,7 @@ export function SwipePager<T extends string>({
         onMomentumScrollBegin={handleMomentumScrollBegin}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScroll={handleScroll}
+        onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}
         overScrollMode="never"
         pagingEnabled

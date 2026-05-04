@@ -229,6 +229,11 @@ export const reviewAccountInviteSchema = z.object({
   decision: z.enum(['approve', 'reject']),
 });
 
+export const cancelAccountInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
+});
+
 export const cancelFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteId: uuidSchema,

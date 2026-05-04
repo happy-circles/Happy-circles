@@ -35,6 +35,9 @@ verify_jwt = true
 [functions.cancel-friendship-invite]
 verify_jwt = true
 
+[functions.cancel-account-invite]
+verify_jwt = true
+
 [functions.claim-external-friendship-invite]
 verify_jwt = true
 

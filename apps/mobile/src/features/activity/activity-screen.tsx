@@ -6,42 +6,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
-import { AppTextInput } from '@/components/app-text-input';
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
-import { FieldBlock } from '@/components/field-block';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
-import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SwipePager } from '@/components/swipe-pager';
 import { TransactionEventCard } from '@/components/transaction-event-card';
-import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
-import {
-  useAcceptFinancialRequestMutation,
-  useAmendFinancialRequestMutation,
-  useAppSnapshot,
-  useApproveSettlementMutation,
-  useCancelFriendshipInviteMutation,
-  useExecuteSettlementMutation,
-  useRespondInternalFriendshipInviteMutation,
-  useReviewAccountInviteMutation,
-  useReviewExternalFriendshipInviteMutation,
-  useRejectFinancialRequestMutation,
-  useRejectSettlementMutation,
-} from '@/lib/live-data';
+import { useAppSnapshot } from '@/lib/live-data';
 import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
 import { buildSetupReminderItem, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
-import {
-  DEFAULT_TRANSACTION_CATEGORY,
-  type UserTransactionCategory,
-  isUserTransactionCategory,
-  transactionCategoryLabel,
-} from '@/lib/transaction-categories';
+import { transactionCategoryLabel } from '@/lib/transaction-categories';
 import {
   transactionAccentColor,
   transactionAmountIsVoided,
@@ -53,13 +32,13 @@ import {
   transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
+  isCycleTransactionItem,
   isPendingTransactionItem,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
 
 type ActivityDomainKey = 'transactions' | 'friendships';
 type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'reminders';
-type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute' | 'cancel';
 type RouterHref = Parameters<ReturnType<typeof useRouter>['push']>[0];
 
 interface NotificationTarget {
@@ -72,14 +51,6 @@ interface NotificationTarget {
 
 interface PendingCardPresentation {
   readonly eyebrow: string;
-  readonly primaryAction?: {
-    readonly key: PendingActionKey;
-    readonly label: string;
-  };
-  readonly secondaryAction?: {
-    readonly key: 'reject' | 'cancel';
-    readonly label: string;
-  };
 }
 
 interface PendingSnippetContent {
@@ -337,6 +308,13 @@ function notificationActorForItem(
   item: ActivityItemDto,
   people: readonly PersonCardDto[],
 ): NotificationActor {
+  if (notificationCategoryForItem(item) === 'reminders') {
+    return {
+      label: 'Happy Circles',
+      avatarUrl: null,
+    };
+  }
+
   const profileDisplayName = readStringField(item, 'profileDisplayName');
   const profileAvatarUrl = readNullableStringField(item, 'profileAvatarUrl');
   const respondingProfileDisplayName = readStringField(item, 'respondingProfileDisplayName');
@@ -466,48 +444,10 @@ function NotificationSection({
   );
 }
 
-function readResultStatus(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const status = (value as Record<string, unknown>)['status'];
-  return typeof status === 'string' ? status : null;
-}
-
-function readNestedStatus(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  return readResultStatus((value as Record<string, unknown>)[key]);
-}
-
-function actionLabel(
-  itemId: string,
-  busyKey: string | null,
-  action: PendingActionKey,
-  idleLabel: string,
-  busyLabel: string,
-): string {
-  return busyKey === `${itemId}:${action}` ? busyLabel : idleLabel;
-}
-
-function buildPendingCardPresentation(
-  item: ActivityItemDto,
-  busyKey: string | null,
-): PendingCardPresentation {
+function buildPendingCardPresentation(item: ActivityItemDto): PendingCardPresentation {
   if (item.kind === 'financial_request' && item.status === 'requires_you') {
     return {
-      eyebrow: 'Decision inmediata',
-      primaryAction: {
-        key: 'accept',
-        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar', 'Aceptando...'),
-      },
-      secondaryAction: {
-        key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'No aceptar', 'Enviando...'),
-      },
+      eyebrow: 'Requiere tu respuesta',
     };
   }
 
@@ -520,14 +460,6 @@ function buildPendingCardPresentation(
   if (item.kind === 'settlement_proposal' && item.status === 'pending_approvals') {
     return {
       eyebrow: 'Happy Circle',
-      primaryAction: {
-        key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Aprobar Circle', 'Aprobando...'),
-      },
-      secondaryAction: {
-        key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'No aprobar', 'Enviando...'),
-      },
     };
   }
 
@@ -540,48 +472,24 @@ function buildPendingCardPresentation(
   if (item.kind === 'settlement_proposal' && item.status === 'approved') {
     return {
       eyebrow: 'Happy Circle listo',
-      primaryAction: {
-        key: 'execute',
-        label: actionLabel(item.id, busyKey, 'execute', 'Completar Circle', 'Completando...'),
-      },
     };
   }
 
   if (item.kind === 'friendship_invite' && item.status === 'requires_you_response') {
     return {
       eyebrow: 'Nueva invitacion',
-      primaryAction: {
-        key: 'accept',
-        label: actionLabel(item.id, busyKey, 'accept', 'Aceptar', 'Aceptando...'),
-      },
-      secondaryAction: {
-        key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Rechazando...'),
-      },
     };
   }
 
   if (item.kind === 'friendship_invite' && item.status === 'requires_you_review') {
     return {
       eyebrow: 'Por verificar',
-      primaryAction: {
-        key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Aceptar', 'Confirmando...'),
-      },
-      secondaryAction: {
-        key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Cerrando...'),
-      },
     };
   }
 
   if (item.kind === 'friendship_invite' && item.status === 'pending_claim') {
     return {
       eyebrow: 'Enviada afuera',
-      secondaryAction: {
-        key: 'cancel',
-        label: actionLabel(item.id, busyKey, 'cancel', 'Cancelar', 'Cancelando...'),
-      },
     };
   }
 
@@ -600,18 +508,16 @@ function buildPendingCardPresentation(
   if (item.kind === 'account_invite' && item.status === 'requires_you_review') {
     return {
       eyebrow: 'Por verificar',
-      primaryAction: {
-        key: 'approve',
-        label: actionLabel(item.id, busyKey, 'approve', 'Aceptar', 'Confirmando...'),
-      },
-      secondaryAction: {
-        key: 'reject',
-        label: actionLabel(item.id, busyKey, 'reject', 'Rechazar', 'Cerrando...'),
-      },
     };
   }
 
   if (item.kind === 'account_invite' && item.status === 'pending_activation') {
+    if (readStringField(item, 'activatedUserId')) {
+      return {
+        eyebrow: 'Cuenta en creacion',
+      };
+    }
+
     return {
       eyebrow: 'Acceso enviado',
     };
@@ -768,25 +674,7 @@ export function ActivityScreen() {
   const requestedCategory = parseNotificationCategoryParam(params.category);
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
-  const acceptRequest = useAcceptFinancialRequestMutation();
-  const amendRequest = useAmendFinancialRequestMutation();
-  const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
-  const rejectRequest = useRejectFinancialRequestMutation();
-  const reviewAccountInvite = useReviewAccountInviteMutation();
-  const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
-  const cancelFriendshipInvite = useCancelFriendshipInviteMutation();
-  const approveSettlement = useApproveSettlementMutation();
-  const rejectSettlement = useRejectSettlementMutation();
-  const executeSettlement = useExecuteSettlementMutation();
 
-  const [message, setMessage] = useState<string | null>(null);
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
-  const [amendmentAmount, setAmendmentAmount] = useState('');
-  const [amendmentDescription, setAmendmentDescription] = useState('');
-  const [amendmentCategory, setAmendmentCategory] = useState<UserTransactionCategory>(
-    DEFAULT_TRANSACTION_CATEGORY,
-  );
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>(
     requestedCategory ?? initialCategoryFromDomain(requestedDomain),
   );
@@ -861,18 +749,6 @@ export function ActivityScreen() {
     };
   }, [session.userId]);
 
-  useEffect(() => {
-    if (
-      activeAmendmentItemId &&
-      !allPendingItems.some((item) => item.id === activeAmendmentItemId)
-    ) {
-      setActiveAmendmentItemId(null);
-      setAmendmentAmount('');
-      setAmendmentDescription('');
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-    }
-  }, [activeAmendmentItemId, allPendingItems]);
-
   function closeNotifications() {
     backOrReturnTo(router, '/home');
   }
@@ -903,7 +779,6 @@ export function ActivityScreen() {
 
     if (item.kind === 'financial_request') {
       const financialRequestContent = buildFinancialRequestPendingContent(item);
-      const responseState = item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side';
       const creatorLabel =
         financialRequestContent.createdByLabel === 'Tu'
           ? 'Creado por ti'
@@ -939,244 +814,34 @@ export function ActivityScreen() {
           statusTone={transactionStatusTone(item)}
           unread
         >
-          {responseState === 'requires_you' ? (
-            <>
-              <View style={styles.actionRow}>
-                <View style={styles.primaryActionSlot}>
-                  <PrimaryAction
-                    compact
-                    label={busyKey === `${item.id}:accept` ? 'Aceptando...' : 'Aceptar'}
-                    loading={busyKey === `${item.id}:accept`}
-                    onPress={
-                      busyKey
-                        ? undefined
-                        : () => void handlePendingAction(item.id, item.kind, item.status, 'accept')
-                    }
-                  />
-                </View>
-              </View>
-              <View style={styles.inlineActionRow}>
-                <Pressable
-                  onPress={
-                    busyKey
-                      ? undefined
-                      : () => void handlePendingAction(item.id, item.kind, item.status, 'reject')
-                  }
-                  style={({ pressed }) => [
-                    styles.inlineAction,
-                    pressed ? styles.inlineActionPressed : null,
-                  ]}
-                >
-                  <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-                    {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aceptar'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={busyKey ? undefined : () => toggleAmendment(item)}
-                  style={({ pressed }) => [
-                    styles.inlineAction,
-                    pressed ? styles.inlineActionPressed : null,
-                  ]}
-                >
-                  <Text style={styles.inlineActionText}>
-                    {activeAmendmentItemId === item.id ? 'Ocultar cambio' : 'Cambiar monto'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {activeAmendmentItemId === item.id ? (
-                <View style={styles.amendmentPanel}>
-                  <FieldBlock hint="Escribe el valor en pesos." label="Monto">
-                    <AppTextInput
-                      keyboardType="number-pad"
-                      onChangeText={setAmendmentAmount}
-                      placeholder="45000"
-                      placeholderTextColor={theme.colors.muted}
-                      value={amendmentAmount}
-                    />
-                    {Number.parseInt(amendmentAmount || '0', 10) > 0 ? (
-                      <Text style={styles.amountPreview}>
-                        {formatCop(Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0))}
-                      </Text>
-                    ) : null}
-                  </FieldBlock>
-
-                  <FieldBlock hint="Ajusta el concepto antes de enviarlo." label="Concepto">
-                    <AppTextInput
-                      multiline
-                      onChangeText={setAmendmentDescription}
-                      placeholder="Explica el nuevo monto"
-                      placeholderTextColor={theme.colors.muted}
-                      style={styles.textarea}
-                      value={amendmentDescription}
-                    />
-                  </FieldBlock>
-
-                  <FieldBlock hint="Tambien quedara guardada en el historial." label="Categoria">
-                    <TransactionCategoryPicker
-                      onChange={setAmendmentCategory}
-                      value={amendmentCategory}
-                    />
-                  </FieldBlock>
-
-                  <View style={styles.actionRow}>
-                    <View style={styles.primaryActionSlot}>
-                      <PrimaryAction
-                        compact
-                        label={
-                          busyKey === `${item.id}:amendment` ? 'Enviando...' : 'Enviar nuevo monto'
-                        }
-                        loading={busyKey === `${item.id}:amendment`}
-                        onPress={busyKey ? undefined : () => void handleAmendment(item.id)}
-                      />
-                    </View>
-                  </View>
-                </View>
-              ) : null}
-            </>
+          {detailHref ? (
+            <PrimaryAction
+              compact
+              icon="person-circle-outline"
+              label="Ver en perfil"
+              onPress={() => openNotificationTarget(detailHref)}
+              variant="secondary"
+            />
           ) : null}
         </TransactionEventCard>
       );
     }
 
-    const cardPresentation = buildPendingCardPresentation(item, busyKey);
+    const cardPresentation = buildPendingCardPresentation(item);
     const snippetContent = buildPendingSnippetContent(item);
-    const isInviteNotification =
-      item.kind === 'friendship_invite' || item.kind === 'account_invite';
-    const hasInlineActions = Boolean(
-      cardPresentation.primaryAction || cardPresentation.secondaryAction,
-    );
-    const inviteProfileHref = isInviteNotification
-      ? (readStringField(item, 'profileHref') as RouterHref | null)
-      : null;
-    const actionContent = hasInlineActions ? (
-      isInviteNotification ? (
-        <View
-          style={[
-            styles.inviteActionRow,
-            cardPresentation.primaryAction ? null : styles.inviteSingleActionRow,
-          ]}
-        >
-          {cardPresentation.secondaryAction ? (
-            <Pressable
-              accessibilityLabel={cardPresentation.secondaryAction.label}
-              disabled={Boolean(busyKey)}
-              onPress={
-                busyKey
-                  ? undefined
-                  : () =>
-                      void handlePendingAction(
-                        item.id,
-                        item.kind,
-                        item.status,
-                        cardPresentation.secondaryAction!.key,
-                      )
-              }
-              style={({ pressed }) => [
-                styles.inviteDecisionButton,
-                styles.inviteSecondaryButton,
-                cardPresentation.primaryAction ? null : styles.inviteDecisionButtonSolo,
-                pressed ? styles.inlineActionPressed : null,
-                busyKey ? styles.actionDisabled : null,
-              ]}
-            >
-              <Text style={[styles.inviteDecisionText, styles.inviteSecondaryText]}>
-                {cardPresentation.secondaryAction.label}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {cardPresentation.primaryAction ? (
-            <Pressable
-              accessibilityLabel={cardPresentation.primaryAction.label}
-              disabled={Boolean(busyKey)}
-              onPress={
-                busyKey
-                  ? undefined
-                  : () =>
-                      void handlePendingAction(
-                        item.id,
-                        item.kind,
-                        item.status,
-                        cardPresentation.primaryAction!.key,
-                      )
-              }
-              style={({ pressed }) => [
-                styles.inviteDecisionButton,
-                styles.invitePrimaryButton,
-                pressed ? styles.inlineActionPressed : null,
-                busyKey ? styles.actionDisabled : null,
-              ]}
-            >
-              <Text style={[styles.inviteDecisionText, styles.invitePrimaryText]}>
-                {cardPresentation.primaryAction.label}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.cardActionStack}>
-          {cardPresentation.primaryAction ? (
-            <View style={styles.primaryActionSlot}>
-              <PrimaryAction
-                compact
-                label={cardPresentation.primaryAction.label}
-                onPress={
-                  busyKey
-                    ? undefined
-                    : () =>
-                        void handlePendingAction(
-                          item.id,
-                          item.kind,
-                          item.status,
-                          cardPresentation.primaryAction!.key,
-                        )
-                }
-              />
-            </View>
-          ) : null}
-
-          {cardPresentation.secondaryAction ? (
-            <Pressable
-              onPress={
-                busyKey
-                  ? undefined
-                  : () =>
-                      void handlePendingAction(
-                        item.id,
-                        item.kind,
-                        item.status,
-                        cardPresentation.secondaryAction!.key,
-                      )
-              }
-              style={({ pressed }) => [
-                styles.inlineAction,
-                pressed ? styles.inlineActionPressed : null,
-              ]}
-            >
-              <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-                {cardPresentation.secondaryAction.label}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )
-    ) : null;
 
     if (notificationCategoryForItem(item) === 'transactions') {
+      const isSystemTransaction = isCycleTransactionItem(item);
       const transactionActorLabel =
-        item.kind === 'settlement_proposal' ||
-        item.kind === 'settlement' ||
-        item.category === 'cycle'
-          ? 'Happy Circle'
-          : actor.label;
+        isSystemTransaction ? 'Happy Circle' : actor.label;
 
       return (
         <TransactionEventCard
           accentColor={transactionAccentColor(item)}
-          actorAvatarUrl={item.category === 'cycle' ? null : actor.avatarUrl}
+          actorAvatarUrl={isSystemTransaction ? null : actor.avatarUrl}
+          actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
           actorFallbackColor={
-            item.category === 'cycle'
+            isSystemTransaction
               ? transactionToneColor(item)
               : avatarColorForLabel(actor.label)
           }
@@ -1196,16 +861,17 @@ export function ActivityScreen() {
           statusLabel={null}
           statusTone={transactionStatusTone(item)}
           unread
-        >
-          {actionContent}
-        </TransactionEventCard>
+        />
       );
     }
+
+    const isReminderNotification = notificationCategoryForItem(item) === 'reminders';
 
     return (
       <TransactionEventCard
         accentColor={category.color}
         actorAvatarUrl={actor.avatarUrl}
+        actorAvatarVariant={isReminderNotification ? 'system' : 'person'}
         actorFallbackColor={avatarColorForLabel(actor.label)}
         actorLabel={actor.label}
         amountColor={category.color}
@@ -1215,183 +881,18 @@ export function ActivityScreen() {
         categoryPlacement="meta"
         compact
         compactMetaLayout="stacked"
-        contentHref={inviteProfileHref ?? undefined}
         context={notificationTitleForDisplay(item.title, actor.label)}
         key={item.id}
         meta={buildInviteNotificationMeta(
           item,
           snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow,
         )}
-        onPress={
-          detailHref && !hasInlineActions && !inviteProfileHref
-            ? () => openNotificationTarget(detailHref)
-            : undefined
-        }
+        onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
         statusLabel={cardPresentation.eyebrow}
         statusTone={inviteNotificationStatusTone(item.status)}
         unread
-      >
-        {actionContent}
-      </TransactionEventCard>
+      />
     );
-  }
-
-  function toggleAmendment(item: ActivityItemDto) {
-    if (activeAmendmentItemId === item.id) {
-      setActiveAmendmentItemId(null);
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-      return;
-    }
-
-    const financialRequestContent = buildFinancialRequestPendingContent(item);
-    const category = isUserTransactionCategory(item.category)
-      ? item.category
-      : DEFAULT_TRANSACTION_CATEGORY;
-    setActiveAmendmentItemId(item.id);
-    setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
-    setAmendmentDescription(financialRequestContent.detail);
-    setAmendmentCategory(category);
-  }
-
-  async function handleAmendment(requestId: string) {
-    const amountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
-    const trimmedDescription = amendmentDescription.trim();
-
-    if (amountMinor <= 0 || trimmedDescription.length === 0) {
-      setMessage('Define un monto valido y escribe un concepto para proponer otro monto.');
-      return;
-    }
-
-    setBusyKey(`${requestId}:amendment`);
-    setMessage(null);
-
-    try {
-      await amendRequest.mutateAsync({
-        requestId,
-        amountMinor,
-        description: trimmedDescription,
-        category: amendmentCategory,
-      });
-      setActiveAmendmentItemId(null);
-      setAmendmentAmount('');
-      setAmendmentDescription('');
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-      setMessage('Nuevo monto enviado.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.');
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  async function handlePendingAction(
-    itemId: string,
-    kind: string,
-    status: string,
-    action: PendingActionKey,
-  ) {
-    const key = `${itemId}:${action}`;
-    setBusyKey(key);
-    setMessage(null);
-
-    try {
-      if (kind === 'financial_request') {
-        if (action === 'accept') {
-          const response = await acceptRequest.mutateAsync(itemId);
-          const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
-          setMessage(
-            autoCycleStatus === 'queued'
-              ? 'Propuesta aceptada. Estamos buscando Happy Circles en segundo plano.'
-              : 'Propuesta aceptada.',
-          );
-        } else {
-          await rejectRequest.mutateAsync(itemId);
-          setMessage('Propuesta no aceptada.');
-        }
-        return;
-      }
-
-      if (kind === 'settlement_proposal' && status === 'pending_approvals') {
-        if (action === 'approve') {
-          const response = await approveSettlement.mutateAsync(itemId);
-          const nextStatus = readResultStatus(response);
-          setMessage(
-            nextStatus === 'approved'
-              ? 'Todos aceptaron. El Happy Circle quedo listo.'
-              : nextStatus === 'stale'
-                ? 'Este Circle fue reemplazado porque el grafo cambio.'
-                : 'Tu aprobacion quedo registrada.',
-          );
-        } else {
-          await rejectSettlement.mutateAsync(itemId);
-          setMessage('Happy Circle no aprobado.');
-        }
-        return;
-      }
-
-      if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
-        const response = await executeSettlement.mutateAsync(itemId);
-        const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
-        setMessage(
-          nextStatus === 'queued'
-            ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
-            : 'Happy Circle completado.',
-        );
-        return;
-      }
-
-      if (kind === 'friendship_invite' && status === 'requires_you_response') {
-        if (action === 'accept') {
-          await respondInternalInvite.mutateAsync({
-            inviteId: itemId,
-            decision: 'accept',
-          });
-          setMessage('Invitacion aceptada.');
-        } else {
-          await respondInternalInvite.mutateAsync({
-            inviteId: itemId,
-            decision: 'reject',
-          });
-          setMessage('Invitacion rechazada.');
-        }
-        return;
-      }
-
-      if (kind === 'friendship_invite' && status === 'requires_you_review') {
-        if (action === 'approve') {
-          await reviewExternalInvite.mutateAsync({
-            inviteId: itemId,
-            decision: 'approve',
-          });
-          setMessage('Conexion confirmada.');
-        } else {
-          await reviewExternalInvite.mutateAsync({
-            inviteId: itemId,
-            decision: 'reject',
-          });
-          setMessage('Invitacion cerrada.');
-        }
-        return;
-      }
-
-      if (kind === 'friendship_invite' && status === 'pending_claim' && action === 'cancel') {
-        await cancelFriendshipInvite.mutateAsync(itemId);
-        setMessage('Invitacion cancelada.');
-        return;
-      }
-
-      if (kind === 'account_invite' && status === 'requires_you_review') {
-        await reviewAccountInvite.mutateAsync({
-          inviteId: itemId,
-          decision: action === 'approve' ? 'approve' : 'reject',
-        });
-        setMessage(action === 'approve' ? 'Acceso confirmado.' : 'Invitacion de acceso cerrada.');
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la accion.');
-    } finally {
-      setBusyKey(null);
-    }
   }
 
   function renderNotificationPage(categoryKey: NotificationCategoryKey) {
@@ -1497,8 +998,6 @@ export function ActivityScreen() {
               />
             ))}
           </ScrollView>
-
-          {message ? <MessageBanner message={message} /> : null}
 
           <SwipePager
             accessibilityLabel="Categorias de notificaciones"
@@ -1660,99 +1159,5 @@ const styles = StyleSheet.create({
     borderTopRightRadius: theme.radius.large,
     padding: theme.spacing.lg,
     width: '100%',
-  },
-  cardActionStack: {
-    gap: theme.spacing.xs,
-  },
-  inviteActionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    paddingTop: theme.spacing.xs,
-  },
-  inviteSingleActionRow: {
-    justifyContent: 'flex-end',
-  },
-  inviteDecisionButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  inviteDecisionButtonSolo: {
-    flex: 0,
-    minWidth: 112,
-  },
-  invitePrimaryButton: {
-    backgroundColor: theme.colors.success,
-  },
-  inviteSecondaryButton: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.danger,
-    borderWidth: 1,
-  },
-  inviteDecisionText: {
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    lineHeight: 15,
-    textAlign: 'center',
-  },
-  invitePrimaryText: {
-    color: theme.colors.white,
-  },
-  inviteSecondaryText: {
-    color: theme.colors.danger,
-  },
-  actionDisabled: {
-    opacity: 0.46,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  primaryActionSlot: {
-    width: '100%',
-  },
-  inlineActionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-  },
-  inlineAction: {
-    paddingVertical: 4,
-  },
-  inlineActionPressed: {
-    opacity: 0.62,
-  },
-  inlineActionText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  inlineActionDanger: {
-    backgroundColor: 'transparent',
-  },
-  inlineActionDangerText: {
-    color: theme.colors.danger,
-  },
-  amendmentPanel: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.xs,
-    padding: theme.spacing.md,
-  },
-  textarea: {
-    minHeight: 96,
-    paddingTop: theme.spacing.sm,
-    textAlignVertical: 'top',
-  },
-  amountPreview: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
   },
 });

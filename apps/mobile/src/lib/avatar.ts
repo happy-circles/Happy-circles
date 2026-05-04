@@ -11,7 +11,13 @@ interface CachedSignedAvatarUrl {
   readonly url: string;
 }
 
+interface ResolvedAvatarUrlState {
+  readonly path: string;
+  readonly url: string | null;
+}
+
 const signedAvatarUrlCache = new Map<string, CachedSignedAvatarUrl>();
+const signedAvatarUrlRequests = new Map<string, Promise<CachedSignedAvatarUrl | null>>();
 
 function normalizeAvatarPath(path: string | null | undefined): string {
   return (path?.trim() ?? '').replace(/^\/+/, '');
@@ -19,6 +25,20 @@ function normalizeAvatarPath(path: string | null | undefined): string {
 
 function isRemoteUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
+}
+
+function cachedSignedAvatarUrl(path: string): CachedSignedAvatarUrl | null {
+  const cached = signedAvatarUrlCache.get(path);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt - SIGNED_URL_REFRESH_MARGIN_MS <= Date.now()) {
+    signedAvatarUrlCache.delete(path);
+    return null;
+  }
+
+  return cached;
 }
 
 export function buildAvatarLabel(value: string | null | undefined): string {
@@ -52,33 +72,57 @@ async function createSignedAvatarUrl(path: string): Promise<CachedSignedAvatarUr
     return null;
   }
 
-  const cached = signedAvatarUrlCache.get(normalizedPath);
-  if (cached && cached.expiresAt - SIGNED_URL_REFRESH_MARGIN_MS > Date.now()) {
+  const cached = cachedSignedAvatarUrl(normalizedPath);
+  if (cached) {
     return cached;
   }
 
-  const { data, error } = await supabase.storage
-    .from(AVATAR_BUCKET)
-    .createSignedUrl(normalizedPath, SIGNED_URL_TTL_SECONDS);
-
-  if (error || !data?.signedUrl) {
-    signedAvatarUrlCache.delete(normalizedPath);
-    return null;
+  const pendingRequest = signedAvatarUrlRequests.get(normalizedPath);
+  if (pendingRequest) {
+    return pendingRequest;
   }
 
-  const signedUrl = {
-    expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000,
-    url: data.signedUrl,
-  };
-  signedAvatarUrlCache.set(normalizedPath, signedUrl);
+  const request = supabase.storage
+    .from(AVATAR_BUCKET)
+    .createSignedUrl(normalizedPath, SIGNED_URL_TTL_SECONDS)
+    .then(({ data, error }) => {
+      if (error || !data?.signedUrl) {
+        signedAvatarUrlCache.delete(normalizedPath);
+        return null;
+      }
 
-  return signedUrl;
+      const signedUrl = {
+        expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000,
+        url: data.signedUrl,
+      };
+      signedAvatarUrlCache.set(normalizedPath, signedUrl);
+
+      return signedUrl;
+    })
+    .finally(() => {
+      signedAvatarUrlRequests.delete(normalizedPath);
+    });
+
+  signedAvatarUrlRequests.set(normalizedPath, request);
+
+  return request;
 }
 
 export function useResolvedAvatarUrl(path: string | null | undefined): string | null {
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
+  const [resolvedUrl, setResolvedUrl] = useState<ResolvedAvatarUrlState>(() => {
     const normalizedPath = normalizeAvatarPath(path);
-    return normalizedPath && isRemoteUrl(normalizedPath) ? normalizedPath : null;
+    if (!normalizedPath) {
+      return { path: '', url: null };
+    }
+
+    if (isRemoteUrl(normalizedPath)) {
+      return { path: normalizedPath, url: normalizedPath };
+    }
+
+    return {
+      path: normalizedPath,
+      url: cachedSignedAvatarUrl(normalizedPath)?.url ?? null,
+    };
   });
 
   useEffect(() => {
@@ -87,33 +131,49 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (!normalizedPath) {
-      setResolvedUrl(null);
+      setResolvedUrl({ path: '', url: null });
       return undefined;
     }
 
     if (isRemoteUrl(normalizedPath)) {
-      setResolvedUrl(normalizedPath);
+      setResolvedUrl({ path: normalizedPath, url: normalizedPath });
       return undefined;
     }
 
-    const refreshSignedUrl = async () => {
+    function scheduleRefresh(signedUrl: CachedSignedAvatarUrl) {
+      const refreshInMs = Math.max(
+        1000,
+        signedUrl.expiresAt - Date.now() - SIGNED_URL_REFRESH_MARGIN_MS,
+      );
+      refreshTimer = setTimeout(refreshSignedUrl, refreshInMs);
+    }
+
+    async function refreshSignedUrl() {
       const signedUrl = await createSignedAvatarUrl(normalizedPath);
       if (cancelled) {
         return;
       }
 
-      setResolvedUrl(signedUrl?.url ?? null);
+      setResolvedUrl({ path: normalizedPath, url: signedUrl?.url ?? null });
 
       if (signedUrl) {
-        const refreshInMs = Math.max(
-          1000,
-          signedUrl.expiresAt - Date.now() - SIGNED_URL_REFRESH_MARGIN_MS,
-        );
-        refreshTimer = setTimeout(refreshSignedUrl, refreshInMs);
+        scheduleRefresh(signedUrl);
       }
-    };
+    }
 
-    setResolvedUrl(null);
+    const cached = cachedSignedAvatarUrl(normalizedPath);
+    if (cached) {
+      setResolvedUrl({ path: normalizedPath, url: cached.url });
+      scheduleRefresh(cached);
+      return () => {
+        cancelled = true;
+        if (refreshTimer) {
+          clearTimeout(refreshTimer);
+        }
+      };
+    }
+
+    setResolvedUrl({ path: normalizedPath, url: null });
     void refreshSignedUrl();
 
     return () => {
@@ -124,5 +184,6 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
     };
   }, [path]);
 
-  return resolvedUrl;
+  const normalizedPath = normalizeAvatarPath(path);
+  return resolvedUrl.path === normalizedPath ? resolvedUrl.url : null;
 }

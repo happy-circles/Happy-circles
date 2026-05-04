@@ -7,7 +7,6 @@ import {
   transactionCategoryColor,
   transactionCategoryIcon,
 } from '@/lib/transaction-categories';
-import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 
 export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle';
@@ -25,7 +24,8 @@ export interface HistoryCaseCardProps {
   readonly eyebrow?: string | null;
   readonly category?: string | null;
   readonly title: string;
-  readonly impact?: string | null;
+  readonly description?: string | null;
+  readonly amountLabel?: string | null;
   readonly meta?: string | null;
   readonly statusLabel: string;
   readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
@@ -40,7 +40,8 @@ export function HistoryCaseCard({
   eyebrow,
   category,
   title,
-  impact,
+  description,
+  amountLabel,
   meta,
   statusLabel,
   statusTone = 'neutral',
@@ -57,8 +58,9 @@ export function HistoryCaseCard({
       .map((part) => part.trim())
       .filter((part) => part.length > 0) ?? [];
   const metaLabel = metaParts[0] ?? null;
-  const metaCategory = metaParts[1] ?? null;
-  const showCategoryIcon = isCycleSnippet || Boolean(category);
+  const showCategoryIcon = Boolean(category) && !isCycleSnippet;
+  const impactSign = tone === 'positive' ? '+' : tone === 'negative' ? '-' : null;
+  const showImpactMetric = Boolean(amountLabel) || tone === 'cycle';
 
   return (
     <SurfaceCard
@@ -72,59 +74,94 @@ export function HistoryCaseCard({
         tone === 'cycle' ? styles.cardCycle : null,
         isCycleSnippet ? styles.cycleSnippet : null,
         tone === 'danger' ? styles.rejectedSnippet : null,
+        isExpanded ? styles.cardExpanded : null,
+        isExpanded && tone === 'positive' ? styles.cardExpandedPositive : null,
+        isExpanded && tone === 'negative' ? styles.cardExpandedNegative : null,
+        isExpanded && tone === 'danger' ? styles.cardExpandedDanger : null,
+        isExpanded && tone === 'cycle' ? styles.cardExpandedCycle : null,
       ]}
-      variant={isCycleSnippet ? 'muted' : 'default'}
+      variant={isExpanded ? 'elevated' : isCycleSnippet ? 'muted' : 'default'}
     >
       <Pressable
         onPress={onToggle}
         style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
       >
         <View style={styles.text}>
-          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+          <View style={styles.kickerRow}>
+            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+            {eyebrow ? <View style={styles.kickerDot} /> : null}
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.statusText,
+                statusTone === 'primary' ? styles.statusPrimary : null,
+                statusTone === 'success' ? styles.statusSuccess : null,
+                statusTone === 'warning' ? styles.statusWarning : null,
+                statusTone === 'danger' ? styles.statusDanger : null,
+                statusTone === 'cycle' ? styles.statusCycle : null,
+              ]}
+            >
+              {statusLabel}
+            </Text>
+          </View>
           <View style={styles.titleLine}>
+            {showCategoryIcon ? (
+              <View
+                style={[
+                  styles.categoryIconBadge,
+                  { backgroundColor: transactionCategoryBackgroundColor(category) },
+                ]}
+              >
+                <Ionicons
+                  color={transactionCategoryColor(category)}
+                  name={categoryIcon}
+                  size={12}
+                />
+              </View>
+            ) : null}
             <Text style={styles.title}>{title}</Text>
           </View>
-          {impact ? <Text style={[styles.impact, toneStyles[tone]]}>{impact}</Text> : null}
-          {metaLabel ? (
+          {metaLabel || description ? (
             <View style={styles.metaRow}>
-              <Text numberOfLines={1} style={styles.meta}>
-                {metaLabel}
-              </Text>
-              {showCategoryIcon && metaCategory ? <View style={styles.metaDot} /> : null}
-              {showCategoryIcon && metaCategory ? (
-                <View style={styles.metaCategory}>
-                  {isCycleSnippet ? (
-                    <View style={styles.cycleIconBadge}>
-                      <Ionicons
-                        color={transactionCategoryColor('cycle')}
-                        name="happy-outline"
-                        size={11}
-                      />
-                    </View>
-                  ) : (
-                    <View
-                      style={[
-                        styles.categoryIconBadge,
-                        { backgroundColor: transactionCategoryBackgroundColor(category) },
-                      ]}
-                    >
-                      <Ionicons
-                        color={transactionCategoryColor(category)}
-                        name={categoryIcon}
-                        size={11}
-                      />
-                    </View>
-                  )}
-                  <Text numberOfLines={1} style={styles.meta}>
-                    {metaCategory}
-                  </Text>
-                </View>
+              {metaLabel ? (
+                <Text numberOfLines={1} style={styles.meta}>
+                  {metaLabel}
+                </Text>
+              ) : null}
+              {metaLabel && description ? <View style={styles.metaDot} /> : null}
+              {description ? (
+                <Text numberOfLines={1} style={[styles.meta, styles.descriptionMeta]}>
+                  {description}
+                </Text>
               ) : null}
             </View>
           ) : null}
         </View>
         <View style={styles.headerMeta}>
-          <StatusChip compact label={statusLabel} tone={statusTone} />
+          {showImpactMetric ? (
+            <View style={styles.impactMetric}>
+              <View style={styles.impactValueRow}>
+                {tone === 'cycle' ? (
+                  <View style={styles.impactCycleBadge}>
+                    <Ionicons
+                      color={transactionCategoryColor('cycle')}
+                      name="happy-outline"
+                      size={15}
+                    />
+                  </View>
+                ) : impactSign ? (
+                  <Text style={[styles.impactSign, toneStyles[tone]]}>{impactSign}</Text>
+                ) : null}
+                {amountLabel ? (
+                  <Text numberOfLines={1} style={[styles.impactAmount, toneStyles[tone]]}>
+                    {amountLabel}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.impactMetric} />
+          )}
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
             <Ionicons
@@ -162,7 +199,9 @@ export function HistoryCaseCard({
                     </Text>
                   ) : null}
                 </View>
-                {step.impact ? <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text> : null}
+                {step.impact && !step.amountLabel ? (
+                  <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text>
+                ) : null}
                 {step.meta ? <Text style={styles.stepMeta}>{step.meta}</Text> : null}
               </View>
             </View>
@@ -194,8 +233,29 @@ const toneStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   card: {
     borderRadius: theme.radius.medium,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     marginVertical: theme.spacing.xxs,
+  },
+  cardExpanded: {
+    backgroundColor: '#fbfcff',
+    borderColor: 'rgba(26, 39, 68, 0.16)',
+    transform: [{ translateY: -1 }],
+  },
+  cardExpandedPositive: {
+    backgroundColor: '#fbfefc',
+    borderColor: 'rgba(61, 186, 110, 0.28)',
+  },
+  cardExpandedNegative: {
+    backgroundColor: '#fffaf5',
+    borderColor: 'rgba(249, 115, 22, 0.24)',
+  },
+  cardExpandedDanger: {
+    backgroundColor: '#fff8f7',
+    borderColor: 'rgba(232, 96, 74, 0.24)',
+  },
+  cardExpandedCycle: {
+    backgroundColor: '#f7fbff',
+    borderColor: 'rgba(37, 99, 235, 0.22)',
   },
   cycleSnippet: {
     borderColor: 'rgba(37, 99, 235, 0.16)',
@@ -227,17 +287,25 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
   },
   header: {
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     justifyContent: 'space-between',
+    minHeight: 78,
   },
   headerPressed: {
     opacity: 0.94,
   },
   text: {
     flex: 1,
-    gap: 2,
+    gap: 6,
+    minWidth: 0,
+  },
+  kickerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   eyebrow: {
     color: theme.colors.primary,
@@ -246,10 +314,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
+  kickerDot: {
+    backgroundColor: theme.colors.muted,
+    borderRadius: theme.radius.pill,
+    height: 3.5,
+    width: 3.5,
+  },
+  statusText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  statusPrimary: {
+    color: theme.colors.primary,
+  },
+  statusSuccess: {
+    color: theme.colors.success,
+  },
+  statusWarning: {
+    color: theme.colors.warning,
+  },
+  statusDanger: {
+    color: theme.colors.danger,
+  },
+  statusCycle: {
+    color: transactionCategoryColor('cycle'),
+  },
   headerMeta: {
-    alignItems: 'flex-end',
-    gap: 4,
-    minWidth: 92,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    maxWidth: 112,
+    minWidth: 96,
   },
   title: {
     flex: 1,
@@ -259,27 +356,52 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   titleLine: {
-    minWidth: 0,
-  },
-  cycleIconBadge: {
     alignItems: 'center',
-    backgroundColor: '#eaf1ff',
-    borderRadius: theme.radius.pill,
-    height: 18,
-    justifyContent: 'center',
-    width: 18,
+    flexDirection: 'row',
+    gap: 7,
+    minWidth: 0,
   },
   categoryIconBadge: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 18,
+    flexShrink: 0,
+    height: 22,
     justifyContent: 'center',
-    width: 18,
+    width: 22,
   },
-  impact: {
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    lineHeight: 16,
+  impactMetric: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    width: '100%',
+  },
+  impactValueRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  impactSign: {
+    fontSize: theme.typography.title3,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  impactAmount: {
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  impactCycleBadge: {
+    alignItems: 'center',
+    backgroundColor: '#eaf1ff',
+    borderRadius: theme.radius.pill,
+    height: 26,
+    justifyContent: 'center',
+    width: 26,
   },
   metaRow: {
     alignItems: 'center',
@@ -293,19 +415,18 @@ const styles = StyleSheet.create({
     height: 3.5,
     width: 3.5,
   },
-  metaCategory: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 4,
-    maxWidth: '100%',
-  },
   meta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 15,
   },
+  descriptionMeta: {
+    flexShrink: 1,
+    fontWeight: '700',
+  },
   toggleRow: {
     alignItems: 'center',
+    alignSelf: 'flex-end',
     flexDirection: 'row',
     gap: 4,
   },
@@ -317,8 +438,8 @@ const styles = StyleSheet.create({
   steps: {
     borderTopColor: theme.colors.hairline,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
   },
   stepRow: {
     alignItems: 'flex-start',

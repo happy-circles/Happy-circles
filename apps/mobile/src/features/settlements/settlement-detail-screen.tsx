@@ -34,9 +34,17 @@ export interface SettlementDetailScreenProps {
   readonly proposalId: string;
 }
 
+const RESULT_OVERLAY_DURATION_MS = 2200;
+
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+interface ActionOverlayState {
+  readonly message?: string;
+  readonly title: string;
+  readonly variant: 'success' | 'danger';
 }
 
 function readResultStatus(value: unknown): string | null {
@@ -344,10 +352,12 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | 'execute' | null>(null);
+  const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [graphFocused, setGraphFocused] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyAction));
   const viewedProposalIdRef = useRef<string | null>(null);
+  const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const settlement = snapshotQuery.data?.settlementsById[proposalId] ?? null;
 
@@ -364,9 +374,35 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     });
   }, [proposalId, settlement?.status]);
 
+  useEffect(
+    () => () => {
+      if (resultOverlayTimeoutRef.current) {
+        clearTimeout(resultOverlayTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  function showActionOverlay(nextOverlay: ActionOverlayState) {
+    if (resultOverlayTimeoutRef.current) {
+      clearTimeout(resultOverlayTimeoutRef.current);
+    }
+
+    setActionOverlay(nextOverlay);
+
+    return new Promise<void>((resolve) => {
+      resultOverlayTimeoutRef.current = setTimeout(() => {
+        setActionOverlay(null);
+        resultOverlayTimeoutRef.current = null;
+        resolve();
+      }, RESULT_OVERLAY_DURATION_MS);
+    });
+  }
+
   async function handleAction(action: 'approve' | 'reject' | 'execute') {
     setBusyAction(action);
     setBanner(null);
+    setActionOverlay(null);
 
     try {
       if (action === 'approve') {
@@ -378,12 +414,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             tone: 'warning',
           });
         } else {
-          showSnackbar(
-            nextStatus === 'approved'
-              ? 'Todos aceptaron. El Happy Circle quedo listo.'
-              : 'Tu aprobacion quedo registrada.',
-            'success',
-          );
+          await showActionOverlay({
+            message:
+              nextStatus === 'approved'
+                ? 'Todos aceptaron. El Happy Circle quedo listo.'
+                : 'Tu aprobacion quedo registrada.',
+            title: 'Decision guardada',
+            variant: 'success',
+          });
         }
       } else if (action === 'reject') {
         await rejectSettlement.mutateAsync(proposalId);
@@ -398,12 +436,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             tone: 'warning',
           });
         } else {
-          showSnackbar(
-            nextAutoCycleStatus === 'queued'
-              ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
-              : 'Happy Circle completado.',
-            'success',
-          );
+          await showActionOverlay({
+            message:
+              nextAutoCycleStatus === 'queued'
+                ? 'Estamos buscando el siguiente en segundo plano.'
+                : 'La transaccion quedo confirmada.',
+            title: 'Happy Circle completado',
+            variant: 'success',
+          });
         }
       }
     } catch (error) {
@@ -422,9 +462,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         return;
       }
 
-      setBanner({
+      await showActionOverlay({
         message: nextMessage,
-        tone: 'danger',
+        title: 'No se pudo completar',
+        variant: 'danger',
       });
     } finally {
       setBusyAction(null);
@@ -624,9 +665,12 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         </View>
       ) : null}
       <LoadingOverlay
-        message="No salgas de esta pantalla mientras registramos la decision."
-        title="Procesando accion"
-        visible={showBusyOverlay}
+        message={
+          actionOverlay?.message ?? 'No salgas de esta pantalla mientras registramos la decision.'
+        }
+        title={actionOverlay?.title ?? 'Procesando transaccion'}
+        variant={actionOverlay?.variant ?? 'loading'}
+        visible={showBusyOverlay || Boolean(actionOverlay)}
       />
     </ScreenShell>
   );

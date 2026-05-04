@@ -179,8 +179,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   amount: {
-    fontSize: theme.typography.callout,
+    fontSize: theme.typography.body,
     fontWeight: '800',
+    lineHeight: 22,
   },
   positive: {
     color: POSITIVE_VISUAL?.accentColor ?? theme.colors.brandGreen,

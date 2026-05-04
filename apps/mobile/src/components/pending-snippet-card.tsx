@@ -10,6 +10,7 @@ import { SurfaceCard } from './surface-card';
 type PendingSnippetVariant = 'default' | 'muted' | 'accent' | 'elevated';
 type PendingSnippetTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 type PendingSnippetAmountTone = 'positive' | 'negative' | 'neutral' | 'danger';
+type PendingSnippetPadding = 'sm' | 'md' | 'lg';
 
 export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly eyebrow: string;
@@ -23,6 +24,7 @@ export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly helperText?: string | null;
   readonly variant?: PendingSnippetVariant;
   readonly tone?: PendingSnippetTone;
+  readonly padding?: PendingSnippetPadding;
   readonly style?: StyleProp<ViewStyle>;
   readonly onPress?: () => void;
 }
@@ -39,6 +41,7 @@ export function PendingSnippetCard({
   helperText,
   variant = 'default',
   tone = 'neutral',
+  padding = 'md',
   style,
   onPress,
   children,
@@ -74,7 +77,6 @@ export function PendingSnippetCard({
 
   return (
     <SurfaceCard
-      padding="md"
       style={[
         styles.card,
         tone === 'primary' ? styles.cardPrimary : null,
@@ -85,6 +87,7 @@ export function PendingSnippetCard({
         tone === 'cycle' ? styles.cardCycle : null,
         style,
       ]}
+      padding={padding}
       variant={variant}
     >
       {onPress ? (

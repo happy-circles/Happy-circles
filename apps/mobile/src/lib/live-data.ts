@@ -16,6 +16,7 @@ import type {
   BalanceWaterfallGroupDto,
   DashboardDto,
   PendingActionDto,
+  PendingRequestHistoryStepDto,
   PersonCardDto,
   PersonDetailDto,
   PersonPendingRequestDto,
@@ -27,6 +28,7 @@ import {
   createBalanceRequestSchema,
   createPeopleOutreachSchema,
   requestAccountDeletionSchema,
+  cancelAccountInviteSchema,
   cancelFriendshipInviteSchema,
   claimExternalFriendshipInviteSchema,
   createExternalFriendshipInviteSchema,
@@ -378,6 +380,7 @@ export interface FriendshipInvitePreviewResult {
   readonly resolvedAt: string | null;
   readonly actorRole: 'sender' | 'claimant' | 'recipient' | 'none';
   readonly inviterDisplayName: string;
+  readonly inviterAvatarPath: string | null;
   readonly intendedRecipientAlias: string | null;
   readonly intendedRecipientPhoneE164: string | null;
   readonly intendedRecipientPhoneLabel: string | null;
@@ -499,6 +502,7 @@ interface ActionableItem {
   readonly counterpartyLabel?: string;
   readonly tone?: ActivityItemDto['tone'];
   readonly participantUserIds?: readonly string[];
+  readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
   readonly createdAt: string;
 }
 
@@ -777,6 +781,7 @@ function actionableItemToActivityItem(item: ActionableItem): ActivityItemDto {
     category: item.category,
     counterpartyLabel: item.counterpartyLabel,
     tone: item.tone,
+    pendingHistorySteps: item.pendingHistorySteps,
   };
 }
 
@@ -850,6 +855,62 @@ function formatPendingRequestSubtitle(
     request.description ?? 'Sin descripcion',
     formatRelativeLabel(request.created_at),
   ].join(' | ');
+}
+
+function pendingRequestHistoryTitle(index: number, total: number): string {
+  if (total <= 1) {
+    return 'Propuesta actual';
+  }
+
+  if (index === 0) {
+    return 'Propuesta inicial';
+  }
+
+  if (index === total - 1) {
+    return 'Monto actual';
+  }
+
+  return 'Cambio propuesto';
+}
+
+function buildPendingRequestHistorySteps(input: {
+  readonly request: FinancialRequestRow;
+  readonly requestsById: ReadonlyMap<string, FinancialRequestRow>;
+  readonly currentUserId: string;
+  readonly counterpartyName: string;
+  readonly names: Map<string, string>;
+}): readonly PendingRequestHistoryStepDto[] {
+  const chain: FinancialRequestRow[] = [];
+  const seenIds = new Set<string>();
+  let currentRequest: FinancialRequestRow | undefined = input.request;
+
+  while (currentRequest && !seenIds.has(currentRequest.id) && chain.length < 20) {
+    chain.push(currentRequest);
+    seenIds.add(currentRequest.id);
+    currentRequest = currentRequest.parent_request_id
+      ? input.requestsById.get(currentRequest.parent_request_id)
+      : undefined;
+  }
+
+  const chronologicalChain = [...chain].reverse();
+
+  return chronologicalChain.map((request, index) => ({
+    id: request.id,
+    title: pendingRequestHistoryTitle(index, chronologicalChain.length),
+    description: request.description ?? 'Sin descripcion',
+    amountMinor: request.amount_minor,
+    category: normalizeTransactionCategory(request.category),
+    createdAtLabel: formatRelativeLabel(request.created_at),
+    createdByLabel: userLabelForRequest(
+      request.creator_user_id,
+      input.currentUserId,
+      input.counterpartyName,
+      input.names,
+      'Persona',
+    ),
+    status: request.status,
+    isCurrent: request.id === input.request.id,
+  }));
 }
 
 function buildPersonPendingRequest(input: {
@@ -4208,6 +4269,9 @@ function buildLiveSnapshot(input: {
     input.openDebts.map((row) => [row.relationship_id, row]),
   );
   const requestsByRelationshipId = groupBy(input.financialRequests, (row) => row.relationship_id);
+  const financialRequestsById = new Map(
+    input.financialRequests.map((request) => [request.id, request]),
+  );
   const historyByRelationshipId = groupBy(history, (row) => row.relationship_id);
   const settlementParticipantsByProposalId = groupBy(
     input.settlementParticipants,
@@ -4275,6 +4339,7 @@ function buildLiveSnapshot(input: {
     people.map((person): [string, LivePersonDetailDto] => {
       const relationship = relationshipsByCounterpartyId.get(person.userId);
       const requests = relationship ? (requestsByRelationshipId.get(relationship.id) ?? []) : [];
+      const personRequestsById = new Map(requests.map((request) => [request.id, request]));
       const latestPendingRequest = requests.find((request) => request.status === 'pending');
       const personPendingRequests = requests
         .filter((request) => request.status === 'pending')
@@ -4302,6 +4367,13 @@ function buildLiveSnapshot(input: {
               requestDirectionForUser(request, input.currentUserId) === 'owes_me'
                 ? 'positive'
                 : 'negative',
+            pendingHistorySteps: buildPendingRequestHistorySteps({
+              request,
+              requestsById: personRequestsById,
+              currentUserId: input.currentUserId,
+              counterpartyName: person.displayName,
+              names: nameByUserId,
+            }),
             createdAt: request.created_at,
           }),
         );
@@ -4330,9 +4402,7 @@ function buildLiveSnapshot(input: {
         }),
       ].sort(compareHistoryItems);
 
-      const pendingLabel = `${person.pendingCount} pendiente${
-        person.pendingCount > 1 ? 's' : ''
-      }`;
+      const pendingLabel = `${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`;
       const headline =
         person.netAmountMinor === 0
           ? person.pendingCount > 0
@@ -4410,6 +4480,13 @@ function buildLiveSnapshot(input: {
           requestDirectionForUser(request, input.currentUserId) === 'owes_me'
             ? 'positive'
             : 'negative',
+        pendingHistorySteps: buildPendingRequestHistorySteps({
+          request,
+          requestsById: financialRequestsById,
+          currentUserId: input.currentUserId,
+          counterpartyName: counterparty?.displayName ?? 'Persona',
+          names: nameByUserId,
+        }),
         createdAt: request.created_at,
       };
     });
@@ -5111,6 +5188,23 @@ export function useReviewAccountInviteMutation() {
 
       return invokeSupabaseFunction<typeof payload, AccountInviteActionResult>(
         'review-account-invite',
+        payload,
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useCancelAccountInviteMutation() {
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const payload = cancelAccountInviteSchema.parse({
+        idempotencyKey: createIdempotencyKey('cancel_account_invite'),
+        inviteId,
+      });
+
+      return invokeSupabaseFunction<typeof payload, AccountInviteActionResult>(
+        'cancel-account-invite',
         payload,
       );
     },

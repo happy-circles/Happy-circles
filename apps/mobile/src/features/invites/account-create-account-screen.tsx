@@ -628,9 +628,8 @@ export function AccountCreateAccountScreen() {
                     onScroll={(event) => setCountryMenuScrollY(event.nativeEvent.contentOffset.y)}
                     onMoveShouldSetResponder={() => true}
                     onStartShouldSetResponder={() => true}
-                    persistentScrollbar
                     scrollEventThrottle={16}
-                    showsVerticalScrollIndicator
+                    showsVerticalScrollIndicator={false}
                     style={[styles.countryMenuScroll, countryMenuScrollWebStyle]}
                   >
                     {COUNTRY_OPTIONS.map((country, index) => {

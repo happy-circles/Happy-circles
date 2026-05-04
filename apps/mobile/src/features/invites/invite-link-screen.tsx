@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AppAvatar } from '@/components/app-avatar';
 import {
   IdentityFlowIdentity,
   IdentityFlowLogoCopy,
@@ -11,6 +13,7 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
+import { resolveAvatarUrl } from '@/lib/avatar';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
 import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
@@ -67,19 +70,6 @@ function inviteReasonLabel(reason: string): string {
   return 'No puedes continuar con esta invitacion.';
 }
 
-function maskPhoneValue(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const digits = value.replaceAll(/\D/g, '');
-  if (digits.length < 4) {
-    return null;
-  }
-
-  return `***${digits.slice(-4)}`;
-}
-
 function channelLabel(channel: 'remote' | 'qr') {
   return channel === 'qr' ? 'QR temporal' : 'Invitacion remota';
 }
@@ -87,6 +77,53 @@ function channelLabel(channel: 'remote' | 'qr') {
 function isUnavailableFriendshipInvite(reason: string) {
   return ['canceled', 'claimed_by_other', 'delivery_revoked', 'expired', 'rejected'].includes(
     reason,
+  );
+}
+
+type InviteDecisionTone = 'primary' | 'danger';
+
+interface InviteDecisionButtonProps {
+  readonly disabled?: boolean;
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly label: string;
+  readonly onPress?: () => void;
+  readonly tone: InviteDecisionTone;
+}
+
+function InviteDecisionButton({
+  disabled = false,
+  icon,
+  label,
+  onPress,
+  tone,
+}: InviteDecisionButtonProps) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={disabled ? undefined : onPress}
+      style={({ pressed }) => [
+        styles.decisionButton,
+        tone === 'primary' ? styles.decisionButtonPrimary : styles.decisionButtonDanger,
+        pressed && !disabled ? styles.decisionButtonPressed : null,
+        disabled ? styles.decisionButtonDisabled : null,
+      ]}
+    >
+      <Ionicons
+        color={tone === 'primary' ? theme.colors.primary : theme.colors.danger}
+        name={icon}
+        size={16}
+      />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.decisionButtonText,
+          tone === 'primary' ? styles.decisionButtonPrimaryText : styles.decisionButtonDangerText,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -134,9 +171,9 @@ export function InviteLinkScreen() {
             ? tokenUnavailable
               ? 'Invitacion no disponible'
               : preview.canApprove
-                ? 'Valida esta conexion'
+                ? 'Revisar conexion'
                 : preview.canClaim
-                  ? 'Invitacion lista'
+                  ? 'Invitacion de amistad'
                   : 'Invitacion revisada'
             : 'Invitacion de amistad';
   const tokenSubtitle = !deliveryToken
@@ -147,9 +184,24 @@ export function InviteLinkScreen() {
         ? previewQuery.error.message
         : previewQuery.isLoading
           ? 'Consultando el estado actual del token.'
-        : preview
-          ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
-          : 'El token abre una invitacion privada.';
+          : preview
+            ? tokenUnavailable || (!preview.canClaim && !preview.canApprove)
+              ? inviteReasonLabel(preview.reason)
+              : 'Responde cuando reconozcas esta invitacion.'
+            : 'El token abre una invitacion privada.';
+  const previewPersonName =
+    preview?.canApprove && preview.claimantSnapshot
+      ? preview.claimantSnapshot.displayName
+      : (preview?.inviterDisplayName ?? 'Persona');
+  const previewAvatarUrl =
+    preview?.canApprove && preview.claimantSnapshot
+      ? resolveAvatarUrl(preview.claimantSnapshot.avatarPath)
+      : resolveAvatarUrl(preview?.inviterAvatarPath ?? null);
+  const previewInviteType = preview
+    ? preview.canApprove
+      ? `${channelLabel(preview.channel)} | por confirmar`
+      : channelLabel(preview.channel)
+    : null;
   const contentTransitionKey =
     !readyForPreview || previewQuery.isLoading
       ? 'friend-invite:loading'
@@ -247,21 +299,15 @@ export function InviteLinkScreen() {
     }
   }
 
+  async function handleDismissInvite() {
+    await clearPendingInviteIntent();
+    beginHomeEntryHandoff();
+    returnToRoute(router, '/home');
+  }
+
   return (
     <IdentityFlowScreen
       contentTransitionKey={contentTransitionKey}
-      footer={
-        <View style={styles.footer}>
-          <PrimaryAction
-            label="Ir al inicio"
-            onPress={() => {
-              beginHomeEntryHandoff();
-              returnToRoute(router, '/home');
-            }}
-            variant="ghost"
-          />
-        </View>
-      }
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
       identityPosition="top"
       message={<IdentityFlowLogoCopy subtitle={tokenSubtitle} title={tokenTitle} />}
@@ -270,78 +316,61 @@ export function InviteLinkScreen() {
       {message ? <MessageBanner message={message} /> : null}
 
       {preview ? (
-        <SurfaceCard padding="lg" variant="elevated">
-          <Text style={styles.title}>{preview.inviterDisplayName}</Text>
-          <Text style={styles.helper}>
-            {channelLabel(preview.channel)} |{' '}
-            {preview.expiresAt
-              ? `vence ${new Date(preview.expiresAt).toLocaleString('es-CO')}`
-              : 'sin vencimiento'}
-          </Text>
-
-          {preview.intendedRecipientAlias || preview.intendedRecipientPhoneE164 ? (
-            <View style={styles.snapshotBlock}>
-              <Text style={styles.snapshotTitle}>Contacto pensado</Text>
-              {preview.intendedRecipientAlias ? (
-                <Text style={styles.snapshotLine}>{preview.intendedRecipientAlias}</Text>
-              ) : null}
-              {preview.intendedRecipientPhoneE164 ? (
-                <Text style={styles.snapshotLine}>
-                  {[
-                    preview.intendedRecipientPhoneLabel,
-                    maskPhoneValue(preview.intendedRecipientPhoneE164),
-                  ]
-                    .filter(Boolean)
-                    .join(' | ')}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-
-          {preview.claimantSnapshot ? (
-            <View style={styles.snapshotBlock}>
-              <Text style={styles.snapshotTitle}>
-                {preview.canApprove
-                  ? 'Cuenta que reclamo esta invitacion'
-                  : 'Cuenta que reclamo el acceso'}
+        <SurfaceCard padding="md" style={styles.inviteCard} variant="elevated">
+          <View style={styles.invitePersonRow}>
+            <AppAvatar imageUrl={previewAvatarUrl} label={previewPersonName} size={52} />
+            <View style={styles.invitePersonCopy}>
+              <Text numberOfLines={1} style={styles.title}>
+                {previewPersonName}
               </Text>
-              <Text style={styles.snapshotLine}>{preview.claimantSnapshot.displayName}</Text>
-              {preview.claimantSnapshot.maskedEmail ? (
-                <Text style={styles.snapshotLine}>{preview.claimantSnapshot.maskedEmail}</Text>
-              ) : null}
-              {preview.claimantSnapshot.maskedPhone ? (
-                <Text style={styles.snapshotLine}>{preview.claimantSnapshot.maskedPhone}</Text>
-              ) : null}
+              {previewInviteType ? <Text style={styles.helper}>{previewInviteType}</Text> : null}
             </View>
-          ) : null}
-
-          <Text style={styles.body}>
-            {preview.canClaim
-              ? `${preview.inviterDisplayName} quiere conectar contigo en Happy Circles.`
-              : preview.canApprove
-                ? `Compara el contacto pensado con la cuenta que reclamo esta invitacion y confirma si si corresponde a la persona que querias agregar.`
-                : inviteReasonLabel(preview.reason)}
-          </Text>
+          </View>
 
           {preview.canClaim ? (
-            <PrimaryAction
-              label={busyAction === 'claim' ? 'Reclamando...' : 'Quiero conectar'}
-              onPress={busyAction ? undefined : () => void handleClaim()}
-              subtitle="Si tu celular coincide con el contacto esperado, puede quedar lista de una vez."
-            />
+            <View style={styles.actionRow}>
+              <InviteDecisionButton
+                disabled={Boolean(busyAction)}
+                icon={
+                  busyAction === 'claim' ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'
+                }
+                label={busyAction === 'claim' ? 'Aceptando' : 'Aceptar'}
+                onPress={() => void handleClaim()}
+                tone="primary"
+              />
+              <InviteDecisionButton
+                disabled={Boolean(busyAction)}
+                icon="close-circle-outline"
+                label="No aceptar"
+                onPress={() => void handleDismissInvite()}
+                tone="danger"
+              />
+            </View>
           ) : null}
 
           {preview.canApprove ? (
-            <View style={styles.actionStack}>
-              <PrimaryAction
-                label={busyAction === 'approve' ? 'Confirmando...' : 'Si es esta persona'}
-                onPress={busyAction ? undefined : () => void handleReview('approve')}
-                subtitle="Crea la amistad y cierra la invitacion"
+            <View style={styles.actionRow}>
+              <InviteDecisionButton
+                disabled={Boolean(busyAction)}
+                icon={
+                  busyAction === 'approve'
+                    ? 'ellipsis-horizontal-circle-outline'
+                    : 'checkmark-circle'
+                }
+                label={busyAction === 'approve' ? 'Aceptando' : 'Aceptar'}
+                onPress={() => void handleReview('approve')}
+                tone="primary"
               />
-              <PrimaryAction
-                label={busyAction === 'reject' ? 'Cerrando...' : 'No es'}
-                onPress={busyAction ? undefined : () => void handleReview('reject')}
-                variant="secondary"
+              <InviteDecisionButton
+                disabled={Boolean(busyAction)}
+                icon={
+                  busyAction === 'reject'
+                    ? 'ellipsis-horizontal-circle-outline'
+                    : 'close-circle-outline'
+                }
+                label={busyAction === 'reject' ? 'Enviando' : 'No aceptar'}
+                onPress={() => void handleReview('reject')}
+                tone="danger"
               />
             </View>
           ) : null}
@@ -363,44 +392,70 @@ export function InviteLinkScreen() {
 }
 
 const styles = StyleSheet.create({
-  footer: {
+  inviteCard: {
+    gap: theme.spacing.md,
+  },
+  invitePersonRow: {
+    alignItems: 'center',
     flexDirection: 'row',
-    paddingBottom: theme.spacing.xs,
+    gap: theme.spacing.sm,
+  },
+  invitePersonCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
   },
   title: {
     color: theme.colors.text,
-    fontSize: theme.typography.callout,
+    fontSize: theme.typography.body,
     fontWeight: '800',
+    lineHeight: 20,
   },
   helper: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  body: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    lineHeight: 22,
+  actionRow: {
+    borderTopColor: theme.colors.hairline,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
   },
-  snapshotBlock: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    gap: theme.spacing.xxs,
-    padding: theme.spacing.md,
+  decisionButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.small,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 5,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.xs,
   },
-  snapshotTitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
+  decisionButtonPrimary: {
+    backgroundColor: theme.colors.primaryGhost,
   },
-  snapshotLine: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    lineHeight: 20,
+  decisionButtonDanger: {
+    backgroundColor: theme.colors.dangerSoft,
   },
-  actionStack: {
-    gap: theme.spacing.sm,
+  decisionButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
+  },
+  decisionButtonDisabled: {
+    opacity: 0.58,
+  },
+  decisionButtonText: {
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  decisionButtonPrimaryText: {
+    color: theme.colors.primary,
+  },
+  decisionButtonDangerText: {
+    color: theme.colors.danger,
   },
 });

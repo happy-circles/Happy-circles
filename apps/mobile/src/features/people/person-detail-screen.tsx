@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +28,6 @@ import {
   friendlyHistoryStepLabel,
   historyCardTitle,
   historyCaseEyebrow,
-  historyCaseImpactLabel,
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
@@ -67,6 +67,7 @@ import { useSession } from '@/providers/session-provider';
 type PersonSegmentKey = 'pending' | 'history';
 type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
 const PERSON_SEGMENT_KEYS: readonly PersonSegmentKey[] = ['pending', 'history'];
+const RESULT_OVERLAY_DURATION_MS = 2200;
 
 export interface PersonDetailScreenProps {
   readonly focusItemId?: string;
@@ -76,6 +77,12 @@ export interface PersonDetailScreenProps {
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+interface ActionOverlayState {
+  readonly message?: string;
+  readonly title: string;
+  readonly variant: 'success' | 'danger';
 }
 
 interface AmendmentErrors {
@@ -224,17 +231,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
-  const [visualPanelSegment, setVisualPanelSegment] =
-    useState<PersonSegmentKey>(panelSegment);
+  const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
+  const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
+  const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingItems = person?.pendingItems ?? [];
-  const activeSettlementProposal =
-    snapshotQuery.data?.balanceOverview.resolution.activeProposal ?? null;
-  const personActiveSettlement = activeSettlementProposal?.participantUserIds.includes(userId)
-    ? activeSettlementProposal
-    : null;
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
   const orderedPendingItems = useMemo(() => {
     if (focusCandidates.size === 0) {
@@ -255,6 +258,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   useEffect(() => {
     setVisualPanelSegment(panelSegment);
   }, [panelSegment]);
+
+  useEffect(
+    () => () => {
+      if (resultOverlayTimeoutRef.current) {
+        clearTimeout(resultOverlayTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!activeAmendmentItemId || !pendingItems.some((item) => item.id === activeAmendmentItemId)) {
@@ -313,19 +325,33 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     }
 
     setExpandedCaseIds((current) =>
-      current.includes(focusedHistoryCaseId) ? current : [focusedHistoryCaseId, ...current],
+      current[0] === focusedHistoryCaseId ? current : [focusedHistoryCaseId],
     );
   }, [focusedHistoryCaseId]);
 
   function toggleHistoryCase(caseId: string) {
-    setExpandedCaseIds((current) =>
-      current.includes(caseId) ? current.filter((item) => item !== caseId) : [...current, caseId],
-    );
+    setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
   }
 
   function changePanelSegment(segment: PersonSegmentKey) {
     setVisualPanelSegment(segment);
     setPanelSegment(segment);
+  }
+
+  function showActionOverlay(nextOverlay: ActionOverlayState) {
+    if (resultOverlayTimeoutRef.current) {
+      clearTimeout(resultOverlayTimeoutRef.current);
+    }
+
+    setActionOverlay(nextOverlay);
+
+    return new Promise<void>((resolve) => {
+      resultOverlayTimeoutRef.current = setTimeout(() => {
+        setActionOverlay(null);
+        resultOverlayTimeoutRef.current = null;
+        resolve();
+      }, RESULT_OVERLAY_DURATION_MS);
+    });
   }
 
   function toggleAmendment(item: ActivityItemDto) {
@@ -416,18 +442,21 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     const key = `${itemId}:${action}`;
     setBusyKey(key);
     setBanner(null);
+    setActionOverlay(null);
 
     try {
       if (kind === 'financial_request') {
         if (action === 'accept') {
           const response = await acceptRequest.mutateAsync(itemId);
           const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
-          showSnackbar(
-            autoCycleStatus === 'queued'
-              ? 'Propuesta aceptada. Estamos buscando Happy Circles en segundo plano.'
-              : 'Propuesta aceptada.',
-            'success',
-          );
+          await showActionOverlay({
+            message:
+              autoCycleStatus === 'queued'
+                ? 'Estamos buscando Happy Circles en segundo plano.'
+                : 'La transaccion quedo confirmada.',
+            title: 'Propuesta aceptada',
+            variant: 'success',
+          });
         } else {
           await rejectRequest.mutateAsync(itemId);
           showSnackbar('Propuesta no aceptada.', 'neutral');
@@ -445,12 +474,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               tone: 'warning',
             });
           } else {
-            showSnackbar(
-              nextStatus === 'approved'
-                ? 'Todos aceptaron. El Happy Circle quedo listo.'
-                : 'Tu aprobacion quedo registrada.',
-              'success',
-            );
+            await showActionOverlay({
+              message:
+                nextStatus === 'approved'
+                  ? 'Todos aceptaron. El Happy Circle quedo listo.'
+                  : 'Tu aprobacion quedo registrada.',
+              title: 'Decision guardada',
+              variant: 'success',
+            });
           }
         } else {
           await rejectSettlement.mutateAsync(itemId);
@@ -462,12 +493,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
         const response = await executeSettlement.mutateAsync(itemId);
         const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
-        showSnackbar(
-          nextStatus === 'queued'
-            ? 'Happy Circle completado. Estamos buscando el siguiente en segundo plano.'
-            : 'Happy Circle completado.',
-          'success',
-        );
+        await showActionOverlay({
+          message:
+            nextStatus === 'queued'
+              ? 'Estamos buscando el siguiente en segundo plano.'
+              : 'La transaccion quedo confirmada.',
+          title: 'Happy Circle completado',
+          variant: 'success',
+        });
       }
     } catch (error) {
       const nextMessage =
@@ -485,9 +518,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         return;
       }
 
-      setBanner({
+      await showActionOverlay({
         message: nextMessage,
-        tone: 'danger',
+        title: 'No se pudo completar',
+        variant: 'danger',
       });
     } finally {
       setBusyKey(null);
@@ -531,6 +565,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           createdAtLabel={financialRequestContent.createdAtLabel}
           createdByLabel={financialRequestContent.createdByLabel}
           description={financialRequestContent.detail}
+          historySteps={item.pendingHistorySteps}
           key={item.id}
           amendmentAmountError={
             activeAmendmentItemId === item.id ? (amendmentErrors.amount ?? null) : null
@@ -719,17 +754,19 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           />
         ) : (
           historyCases.map((itemCase) => {
-            const isExpanded = expandedCaseIds.includes(itemCase.id);
+            const isExpanded = expandedCaseIds[0] === itemCase.id;
             const latest = itemCase.latest;
             const caseMeta = historyCaseMeta(itemCase) || null;
-            const caseImpact = historyCaseImpactLabel(itemCase);
             const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+            const caseTitle = friendlyHistoryStepLabel(latest);
+            const caseDescription = historyCardTitle(itemCase);
 
             return (
               <HistoryCaseCard
+                amountLabel={historyStepAmountLabel(latest)}
                 category={latest.category}
+                description={caseDescription !== caseTitle ? caseDescription : null}
                 eyebrow={historyCaseEyebrow(itemCase)}
-                impact={caseImpact}
                 isCycleSnippet={itemCase.isCycleSnippet}
                 isExpanded={isExpanded}
                 key={itemCase.id}
@@ -745,7 +782,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   meta: historyStepMetaLabel(step),
                   tone: historyImpactTone(step) as HistoryCaseTone,
                 }))}
-                title={historyCardTitle(itemCase)}
+                title={caseTitle}
                 tone={caseTone}
               />
             );
@@ -803,27 +840,22 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const hasPendingItems = person.pendingCount > 0;
   const pendingLabel = `${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`;
   const isSettledBalance = person.netAmountMinor === 0;
-  const balanceTone =
-    isSettledBalance
-      ? 'neutral'
-      : person.direction === 'owes_me'
-        ? 'positive'
-        : 'negative';
+  const balanceTone = isSettledBalance
+    ? 'neutral'
+    : person.direction === 'owes_me'
+      ? 'positive'
+      : 'negative';
   const balanceVisual = toneVisual(balanceTone);
-  const balanceSummary =
-    isSettledBalance && hasPendingItems
-      ? `${pendingLabel} por resolver`
-      : isSettledBalance
-      ? 'Estan al dia'
-      : person.direction === 'owes_me'
-        ? `Te debe ${formatCop(person.netAmountMinor)}`
-        : `Debes ${formatCop(person.netAmountMinor)}`;
-  const balanceSummaryColor =
-    isSettledBalance && hasPendingItems ? theme.colors.warning : balanceVisual?.accentColor;
+  const balanceSummary = isSettledBalance
+    ? 'Estan al dia'
+    : person.direction === 'owes_me'
+      ? `Te debe ${formatCop(person.netAmountMinor)}`
+      : `Debes ${formatCop(person.netAmountMinor)}`;
+  const balanceSummaryColor = balanceVisual?.accentColor;
   const heroMeta = hasPendingItems
     ? isSettledBalance
       ? 'Saldo confirmado en cero'
-      : pendingLabel
+      : undefined
     : person.supportText;
   const relationshipStatus = (person as { readonly relationshipStatus?: string })
     .relationshipStatus;
@@ -841,15 +873,46 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
             </Pressable>
             <Text style={styles.contactFlatName}>{person.displayName}</Text>
-            <Text
-              style={[
-                styles.balanceSummary,
-                balanceSummaryColor ? { color: balanceSummaryColor } : null,
-              ]}
-            >
-              {balanceSummary}
-            </Text>
-            {heroMeta ? <Text style={styles.heroMeta}>{heroMeta}</Text> : null}
+            {!isSettledBalance ? (
+              <Text
+                style={[
+                  styles.balanceSummary,
+                  styles.balanceSummaryAmount,
+                  balanceSummaryColor ? { color: balanceSummaryColor } : null,
+                ]}
+                adjustsFontSizeToFit
+                minimumFontScale={0.86}
+                numberOfLines={1}
+              >
+                {balanceSummary}
+              </Text>
+            ) : !hasPendingItems ? (
+              <Text
+                style={[
+                  styles.balanceSummary,
+                  balanceSummaryColor ? { color: balanceSummaryColor } : null,
+                ]}
+                adjustsFontSizeToFit
+                minimumFontScale={0.9}
+                numberOfLines={1}
+              >
+                {balanceSummary}
+              </Text>
+            ) : null}
+            {hasPendingItems ? (
+              <View style={styles.pendingHeroBadge}>
+                <Ionicons color={theme.colors.warning} name="alert-circle-outline" size={12} />
+                <Text style={styles.pendingHeroBadgeText}>{pendingLabel}</Text>
+              </View>
+            ) : null}
+            {heroMeta ? (
+              <View style={styles.heroMetaRow}>
+                {isSettledBalance && hasPendingItems ? (
+                  <Ionicons color={theme.colors.muted} name="shield-checkmark-outline" size={14} />
+                ) : null}
+                <Text style={styles.heroMeta}>{heroMeta}</Text>
+              </View>
+            ) : null}
           </View>
 
           {canRegisterTransactions ? (
@@ -882,31 +945,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 style={styles.quickActionPill}
               />
             </View>
-          ) : null}
-
-          {personActiveSettlement ? (
-            <PendingSnippetCard
-              amountLabel={formatCop(personActiveSettlement.totalAmountMinor)}
-              amountTone="neutral"
-              detail={personActiveSettlement.subtitle}
-              eyebrow="Happy Circle"
-              helperText={`${personActiveSettlement.savedMovementsCount} movimiento${personActiveSettlement.savedMovementsCount === 1 ? '' : 's'} ahorrado${personActiveSettlement.savedMovementsCount === 1 ? '' : 's'}`}
-              meta={personActiveSettlement.participantLabels.join(', ')}
-              statusLabel={personActiveSettlement.status === 'approved' ? 'Listo' : 'Pendiente'}
-              statusTone={personActiveSettlement.status === 'approved' ? 'cycle' : 'warning'}
-              title={personActiveSettlement.title}
-              tone="cycle"
-              variant="elevated"
-            >
-              <PrimaryAction
-                compact
-                label="Ver Happy Circle"
-                onPress={() =>
-                  pushRoute(router, `/settlements/${personActiveSettlement.proposalId}`)
-                }
-                variant="secondary"
-              />
-            </PendingSnippetCard>
           ) : null}
         </View>
 
@@ -964,9 +1002,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       </View>
       <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
       <LoadingOverlay
-        message="No cierres esta pantalla mientras registramos la respuesta."
-        title="Procesando accion"
-        visible={showBusyOverlay}
+        message={
+          actionOverlay?.message ?? 'No cierres esta pantalla mientras registramos la respuesta.'
+        }
+        title={actionOverlay?.title ?? 'Procesando transaccion'}
+        variant={actionOverlay?.variant ?? 'loading'}
+        visible={showBusyOverlay || Boolean(actionOverlay)}
       />
       <AvatarViewerModal
         imageUrl={person.avatarUrl ?? null}
@@ -986,10 +1027,10 @@ const styles = StyleSheet.create({
   layout: {
     alignSelf: 'center',
     flex: 1,
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
     maxWidth: 560,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.sm,
     width: '100%',
   },
@@ -997,13 +1038,14 @@ const styles = StyleSheet.create({
     top: theme.spacing.md,
   },
   fixedTop: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   heroBlock: {
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
+    position: 'relative',
   },
   avatarButton: {
     alignItems: 'center',
@@ -1024,7 +1066,39 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 22,
+    marginTop: 2,
+    maxWidth: '100%',
     textAlign: 'center',
+  },
+  balanceSummaryAmount: {
+    fontSize: theme.typography.title2,
+    lineHeight: 30,
+    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  pendingHeroBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.warningSoft,
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 4,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 4,
+  },
+  pendingHeroBadgeText: {
+    color: theme.colors.warning,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 13,
+  },
+  heroMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    justifyContent: 'center',
   },
   heroMeta: {
     color: theme.colors.textMuted,
@@ -1051,7 +1125,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
     flexShrink: 1,
     gap: theme.spacing.md,
-    paddingTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
   },
   tabBar: {
     alignItems: 'stretch',

@@ -3,7 +3,7 @@ import { Link, useRouter, type Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppAvatar } from '@/components/app-avatar';
+import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
 import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { pushRoute } from '@/lib/navigation';
@@ -18,6 +18,7 @@ import {
 export interface TransactionEventCardProps extends PropsWithChildren {
   readonly accentColor: string;
   readonly actorAvatarUrl?: string | null;
+  readonly actorAvatarVariant?: AppAvatarVariant;
   readonly actorFallbackColor: string;
   readonly actorLabel: string;
   readonly amountColor: string;
@@ -71,6 +72,7 @@ function withAlpha(color: string, alpha: number): string {
 export function TransactionEventCard({
   accentColor,
   actorAvatarUrl = null,
+  actorAvatarVariant = 'person',
   actorFallbackColor,
   actorLabel,
   amountColor,
@@ -202,6 +204,7 @@ export function TransactionEventCard({
               label={actorLabel}
               rounded={false}
               size={compact ? 38 : 44}
+              variant={actorAvatarVariant}
             />
             {categoryPlacement === 'avatar' ? (
               <View

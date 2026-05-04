@@ -59,7 +59,8 @@ insert into public.user_profiles (
   phone_country_iso2,
   phone_country_calling_code,
   phone_national_number,
-  phone_e164
+  phone_e164,
+  account_access_state
 )
 select
   demo_users.id,
@@ -69,7 +70,8 @@ select
   'CO',
   '+57',
   right(demo_users.phone_e164, 10),
-  demo_users.phone_e164
+  demo_users.phone_e164,
+  'active'
 from (
   values
     ('00000000-0000-0000-0000-0000000000e5'::uuid, 'elena@example.com', 'Elena', '+573001111101'),
@@ -83,7 +85,8 @@ set email = excluded.email,
     phone_country_iso2 = excluded.phone_country_iso2,
     phone_country_calling_code = excluded.phone_country_calling_code,
     phone_national_number = excluded.phone_national_number,
-    phone_e164 = excluded.phone_e164;
+    phone_e164 = excluded.phone_e164,
+    account_access_state = excluded.account_access_state;
 
 do $$
 declare
@@ -98,14 +101,21 @@ declare
   v_external_qr_2 jsonb;
   v_external_remote_changed jsonb;
   v_cancelable jsonb;
+  v_account_cancelable jsonb;
+  v_account_claimed jsonb;
   v_preview jsonb;
   v_claim jsonb;
   v_manual_claim jsonb;
   v_review jsonb;
   v_cancel jsonb;
+  v_account_cancel jsonb;
   v_delivery_count integer;
   v_active_relationship uuid;
 begin
+  delete from public.account_invites
+  where inviter_user_id in (v_user_elena, v_user_felipe, v_user_gina)
+     or activated_user_id in (v_user_elena, v_user_felipe, v_user_gina);
+
   delete from public.friendship_invite_deliveries
   where claimed_by_user_id in (v_user_elena, v_user_felipe, v_user_gina)
      or invite_id in (
@@ -301,6 +311,10 @@ begin
     raise exception 'expected remote delivery to be claimable by Gina';
   end if;
 
+  if (v_preview ->> 'inviterAvatarPath') <> v_user_elena::text || '/avatar.jpg' then
+    raise exception 'expected preview to expose inviter avatar path, got %', v_preview;
+  end if;
+
   if (v_preview ->> 'intendedRecipientPhoneE164') <> '+573001111103' then
     raise exception 'expected preview to expose intended recipient phone, got %', v_preview;
   end if;
@@ -442,6 +456,84 @@ begin
   if (v_preview ->> 'reason') <> 'canceled' then
     raise exception 'expected canceled preview for revoked delivery, got %', v_preview ->> 'reason';
   end if;
+
+  v_account_cancelable := public.create_account_invite(
+    v_user_elena,
+    'test-account-cancelable',
+    'remote',
+    'sql_test_account_cancel',
+    'Cuenta de prueba',
+    '+573001112299',
+    'mobile'
+  );
+
+  v_account_cancel := public.cancel_account_invite(
+    v_user_elena,
+    'test-account-cancel',
+    (v_account_cancelable ->> 'inviteId')::uuid
+  );
+
+  if (v_account_cancel ->> 'status') <> 'canceled' then
+    raise exception 'expected canceled account invite after sender cancellation, got %', v_account_cancel;
+  end if;
+
+  select count(*)
+    into v_delivery_count
+  from public.account_invite_deliveries
+  where invite_id = (v_account_cancelable ->> 'inviteId')::uuid
+    and status = 'revoked'
+    and revoked_at is not null;
+
+  if v_delivery_count <> 1 then
+    raise exception 'expected account invite delivery to be revoked after cancellation, got %', v_delivery_count;
+  end if;
+
+  v_preview := public.get_account_invite_preview_public(
+    v_account_cancelable ->> 'deliveryToken',
+    false,
+    null,
+    null
+  );
+
+  if (v_preview ->> 'reason') <> 'canceled' then
+    raise exception 'expected canceled account invite preview, got %', v_preview;
+  end if;
+
+  v_account_claimed := public.create_account_invite(
+    v_user_elena,
+    'test-account-cancel-claimed',
+    'remote',
+    'sql_test_account_cancel_claimed',
+    'Cuenta reclamada',
+    '+573001112399',
+    'mobile'
+  );
+
+  update public.account_invites
+  set activated_user_id = v_user_gina,
+      updated_at = timezone('utc', now())
+  where id = (v_account_claimed ->> 'inviteId')::uuid;
+
+  update public.account_invite_deliveries
+  set status = 'authenticated',
+      authenticated_user_id = v_user_gina,
+      authenticated_at = timezone('utc', now()),
+      updated_at = timezone('utc', now())
+  where invite_id = (v_account_claimed ->> 'inviteId')::uuid;
+
+  begin
+    perform public.cancel_account_invite(
+      v_user_elena,
+      'test-account-cancel-claimed-blocked',
+      (v_account_claimed ->> 'inviteId')::uuid
+    );
+    raise exception 'expected claimed account invite cancellation to fail';
+  exception
+    when others then
+      if sqlerrm <> 'account_invite_not_cancelable' then
+        raise;
+      end if;
+  end;
 end
 $$;
 

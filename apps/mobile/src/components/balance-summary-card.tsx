@@ -55,7 +55,7 @@ function BalanceMetricItem({
 
   return (
     <View style={styles.metricItem}>
-      <Ionicons color={visual.accentColor} name={visual.icon} size={20} />
+      <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
       <Text numberOfLines={1} style={[styles.metricLabel, { color: visual.accentColor }]}>
         {visual.label}
       </Text>
@@ -122,10 +122,10 @@ export function BalanceSummaryCard({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.sm,
-    paddingBottom: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.xl,
   },
   header: {
     alignItems: 'center',
@@ -142,35 +142,37 @@ const styles = StyleSheet.create({
     fontSize: 44,
     fontWeight: '800',
     lineHeight: 52,
+    marginBottom: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
     textAlign: 'center',
   },
   metricsRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.lg,
+    gap: theme.spacing.xl,
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: theme.spacing.xs,
     width: '100%',
   },
   metricItem: {
     alignItems: 'center',
     flexDirection: 'row',
     flex: 1,
-    gap: 5,
+    gap: 4,
     justifyContent: 'center',
     maxWidth: 190,
     minWidth: 0,
   },
   metricLabel: {
-    fontSize: theme.typography.callout,
+    fontSize: theme.typography.footnote,
     fontWeight: '800',
-    lineHeight: 19,
+    lineHeight: 17,
   },
   metricAmount: {
     flexShrink: 1,
-    fontSize: theme.typography.body,
+    fontSize: theme.typography.callout,
     fontWeight: '800',
-    lineHeight: 21,
+    lineHeight: 19,
   },
   detailsLink: {
     alignItems: 'center',

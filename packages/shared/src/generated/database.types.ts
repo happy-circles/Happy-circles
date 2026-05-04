@@ -3141,6 +3141,14 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_account_invite: {
+        Args: {
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_invite_id: string
+        }
+        Returns: Json
+      }
       claim_external_friendship_invite: {
         Args: {
           p_actor_user_id: string

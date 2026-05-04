@@ -112,4 +112,24 @@ describe('app smoke checks', () => {
     expect(appLayout).toContain('getLastNotificationRoute');
     expect(appLayout).toContain('notificationRouteFromResponse(response)');
   });
+
+  it('keeps transaction notifications as navigation-only surfaces', () => {
+    const activityScreen = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'activity',
+      'activity-screen.tsx',
+    );
+
+    expect(activityScreen).toContain('label="Ver en perfil"');
+    expect(activityScreen).not.toContain('Ver Happy Circle');
+    expect(activityScreen).not.toContain('useAcceptFinancialRequestMutation');
+    expect(activityScreen).not.toContain('useRejectFinancialRequestMutation');
+    expect(activityScreen).not.toContain('useAmendFinancialRequestMutation');
+    expect(activityScreen).not.toContain('useApproveSettlementMutation');
+    expect(activityScreen).not.toContain('useRejectSettlementMutation');
+    expect(activityScreen).not.toContain('useExecuteSettlementMutation');
+  });
 });

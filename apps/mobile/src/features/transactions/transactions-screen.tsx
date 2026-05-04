@@ -19,7 +19,6 @@ import {
   type HistoryCaseItem,
   historyCardTitle,
   historyCaseEyebrow,
-  historyCaseImpactLabel,
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
@@ -41,6 +40,7 @@ import {
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   isConsolidatedTransactionItem,
+  isCycleTransactionItem,
   isNoBalanceTransactionStatus,
   isPendingTransactionItem,
   transactionAccentColor,
@@ -269,10 +269,8 @@ function PendingTransactionCard({
   readonly item: ActivityItemDto;
   readonly people: readonly PersonCardDto[];
 }) {
-  const actorLabel =
-    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
-      ? 'Happy Circle'
-      : (item.counterpartyLabel ?? 'Persona');
+  const isSystemTransaction = isCycleTransactionItem(item);
+  const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
   const matchedPerson = transactionPersonForItem(people, item);
   const fallbackPerson = {
     displayName: actorLabel,
@@ -282,8 +280,11 @@ function PendingTransactionCard({
   return (
     <TransactionEventCard
       accentColor={transactionAccentColor(item)}
-      actorAvatarUrl={matchedPerson?.avatarUrl ?? null}
-      actorFallbackColor={initialsBackgroundColor(fallbackPerson)}
+      actorAvatarUrl={isSystemTransaction ? null : (matchedPerson?.avatarUrl ?? null)}
+      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
+      actorFallbackColor={
+        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
+      }
       actorLabel={actorLabel}
       amountColor={transactionToneColor(item)}
       amountLabel={transactionAmountLabel(item)}
@@ -396,11 +397,7 @@ export function TransactionsScreen() {
   }, [pendingTransactionItems, seenPendingTransactionIds, session.userId]);
 
   function toggleHistoryCase(caseId: string) {
-    setExpandedCaseIds((current) =>
-      current.includes(caseId)
-        ? current.filter((itemId) => itemId !== caseId)
-        : [caseId, ...current],
-    );
+    setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
   }
 
   if (snapshotQuery.isLoading) {
@@ -522,14 +519,17 @@ export function TransactionsScreen() {
             {historyCases.map((itemCase) => {
               const latest = itemCase.latest;
               const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+              const caseTitle = friendlyHistoryStepLabel(latest);
+              const caseDescription = historyCardTitle(itemCase);
 
               return (
                 <HistoryCaseCard
+                  amountLabel={historyStepAmountLabel(latest)}
                   category={latest.category}
+                  description={caseDescription !== caseTitle ? caseDescription : null}
                   eyebrow={historyCaseEyebrow(itemCase)}
-                  impact={historyCaseImpactLabel(itemCase)}
                   isCycleSnippet={itemCase.isCycleSnippet}
-                  isExpanded={expandedCaseIds.includes(itemCase.id)}
+                  isExpanded={expandedCaseIds[0] === itemCase.id}
                   key={itemCase.id}
                   meta={historyCaseMeta(itemCase) || null}
                   onToggle={() => toggleHistoryCase(itemCase.id)}
@@ -543,7 +543,7 @@ export function TransactionsScreen() {
                     title: friendlyHistoryStepLabel(step),
                     tone: historyImpactTone(step) as HistoryCaseTone,
                   }))}
-                  title={historyCardTitle(itemCase)}
+                  title={caseTitle}
                   tone={caseTone}
                 />
               );

@@ -12,12 +12,17 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type {
   BalanceAnalyticsCategoryRowDto,
+  BalanceAnalyticsLens,
   BalanceAnalyticsPeriod,
+  BalanceAnalyticsPeriodDto,
   BalanceAnalyticsPersonRowDto,
 } from '@happy-circles/application';
 
+import { HappyCircleCard } from '@/components/happy-circle-card';
+import { HappyWaterfallChart } from '@/components/happy-waterfall-chart';
 import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { ScreenShell } from '@/components/screen-shell';
+import { SectionBlock } from '@/components/section-block';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
@@ -42,7 +47,7 @@ const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Proyeccion', value: 'projection', icon: 'trending-up-outline' },
   { label: 'Personas', value: 'people', icon: 'people-outline' },
   { label: 'Categorias', value: 'categories', icon: 'pricetags-outline' },
-  { label: 'Cierres', value: 'settlements', icon: 'checkmark-done-outline' },
+  { label: 'Happy Circles', value: 'settlements', icon: 'happy-outline' },
 ];
 
 const FOCUS_CARD_MIN_HEIGHT = 430;
@@ -52,6 +57,12 @@ const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Mes', value: 'month' },
   { label: 'Ano', value: 'year' },
   { label: 'Todo', value: 'all' },
+];
+
+const LENS_OPTIONS: readonly SegmentedOption<BalanceAnalyticsLens>[] = [
+  { label: 'Balance', value: 'balance' },
+  { label: 'Debes', value: 'i_owe' },
+  { label: 'Te deben', value: 'owed_to_me' },
 ];
 
 function isBalanceFocus(value: string | null | undefined): value is BalanceFocus {
@@ -136,6 +147,33 @@ function personImpactAmount(row: BalanceAnalyticsPersonRowDto): number {
 }
 
 function categoryImpactAmount(row: BalanceAnalyticsCategoryRowDto): number {
+  return row.netMinor;
+}
+
+function personLensAmount(row: BalanceAnalyticsPersonRowDto, lens: BalanceAnalyticsLens): number {
+  if (lens === 'i_owe') {
+    return row.periodIOweMinor;
+  }
+
+  if (lens === 'owed_to_me') {
+    return row.periodOwedToMeMinor;
+  }
+
+  return row.periodNetMinor;
+}
+
+function categoryLensAmount(
+  row: BalanceAnalyticsCategoryRowDto,
+  lens: BalanceAnalyticsLens,
+): number {
+  if (lens === 'i_owe') {
+    return row.iOweMinor;
+  }
+
+  if (lens === 'owed_to_me') {
+    return row.owedToMeMinor;
+  }
+
   return row.netMinor;
 }
 
@@ -306,6 +344,415 @@ function ImpactBars({
   );
 }
 
+function DetailFilters({
+  lens,
+  onLensChange,
+  onPeriodChange,
+  period,
+}: {
+  readonly lens: BalanceAnalyticsLens;
+  readonly onLensChange: (lens: BalanceAnalyticsLens) => void;
+  readonly onPeriodChange: (period: BalanceAnalyticsPeriod) => void;
+  readonly period: BalanceAnalyticsPeriod;
+}) {
+  return (
+    <View style={styles.detailFilters}>
+      <SegmentedControl
+        label="Periodo"
+        onChange={onPeriodChange}
+        options={PERIOD_OPTIONS}
+        value={period}
+      />
+      <SegmentedControl
+        label="Filtro"
+        onChange={onLensChange}
+        options={LENS_OPTIONS}
+        value={lens}
+      />
+    </View>
+  );
+}
+
+function RankingRow({
+  description,
+  icon,
+  label,
+  meta,
+  onPress,
+  tone,
+  valueLabel,
+}: {
+  readonly description?: string | null;
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly label: string;
+  readonly meta: string;
+  readonly onPress?: () => void;
+  readonly tone: 'positive' | 'negative' | 'neutral';
+  readonly valueLabel: string;
+}) {
+  const rowContent = (
+    <>
+      <View style={styles.rankingIcon}>
+        <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
+      </View>
+      <View style={styles.rankingCopy}>
+        <Text numberOfLines={1} style={styles.detailRowTitle}>
+          {label}
+        </Text>
+        {description ? (
+          <Text numberOfLines={1} style={styles.detailRowDescription}>
+            {description}
+          </Text>
+        ) : null}
+        <Text numberOfLines={1} style={styles.cardMeta}>
+          {meta}
+        </Text>
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.detailRowAmount,
+          tone === 'positive' ? styles.positiveText : null,
+          tone === 'negative' ? styles.negativeText : null,
+        ]}
+      >
+        {valueLabel}
+      </Text>
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={styles.rankingRow}>{rowContent}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.rankingRow, pressed ? styles.pressed : null]}
+    >
+      {rowContent}
+    </Pressable>
+  );
+}
+
+function BalanceDetail({
+  currentPeriod,
+  lens,
+  onLensChange,
+  onPeriodChange,
+  period,
+  sortedCategories,
+  sortedPeople,
+}: {
+  readonly currentPeriod: BalanceAnalyticsPeriodDto;
+  readonly lens: BalanceAnalyticsLens;
+  readonly onLensChange: (lens: BalanceAnalyticsLens) => void;
+  readonly onPeriodChange: (period: BalanceAnalyticsPeriod) => void;
+  readonly period: BalanceAnalyticsPeriod;
+  readonly sortedCategories: readonly BalanceAnalyticsCategoryRowDto[];
+  readonly sortedPeople: readonly BalanceAnalyticsPersonRowDto[];
+}) {
+  const lensSummary = currentPeriod.summaries[lens];
+  const topPerson = sortedPeople[0] ?? null;
+  const topCategory = sortedCategories[0] ?? null;
+
+  return (
+    <SectionBlock title="Detalle del balance">
+      <DetailFilters
+        lens={lens}
+        onLensChange={onLensChange}
+        onPeriodChange={onPeriodChange}
+        period={period}
+      />
+      <SurfaceCard padding="lg" style={styles.detailCard} variant="elevated">
+        <Text style={styles.cardEyebrow}>{currentPeriod.labels.current}</Text>
+        <Text style={styles.detailHeroAmount}>{formatCop(lensSummary.finalMinor)}</Text>
+        <Text style={styles.focusCaption}>
+          Inicio {formatCop(lensSummary.initialMinor)} - Cambio{' '}
+          {signedFormatCop(lensSummary.deltaMinor)}
+        </Text>
+        <Text style={styles.detailInsight}>
+          {comparisonCopy(lensSummary.changeRatio, currentPeriod.labels.previous)}
+        </Text>
+      </SurfaceCard>
+      <SurfaceCard padding="md" variant="muted">
+        <Text style={styles.detailInsight}>{currentPeriod.insight}</Text>
+      </SurfaceCard>
+      <View style={styles.detailGrid}>
+        {topPerson ? (
+          <SurfaceCard padding="md" style={styles.detailGridCard}>
+            <Text style={styles.cardEyebrow}>Persona clave</Text>
+            <Text numberOfLines={1} style={styles.detailRowTitle}>
+              {topPerson.label}
+            </Text>
+            <Text style={styles.cardMeta}>{formatCop(personLensAmount(topPerson, lens))}</Text>
+          </SurfaceCard>
+        ) : null}
+        {topCategory ? (
+          <SurfaceCard padding="md" style={styles.detailGridCard}>
+            <Text style={styles.cardEyebrow}>Categoria clave</Text>
+            <Text numberOfLines={1} style={styles.detailRowTitle}>
+              {topCategory.label}
+            </Text>
+            <Text style={styles.cardMeta}>{formatCop(categoryLensAmount(topCategory, lens))}</Text>
+          </SurfaceCard>
+        ) : null}
+      </View>
+    </SectionBlock>
+  );
+}
+
+function ProjectionDetail({
+  onSegmentPress,
+  overview,
+}: {
+  readonly onSegmentPress: (filter: ProjectionChartFilter) => void;
+  readonly overview: {
+    readonly netBalanceMinor: number;
+    readonly projectedBalanceMinor: number;
+    readonly impactMinor: number;
+    readonly pendingCount: number;
+    readonly pendingIncomingMinor: number;
+    readonly pendingOutgoingMinor: number;
+    readonly totalOwedToMeMinor: number;
+    readonly totalIOweMinor: number;
+  };
+}) {
+  const rows: readonly {
+    readonly filter: ProjectionChartFilter;
+    readonly icon: keyof typeof Ionicons.glyphMap;
+    readonly label: string;
+    readonly valueMinor: number;
+  }[] = [
+    {
+      filter: 'owed_to_me',
+      icon: 'arrow-down-outline',
+      label: 'Te deben hoy',
+      valueMinor: overview.totalOwedToMeMinor,
+    },
+    {
+      filter: 'i_owe',
+      icon: 'arrow-up-outline',
+      label: 'Debes hoy',
+      valueMinor: overview.totalIOweMinor,
+    },
+    {
+      filter: 'current_balance',
+      icon: 'wallet-outline',
+      label: 'Balance actual',
+      valueMinor: overview.netBalanceMinor,
+    },
+    {
+      filter: 'pending_incoming',
+      icon: 'arrow-down-circle-outline',
+      label: 'Te deberan',
+      valueMinor: overview.pendingIncomingMinor,
+    },
+    {
+      filter: 'pending_outgoing',
+      icon: 'arrow-up-circle-outline',
+      label: 'Deberas',
+      valueMinor: overview.pendingOutgoingMinor,
+    },
+    {
+      filter: 'projection',
+      icon: 'flag-outline',
+      label: 'Proyectado',
+      valueMinor: overview.projectedBalanceMinor,
+    },
+  ];
+
+  return (
+    <SectionBlock title="Detalle de proyeccion">
+      <SurfaceCard padding="md" style={styles.projectionSummary} variant="muted">
+        <View style={styles.inlineMetric}>
+          <Text style={styles.inlineMetricValue}>{overview.pendingCount}</Text>
+          <Text style={styles.inlineMetricLabel}>pendientes abiertos</Text>
+        </View>
+        <View style={styles.inlineMetric}>
+          <Text style={styles.inlineMetricValue}>{formatCompactCop(overview.impactMinor)}</Text>
+          <Text style={styles.inlineMetricLabel}>impacto estimado</Text>
+        </View>
+      </SurfaceCard>
+      <SurfaceCard padding="md">
+        {rows.map((row) => (
+          <RankingRow
+            icon={row.icon}
+            key={row.filter}
+            label={row.label}
+            meta="Abrir movimientos relacionados"
+            onPress={() => onSegmentPress(row.filter)}
+            tone={amountTone(row.valueMinor)}
+            valueLabel={formatCop(row.valueMinor)}
+          />
+        ))}
+      </SurfaceCard>
+    </SectionBlock>
+  );
+}
+
+function PeopleDetail({
+  currentPeriod,
+  lens,
+  onLensChange,
+  onOpenPerson,
+  onPeriodChange,
+  period,
+  sortedPeople,
+}: {
+  readonly currentPeriod: BalanceAnalyticsPeriodDto;
+  readonly lens: BalanceAnalyticsLens;
+  readonly onLensChange: (lens: BalanceAnalyticsLens) => void;
+  readonly onOpenPerson: (person: BalanceAnalyticsPersonRowDto) => void;
+  readonly onPeriodChange: (period: BalanceAnalyticsPeriod) => void;
+  readonly period: BalanceAnalyticsPeriod;
+  readonly sortedPeople: readonly BalanceAnalyticsPersonRowDto[];
+}) {
+  return (
+    <SectionBlock title="Detalle por persona">
+      <DetailFilters
+        lens={lens}
+        onLensChange={onLensChange}
+        onPeriodChange={onPeriodChange}
+        period={period}
+      />
+      <HappyWaterfallChart groups={currentPeriod.waterfallByPerson} />
+      <SurfaceCard padding="md">
+        {sortedPeople.length === 0 ? (
+          <Text style={styles.supportText}>Todavia no hay actividad visible en este periodo.</Text>
+        ) : (
+          sortedPeople.map((row) => (
+            <RankingRow
+              description={
+                row.topCategories.length > 0
+                  ? row.topCategories
+                      .map((category) => transactionCategoryLabel(category))
+                      .join(', ')
+                  : 'Sin categorias dominantes'
+              }
+              icon="person"
+              key={row.key}
+              label={row.label}
+              meta={`${row.movementCount} movimiento${row.movementCount === 1 ? '' : 's'} - saldo actual ${formatCop(row.netMinor)}`}
+              onPress={() => onOpenPerson(row)}
+              tone={amountTone(personLensAmount(row, lens))}
+              valueLabel={formatCop(personLensAmount(row, lens))}
+            />
+          ))
+        )}
+      </SurfaceCard>
+    </SectionBlock>
+  );
+}
+
+function CategoriesDetail({
+  currentPeriod,
+  lens,
+  onLensChange,
+  onPeriodChange,
+  period,
+  sortedCategories,
+}: {
+  readonly currentPeriod: BalanceAnalyticsPeriodDto;
+  readonly lens: BalanceAnalyticsLens;
+  readonly onLensChange: (lens: BalanceAnalyticsLens) => void;
+  readonly onPeriodChange: (period: BalanceAnalyticsPeriod) => void;
+  readonly period: BalanceAnalyticsPeriod;
+  readonly sortedCategories: readonly BalanceAnalyticsCategoryRowDto[];
+}) {
+  return (
+    <SectionBlock title="Detalle por categoria">
+      <DetailFilters
+        lens={lens}
+        onLensChange={onLensChange}
+        onPeriodChange={onPeriodChange}
+        period={period}
+      />
+      <HappyWaterfallChart groups={currentPeriod.waterfallByCategory} />
+      <SurfaceCard padding="md">
+        {sortedCategories.length === 0 ? (
+          <Text style={styles.supportText}>
+            Todavia no hay categorias con impacto en este periodo.
+          </Text>
+        ) : (
+          sortedCategories.map((row) => (
+            <RankingRow
+              description={
+                row.personLabels.length > 0
+                  ? row.personLabels.join(', ')
+                  : 'Sin personas visibles en este periodo'
+              }
+              icon="pricetag"
+              key={row.key}
+              label={row.label}
+              meta={`${row.movementCount} movimiento${row.movementCount === 1 ? '' : 's'} - ${comparisonCopy(
+                row.previousNetMinor === 0
+                  ? null
+                  : (row.netMinor - row.previousNetMinor) / Math.abs(row.previousNetMinor),
+                currentPeriod.labels.previous,
+              )}`}
+              tone={amountTone(categoryLensAmount(row, lens))}
+              valueLabel={formatCop(categoryLensAmount(row, lens))}
+            />
+          ))
+        )}
+      </SurfaceCard>
+    </SectionBlock>
+  );
+}
+
+function HappyCirclesDetail({
+  currentPeriod,
+}: {
+  readonly currentPeriod: BalanceAnalyticsPeriodDto;
+}) {
+  const settlementPreview = currentPeriod.settlements.activeProposal;
+
+  return (
+    <SectionBlock title="Detalle de Happy Circles">
+      {settlementPreview ? (
+        <HappyCircleCard proposal={settlementPreview} variant="compact" />
+      ) : (
+        <SurfaceCard padding="md" variant="muted">
+          <Text style={styles.supportText}>No hay un Happy Circle activo en este momento.</Text>
+        </SurfaceCard>
+      )}
+      <View style={styles.detailGrid}>
+        <SurfaceCard padding="md" style={styles.detailGridCard}>
+          <Text style={styles.cardEyebrow}>Monto resuelto</Text>
+          <Text style={styles.detailMetricAmount}>
+            {formatCop(currentPeriod.settlements.resolvedMinor)}
+          </Text>
+          <Text style={styles.cardMeta}>
+            {comparisonCopy(currentPeriod.settlements.changeRatio, currentPeriod.labels.previous)}
+          </Text>
+        </SurfaceCard>
+        <SurfaceCard padding="md" style={styles.detailGridCard}>
+          <Text style={styles.cardEyebrow}>Movimientos ahorrados</Text>
+          <Text style={styles.detailMetricAmount}>
+            {currentPeriod.settlements.savedMovementsCount}
+          </Text>
+          <Text style={styles.cardMeta}>
+            {currentPeriod.settlements.movementCount} movimiento
+            {currentPeriod.settlements.movementCount === 1 ? '' : 's'} ejecutado
+            {currentPeriod.settlements.movementCount === 1 ? '' : 's'}
+          </Text>
+        </SurfaceCard>
+        <SurfaceCard padding="md" style={styles.detailGridCard}>
+          <Text style={styles.cardEyebrow}>Circulos participados</Text>
+          <Text style={styles.detailMetricAmount}>
+            {currentPeriod.settlements.participatedCount}
+          </Text>
+          <Text style={styles.cardMeta}>
+            {currentPeriod.settlements.activeCount} activo
+            {currentPeriod.settlements.activeCount === 1 ? '' : 's'} hoy
+          </Text>
+        </SurfaceCard>
+      </View>
+    </SectionBlock>
+  );
+}
+
 function PeopleFocusCard({
   periodLabel,
   people,
@@ -402,7 +849,7 @@ function SettlementsFocusCard({
 }) {
   return (
     <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="checkmark-done-outline" label="Cierres" meta={periodLabel} />
+      <FocusHeader icon="happy-outline" label="Happy Circles" meta={periodLabel} />
       <Text
         adjustsFontSizeToFit
         minimumFontScale={0.78}
@@ -419,7 +866,7 @@ function SettlementsFocusCard({
         </View>
         <View style={styles.inlineMetric}>
           <Text style={styles.inlineMetricValue}>{activeCount}</Text>
-          <Text style={styles.inlineMetricLabel}>cierres activos</Text>
+          <Text style={styles.inlineMetricLabel}>Happy Circles activos</Text>
         </View>
         <View style={styles.inlineMetric}>
           <Text style={styles.inlineMetricValue}>{movementCount}</Text>
@@ -428,7 +875,7 @@ function SettlementsFocusCard({
       </View>
       {activeProposal ? (
         <View style={styles.activeSettlement}>
-          <Text style={styles.cardEyebrow}>Cierre activo</Text>
+          <Text style={styles.cardEyebrow}>Happy Circle activo</Text>
           <Text numberOfLines={1} style={styles.barLabel}>
             {activeProposal.title}
           </Text>
@@ -458,6 +905,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
   const [carouselWidth, setCarouselWidth] = useState(0);
   const [period, setPeriod] = useState<BalanceAnalyticsPeriod>(analytics?.defaultPeriod ?? 'month');
+  const [lens, setLens] = useState<BalanceAnalyticsLens>('balance');
   const [activeFocus, setActiveFocus] = useState<BalanceFocus>(
     isBalanceFocus(initialFocus) ? initialFocus : 'balance',
   );
@@ -515,19 +963,29 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
   }
 
   const currentPeriod = analytics.periods[period];
-  const lensSummary = currentPeriod.summaries.balance;
+  const balanceSummary = currentPeriod.summaries.balance;
   const sortedPeople = [...currentPeriod.people].sort((left, right) => {
-    const amountDiff = Math.abs(personImpactAmount(right)) - Math.abs(personImpactAmount(left));
+    const amountDiff =
+      Math.abs(personLensAmount(right, lens)) - Math.abs(personLensAmount(left, lens));
     if (amountDiff !== 0) {
       return amountDiff;
+    }
+
+    if (right.movementCount !== left.movementCount) {
+      return right.movementCount - left.movementCount;
     }
 
     return left.label.localeCompare(right.label, 'es-CO');
   });
   const sortedCategories = [...currentPeriod.categories].sort((left, right) => {
-    const amountDiff = Math.abs(categoryImpactAmount(right)) - Math.abs(categoryImpactAmount(left));
+    const amountDiff =
+      Math.abs(categoryLensAmount(right, lens)) - Math.abs(categoryLensAmount(left, lens));
     if (amountDiff !== 0) {
       return amountDiff;
+    }
+
+    if (right.movementCount !== left.movementCount) {
+      return right.movementCount - left.movementCount;
     }
 
     return left.label.localeCompare(right.label, 'es-CO');
@@ -546,15 +1004,6 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
 
   return (
     <ScreenShell headerVariant="plain" refresh={refresh} title="Balance">
-      {activeFocus !== 'projection' ? (
-        <SegmentedControl
-          label="Periodo"
-          onChange={setPeriod}
-          options={PERIOD_OPTIONS}
-          value={period}
-        />
-      ) : null}
-
       <View
         onLayout={(event) => setCarouselWidth(event.nativeEvent.layout.width)}
         style={styles.carouselViewport}
@@ -574,7 +1023,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
           <View style={[styles.carouselPage, { width: carouselWidth }]}>
             <BalanceFocusCard
               netBalanceMinor={overview.summary.netBalanceMinor}
-              periodChangeMinor={lensSummary.deltaMinor}
+              periodChangeMinor={balanceSummary.deltaMinor}
               totalIOweMinor={overview.summary.totalIOweMinor}
               totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
               updatedAtLabel={overview.updatedAtLabel}
@@ -623,6 +1072,59 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
       </View>
 
       <CarouselDots activeFocus={activeFocus} onChange={setActiveFocus} />
+
+      {activeFocus === 'balance' ? (
+        <BalanceDetail
+          currentPeriod={currentPeriod}
+          lens={lens}
+          onLensChange={setLens}
+          onPeriodChange={setPeriod}
+          period={period}
+          sortedCategories={sortedCategories}
+          sortedPeople={sortedPeople}
+        />
+      ) : null}
+
+      {activeFocus === 'projection' ? (
+        <ProjectionDetail
+          onSegmentPress={(filter) => pushRoute(router, transactionFilterHref(filter))}
+          overview={{
+            netBalanceMinor: overview.summary.netBalanceMinor,
+            projectedBalanceMinor: overview.projection.projectedNetBalanceMinor,
+            impactMinor: overview.projection.impactMinor,
+            pendingCount: overview.projection.pendingCount,
+            pendingIncomingMinor: overview.projection.pendingIncomingMinor,
+            pendingOutgoingMinor: overview.projection.pendingOutgoingMinor,
+            totalOwedToMeMinor: overview.summary.totalOwedToMeMinor,
+            totalIOweMinor: overview.summary.totalIOweMinor,
+          }}
+        />
+      ) : null}
+
+      {activeFocus === 'people' ? (
+        <PeopleDetail
+          currentPeriod={currentPeriod}
+          lens={lens}
+          onLensChange={setLens}
+          onOpenPerson={(person) => pushRoute(router, `/person/${person.userId}` as Href)}
+          onPeriodChange={setPeriod}
+          period={period}
+          sortedPeople={sortedPeople}
+        />
+      ) : null}
+
+      {activeFocus === 'categories' ? (
+        <CategoriesDetail
+          currentPeriod={currentPeriod}
+          lens={lens}
+          onLensChange={setLens}
+          onPeriodChange={setPeriod}
+          period={period}
+          sortedCategories={sortedCategories}
+        />
+      ) : null}
+
+      {activeFocus === 'settlements' ? <HappyCirclesDetail currentPeriod={currentPeriod} /> : null}
     </ScreenShell>
   );
 }
@@ -638,6 +1140,80 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  detailFilters: {
+    gap: theme.spacing.sm,
+  },
+  detailCard: {
+    gap: theme.spacing.sm,
+  },
+  detailHeroAmount: {
+    color: theme.colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 40,
+  },
+  detailInsight: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  detailGrid: {
+    gap: theme.spacing.sm,
+  },
+  detailGridCard: {
+    gap: theme.spacing.xs,
+  },
+  detailMetricAmount: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
+    lineHeight: 28,
+  },
+  projectionSummary: {
+    gap: theme.spacing.sm,
+  },
+  rankingRow: {
+    alignItems: 'center',
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  rankingIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.large,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  rankingCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  detailRowTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  detailRowDescription: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
+  detailRowAmount: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 20,
+    maxWidth: 118,
+    textAlign: 'right',
   },
   carouselDots: {
     alignItems: 'center',
