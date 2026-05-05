@@ -24,9 +24,9 @@ import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
-import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
+import { toneVisual } from '@/lib/direction-ui';
 import { useAppSnapshot } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
@@ -50,7 +50,7 @@ const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Happy Circles', value: 'settlements', icon: 'happy-outline' },
 ];
 
-const FOCUS_CARD_MIN_HEIGHT = 430;
+const FOCUS_CARD_HEIGHT = 350;
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -120,6 +120,38 @@ function signedFormatCop(minor: number): string {
   }
 
   return formatCop(minor);
+}
+
+function signedFormatCompactCop(minor: number): string {
+  if (minor > 0) {
+    return `+${formatCompactCop(minor)}`;
+  }
+
+  return formatCompactCop(minor);
+}
+
+function formatHomeBalanceCop(minor: number): string {
+  if (minor < 0) {
+    return `- ${formatCop(Math.abs(minor))}`;
+  }
+
+  return formatCop(minor);
+}
+
+function periodScopeLabel(period: BalanceAnalyticsPeriod): string {
+  if (period === 'week') {
+    return 'esta semana';
+  }
+
+  if (period === 'month') {
+    return 'este mes';
+  }
+
+  if (period === 'year') {
+    return 'este ano';
+  }
+
+  return 'desde el inicio';
 }
 
 function comparisonCopy(changeRatio: number | null, previousLabel: string | null): string {
@@ -220,60 +252,179 @@ function FocusHeader({
 }) {
   return (
     <View style={styles.cardHeader}>
-      <View style={styles.cardIconBox}>
-        <Ionicons color={theme.colors.primary} name={icon} size={20} />
+      <View style={styles.cardCharacter}>
+        <View style={styles.cardCharacterFace}>
+          <Ionicons color={theme.colors.primary} name={icon} size={24} />
+        </View>
       </View>
       <View style={styles.cardHeaderCopy}>
-        <Text style={styles.cardEyebrow}>{label}</Text>
-        {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
+        <Text numberOfLines={1} style={styles.cardTitle}>
+          {label}
+        </Text>
+        {meta ? (
+          <Text numberOfLines={2} style={styles.cardSubtitle}>
+            {meta}
+          </Text>
+        ) : null}
       </View>
+    </View>
+  );
+}
+
+function TrendChip({
+  amountMinor,
+  changeRatio,
+  centered = false,
+  contextLabel,
+}: {
+  readonly amountMinor?: number;
+  readonly changeRatio?: number | null;
+  readonly centered?: boolean;
+  readonly contextLabel: string;
+}) {
+  const hasComparison =
+    amountMinor !== undefined || (changeRatio !== undefined && changeRatio !== null);
+  const comparable = amountMinor ?? changeRatio ?? 0;
+  const tone = comparable > 0 ? 'positive' : comparable < 0 ? 'negative' : 'neutral';
+  const valueLabel =
+    amountMinor !== undefined
+      ? signedFormatCompactCop(amountMinor)
+      : changeRatio === null || changeRatio === undefined
+        ? 'Sin data'
+        : `${Math.round(Math.abs(changeRatio) * 100)}%`;
+
+  return (
+    <View
+      style={[
+        styles.trendChip,
+        centered ? styles.trendChipCentered : null,
+        tone === 'positive' ? styles.trendChipPositive : null,
+        tone === 'negative' ? styles.trendChipNegative : null,
+      ]}
+    >
+      <Ionicons
+        color={
+          tone === 'positive'
+            ? theme.colors.success
+            : tone === 'negative'
+              ? theme.colors.warning
+              : theme.colors.textMuted
+        }
+        name={
+          tone === 'positive'
+            ? 'trending-up-outline'
+            : tone === 'negative'
+              ? 'trending-down-outline'
+              : 'remove-outline'
+        }
+        size={15}
+      />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.trendChipValue,
+          tone === 'positive' ? styles.positiveText : null,
+          tone === 'negative' ? styles.negativeText : null,
+        ]}
+      >
+        {hasComparison ? valueLabel : 'Sin data'}
+      </Text>
+      <Text numberOfLines={1} style={styles.trendChipContext}>
+        {contextLabel}
+      </Text>
+    </View>
+  );
+}
+
+function BalanceCarouselMetricItem({
+  amountMinor,
+  tone,
+}: {
+  readonly amountMinor: number;
+  readonly tone: 'positive' | 'negative';
+}) {
+  const visual = toneVisual(tone);
+
+  if (!visual) {
+    return null;
+  }
+
+  return (
+    <View style={styles.balanceMetricItem}>
+      <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
+      <Text numberOfLines={1} style={[styles.balanceMetricLabel, { color: visual.accentColor }]}>
+        {visual.label}
+      </Text>
+      <Text
+        adjustsFontSizeToFit
+        minimumFontScale={0.82}
+        numberOfLines={1}
+        style={[styles.balanceMetricAmount, { color: visual.accentColor }]}
+      >
+        {formatCop(amountMinor)}
+      </Text>
+    </View>
+  );
+}
+
+function EmptyCardState({
+  icon,
+  label,
+}: {
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly label: string;
+}) {
+  return (
+    <View style={styles.emptyCardState}>
+      <Ionicons color={theme.colors.textMuted} name={icon} size={18} />
+      <Text style={styles.emptyCardText}>{label}</Text>
     </View>
   );
 }
 
 function BalanceFocusCard({
   netBalanceMinor,
+  periodContextLabel,
   periodChangeMinor,
   totalIOweMinor,
   totalOwedToMeMinor,
   updatedAtLabel,
 }: {
   readonly netBalanceMinor: number;
+  readonly periodContextLabel: string;
   readonly periodChangeMinor: number;
   readonly totalIOweMinor: number;
   readonly totalOwedToMeMinor: number;
   readonly updatedAtLabel: string;
 }) {
   const tone = balanceTone(netBalanceMinor);
+  const balanceVisual = toneVisual(tone);
 
   return (
-    <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <View style={styles.balanceHeader}>
-        <FocusHeader icon="wallet-outline" label="Balance actual" meta={updatedAtLabel} />
-        <StatusChip
-          label={tone === 'negative' ? 'Por pagar' : tone === 'positive' ? 'A favor' : 'Al dia'}
-          tone={tone === 'negative' ? 'warning' : tone === 'positive' ? 'success' : 'primary'}
-        />
-      </View>
-      <Text
-        adjustsFontSizeToFit
-        minimumFontScale={0.72}
-        numberOfLines={1}
-        style={[
-          styles.heroAmount,
-          tone === 'positive' ? styles.positiveText : null,
-          tone === 'negative' ? styles.negativeText : null,
-        ]}
-      >
-        {formatCop(netBalanceMinor)}
-      </Text>
-      <Text style={styles.focusCaption}>
-        Cambio del periodo: {signedFormatCop(periodChangeMinor)}
-      </Text>
-      <View style={styles.balanceSplit}>
-        <Text style={styles.balanceSplitText}>Te deben {formatCompactCop(totalOwedToMeMinor)}</Text>
-        <View style={styles.balanceDivider} />
-        <Text style={styles.balanceSplitText}>Debes {formatCompactCop(totalIOweMinor)}</Text>
+    <SurfaceCard
+      padding="lg"
+      style={[styles.focusCard, styles.balanceFocusCard]}
+      variant="elevated"
+    >
+      <FocusHeader icon="wallet-outline" label="Balance actual" meta={updatedAtLabel} />
+      <View style={styles.balanceHomeBody}>
+        <Text style={styles.homeBalanceLabel}>Tu balance</Text>
+        <Text
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}
+          numberOfLines={1}
+          style={[
+            styles.homeBalanceAmount,
+            balanceVisual ? { color: balanceVisual.accentColor } : null,
+          ]}
+        >
+          {formatHomeBalanceCop(netBalanceMinor)}
+        </Text>
+        <TrendChip amountMinor={periodChangeMinor} centered contextLabel={periodContextLabel} />
+        <View style={styles.homeBalanceMetricsRow}>
+          <BalanceCarouselMetricItem amountMinor={totalIOweMinor} tone="negative" />
+          <BalanceCarouselMetricItem amountMinor={totalOwedToMeMinor} tone="positive" />
+        </View>
       </View>
     </SurfaceCard>
   );
@@ -289,13 +440,14 @@ function ImpactBars({
     readonly label: string;
     readonly amountMinor: number;
     readonly meta: string;
+    readonly trendMinor?: number;
   }[];
 }) {
-  const visibleRows = rows.slice(0, 3);
+  const visibleRows = rows.slice(0, 2);
   const maxAmount = Math.max(...visibleRows.map((row) => Math.abs(row.amountMinor)), 1);
 
   if (visibleRows.length === 0) {
-    return <Text style={styles.supportText}>{emptyLabel}</Text>;
+    return <EmptyCardState icon="remove-circle-outline" label={emptyLabel} />;
   }
 
   return (
@@ -311,9 +463,48 @@ function ImpactBars({
                 <Text numberOfLines={1} style={styles.barLabel}>
                   {row.label}
                 </Text>
-                <Text numberOfLines={1} style={styles.cardMeta}>
-                  {row.meta}
-                </Text>
+                <View style={styles.barMetaLine}>
+                  <Text numberOfLines={1} style={[styles.cardMeta, styles.barMetaText]}>
+                    {row.meta}
+                  </Text>
+                  {row.trendMinor !== undefined ? (
+                    <View
+                      style={[
+                        styles.miniTrend,
+                        row.trendMinor > 0 ? styles.miniTrendPositive : null,
+                        row.trendMinor < 0 ? styles.miniTrendNegative : null,
+                      ]}
+                    >
+                      <Ionicons
+                        color={
+                          row.trendMinor > 0
+                            ? theme.colors.success
+                            : row.trendMinor < 0
+                              ? theme.colors.warning
+                              : theme.colors.textMuted
+                        }
+                        name={
+                          row.trendMinor > 0
+                            ? 'trending-up-outline'
+                            : row.trendMinor < 0
+                              ? 'trending-down-outline'
+                              : 'remove-outline'
+                        }
+                        size={10}
+                      />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.miniTrendText,
+                          row.trendMinor > 0 ? styles.positiveText : null,
+                          row.trendMinor < 0 ? styles.negativeText : null,
+                        ]}
+                      >
+                        {signedFormatCompactCop(row.trendMinor)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
               <Text
                 numberOfLines={1}
@@ -471,6 +662,7 @@ function BalanceDetail({
           Inicio {formatCop(lensSummary.initialMinor)} - Cambio{' '}
           {signedFormatCop(lensSummary.deltaMinor)}
         </Text>
+        <TrendChip changeRatio={lensSummary.changeRatio} contextLabel={periodScopeLabel(period)} />
         <Text style={styles.detailInsight}>
           {comparisonCopy(lensSummary.changeRatio, currentPeriod.labels.previous)}
         </Text>
@@ -754,9 +946,11 @@ function HappyCirclesDetail({
 }
 
 function PeopleFocusCard({
+  periodContextLabel,
   periodLabel,
   people,
 }: {
+  readonly periodContextLabel: string;
   readonly periodLabel: string;
   readonly people: readonly BalanceAnalyticsPersonRowDto[];
 }) {
@@ -764,19 +958,26 @@ function PeopleFocusCard({
 
   return (
     <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="people-outline" label="Personas" meta={periodLabel} />
+      <FocusHeader icon="people-outline" label="Personas" meta={`Actividad de ${periodLabel}`} />
       <Text style={styles.focusTitle}>{topPerson ? topPerson.label : 'Sin actividad visible'}</Text>
       <Text style={styles.focusCaption}>
         {topPerson
           ? `Mayor impacto: ${signedFormatCop(personImpactAmount(topPerson))}`
           : 'Todavia no hay movimientos para comparar en este periodo.'}
       </Text>
+      {topPerson ? (
+        <TrendChip
+          amountMinor={topPerson.periodNetMinor - topPerson.previousPeriodNetMinor}
+          contextLabel={periodContextLabel}
+        />
+      ) : null}
       <ImpactBars
         emptyLabel="Todavia no hay actividad visible por persona."
         rows={people.map((row) => ({
           key: row.key,
           label: row.label,
           amountMinor: personImpactAmount(row),
+          trendMinor: row.periodNetMinor - row.previousPeriodNetMinor,
           meta:
             row.topCategories.length > 0
               ? row.topCategories.map((category) => transactionCategoryLabel(category)).join(', ')
@@ -789,16 +990,22 @@ function PeopleFocusCard({
 
 function CategoriesFocusCard({
   categories,
+  periodContextLabel,
   periodLabel,
 }: {
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
+  readonly periodContextLabel: string;
   readonly periodLabel: string;
 }) {
   const topCategory = categories[0] ?? null;
 
   return (
     <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="pricetags-outline" label="Categorias" meta={periodLabel} />
+      <FocusHeader
+        icon="pricetags-outline"
+        label="Categorias"
+        meta={`Actividad de ${periodLabel}`}
+      />
       <Text style={styles.focusTitle}>
         {topCategory ? topCategory.label : 'Sin categorias visibles'}
       </Text>
@@ -807,12 +1014,19 @@ function CategoriesFocusCard({
           ? `Mayor impacto: ${signedFormatCop(categoryImpactAmount(topCategory))}`
           : 'Todavia no hay categorias con impacto en este periodo.'}
       </Text>
+      {topCategory ? (
+        <TrendChip
+          amountMinor={topCategory.netMinor - topCategory.previousNetMinor}
+          contextLabel={periodContextLabel}
+        />
+      ) : null}
       <ImpactBars
         emptyLabel="Todavia no hay categorias con impacto en este periodo."
         rows={categories.map((row) => ({
           key: row.key,
           label: row.label,
           amountMinor: categoryImpactAmount(row),
+          trendMinor: row.netMinor - row.previousNetMinor,
           meta:
             row.personLabels.length > 0
               ? row.personLabels.join(', ')
@@ -825,31 +1039,24 @@ function CategoriesFocusCard({
 
 function SettlementsFocusCard({
   activeCount,
-  activeProposal,
   changeRatio,
   movementCount,
+  periodContextLabel,
   periodLabel,
-  previousLabel,
   resolvedMinor,
   savedMovementsCount,
 }: {
   readonly activeCount: number;
-  readonly activeProposal: {
-    readonly title: string;
-    readonly subtitle: string;
-    readonly totalAmountMinor: number;
-    readonly approvalsPending: number;
-  } | null;
   readonly changeRatio: number | null;
   readonly movementCount: number;
+  readonly periodContextLabel: string;
   readonly periodLabel: string;
-  readonly previousLabel: string | null;
   readonly resolvedMinor: number;
   readonly savedMovementsCount: number;
 }) {
   return (
     <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="happy-outline" label="Happy Circles" meta={periodLabel} />
+      <FocusHeader icon="happy-outline" label="Happy Circles" meta={`Cierres de ${periodLabel}`} />
       <Text
         adjustsFontSizeToFit
         minimumFontScale={0.78}
@@ -858,36 +1065,21 @@ function SettlementsFocusCard({
       >
         {formatCop(resolvedMinor)}
       </Text>
-      <Text style={styles.focusCaption}>{comparisonCopy(changeRatio, previousLabel)}</Text>
-      <View style={styles.settlementSummary}>
-        <View style={styles.inlineMetric}>
-          <Text style={styles.inlineMetricValue}>{savedMovementsCount}</Text>
-          <Text style={styles.inlineMetricLabel}>movimientos ahorrados</Text>
+      <TrendChip changeRatio={changeRatio} contextLabel={periodContextLabel} />
+      <View style={styles.compactMetricGrid}>
+        <View style={styles.compactMetricTile}>
+          <Text style={styles.compactMetricValue}>{savedMovementsCount}</Text>
+          <Text style={styles.compactMetricLabel}>movimientos ahorrados</Text>
         </View>
-        <View style={styles.inlineMetric}>
-          <Text style={styles.inlineMetricValue}>{activeCount}</Text>
-          <Text style={styles.inlineMetricLabel}>Happy Circles activos</Text>
+        <View style={styles.compactMetricTile}>
+          <Text style={styles.compactMetricValue}>{activeCount}</Text>
+          <Text style={styles.compactMetricLabel}>activos</Text>
         </View>
-        <View style={styles.inlineMetric}>
-          <Text style={styles.inlineMetricValue}>{movementCount}</Text>
-          <Text style={styles.inlineMetricLabel}>movimientos ejecutados</Text>
+        <View style={styles.compactMetricTile}>
+          <Text style={styles.compactMetricValue}>{movementCount}</Text>
+          <Text style={styles.compactMetricLabel}>ejecutados</Text>
         </View>
       </View>
-      {activeProposal ? (
-        <View style={styles.activeSettlement}>
-          <Text style={styles.cardEyebrow}>Happy Circle activo</Text>
-          <Text numberOfLines={1} style={styles.barLabel}>
-            {activeProposal.title}
-          </Text>
-          <Text style={styles.cardMeta}>{activeProposal.subtitle}</Text>
-          <Text style={styles.cardMeta}>
-            {formatCop(activeProposal.totalAmountMinor)} - {activeProposal.approvalsPending}{' '}
-            aprobacion
-            {activeProposal.approvalsPending === 1 ? '' : 'es'} pendiente
-            {activeProposal.approvalsPending === 1 ? '' : 's'}
-          </Text>
-        </View>
-      ) : null}
     </SurfaceCard>
   );
 }
@@ -963,6 +1155,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
   }
 
   const currentPeriod = analytics.periods[period];
+  const periodContextLabel = periodScopeLabel(period);
   const balanceSummary = currentPeriod.summaries.balance;
   const sortedPeople = [...currentPeriod.people].sort((left, right) => {
     const amountDiff =
@@ -1023,6 +1216,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
           <View style={[styles.carouselPage, { width: carouselWidth }]}>
             <BalanceFocusCard
               netBalanceMinor={overview.summary.netBalanceMinor}
+              periodContextLabel={periodContextLabel}
               periodChangeMinor={balanceSummary.deltaMinor}
               totalIOweMinor={overview.summary.totalIOweMinor}
               totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
@@ -1046,12 +1240,17 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
           </View>
 
           <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <PeopleFocusCard people={sortedPeople} periodLabel={currentPeriod.labels.current} />
+            <PeopleFocusCard
+              people={sortedPeople}
+              periodContextLabel={periodContextLabel}
+              periodLabel={currentPeriod.labels.current}
+            />
           </View>
 
           <View style={[styles.carouselPage, { width: carouselWidth }]}>
             <CategoriesFocusCard
               categories={sortedCategories}
+              periodContextLabel={periodContextLabel}
               periodLabel={currentPeriod.labels.current}
             />
           </View>
@@ -1059,11 +1258,10 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
           <View style={[styles.carouselPage, { width: carouselWidth }]}>
             <SettlementsFocusCard
               activeCount={currentPeriod.settlements.activeCount}
-              activeProposal={currentPeriod.settlements.activeProposal}
               changeRatio={currentPeriod.settlements.changeRatio}
               movementCount={currentPeriod.settlements.movementCount}
+              periodContextLabel={periodContextLabel}
               periodLabel={currentPeriod.labels.current}
-              previousLabel={currentPeriod.labels.previous}
               resolvedMinor={currentPeriod.settlements.resolvedMinor}
               savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
             />
@@ -1248,34 +1446,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xs,
   },
   focusCard: {
-    gap: theme.spacing.md,
-    minHeight: FOCUS_CARD_MIN_HEIGHT,
+    gap: theme.spacing.sm,
+    height: FOCUS_CARD_HEIGHT,
   },
-  balanceHeader: {
+  balanceFocusCard: {
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.xl,
+  },
+  balanceHomeBody: {
+    alignItems: 'center',
+    flex: 1,
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  homeBalanceLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  homeBalanceAmount: {
+    color: theme.colors.text,
+    fontSize: 44,
+    fontWeight: '800',
+    lineHeight: 52,
+    marginTop: theme.spacing.xs,
+    textAlign: 'center',
+  },
+  homeBalanceMetricsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xl,
+    justifyContent: 'center',
+    marginTop: theme.spacing.xs,
+    width: '100%',
+  },
+  balanceMetricItem: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'center',
+    maxWidth: 190,
+    minWidth: 0,
+  },
+  balanceMetricLabel: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  balanceMetricAmount: {
+    flexShrink: 1,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  cardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flex: 1,
-    gap: theme.spacing.sm,
     minWidth: 0,
   },
-  cardIconBox: {
+  cardCharacter: {
     alignItems: 'center',
     backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.medium,
-    height: 42,
+    borderRadius: theme.radius.large,
+    height: 52,
     justifyContent: 'center',
-    width: 42,
+    width: 52,
+  },
+  cardCharacterFace: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
   },
   cardHeaderCopy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
     minWidth: 0,
+  },
+  cardTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    lineHeight: 23,
+  },
+  cardSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
   cardEyebrow: {
     color: theme.colors.textMuted,
@@ -1291,17 +1558,17 @@ const styles = StyleSheet.create({
   },
   heroAmount: {
     color: theme.colors.text,
-    fontSize: 42,
+    fontSize: 38,
     fontWeight: '800',
     letterSpacing: -1,
-    lineHeight: 48,
+    lineHeight: 44,
   },
   focusAmount: {
     color: theme.colors.text,
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800',
     letterSpacing: -0.8,
-    lineHeight: 42,
+    lineHeight: 38,
   },
   focusTitle: {
     color: theme.colors.text,
@@ -1312,33 +1579,65 @@ const styles = StyleSheet.create({
   },
   focusCaption: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
-  balanceSplit: {
+  trendChip: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
+    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
     borderRadius: theme.radius.medium,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    maxWidth: '100%',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  trendChipCentered: {
+    alignSelf: 'center',
+  },
+  trendChipPositive: {
+    borderColor: theme.colors.success,
+  },
+  trendChipNegative: {
+    borderColor: theme.colors.warning,
+  },
+  trendChipValue: {
+    color: theme.colors.text,
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  trendChipContext: {
+    color: theme.colors.textMuted,
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  emptyCardState: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
+    borderRadius: theme.radius.medium,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  balanceSplitText: {
-    color: theme.colors.text,
+  emptyCardText: {
+    color: theme.colors.textMuted,
     flex: 1,
     fontSize: theme.typography.footnote,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 18,
-    textAlign: 'center',
-  },
-  balanceDivider: {
-    backgroundColor: theme.colors.border,
-    height: 24,
-    width: 1,
   },
   barList: {
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   barRow: {
     gap: theme.spacing.xs,
@@ -1352,6 +1651,16 @@ const styles = StyleSheet.create({
   barCopy: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
+  },
+  barMetaLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minWidth: 0,
+  },
+  barMetaText: {
+    flex: 1,
     minWidth: 0,
   },
   barLabel: {
@@ -1387,8 +1696,58 @@ const styles = StyleSheet.create({
   barFillNeutral: {
     backgroundColor: theme.colors.primary,
   },
-  settlementSummary: {
+  miniTrend: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  miniTrendPositive: {
+    borderColor: theme.colors.success,
+  },
+  miniTrendNegative: {
+    borderColor: theme.colors.warning,
+  },
+  miniTrendText: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 12,
+  },
+  compactMetricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  compactMetricTile: {
+    alignItems: 'flex-start',
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
+    borderRadius: theme.radius.medium,
+    flexBasis: '30%',
+    flexGrow: 1,
+    gap: 2,
+    minWidth: 92,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  compactMetricValue: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    lineHeight: 23,
+  },
+  compactMetricLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 15,
   },
   inlineMetric: {
     alignItems: 'center',
@@ -1413,12 +1772,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
     textAlign: 'right',
-  },
-  activeSettlement: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.medium,
-    gap: 4,
-    padding: theme.spacing.md,
   },
   positiveText: {
     color: theme.colors.success,

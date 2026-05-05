@@ -24,6 +24,7 @@ export function StatusChip({ label, tone = 'neutral', compact = false }: StatusC
       ]}
     >
       <Text
+        numberOfLines={1}
         style={[
           styles.label,
           compact ? styles.compactLabel : null,
@@ -50,6 +51,8 @@ const styles = StyleSheet.create({
   },
   compactChip: {
     borderRadius: theme.radius.pill,
+    flexShrink: 1,
+    maxWidth: 136,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },

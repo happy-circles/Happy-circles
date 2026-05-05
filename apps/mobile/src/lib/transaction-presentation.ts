@@ -35,10 +35,48 @@ export function splitTransactionSubtitle(value: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-export function isCycleTransactionItem(
-  item: Pick<ActivityItemDto, 'category' | 'kind'>,
-): boolean {
-  return item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal';
+function firstNameLabel(value: string): string {
+  const [name] = value.trim().split(/\s+/);
+  return name && name.length > 0 ? name : 'Persona';
+}
+
+function formatRelativeTransactionLabel(value: string): string {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return 'recientemente';
+  }
+
+  const diffMs = Date.now() - timestamp;
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) {
+    return 'hace un momento';
+  }
+
+  if (diffMs < hour) {
+    return `hace ${Math.max(1, Math.round(diffMs / minute))} min`;
+  }
+
+  if (diffMs < day) {
+    return `hace ${Math.max(1, Math.round(diffMs / hour))} h`;
+  }
+
+  if (diffMs < 7 * day) {
+    return `hace ${Math.max(1, Math.round(diffMs / day))} d`;
+  }
+
+  return new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(timestamp));
+}
+
+export function isCycleTransactionItem(item: Pick<ActivityItemDto, 'category' | 'kind'>): boolean {
+  return (
+    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
+  );
 }
 
 export function isPendingTransactionItem(item: ActivityItemDto): boolean {
@@ -225,11 +263,7 @@ export function transactionStatusTone(item: ActivityItemDto): TransactionStatusT
     return 'cycle';
   }
 
-  if (
-    item.status === 'requires_you' ||
-    item.status === 'pending' ||
-    item.status === 'amended'
-  ) {
+  if (item.status === 'requires_you' || item.status === 'pending' || item.status === 'amended') {
     return 'warning';
   }
 
@@ -246,6 +280,57 @@ export function transactionStatusTone(item: ActivityItemDto): TransactionStatusT
   }
 
   return 'neutral';
+}
+
+export function transactionCreatorLabel(item: ActivityItemDto, actorLabel: string): string {
+  if (isCycleTransactionItem(item)) {
+    return 'Happy Circle';
+  }
+
+  const subtitleParts = splitTransactionSubtitle(item.subtitle);
+  if (item.kind === 'financial_request' && subtitleParts[0]) {
+    return subtitleParts[0];
+  }
+
+  const titleCreator = item.title.match(
+    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
+  )?.[1];
+  if (titleCreator?.trim()) {
+    return titleCreator.trim();
+  }
+
+  const subtitleCreator = subtitleParts[0];
+  if (
+    subtitleCreator &&
+    subtitleCreator !== 'Usuario' &&
+    subtitleCreator !== 'Sistema' &&
+    subtitleCreator !== 'Happy Circle'
+  ) {
+    return subtitleCreator;
+  }
+
+  if (item.sourceType === 'system') {
+    return 'Sistema';
+  }
+
+  return firstNameLabel(actorLabel);
+}
+
+export function transactionTimeLabel(item: ActivityItemDto): string {
+  const subtitleParts = splitTransactionSubtitle(item.subtitle);
+
+  return (
+    item.happenedAtLabel ??
+    subtitleParts[subtitleParts.length - 1] ??
+    (item.happenedAt ? formatRelativeTransactionLabel(item.happenedAt) : 'reciente')
+  );
+}
+
+export function transactionCreatedByMetaLabel(item: ActivityItemDto, actorLabel: string): string {
+  const creatorLabel = transactionCreatorLabel(item, actorLabel);
+  const createdByText = creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
+
+  return `${createdByText} - ${transactionTimeLabel(item)}`;
 }
 
 export function transactionMetaLabel(item: ActivityItemDto): string {

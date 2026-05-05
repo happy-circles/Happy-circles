@@ -57,10 +57,10 @@ type BarDef = {
 };
 
 // ── Constants ────────────────────────────────────────────────────
-const CHART_H = 110;
-const BAR_W = 28;
-const GAP = 32;
-const DIVIDER_GAP = 42;
+const CHART_H = 120;
+const BAR_W = 34;
+const GAP = 26;
+const DIVIDER_GAP = 34;
 const FORECAST_START = 3; // index where forecast section begins
 const DASH_PATTERN = '4,4';
 const DASH_STROKE_WIDTH = 1.25;
@@ -236,7 +236,21 @@ export function ProjectionForecastCard({
       <View style={styles.body}>
         <View style={styles.summaryRow}>
           <View style={styles.projectedStack}>
-            <Text style={styles.summaryLabel}>Proyección</Text>
+            <View style={styles.projectionHeader}>
+              <View style={styles.cardCharacter}>
+                <View style={styles.cardCharacterFace}>
+                  <Ionicons color={theme.colors.primary} name="trending-up-outline" size={24} />
+                </View>
+              </View>
+              <View style={styles.headerCopy}>
+                <Text numberOfLines={1} style={styles.cardTitle}>
+                  Proyeccion
+                </Text>
+                <Text numberOfLines={2} style={styles.cardSubtitle}>
+                  {hasImpact ? `${pendingLabel} por simular` : 'Sin pendientes por simular'}
+                </Text>
+              </View>
+            </View>
             <View style={styles.projectedMetaRow}>
               <Text
                 adjustsFontSizeToFit
@@ -504,15 +518,47 @@ const styles = StyleSheet.create({
   },
   projectedStack: {
     flex: 1,
-    gap: 4,
+    gap: theme.spacing.xs,
     minWidth: 0,
   },
-  summaryLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
+  projectionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  cardCharacter: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.large,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  cardCharacterFace: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  cardTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
     fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
+    lineHeight: 23,
+  },
+  cardSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
   },
   projectedMetaRow: {
     alignItems: 'center',
@@ -528,7 +574,9 @@ const styles = StyleSheet.create({
     lineHeight: 23,
   },
   pendingChip: {
-    backgroundColor: 'rgba(26, 39, 68, 0.05)',
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
     borderRadius: theme.radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -541,7 +589,9 @@ const styles = StyleSheet.create({
   impactPill: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: 'transparent',
+    borderColor: theme.colors.hairline,
+    borderWidth: 1,
     borderRadius: theme.radius.small,
     flexDirection: 'row',
     gap: 4,
@@ -550,10 +600,10 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   impactPillPositive: {
-    backgroundColor: theme.colors.successSoft,
+    borderColor: theme.colors.success,
   },
   impactPillNegative: {
-    backgroundColor: theme.colors.dangerSoft,
+    borderColor: theme.colors.danger,
   },
   impactTextStack: {
     gap: 0,
@@ -585,6 +635,7 @@ const styles = StyleSheet.create({
   },
   sectionLabelForecast: { color: theme.colors.textMuted },
   chartContent: {
+    alignItems: 'center',
     position: 'relative',
     overflow: 'visible',
     paddingTop: theme.spacing.xs,
@@ -595,7 +646,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
   },
-  chartWrapper: { alignItems: 'center', paddingTop: 12, paddingBottom: 60, position: 'relative' },
+  chartWrapper: { alignItems: 'center', paddingTop: 10, paddingBottom: 42, position: 'relative' },
   labelCol: {
     alignItems: 'center',
     gap: 2,

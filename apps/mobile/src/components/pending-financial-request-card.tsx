@@ -114,6 +114,32 @@ function historyActorLabel(label: string): string {
   return label === 'Tu' ? 'Por ti' : `Por ${label}`;
 }
 
+function hasPendingHistoryAmountChanges(
+  steps: readonly PendingFinancialRequestHistoryStep[],
+): boolean {
+  return steps.some((step, index) => {
+    const previousStep = steps[index - 1];
+    return Boolean(previousStep && step.amountMinor !== previousStep.amountMinor);
+  });
+}
+
+function pendingHistoryStepAmountLabel(
+  steps: readonly PendingFinancialRequestHistoryStep[],
+  step: PendingFinancialRequestHistoryStep,
+  index: number,
+): string | null {
+  if (!hasPendingHistoryAmountChanges(steps)) {
+    return null;
+  }
+
+  const previousStep = steps[index - 1];
+  if (previousStep && step.amountMinor === previousStep.amountMinor) {
+    return null;
+  }
+
+  return formatCop(step.amountMinor);
+}
+
 export function PendingFinancialRequestCard({
   counterpartyName,
   responseState,
@@ -151,6 +177,9 @@ export function PendingFinancialRequestCard({
   const visibleHistorySteps = historySteps.length > 1 ? historySteps : [];
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const currentHistoryStep = visibleHistorySteps[visibleHistorySteps.length - 1] ?? null;
+  const currentHistoryAmountMinor = currentHistoryStep?.amountMinor ?? amountMinor;
+  const showHistoryActors =
+    new Set(visibleHistorySteps.map((step) => step.createdByLabel)).size > 1;
   const historyChangeCount = Math.max(visibleHistorySteps.length - 1, 0);
   const historyChangeLabel = `${historyChangeCount} cambio${historyChangeCount === 1 ? '' : 's'}`;
 
@@ -189,8 +218,7 @@ export function PendingFinancialRequestCard({
               <View style={styles.historyToggleText}>
                 <Text style={styles.historyTitle}>Historia del pendiente</Text>
                 <Text numberOfLines={1} style={styles.historySummary}>
-                  {historyChangeLabel} - actual{' '}
-                  {formatCop(currentHistoryStep?.amountMinor ?? amountMinor)}
+                  {historyChangeLabel} - actual {formatCop(currentHistoryAmountMinor)}
                 </Text>
               </View>
             </View>
@@ -209,10 +237,18 @@ export function PendingFinancialRequestCard({
           {isHistoryExpanded ? (
             <View style={styles.historySteps}>
               {visibleHistorySteps.map((step, index) => {
-                const stepCategory = isUserTransactionCategory(step.category)
-                  ? step.category
-                  : DEFAULT_TRANSACTION_CATEGORY;
                 const isLast = index === visibleHistorySteps.length - 1;
+                const stepAmountLabel = pendingHistoryStepAmountLabel(
+                  visibleHistorySteps,
+                  step,
+                  index,
+                );
+                const stepMeta = [
+                  showHistoryActors ? historyActorLabel(step.createdByLabel) : null,
+                  step.createdAtLabel,
+                ]
+                  .filter(Boolean)
+                  .join(' - ');
 
                 return (
                   <View key={step.id} style={styles.historyStepRow}>
@@ -229,22 +265,21 @@ export function PendingFinancialRequestCard({
                     <View style={styles.historyStepBody}>
                       <View style={styles.historyStepTop}>
                         <Text style={styles.historyStepTitle}>{step.title}</Text>
-                        <Text
-                          style={[
-                            styles.historyAmount,
-                            amountTone === 'positive' ? styles.historyAmountPositive : null,
-                            amountTone === 'negative' ? styles.historyAmountNegative : null,
-                            amountTone === 'danger' ? styles.historyAmountDanger : null,
-                          ]}
-                        >
-                          {formatCop(step.amountMinor)}
-                        </Text>
+                        {stepAmountLabel ? (
+                          <Text
+                            style={[
+                              styles.historyAmount,
+                              amountTone === 'positive' ? styles.historyAmountPositive : null,
+                              amountTone === 'negative' ? styles.historyAmountNegative : null,
+                              amountTone === 'danger' ? styles.historyAmountDanger : null,
+                            ]}
+                          >
+                            {stepAmountLabel}
+                          </Text>
+                        ) : null}
                       </View>
                       <Text style={styles.historyDescription}>{step.description}</Text>
-                      <Text style={styles.historyMeta}>
-                        {historyActorLabel(step.createdByLabel)} | {step.createdAtLabel} -{' '}
-                        {transactionCategoryLabel(stepCategory)}
-                      </Text>
+                      {stepMeta ? <Text style={styles.historyMeta}>{stepMeta}</Text> : null}
                     </View>
                   </View>
                 );

@@ -22,9 +22,13 @@ import {
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
+  historyCaseVisualCategory,
   historyImpactLabel,
   historyImpactTone,
   historyStepAmountLabel,
+  historyTimelineStepCategory,
+  historyTimelineStepDetailLabel,
+  historyTimelineStepAmountLabel,
 } from '@/lib/history-cases';
 import { useAppSnapshot } from '@/lib/live-data';
 import {
@@ -43,13 +47,13 @@ import {
   isCycleTransactionItem,
   isNoBalanceTransactionStatus,
   isPendingTransactionItem,
-  transactionAccentColor,
   transactionAmountIsVoided,
   transactionAmountLabel,
+  transactionCreatedByMetaLabel,
   transactionContextLabel,
-  transactionDirectionLabel,
   transactionFocusId,
-  transactionMetaLabel,
+  transactionStatusLabel,
+  transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
@@ -59,29 +63,12 @@ const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#
 
 const PRIMARY_FILTER_OPTIONS: readonly {
   readonly label: string;
-  readonly value: Extract<
-    TransactionRootFilter,
-    'all' | 'current_balance' | 'owed_to_me' | 'i_owe' | 'pending'
-  >;
+  readonly value: Extract<TransactionRootFilter, 'all' | 'owed_to_me' | 'i_owe' | 'pending'>;
 }[] = [
   { label: 'Todo', value: 'all' },
-  { label: 'Balance', value: 'current_balance' },
+  { label: 'Pendientes', value: 'pending' },
   { label: 'Te deben', value: 'owed_to_me' },
   { label: 'Debes', value: 'i_owe' },
-  { label: 'Pendientes', value: 'pending' },
-];
-
-const PENDING_FILTER_OPTIONS: readonly {
-  readonly label: string;
-  readonly value: Extract<
-    TransactionRootFilter,
-    'pending' | 'pending_incoming' | 'pending_outgoing' | 'projection'
-  >;
-}[] = [
-  { label: 'Todos', value: 'pending' },
-  { label: 'Te deberán', value: 'pending_incoming' },
-  { label: 'Deberás', value: 'pending_outgoing' },
-  { label: 'Proyección', value: 'projection' },
 ];
 
 function isBalanceRootItem(item: ActivityItemDto): boolean {
@@ -261,11 +248,9 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
 }
 
 function PendingTransactionCard({
-  highlightPending,
   item,
   people,
 }: {
-  readonly highlightPending: boolean;
   readonly item: ActivityItemDto;
   readonly people: readonly PersonCardDto[];
 }) {
@@ -279,7 +264,7 @@ function PendingTransactionCard({
 
   return (
     <TransactionEventCard
-      accentColor={transactionAccentColor(item)}
+      accentColor={transactionToneColor(item)}
       actorAvatarUrl={isSystemTransaction ? null : (matchedPerson?.avatarUrl ?? null)}
       actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
       actorFallbackColor={
@@ -290,16 +275,14 @@ function PendingTransactionCard({
       amountLabel={transactionAmountLabel(item)}
       amountStruckThrough={transactionAmountIsVoided(item)}
       category={transactionVisualCategory(item)}
-      categoryPlacement="meta"
+      categoryPlacement="none"
       compact
-      compactMetaLayout="stacked"
+      compactMetaLayout="inline"
       context={transactionContextLabel(item, actorLabel)}
-      directionLabel={transactionDirectionLabel(item)}
       href={transactionDetailHref(people, item, 'pending')}
-      meta={transactionMetaLabel(item)}
-      pending={highlightPending}
-      pendingHighlightColor={highlightPending ? transactionAccentColor(item) : undefined}
-      unread
+      meta={transactionCreatedByMetaLabel(item, actorLabel)}
+      statusLabel={transactionStatusLabel(item)}
+      statusTone={transactionStatusTone(item)}
     />
   );
 }
@@ -345,7 +328,6 @@ export function TransactionsScreen() {
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
   const activePrimaryFilter = primaryTransactionFilter(activeFilter);
-  const pendingFiltersVisible = activePrimaryFilter === 'pending';
   const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
   const visiblePendingTransactionItems = pendingTransactionItems.filter((item) =>
     matchesPendingFilter(item, activeFilter),
@@ -445,7 +427,6 @@ export function TransactionsScreen() {
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
-      subtitle="Pendientes arriba y debajo todo el historial registrado."
       title="Transacciones"
       titleAlign="center"
     >
@@ -464,23 +445,6 @@ export function TransactionsScreen() {
             />
           ))}
         </ScrollView>
-
-        {pendingFiltersVisible ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.secondaryFilterRail}
-          >
-            {PENDING_FILTER_OPTIONS.map((option) => (
-              <FilterPill
-                key={option.value}
-                label={option.label}
-                onPress={() => setActiveFilter(option.value)}
-                selected={activeFilter === option.value}
-              />
-            ))}
-          </ScrollView>
-        ) : null}
       </View>
 
       {!hasVisibleTransactions ? (
@@ -491,59 +455,57 @@ export function TransactionsScreen() {
       ) : null}
 
       {visiblePendingTransactionItems.length > 0 ? (
-        <SectionBlock
-          subtitle="Todo lo que aun espera una respuesta o una aprobacion."
-          title="Pendientes"
-        >
+        <SectionBlock title="Pendientes">
           <View style={styles.list}>
             {visiblePendingTransactionItems.map((item) => (
-              <PendingTransactionCard
-                highlightPending={Boolean(
-                  seenPendingTransactionIds && !seenPendingTransactionIds.has(item.id),
-                )}
-                item={item}
-                key={item.id}
-                people={people}
-              />
+              <PendingTransactionCard item={item} key={item.id} people={people} />
             ))}
           </View>
         </SectionBlock>
       ) : null}
 
       {historyCases.length > 0 ? (
-        <SectionBlock
-          subtitle="Casos agrupados para que puedas ver la historia completa de cada movimiento."
-          title="Historial"
-        >
+        <SectionBlock title="Historial">
           <View style={styles.list}>
             {historyCases.map((itemCase) => {
               const latest = itemCase.latest;
+              const caseAmountLabel = historyStepAmountLabel(latest);
               const caseTone = historyImpactTone(latest) as HistoryCaseTone;
               const caseTitle = friendlyHistoryStepLabel(latest);
               const caseDescription = historyCardTitle(itemCase);
 
               return (
                 <HistoryCaseCard
-                  amountLabel={historyStepAmountLabel(latest)}
-                  category={latest.category}
-                  description={caseDescription !== caseTitle ? caseDescription : null}
+                  amountLabel={caseAmountLabel}
+                  category={historyCaseVisualCategory(itemCase)}
+                  description={null}
                   eyebrow={historyCaseEyebrow(itemCase)}
                   isCycleSnippet={itemCase.isCycleSnippet}
                   isExpanded={expandedCaseIds[0] === itemCase.id}
                   key={itemCase.id}
-                  meta={historyCaseMeta(itemCase) || null}
+                  meta={historyCaseMeta(itemCase)}
                   onToggle={() => toggleHistoryCase(itemCase.id)}
                   statusLabel={historyCaseStatusLabel(itemCase)}
                   statusTone={historyCaseStatusTone(itemCase)}
-                  steps={itemCase.steps.map((step) => ({
-                    amountLabel: historyStepAmountLabel(step),
-                    id: step.id,
-                    impact: historyImpactLabel(step),
-                    meta: step.happenedAtLabel ?? null,
-                    title: friendlyHistoryStepLabel(step),
-                    tone: historyImpactTone(step) as HistoryCaseTone,
-                  }))}
-                  title={caseTitle}
+                  steps={itemCase.steps.map((step, index) => {
+                    const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
+                    const impact = historyImpactLabel(step);
+
+                    return {
+                      amountLabel,
+                      category: historyTimelineStepCategory(itemCase, step, index),
+                      detail: historyTimelineStepDetailLabel(step),
+                      id: step.id,
+                      impact:
+                        !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
+                          ? null
+                          : impact,
+                      meta: step.happenedAtLabel ?? null,
+                      title: friendlyHistoryStepLabel(step),
+                      tone: historyImpactTone(step) as HistoryCaseTone,
+                    };
+                  })}
+                  title={caseDescription || caseTitle}
                   tone={caseTone}
                 />
               );
@@ -573,10 +535,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   filterRail: {
-    gap: theme.spacing.xs,
-    paddingRight: theme.spacing.lg,
-  },
-  secondaryFilterRail: {
     gap: theme.spacing.xs,
     paddingRight: theme.spacing.lg,
   },

@@ -27,13 +27,16 @@ import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
   historyCardTitle,
-  historyCaseEyebrow,
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
+  historyCaseVisualCategory,
   historyImpactLabel,
   historyImpactTone,
   historyStepAmountLabel,
+  historyTimelineStepCategory,
+  historyTimelineStepDetailLabel,
+  historyTimelineStepAmountLabel,
   toHistoryFeedItem,
   type HistoryCaseItem,
 } from '@/lib/history-cases';
@@ -54,7 +57,6 @@ import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
   isUserTransactionCategory,
-  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import {
   transactionContextLabel,
@@ -129,18 +131,8 @@ function buildFinancialRequestPendingContent(item: ActivityItemDto): {
   };
 }
 
-function isInviteHistoryStep(step: HistoryCaseItem): boolean {
-  return step.detail === 'Invitacion de amistad' || step.detail === 'Acceso privado';
-}
-
-function historyStepMetaLabel(step: HistoryCaseItem): string {
-  if (isInviteHistoryStep(step)) {
-    return [step.happenedAtLabel, step.subtitle].filter(Boolean).join(' - ');
-  }
-
-  return step.happenedAtLabel
-    ? `${step.happenedAtLabel} · ${transactionCategoryLabel(step.category)}`
-    : transactionCategoryLabel(step.category);
+function historyStepMetaLabel(step: HistoryCaseItem): string | null {
+  return step.happenedAtLabel ?? null;
 }
 
 function pendingSnippetTone(
@@ -756,33 +748,43 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           historyCases.map((itemCase) => {
             const isExpanded = expandedCaseIds[0] === itemCase.id;
             const latest = itemCase.latest;
-            const caseMeta = historyCaseMeta(itemCase) || null;
+            const caseAmountLabel = historyStepAmountLabel(latest);
             const caseTone = historyImpactTone(latest) as HistoryCaseTone;
             const caseTitle = friendlyHistoryStepLabel(latest);
             const caseDescription = historyCardTitle(itemCase);
 
             return (
               <HistoryCaseCard
-                amountLabel={historyStepAmountLabel(latest)}
-                category={latest.category}
-                description={caseDescription !== caseTitle ? caseDescription : null}
-                eyebrow={historyCaseEyebrow(itemCase)}
+                amountLabel={caseAmountLabel}
+                category={historyCaseVisualCategory(itemCase)}
+                description={null}
+                eyebrow={person?.displayName ?? null}
                 isCycleSnippet={itemCase.isCycleSnippet}
                 isExpanded={isExpanded}
                 key={itemCase.id}
-                meta={caseMeta}
+                meta={historyCaseMeta(itemCase)}
                 onToggle={() => toggleHistoryCase(itemCase.id)}
                 statusLabel={historyCaseStatusLabel(itemCase)}
                 statusTone={historyCaseStatusTone(itemCase)}
-                steps={itemCase.steps.map((step) => ({
-                  id: step.id,
-                  title: friendlyHistoryStepLabel(step),
-                  amountLabel: historyStepAmountLabel(step),
-                  impact: historyImpactLabel(step),
-                  meta: historyStepMetaLabel(step),
-                  tone: historyImpactTone(step) as HistoryCaseTone,
-                }))}
-                title={caseTitle}
+                steps={itemCase.steps.map((step, index) => {
+                  const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
+                  const impact = historyImpactLabel(step);
+
+                  return {
+                    id: step.id,
+                    title: friendlyHistoryStepLabel(step),
+                    category: historyTimelineStepCategory(itemCase, step, index),
+                    detail: historyTimelineStepDetailLabel(step),
+                    amountLabel,
+                    impact:
+                      !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
+                        ? null
+                        : impact,
+                    meta: historyStepMetaLabel(step),
+                    tone: historyImpactTone(step) as HistoryCaseTone,
+                  };
+                })}
+                title={caseDescription || caseTitle}
                 tone={caseTone}
               />
             );

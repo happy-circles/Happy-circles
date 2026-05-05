@@ -42,7 +42,7 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly unread?: boolean;
   readonly variant?: 'default' | 'muted' | 'accent' | 'elevated';
   readonly compact?: boolean;
-  readonly categoryPlacement?: 'avatar' | 'meta';
+  readonly categoryPlacement?: 'avatar' | 'meta' | 'none';
   readonly contextVariant?: 'text' | 'badge';
   readonly compactMetaLayout?: 'inline' | 'stacked';
   readonly directionLayout?: 'stacked' | 'floating';
@@ -222,9 +222,13 @@ export function TransactionEventCard({
             ) : null}
           </View>
           <View style={[styles.copy, compact ? styles.copyCompact : null]}>
-            <Text numberOfLines={1} style={[styles.actor, compact ? styles.actorCompact : null]}>
-              {actorLabel}
-            </Text>
+            <View style={styles.actorRow}>
+              <Text numberOfLines={1} style={[styles.actor, compact ? styles.actorCompact : null]}>
+                {actorLabel}
+              </Text>
+              {statusLabel ? <StatusChip compact label={statusLabel} tone={statusTone} /> : null}
+              {unread ? <View style={styles.unreadDot} /> : null}
+            </View>
             {compact && categoryPlacement === 'meta' ? (
               compactMetaLayout === 'stacked' ? (
                 <View style={styles.compactMetaStack}>
@@ -354,10 +358,6 @@ export function TransactionEventCard({
         </Pressable>
 
         <View style={[styles.side, compact ? styles.sideCompact : null]}>
-          {unread ? <View style={styles.unreadDot} /> : null}
-          {statusLabel ? (
-            <StatusChip compact={compact} label={statusLabel} tone={statusTone} />
-          ) : null}
           <View style={[styles.amountLine, compact ? styles.amountLineCompact : null]}>
             <View
               style={[
@@ -497,8 +497,15 @@ const styles = StyleSheet.create({
   copyCompact: {
     gap: 2,
   },
+  actorRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minWidth: 0,
+  },
   actor: {
     color: theme.colors.text,
+    flexShrink: 1,
     fontSize: theme.typography.callout,
     fontWeight: '700',
     lineHeight: 19,

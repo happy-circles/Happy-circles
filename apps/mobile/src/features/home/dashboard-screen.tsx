@@ -16,6 +16,7 @@ import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { SurfaceCard } from '@/components/surface-card';
 import { SwipePager } from '@/components/swipe-pager';
+import { TransactionSummaryRow } from '@/components/transaction-summary-row';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import {
@@ -47,11 +48,6 @@ import {
   triggerIdentitySuccessHaptic,
   triggerIdentityWarningHaptic,
 } from '@/lib/identity-flow-haptics';
-import {
-  transactionCategoryBackgroundColor,
-  transactionCategoryColor,
-  transactionCategoryIcon,
-} from '@/lib/transaction-categories';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -60,8 +56,10 @@ import {
   isPendingTransactionItem,
   transactionAmountIsVoided,
   transactionAmountLabel,
+  transactionCreatedByMetaLabel,
   transactionFocusId,
   transactionStatusLabel,
+  transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
@@ -201,57 +199,6 @@ function compactTransactionAmountLabel(item: ActivityItemDto): string | null {
   }
 
   return amountLabel;
-}
-
-function compactTransactionCreatorLabel(item: ActivityItemDto, actorLabel: string): string {
-  if (isCycleTransactionItem(item)) {
-    return 'Happy Circle';
-  }
-
-  const subtitleParts = splitSubtitle(item.subtitle);
-  if (item.kind === 'financial_request' && subtitleParts[0]) {
-    return subtitleParts[0];
-  }
-
-  const titleCreator = item.title.match(
-    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
-  )?.[1];
-  if (titleCreator?.trim()) {
-    return titleCreator.trim();
-  }
-
-  const subtitleCreator = subtitleParts[0];
-  if (
-    subtitleCreator &&
-    subtitleCreator !== 'Usuario' &&
-    subtitleCreator !== 'Sistema' &&
-    subtitleCreator !== 'Happy Circle'
-  ) {
-    return subtitleCreator;
-  }
-
-  if (item.sourceType === 'system') {
-    return 'Sistema';
-  }
-
-  return firstName(actorLabel);
-}
-
-function compactTransactionTimeLabel(item: ActivityItemDto): string {
-  const subtitleParts = splitSubtitle(item.subtitle);
-
-  return (
-    item.happenedAtLabel ??
-    subtitleParts[subtitleParts.length - 1] ??
-    (item.happenedAt ? formatRelativeLabel(item.happenedAt) : 'reciente')
-  );
-}
-
-function compactTransactionMeta(item: ActivityItemDto, actorLabel: string): string {
-  const creatorLabel = compactTransactionCreatorLabel(item, actorLabel);
-  const createdByText = creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
-
-  return `${createdByText} - ${compactTransactionTimeLabel(item)}`;
 }
 
 function personIdFromHref(href: string | undefined): string | null {
@@ -820,58 +767,23 @@ function TransactionPreviewCard({
   const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
   const href = transactionPersonHref(person, item, targetPanel);
   const amountLabel = compactTransactionAmountLabel(item);
-  const meta = compactTransactionMeta(item, name);
+  const meta = transactionCreatedByMetaLabel(item, name);
   const category = transactionVisualCategory(item);
-  const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
   const statusLabel = isPending ? 'Pendiente' : transactionStatusLabel(item);
   const content = (
-    <View
-      style={[
-        styles.transactionPreviewRow,
-        highlightPending ? styles.transactionPreviewRowPending : null,
-      ]}
-    >
-      <View
-        style={[
-          styles.transactionPreviewCategory,
-          { backgroundColor: transactionCategoryBackgroundColor(category) },
-        ]}
-      >
-        <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={15} />
-      </View>
-
-      <View style={styles.transactionPreviewCopy}>
-        <View style={styles.transactionPreviewTitleRow}>
-          <Text numberOfLines={1} style={styles.transactionPreviewName}>
-            {name}
-          </Text>
-          {unread ? <View style={styles.transactionPreviewUnreadDot} /> : null}
-        </View>
-        <Text numberOfLines={1} style={styles.transactionPreviewMeta}>
-          {meta}
-        </Text>
-      </View>
-
-      <View style={styles.transactionPreviewSide}>
-        {amountLabel ? (
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.transactionPreviewAmount,
-              { color: transactionToneColor(item) },
-              transactionAmountIsVoided(item) ? styles.transactionPreviewAmountVoided : null,
-            ]}
-          >
-            {amountLabel}
-          </Text>
-        ) : null}
-        {statusLabel && (isPending || transactionAmountIsVoided(item)) ? (
-          <Text numberOfLines={1} style={styles.transactionPreviewStatus}>
-            {statusLabel}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+    <TransactionSummaryRow
+      amountColor={transactionToneColor(item)}
+      amountLabel={amountLabel}
+      amountStruckThrough={transactionAmountIsVoided(item)}
+      category={category}
+      highlighted={highlightPending}
+      meta={meta}
+      statusLabel={statusLabel}
+      statusTone={isPending ? 'warning' : transactionStatusTone(item)}
+      surface
+      title={name}
+      unread={unread}
+    />
   );
 
   return (
@@ -1953,81 +1865,6 @@ const styles = StyleSheet.create({
   transactionList: {
     gap: theme.spacing.xs,
     paddingBottom: HOME_REGISTER_FAB_CLEARANCE,
-  },
-  transactionPreviewRow: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.small,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 54,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 8,
-  },
-  transactionPreviewRowPending: {
-    backgroundColor: '#fffaf0',
-    borderColor: 'rgba(249, 115, 22, 0.14)',
-  },
-  transactionPreviewCategory: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
-  transactionPreviewCopy: {
-    flex: 1,
-    gap: 1,
-    minWidth: 0,
-  },
-  transactionPreviewTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    minWidth: 0,
-  },
-  transactionPreviewName: {
-    color: theme.colors.text,
-    flexShrink: 1,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 17,
-  },
-  transactionPreviewUnreadDot: {
-    backgroundColor: '#2f80ed',
-    borderRadius: theme.radius.pill,
-    height: 6,
-    width: 6,
-  },
-  transactionPreviewMeta: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 14,
-  },
-  transactionPreviewSide: {
-    alignItems: 'flex-end',
-    gap: 1,
-    maxWidth: 112,
-  },
-  transactionPreviewAmount: {
-    fontSize: theme.typography.footnote,
-    fontWeight: '900',
-    lineHeight: 17,
-    textAlign: 'right',
-  },
-  transactionPreviewAmountVoided: {
-    opacity: 0.68,
-    textDecorationLine: 'line-through',
-  },
-  transactionPreviewStatus: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 12,
-    textAlign: 'right',
   },
   sheetScrim: {
     backgroundColor: theme.colors.overlay,

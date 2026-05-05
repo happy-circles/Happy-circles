@@ -5,7 +5,6 @@ import type {
 } from '@happy-circles/application';
 
 import { formatCop } from './data';
-import { transactionCategoryLabel } from './transaction-categories';
 
 type HistoryStatusTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 type HistoryDirection = 'i_owe' | 'owes_me' | 'neutral';
@@ -17,7 +16,7 @@ export interface HistoryCaseItem {
   readonly status: string;
   readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'friendship_invite';
   readonly amountMinor?: number;
-  readonly category?: ActivityItemDto['category'];
+  readonly category?: string | null;
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
   readonly detail?: string;
@@ -86,12 +85,128 @@ function firstNameLabel(value: string): string {
   return firstPart && firstPart.length > 0 ? firstPart : value;
 }
 
+function splitHistorySubtitle(value: string): string[] {
+  return value
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function historyCreatorLabel(item: HistoryCaseItem, fallbackLabel: string): string {
+  if (item.category === 'cycle' || item.kind === 'settlement') {
+    return 'Happy Circle';
+  }
+
+  const subtitleParts = splitHistorySubtitle(item.subtitle);
+  const titleCreator = item.title.match(
+    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
+  )?.[1];
+
+  if (titleCreator?.trim()) {
+    return titleCreator.trim();
+  }
+
+  const subtitleCreator = subtitleParts[0];
+  if (
+    subtitleCreator &&
+    subtitleCreator !== 'Usuario' &&
+    subtitleCreator !== 'Sistema' &&
+    subtitleCreator !== 'Happy Circle'
+  ) {
+    return subtitleCreator;
+  }
+
+  return fallbackLabel;
+}
+
+function createdByText(label: string): string {
+  return label === 'Tu' ? 'Creado por ti' : `Creado por ${label}`;
+}
+
 function isInviteTrajectoryItem(item: Pick<HistoryCaseItem, 'kind' | 'detail'>): boolean {
   return (
     item.kind === 'friendship_invite' ||
     item.detail === 'Invitacion de amistad' ||
     item.detail === 'Acceso privado'
   );
+}
+
+function normalizedHistoryText(...values: readonly (string | null | undefined)[]): string {
+  return values.filter(Boolean).join(' ').toLocaleLowerCase('es-CO');
+}
+
+function historyItemVisualCategory(item: HistoryCaseItem): string | null {
+  if (!isInviteTrajectoryItem(item)) {
+    return item.category ?? null;
+  }
+
+  const text = normalizedHistoryText(item.title, item.subtitle, item.detail);
+  if (item.detail === 'Acceso privado' || text.includes('acceso')) {
+    return 'access_key';
+  }
+
+  if (text.includes('qr')) {
+    return 'friendship_qr';
+  }
+
+  return 'friendship';
+}
+
+function historyCaseInviteCategory<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): string | null {
+  if (!isInviteTrajectoryItem(itemCase.latest)) {
+    return historyItemVisualCategory(itemCase.latest);
+  }
+
+  const categories = itemCase.steps.map(historyItemVisualCategory);
+  if (categories.includes('access_key')) {
+    return 'access_key';
+  }
+
+  if (categories.includes('friendship_qr')) {
+    return 'friendship_qr';
+  }
+
+  return 'friendship';
+}
+
+export function historyCaseVisualCategory<T extends HistoryCaseItem>(
+  itemCase: HistoryCase<T>,
+): string | null {
+  return historyCaseInviteCategory(itemCase);
+}
+
+export function historyTimelineStepCategory<T extends HistoryCaseItem>(
+  itemCase: Pick<HistoryCase<T>, 'steps'>,
+  step: T,
+  index: number,
+): string | null {
+  const category = historyItemVisualCategory(step);
+  const previousStep = itemCase.steps[index - 1];
+  if (!category || !previousStep) {
+    return null;
+  }
+
+  return category === historyItemVisualCategory(previousStep) ? null : category;
+}
+
+export function historyTimelineStepDetailLabel(item: HistoryCaseItem): string | null {
+  if (!isInviteTrajectoryItem(item)) {
+    return null;
+  }
+
+  const ignored = new Set(
+    [item.title, item.detail, item.happenedAtLabel, 'Invitacion de amistad', 'Acceso privado']
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.toLocaleLowerCase('es-CO')),
+  );
+  const details = splitHistorySubtitle(item.subtitle).filter((segment) => {
+    const normalized = segment.toLocaleLowerCase('es-CO');
+    return !ignored.has(normalized);
+  });
+
+  return details.length > 0 ? details.join(' · ') : null;
 }
 
 function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status' | 'detail'>): string {
@@ -715,19 +830,42 @@ export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
     : null;
 }
 
-export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
-  if (isInviteTrajectoryItem(itemCase.latest)) {
-    const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
-    return `${itemCase.latest.detail ?? 'Invitacion'} - ${timeLabel}`;
+export function historyHasAmountChanges<T extends HistoryCaseItem>(steps: readonly T[]): boolean {
+  return steps.some((step, index) => {
+    const previousStep = steps[index - 1];
+    if (!previousStep) {
+      return false;
+    }
+
+    return historyStepAmountLabel(step) !== historyStepAmountLabel(previousStep);
+  });
+}
+
+export function historyTimelineStepAmountLabel<T extends HistoryCaseItem>(
+  itemCase: Pick<HistoryCase<T>, 'latest' | 'steps'>,
+  step: T,
+  index: number,
+): string | null {
+  const amountLabel = historyStepAmountLabel(step);
+  if (!amountLabel || !historyHasAmountChanges(itemCase.steps)) {
+    return null;
   }
 
-  const creatorLabel =
+  const previousStep = itemCase.steps[index - 1];
+  if (previousStep && amountLabel === historyStepAmountLabel(previousStep)) {
+    return null;
+  }
+
+  return amountLabel;
+}
+
+export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
+  const fallbackCreator =
     (itemCase.latest.counterpartyLabel
       ? firstNameLabel(itemCase.latest.counterpartyLabel)
       : null) || (itemCase.isCycleSnippet ? 'Happy Circle' : 'Usuario');
+  const creatorLabel = historyCreatorLabel(itemCase.latest, fallbackCreator);
   const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
 
-  return `Creado por ${creatorLabel} · ${timeLabel} | ${transactionCategoryLabel(
-    itemCase.latest.category,
-  )}`;
+  return `${createdByText(creatorLabel)} · ${timeLabel}`;
 }

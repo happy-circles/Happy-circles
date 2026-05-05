@@ -1,0 +1,230 @@
+import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { theme } from '@/lib/theme';
+import {
+  transactionCategoryBackgroundColor,
+  transactionCategoryColor,
+  transactionCategoryIcon,
+} from '@/lib/transaction-categories';
+
+export type TransactionSummaryStatusTone =
+  | 'primary'
+  | 'success'
+  | 'warning'
+  | 'neutral'
+  | 'danger'
+  | 'cycle';
+
+export interface TransactionSummaryRowProps {
+  readonly amountColor?: string;
+  readonly amountLabel?: string | null;
+  readonly amountStruckThrough?: boolean;
+  readonly category?: string | null;
+  readonly chevron?: 'forward' | 'up' | null;
+  readonly highlighted?: boolean;
+  readonly meta?: string | null;
+  readonly statusLabel?: string | null;
+  readonly statusTone?: TransactionSummaryStatusTone;
+  readonly surface?: boolean;
+  readonly title: string;
+  readonly unread?: boolean;
+}
+
+export function TransactionSummaryRow({
+  amountColor = theme.colors.text,
+  amountLabel,
+  amountStruckThrough = false,
+  category,
+  chevron = null,
+  highlighted = false,
+  meta,
+  statusLabel,
+  statusTone = 'neutral',
+  surface = false,
+  title,
+  unread = false,
+}: TransactionSummaryRowProps) {
+  const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+
+  return (
+    <View
+      style={[
+        styles.row,
+        surface ? styles.surfaceRow : null,
+        surface && highlighted ? styles.surfaceRowHighlighted : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.categoryIcon,
+          { backgroundColor: transactionCategoryBackgroundColor(category) },
+        ]}
+      >
+        <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={15} />
+      </View>
+
+      <View style={styles.copy}>
+        <View style={styles.titleRow}>
+          <Text numberOfLines={1} style={styles.title}>
+            {title}
+          </Text>
+          {statusLabel ? (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.status,
+                statusTone === 'primary' ? styles.statusPrimary : null,
+                statusTone === 'success' ? styles.statusSuccess : null,
+                statusTone === 'warning' ? styles.statusWarning : null,
+                statusTone === 'danger' ? styles.statusDanger : null,
+                statusTone === 'cycle' ? styles.statusCycle : null,
+              ]}
+            >
+              {statusLabel}
+            </Text>
+          ) : null}
+          {unread ? <View style={styles.unreadDot} /> : null}
+        </View>
+        {meta ? (
+          <Text numberOfLines={1} style={styles.meta}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.side}>
+        <View style={styles.amountRow}>
+          {amountLabel ? (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.amount,
+                { color: amountColor },
+                amountStruckThrough ? styles.amountStruckThrough : null,
+              ]}
+            >
+              {amountLabel}
+            </Text>
+          ) : null}
+          {chevron ? (
+            <Ionicons
+              color={theme.colors.textMuted}
+              name={chevron === 'up' ? 'chevron-up' : 'chevron-forward'}
+              size={16}
+            />
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+    minHeight: 54,
+  },
+  surfaceRow: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
+  },
+  surfaceRowHighlighted: {
+    backgroundColor: '#fffaf0',
+    borderColor: 'rgba(249, 115, 22, 0.14)',
+  },
+  categoryIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flexShrink: 0,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  copy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
+  },
+  titleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minWidth: 0,
+  },
+  title: {
+    color: theme.colors.text,
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
+    minWidth: 0,
+  },
+  status: {
+    color: theme.colors.textMuted,
+    flexShrink: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 12,
+    maxWidth: 118,
+  },
+  statusPrimary: {
+    color: theme.colors.primary,
+  },
+  statusSuccess: {
+    color: theme.colors.success,
+  },
+  statusWarning: {
+    color: theme.colors.warning,
+  },
+  statusDanger: {
+    color: theme.colors.danger,
+  },
+  statusCycle: {
+    color: transactionCategoryColor('cycle'),
+  },
+  unreadDot: {
+    backgroundColor: '#2f80ed',
+    borderRadius: theme.radius.pill,
+    flexShrink: 0,
+    height: 6,
+    width: 6,
+  },
+  meta: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  side: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    maxWidth: 112,
+    minWidth: 78,
+  },
+  amountRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'flex-end',
+    maxWidth: '100%',
+  },
+  amount: {
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 17,
+    textAlign: 'right',
+  },
+  amountStruckThrough: {
+    opacity: 0.68,
+    textDecorationLine: 'line-through',
+  },
+});

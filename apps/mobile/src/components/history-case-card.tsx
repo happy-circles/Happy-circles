@@ -1,6 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  UIManager,
+  View,
+} from 'react-native';
 
+import { TransactionSummaryRow } from '@/components/transaction-summary-row';
 import { theme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
@@ -14,9 +23,11 @@ export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | '
 export interface HistoryCaseStepViewModel {
   readonly id: string;
   readonly title: string;
+  readonly detail?: string | null;
   readonly impact?: string | null;
   readonly meta?: string | null;
   readonly amountLabel?: string | null;
+  readonly category?: string | null;
   readonly tone: HistoryCaseTone;
 }
 
@@ -36,6 +47,35 @@ export interface HistoryCaseCardProps {
   readonly steps: readonly HistoryCaseStepViewModel[];
 }
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const historyOpenLayoutAnimation = {
+  create: {
+    property: LayoutAnimation.Properties.opacity,
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+  duration: 180,
+  update: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+};
+
+const historyCloseLayoutAnimation = {
+  duration: 150,
+  update: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+};
+
+function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
+  LayoutAnimation.configureNext(
+    isExpanded ? historyCloseLayoutAnimation : historyOpenLayoutAnimation,
+  );
+  onToggle();
+}
+
 export function HistoryCaseCard({
   eyebrow,
   category,
@@ -51,16 +91,13 @@ export function HistoryCaseCard({
   onToggle,
   steps,
 }: HistoryCaseCardProps) {
-  const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
-  const metaParts =
-    meta
-      ?.split('|')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0) ?? [];
-  const metaLabel = metaParts[0] ?? null;
-  const showCategoryIcon = Boolean(category) && !isCycleSnippet;
   const impactSign = tone === 'positive' ? '+' : tone === 'negative' ? '-' : null;
-  const showImpactMetric = Boolean(amountLabel) || tone === 'cycle';
+  const displayAmountLabel = amountLabel
+    ? `${impactSign ? `${impactSign} ` : ''}${amountLabel}`
+    : null;
+  const primaryLabel = eyebrow ?? (isCycleSnippet ? 'Happy Circle' : title);
+  const detailTitle = primaryLabel !== title ? title : null;
+  const showExpandedSummary = isExpanded && Boolean(detailTitle || description);
 
   return (
     <SurfaceCard
@@ -80,132 +117,88 @@ export function HistoryCaseCard({
         isExpanded && tone === 'danger' ? styles.cardExpandedDanger : null,
         isExpanded && tone === 'cycle' ? styles.cardExpandedCycle : null,
       ]}
-      variant={isExpanded ? 'elevated' : isCycleSnippet ? 'muted' : 'default'}
+      variant={isCycleSnippet ? 'muted' : 'default'}
     >
       <Pressable
-        onPress={onToggle}
+        onPress={() => animateHistoryToggle(isExpanded, onToggle)}
         style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
       >
-        <View style={styles.text}>
-          <View style={styles.kickerRow}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-            {eyebrow ? <View style={styles.kickerDot} /> : null}
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.statusText,
-                statusTone === 'primary' ? styles.statusPrimary : null,
-                statusTone === 'success' ? styles.statusSuccess : null,
-                statusTone === 'warning' ? styles.statusWarning : null,
-                statusTone === 'danger' ? styles.statusDanger : null,
-                statusTone === 'cycle' ? styles.statusCycle : null,
-              ]}
-            >
-              {statusLabel}
-            </Text>
-          </View>
-          <View style={styles.titleLine}>
-            {showCategoryIcon ? (
-              <View
-                style={[
-                  styles.categoryIconBadge,
-                  { backgroundColor: transactionCategoryBackgroundColor(category) },
-                ]}
-              >
-                <Ionicons
-                  color={transactionCategoryColor(category)}
-                  name={categoryIcon}
-                  size={12}
-                />
-              </View>
-            ) : null}
-            <Text style={styles.title}>{title}</Text>
-          </View>
-          {metaLabel || description ? (
-            <View style={styles.metaRow}>
-              {metaLabel ? (
-                <Text numberOfLines={1} style={styles.meta}>
-                  {metaLabel}
-                </Text>
-              ) : null}
-              {metaLabel && description ? <View style={styles.metaDot} /> : null}
-              {description ? (
-                <Text numberOfLines={1} style={[styles.meta, styles.descriptionMeta]}>
-                  {description}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.headerMeta}>
-          {showImpactMetric ? (
-            <View style={styles.impactMetric}>
-              <View style={styles.impactValueRow}>
-                {tone === 'cycle' ? (
-                  <View style={styles.impactCycleBadge}>
-                    <Ionicons
-                      color={transactionCategoryColor('cycle')}
-                      name="happy-outline"
-                      size={15}
-                    />
-                  </View>
-                ) : impactSign ? (
-                  <Text style={[styles.impactSign, toneStyles[tone]]}>{impactSign}</Text>
-                ) : null}
-                {amountLabel ? (
-                  <Text numberOfLines={1} style={[styles.impactAmount, toneStyles[tone]]}>
-                    {amountLabel}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.impactMetric} />
-          )}
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
-            <Ionicons
-              color={theme.colors.textMuted}
-              name={isExpanded ? 'chevron-up' : 'chevron-forward'}
-              size={16}
-            />
-          </View>
-        </View>
+        <TransactionSummaryRow
+          amountColor={toneColor(tone)}
+          amountLabel={displayAmountLabel}
+          category={category}
+          chevron={isExpanded ? 'up' : 'forward'}
+          meta={meta}
+          statusLabel={statusLabel}
+          statusTone={statusTone}
+          title={primaryLabel}
+        />
       </Pressable>
 
       {isExpanded ? (
-        <View style={styles.steps}>
-          {steps.map((step, index) => (
-            <View key={step.id} style={styles.stepRow}>
-              <View style={styles.stepRail}>
-                <View
-                  style={[
-                    styles.stepMarker,
-                    step.tone === 'positive' ? styles.stepMarkerPositive : null,
-                    step.tone === 'negative' ? styles.stepMarkerNegative : null,
-                    step.tone === 'neutral' ? styles.stepMarkerNeutral : null,
-                    step.tone === 'danger' ? styles.stepMarkerDanger : null,
-                    step.tone === 'cycle' ? styles.stepMarkerCycle : null,
-                  ]}
-                />
-                {index < steps.length - 1 ? <View style={styles.stepLine} /> : null}
-              </View>
-              <View style={styles.stepBody}>
-                <View style={styles.stepTop}>
-                  <Text style={styles.stepTitle}>{step.title}</Text>
-                  {step.amountLabel ? (
-                    <Text style={[styles.stepAmount, toneStyles[step.tone]]}>
-                      {step.amountLabel}
-                    </Text>
-                  ) : null}
-                </View>
-                {step.impact && !step.amountLabel ? (
-                  <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text>
-                ) : null}
-                {step.meta ? <Text style={styles.stepMeta}>{step.meta}</Text> : null}
-              </View>
+        <View style={styles.expandedContent}>
+          {showExpandedSummary ? (
+            <View style={styles.expandedSummary}>
+              {detailTitle ? <Text style={styles.expandedTitle}>{detailTitle}</Text> : null}
+              {description ? <Text style={styles.expandedDescription}>{description}</Text> : null}
             </View>
-          ))}
+          ) : null}
+          <View style={styles.steps}>
+            {steps.map((step, index) => (
+              <View key={step.id} style={styles.stepRow}>
+                <View style={styles.stepRail}>
+                  <View
+                    style={[
+                      styles.stepMarker,
+                      step.tone === 'positive' ? styles.stepMarkerPositive : null,
+                      step.tone === 'negative' ? styles.stepMarkerNegative : null,
+                      step.tone === 'neutral' ? styles.stepMarkerNeutral : null,
+                      step.tone === 'danger' ? styles.stepMarkerDanger : null,
+                      step.tone === 'cycle' ? styles.stepMarkerCycle : null,
+                    ]}
+                  />
+                  {index < steps.length - 1 ? <View style={styles.stepLine} /> : null}
+                </View>
+                <View style={styles.stepBody}>
+                  <View style={styles.stepTop}>
+                    <View style={styles.stepTitleRow}>
+                      {step.category ? (
+                        <View
+                          style={[
+                            styles.stepCategoryBadge,
+                            {
+                              backgroundColor: transactionCategoryBackgroundColor(step.category),
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            color={transactionCategoryColor(step.category)}
+                            name={
+                              transactionCategoryIcon(
+                                step.category,
+                              ) as keyof typeof Ionicons.glyphMap
+                            }
+                            size={11}
+                          />
+                        </View>
+                      ) : null}
+                      <Text style={styles.stepTitle}>{step.title}</Text>
+                    </View>
+                    {step.amountLabel ? (
+                      <Text style={[styles.stepAmount, toneStyles[step.tone]]}>
+                        {step.amountLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
+                  {step.impact && !step.amountLabel ? (
+                    <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text>
+                  ) : null}
+                  {step.meta ? <Text style={styles.stepMeta}>{step.meta}</Text> : null}
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
       ) : null}
     </SurfaceCard>
@@ -230,32 +223,30 @@ const toneStyles = StyleSheet.create({
   },
 });
 
+function toneColor(tone: HistoryCaseTone): string {
+  return toneStyles[tone].color;
+}
+
 const styles = StyleSheet.create({
   card: {
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.small,
     gap: theme.spacing.sm,
     marginVertical: theme.spacing.xxs,
   },
   cardExpanded: {
-    backgroundColor: '#fbfcff',
-    borderColor: 'rgba(26, 39, 68, 0.16)',
-    transform: [{ translateY: -1 }],
+    borderColor: 'rgba(26, 39, 68, 0.14)',
   },
   cardExpandedPositive: {
-    backgroundColor: '#fbfefc',
-    borderColor: 'rgba(61, 186, 110, 0.28)',
+    borderColor: 'rgba(61, 186, 110, 0.24)',
   },
   cardExpandedNegative: {
-    backgroundColor: '#fffaf5',
-    borderColor: 'rgba(249, 115, 22, 0.24)',
+    borderColor: 'rgba(249, 115, 22, 0.22)',
   },
   cardExpandedDanger: {
-    backgroundColor: '#fff8f7',
-    borderColor: 'rgba(232, 96, 74, 0.24)',
+    borderColor: 'rgba(232, 96, 74, 0.22)',
   },
   cardExpandedCycle: {
-    backgroundColor: '#f7fbff',
-    borderColor: 'rgba(37, 99, 235, 0.22)',
+    borderColor: 'rgba(37, 99, 235, 0.2)',
   },
   cycleSnippet: {
     borderColor: 'rgba(37, 99, 235, 0.16)',
@@ -287,153 +278,29 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
   },
   header: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 78,
+    borderRadius: theme.radius.small,
   },
   headerPressed: {
     opacity: 0.94,
   },
-  text: {
-    flex: 1,
-    gap: 6,
-    minWidth: 0,
+  expandedContent: {
+    gap: theme.spacing.sm,
+    overflow: 'hidden',
   },
-  kickerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  eyebrow: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  kickerDot: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 3.5,
-    width: 3.5,
-  },
-  statusText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    lineHeight: 15,
-  },
-  statusPrimary: {
-    color: theme.colors.primary,
-  },
-  statusSuccess: {
-    color: theme.colors.success,
-  },
-  statusWarning: {
-    color: theme.colors.warning,
-  },
-  statusDanger: {
-    color: theme.colors.danger,
-  },
-  statusCycle: {
-    color: transactionCategoryColor('cycle'),
-  },
-  headerMeta: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    justifyContent: 'space-between',
-    maxWidth: 112,
-    minWidth: 96,
-  },
-  title: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 19,
-  },
-  titleLine: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
-    minWidth: 0,
-  },
-  categoryIconBadge: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    flexShrink: 0,
-    height: 22,
-    justifyContent: 'center',
-    width: 22,
-  },
-  impactMetric: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 42,
-    width: '100%',
-  },
-  impactValueRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
+  expandedSummary: {
     gap: 3,
-    justifyContent: 'center',
-    maxWidth: '100%',
+    paddingTop: theme.spacing.xxs,
   },
-  impactSign: {
-    fontSize: theme.typography.title3,
-    fontWeight: '900',
-    lineHeight: 22,
-  },
-  impactAmount: {
-    flexShrink: 1,
+  expandedTitle: {
+    color: theme.colors.text,
     fontSize: theme.typography.footnote,
-    fontWeight: '900',
-    lineHeight: 17,
-    textAlign: 'center',
+    fontWeight: '800',
+    lineHeight: 18,
   },
-  impactCycleBadge: {
-    alignItems: 'center',
-    backgroundColor: '#eaf1ff',
-    borderRadius: theme.radius.pill,
-    height: 26,
-    justifyContent: 'center',
-    width: 26,
-  },
-  metaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  metaDot: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 3.5,
-    width: 3.5,
-  },
-  meta: {
+  expandedDescription: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
-    lineHeight: 15,
-  },
-  descriptionMeta: {
-    flexShrink: 1,
-    fontWeight: '700',
-  },
-  toggleRow: {
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    gap: 4,
-  },
-  toggleText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
+    lineHeight: 16,
   },
   steps: {
     borderTopColor: theme.colors.hairline,
@@ -488,13 +355,33 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
+  stepTitleRow: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minWidth: 0,
+    paddingRight: theme.spacing.sm,
+  },
+  stepCategoryBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flexShrink: 0,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
   stepTitle: {
     color: theme.colors.text,
-    flex: 1,
+    flexShrink: 1,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
     lineHeight: 18,
-    paddingRight: theme.spacing.sm,
+  },
+  stepDetail: {
+    color: theme.colors.text,
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
   },
   stepImpact: {
     fontSize: theme.typography.caption,

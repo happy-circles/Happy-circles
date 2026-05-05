@@ -25,6 +25,12 @@ const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = {
   cycle: 'Happy Circle',
 };
 
+const EXTRA_TRANSACTION_CATEGORY_LABELS = {
+  friendship: 'Amistad',
+  friendship_qr: 'QR',
+  access_key: 'Acceso',
+} as const;
+
 const TRANSACTION_CATEGORY_VISUALS: Record<
   TransactionCategory,
   {
@@ -70,6 +76,47 @@ const TRANSACTION_CATEGORY_VISUALS: Record<
   },
 };
 
+const EXTRA_TRANSACTION_CATEGORY_VISUALS: Record<
+  keyof typeof EXTRA_TRANSACTION_CATEGORY_LABELS,
+  {
+    readonly icon: string;
+    readonly color: string;
+    readonly backgroundColor: string;
+  }
+> = {
+  friendship: {
+    icon: 'person-add-outline',
+    color: '#2563eb',
+    backgroundColor: '#eaf1ff',
+  },
+  friendship_qr: {
+    icon: 'qr-code-outline',
+    color: '#047857',
+    backgroundColor: '#e6f7ef',
+  },
+  access_key: {
+    icon: 'key-outline',
+    color: '#7c3aed',
+    backgroundColor: '#f0eaff',
+  },
+};
+
+function resolveTransactionCategoryVisual(value: string | null | undefined): {
+  readonly icon: string;
+  readonly color: string;
+  readonly backgroundColor: string;
+} {
+  const normalized = value?.trim();
+
+  if (normalized && normalized in EXTRA_TRANSACTION_CATEGORY_VISUALS) {
+    return EXTRA_TRANSACTION_CATEGORY_VISUALS[
+      normalized as keyof typeof EXTRA_TRANSACTION_CATEGORY_VISUALS
+    ];
+  }
+
+  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(normalized)];
+}
+
 export function isUserTransactionCategory(
   value: string | null | undefined,
 ): value is UserTransactionCategory {
@@ -87,17 +134,25 @@ export function normalizeTransactionCategory(
 }
 
 export function transactionCategoryLabel(value: string | null | undefined): string {
-  return TRANSACTION_CATEGORY_LABELS[normalizeTransactionCategory(value)];
+  const normalized = value?.trim();
+
+  if (normalized && normalized in EXTRA_TRANSACTION_CATEGORY_LABELS) {
+    return EXTRA_TRANSACTION_CATEGORY_LABELS[
+      normalized as keyof typeof EXTRA_TRANSACTION_CATEGORY_LABELS
+    ];
+  }
+
+  return TRANSACTION_CATEGORY_LABELS[normalizeTransactionCategory(normalized)];
 }
 
 export function transactionCategoryIcon(value: string | null | undefined): string {
-  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(value)].icon;
+  return resolveTransactionCategoryVisual(value).icon;
 }
 
 export function transactionCategoryColor(value: string | null | undefined): string {
-  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(value)].color;
+  return resolveTransactionCategoryVisual(value).color;
 }
 
 export function transactionCategoryBackgroundColor(value: string | null | undefined): string {
-  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(value)].backgroundColor;
+  return resolveTransactionCategoryVisual(value).backgroundColor;
 }
