@@ -13,7 +13,7 @@ import {
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
-import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
+import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import {
   triggerIdentityErrorHaptic,
   triggerIdentityImpactHaptic,
@@ -68,7 +68,7 @@ export function ResetPasswordScreen() {
 
       if (result === 'Clave actualizada.') {
         triggerIdentitySuccessHaptic();
-        beginHomeEntryHandoff();
+        await beginHomeEntryHandoffAfterScrollReset();
         returnToRoute(router, '/home');
         return;
       }

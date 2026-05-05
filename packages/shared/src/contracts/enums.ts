@@ -179,3 +179,11 @@ export const ANALYTICS_SCREEN_NAMES = [
   'unknown',
 ] as const;
 export type AnalyticsScreenName = (typeof ANALYTICS_SCREEN_NAMES)[number];
+
+export const SUPPORT_ERROR_KINDS = [
+  'edge_function',
+  'client_exception',
+  'client_action',
+  'data_sync',
+] as const;
+export type SupportErrorKind = (typeof SUPPORT_ERROR_KINDS)[number];

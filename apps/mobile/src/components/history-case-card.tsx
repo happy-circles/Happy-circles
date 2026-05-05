@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: theme.radius.small,
     gap: theme.spacing.sm,
-    marginVertical: theme.spacing.xxs,
+    minHeight: 76,
   },
   cardExpanded: {
     borderColor: 'rgba(26, 39, 68, 0.14)',

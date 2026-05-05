@@ -16,7 +16,7 @@ import {
 import { MessageBanner } from '@/components/message-banner';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
-import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
+import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import {
   buildSetupAccountHref,
@@ -302,8 +302,7 @@ export function AccountInviteScreen() {
       if (response.status === 'accepted') {
         await clearPendingInviteIntent();
         setMessage('Cuenta activada. Ya puedes entrar a Happy Circles.');
-        beginHomeEntryHandoff();
-        returnToRoute(router, '/home');
+        await navigateHome();
         return;
       }
 
@@ -312,8 +311,7 @@ export function AccountInviteScreen() {
         setMessage(
           'Tu cuenta ya quedo lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
         );
-        beginHomeEntryHandoff();
-        returnToRoute(router, '/home');
+        await navigateHome();
         return;
       }
 
@@ -325,6 +323,11 @@ export function AccountInviteScreen() {
     }
   }
 
+  async function navigateHome() {
+    await beginHomeEntryHandoffAfterScrollReset();
+    returnToRoute(router, '/home');
+  }
+
   return (
     <IdentityFlowScreen
       actions={
@@ -333,8 +336,7 @@ export function AccountInviteScreen() {
           label={session.accountAccessState === 'active' ? 'Ir al inicio' : 'Usar otra invitacion'}
           onPress={() => {
             if (session.accountAccessState === 'active') {
-              beginHomeEntryHandoff();
-              returnToRoute(router, '/home');
+              void navigateHome();
               return;
             }
 

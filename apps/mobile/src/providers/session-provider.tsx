@@ -57,6 +57,12 @@ import {
   type NotificationPermissionStatus,
 } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import {
+  createSupportId,
+  readFunctionErrorDetails,
+  reportClientErrorSafe,
+  withSupportCode,
+} from '@/lib/support-errors';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -1163,6 +1169,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      if (!nextBiometricsEnabled) {
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) {
+          console.warn(
+            'Failed to clear restored Supabase session without biometrics',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+
+        clearSignedInState();
+        setRememberedAccount(rememberedSnapshot);
+        setSessionStatus('signed_out');
+        setHydrated(true);
+        return;
+      }
+
       try {
         await loadAccountState(nextSession, {
           initialLock: nextBiometricsEnabled,
@@ -1290,7 +1312,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Supabase no esta configurado en esta app.';
       }
 
-      const redirectTo = Linking.createURL('/sign-in');
+      const redirectTo = Linking.createURL('/join?mode=sign-in');
       const authApi = supabase.auth as unknown as {
         readonly linkIdentity?: (input: {
           readonly provider: 'google';
@@ -1528,6 +1550,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Necesitas una invitacion valida para crear una cuenta nueva.';
       }
 
+      const supportId = createSupportId();
       const registrationPreview = await supabase.functions.invoke<AccountRegistrationPreviewResult>(
         'get-account-invite-preview-public',
         {
@@ -1537,11 +1560,21 @@ export function SessionProvider({ children }: PropsWithChildren) {
             phoneE164,
             recordAppOpen: false,
           },
+          headers: {
+            'x-client-info': 'happy-circles-mobile',
+            'x-request-id': supportId,
+          },
         },
       );
 
       if (registrationPreview.error) {
-        return formatSupabaseAuthErrorMessage(readErrorMessage(registrationPreview.error));
+        const details = await readFunctionErrorDetails(registrationPreview.error);
+        return formatSupabaseAuthErrorMessage(
+          withSupportCode(
+            details.message || readErrorMessage(registrationPreview.error),
+            supportId,
+          ),
+        );
       }
 
       if (
@@ -2323,9 +2356,42 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     welcomeEmailAttemptedUserIdsRef.current.add(userId);
-    void supabase.functions.invoke('send-welcome-email', { body: {} }).catch(() => {
-      // Welcome email delivery is best-effort and should never block setup.
-    });
+    const supportId = createSupportId();
+    void supabase.functions
+      .invoke('send-welcome-email', {
+        body: {},
+        headers: {
+          'x-client-info': 'happy-circles-mobile',
+          'x-request-id': supportId,
+        },
+      })
+      .then(async (result) => {
+        if (result.error) {
+          const details = await readFunctionErrorDetails(result.error);
+          reportClientErrorSafe({
+            error: new Error(details.message),
+            errorCode: details.code,
+            errorMessage: details.message,
+            functionName: 'send-welcome-email',
+            kind: 'edge_function',
+            metadata: { source: 'welcome_email_effect', status: details.status ?? null },
+            requestId: details.requestId ?? supportId,
+            supportId,
+          });
+        }
+      })
+      .catch((error) => {
+        reportClientErrorSafe({
+          error,
+          errorMessage: readErrorMessage(error),
+          functionName: 'send-welcome-email',
+          kind: 'client_action',
+          metadata: { source: 'welcome_email_effect' },
+          requestId: supportId,
+          supportId,
+        });
+        // Welcome email delivery is best-effort and should never block setup.
+      });
   }, [
     accountAccessState,
     isEmailConfirmed,

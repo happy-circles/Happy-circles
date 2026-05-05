@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,7 +50,7 @@ const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Happy Circles', value: 'settlements', icon: 'happy-outline' },
 ];
 
-const FOCUS_CARD_HEIGHT = 350;
+const FOCUS_CARD_HEIGHT = 278;
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -241,31 +241,22 @@ function CarouselDots({
   );
 }
 
-function FocusHeader({
-  icon,
-  label,
-  meta,
+function FocusCardTitle({
+  children,
+  contextLabel,
 }: {
-  readonly icon: keyof typeof Ionicons.glyphMap;
-  readonly label: string;
-  readonly meta?: string;
+  readonly children: string;
+  readonly contextLabel: string;
 }) {
   return (
-    <View style={styles.cardHeader}>
-      <View style={styles.cardCharacter}>
-        <View style={styles.cardCharacterFace}>
-          <Ionicons color={theme.colors.primary} name={icon} size={24} />
-        </View>
-      </View>
-      <View style={styles.cardHeaderCopy}>
-        <Text numberOfLines={1} style={styles.cardTitle}>
-          {label}
+    <View style={styles.focusCardHeader}>
+      <Text numberOfLines={1} style={styles.focusCardTitle}>
+        {children}
+      </Text>
+      <View style={styles.focusCardContextPill}>
+        <Text numberOfLines={1} style={styles.focusCardContextText}>
+          {contextLabel}
         </Text>
-        {meta ? (
-          <Text numberOfLines={2} style={styles.cardSubtitle}>
-            {meta}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -388,27 +379,20 @@ function BalanceFocusCard({
   periodChangeMinor,
   totalIOweMinor,
   totalOwedToMeMinor,
-  updatedAtLabel,
 }: {
   readonly netBalanceMinor: number;
   readonly periodContextLabel: string;
   readonly periodChangeMinor: number;
   readonly totalIOweMinor: number;
   readonly totalOwedToMeMinor: number;
-  readonly updatedAtLabel: string;
 }) {
   const tone = balanceTone(netBalanceMinor);
   const balanceVisual = toneVisual(tone);
 
   return (
-    <SurfaceCard
-      padding="lg"
-      style={[styles.focusCard, styles.balanceFocusCard]}
-      variant="elevated"
-    >
-      <FocusHeader icon="wallet-outline" label="Balance actual" meta={updatedAtLabel} />
+    <SurfaceCard padding="lg" style={[styles.focusCard, styles.balanceFocusCard]}>
+      <FocusCardTitle contextLabel={periodContextLabel}>Balance actual</FocusCardTitle>
       <View style={styles.balanceHomeBody}>
-        <Text style={styles.homeBalanceLabel}>Tu balance</Text>
         <Text
           adjustsFontSizeToFit
           minimumFontScale={0.78}
@@ -432,9 +416,11 @@ function BalanceFocusCard({
 
 function ImpactBars({
   emptyLabel,
+  maxRows = 2,
   rows,
 }: {
   readonly emptyLabel: string;
+  readonly maxRows?: number;
   readonly rows: readonly {
     readonly key: string;
     readonly label: string;
@@ -443,7 +429,7 @@ function ImpactBars({
     readonly trendMinor?: number;
   }[];
 }) {
-  const visibleRows = rows.slice(0, 2);
+  const visibleRows = rows.slice(0, maxRows);
   const maxAmount = Math.max(...visibleRows.map((row) => Math.abs(row.amountMinor)), 1);
 
   if (visibleRows.length === 0) {
@@ -533,6 +519,23 @@ function ImpactBars({
       })}
     </View>
   );
+}
+
+function movementCountLabel(count: number): string {
+  return `${count} movimiento${count === 1 ? '' : 's'}`;
+}
+
+function personFocusMeta(row: BalanceAnalyticsPersonRowDto): string {
+  const topCategory = row.topCategoryBreakdown[0] ?? null;
+  const movementLabel = movementCountLabel(row.movementCount);
+
+  if (!topCategory) {
+    return movementLabel;
+  }
+
+  return `${transactionCategoryLabel(topCategory.category)} ${signedFormatCompactCop(
+    topCategory.netMinor,
+  )} - ${movementLabel}`;
 }
 
 function DetailFilters({
@@ -947,41 +950,23 @@ function HappyCirclesDetail({
 
 function PeopleFocusCard({
   periodContextLabel,
-  periodLabel,
   people,
 }: {
   readonly periodContextLabel: string;
-  readonly periodLabel: string;
   readonly people: readonly BalanceAnalyticsPersonRowDto[];
 }) {
-  const topPerson = people[0] ?? null;
-
   return (
-    <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="people-outline" label="Personas" meta={`Actividad de ${periodLabel}`} />
-      <Text style={styles.focusTitle}>{topPerson ? topPerson.label : 'Sin actividad visible'}</Text>
-      <Text style={styles.focusCaption}>
-        {topPerson
-          ? `Mayor impacto: ${signedFormatCop(personImpactAmount(topPerson))}`
-          : 'Todavia no hay movimientos para comparar en este periodo.'}
-      </Text>
-      {topPerson ? (
-        <TrendChip
-          amountMinor={topPerson.periodNetMinor - topPerson.previousPeriodNetMinor}
-          contextLabel={periodContextLabel}
-        />
-      ) : null}
+    <SurfaceCard padding="lg" style={styles.focusCard}>
+      <FocusCardTitle contextLabel={periodContextLabel}>Personas</FocusCardTitle>
       <ImpactBars
         emptyLabel="Todavia no hay actividad visible por persona."
+        maxRows={3}
         rows={people.map((row) => ({
           key: row.key,
           label: row.label,
           amountMinor: personImpactAmount(row),
           trendMinor: row.periodNetMinor - row.previousPeriodNetMinor,
-          meta:
-            row.topCategories.length > 0
-              ? row.topCategories.map((category) => transactionCategoryLabel(category)).join(', ')
-              : `${row.movementCount} movimiento${row.movementCount === 1 ? '' : 's'}`,
+          meta: personFocusMeta(row),
         }))}
       />
     </SurfaceCard>
@@ -991,21 +976,15 @@ function PeopleFocusCard({
 function CategoriesFocusCard({
   categories,
   periodContextLabel,
-  periodLabel,
 }: {
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
   readonly periodContextLabel: string;
-  readonly periodLabel: string;
 }) {
   const topCategory = categories[0] ?? null;
 
   return (
-    <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader
-        icon="pricetags-outline"
-        label="Categorias"
-        meta={`Actividad de ${periodLabel}`}
-      />
+    <SurfaceCard padding="lg" style={styles.focusCard}>
+      <FocusCardTitle contextLabel={periodContextLabel}>Categorias</FocusCardTitle>
       <Text style={styles.focusTitle}>
         {topCategory ? topCategory.label : 'Sin categorias visibles'}
       </Text>
@@ -1042,7 +1021,6 @@ function SettlementsFocusCard({
   changeRatio,
   movementCount,
   periodContextLabel,
-  periodLabel,
   resolvedMinor,
   savedMovementsCount,
 }: {
@@ -1050,13 +1028,12 @@ function SettlementsFocusCard({
   readonly changeRatio: number | null;
   readonly movementCount: number;
   readonly periodContextLabel: string;
-  readonly periodLabel: string;
   readonly resolvedMinor: number;
   readonly savedMovementsCount: number;
 }) {
   return (
-    <SurfaceCard padding="lg" style={styles.focusCard} variant="elevated">
-      <FocusHeader icon="happy-outline" label="Happy Circles" meta={`Cierres de ${periodLabel}`} />
+    <SurfaceCard padding="lg" style={styles.focusCard}>
+      <FocusCardTitle contextLabel={periodContextLabel}>Happy Circles</FocusCardTitle>
       <Text
         adjustsFontSizeToFit
         minimumFontScale={0.78}
@@ -1084,18 +1061,332 @@ function SettlementsFocusCard({
   );
 }
 
+type BalanceCarouselOverview = {
+  readonly projection: {
+    readonly impactMinor: number;
+    readonly pendingCount: number;
+    readonly pendingIncomingMinor: number;
+    readonly pendingOutgoingMinor: number;
+    readonly projectedNetBalanceMinor: number;
+  };
+  readonly summary: {
+    readonly netBalanceMinor: number;
+    readonly totalIOweMinor: number;
+    readonly totalOwedToMeMinor: number;
+  };
+};
+
+type BalanceCarouselAnalytics = {
+  readonly defaultPeriod: BalanceAnalyticsPeriod;
+  readonly periods: Record<BalanceAnalyticsPeriod, BalanceAnalyticsPeriodDto>;
+};
+
+export function BalanceLensCarousel({
+  analytics,
+  initialFocus = 'balance',
+  lens = 'balance',
+  onFocusPress,
+  onProjectionSegmentPress,
+  overview,
+  period,
+  swipeEnabled = true,
+}: {
+  readonly analytics: BalanceCarouselAnalytics;
+  readonly initialFocus?: BalanceFocus;
+  readonly lens?: BalanceAnalyticsLens;
+  readonly onFocusPress?: (focus: BalanceFocus) => void;
+  readonly onProjectionSegmentPress?: (filter: ProjectionChartFilter) => void;
+  readonly overview: BalanceCarouselOverview;
+  readonly period?: BalanceAnalyticsPeriod;
+  readonly swipeEnabled?: boolean;
+}) {
+  const carouselRef = useRef<ScrollViewType | null>(null);
+  const lastSyncedFocusRef = useRef<BalanceFocus>(initialFocus);
+  const activeFocusRef = useRef<BalanceFocus>(initialFocus);
+  const visualFocusRef = useRef<BalanceFocus>(initialFocus);
+  const latestCarouselOffsetRef = useRef(0);
+  const syncedCarouselWidthRef = useRef(0);
+  const hasSyncedCarouselPositionRef = useRef(false);
+  const carouselSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [carouselWidth, setCarouselWidth] = useState(0);
+  const [activeFocus, setActiveFocus] = useState<BalanceFocus>(initialFocus);
+  const [visualFocus, setVisualFocus] = useState<BalanceFocus>(initialFocus);
+  const selectedPeriod = period ?? analytics.defaultPeriod ?? 'month';
+  const currentPeriod = analytics.periods[selectedPeriod];
+  const periodContextLabel = periodScopeLabel(selectedPeriod);
+  const balanceSummary = currentPeriod.summaries.balance;
+  const sortedPeople = [...currentPeriod.people].sort((left, right) => {
+    const amountDiff =
+      Math.abs(personLensAmount(right, lens)) - Math.abs(personLensAmount(left, lens));
+    if (amountDiff !== 0) {
+      return amountDiff;
+    }
+
+    if (right.movementCount !== left.movementCount) {
+      return right.movementCount - left.movementCount;
+    }
+
+    return left.label.localeCompare(right.label, 'es-CO');
+  });
+  const sortedCategories = [...currentPeriod.categories].sort((left, right) => {
+    const amountDiff =
+      Math.abs(categoryLensAmount(right, lens)) - Math.abs(categoryLensAmount(left, lens));
+    if (amountDiff !== 0) {
+      return amountDiff;
+    }
+
+    if (right.movementCount !== left.movementCount) {
+      return right.movementCount - left.movementCount;
+    }
+
+    return left.label.localeCompare(right.label, 'es-CO');
+  });
+
+  useEffect(() => {
+    setActiveFocus(initialFocus);
+    setVisualFocus(initialFocus);
+    activeFocusRef.current = initialFocus;
+    visualFocusRef.current = initialFocus;
+  }, [initialFocus]);
+
+  useEffect(() => {
+    activeFocusRef.current = activeFocus;
+  }, [activeFocus]);
+
+  useEffect(
+    () => () => {
+      if (carouselSettleTimerRef.current) {
+        clearTimeout(carouselSettleTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (carouselWidth <= 0) {
+      return;
+    }
+
+    if (
+      lastSyncedFocusRef.current === activeFocus &&
+      syncedCarouselWidthRef.current === carouselWidth
+    ) {
+      return;
+    }
+
+    lastSyncedFocusRef.current = activeFocus;
+    syncedCarouselWidthRef.current = carouselWidth;
+    const nextX = focusIndex(activeFocus) * carouselWidth;
+    latestCarouselOffsetRef.current = nextX;
+    carouselRef.current?.scrollTo({
+      animated: hasSyncedCarouselPositionRef.current,
+      x: nextX,
+      y: 0,
+    });
+    hasSyncedCarouselPositionRef.current = true;
+  }, [activeFocus, carouselWidth]);
+
+  function clearCarouselSettleTimer() {
+    if (carouselSettleTimerRef.current) {
+      clearTimeout(carouselSettleTimerRef.current);
+      carouselSettleTimerRef.current = null;
+    }
+  }
+
+  function updateVisualFocus(nextFocus: BalanceFocus) {
+    if (nextFocus === visualFocusRef.current) {
+      return;
+    }
+
+    visualFocusRef.current = nextFocus;
+    setVisualFocus(nextFocus);
+  }
+
+  function settleCarousel(offsetX: number) {
+    if (carouselWidth <= 0) {
+      return;
+    }
+
+    const rawIndex = offsetX / carouselWidth;
+    const nextIndex = Math.max(0, Math.min(FOCUS_OPTIONS.length - 1, Math.round(rawIndex)));
+    const nextFocus = FOCUS_OPTIONS[nextIndex]?.value;
+    if (!nextFocus) {
+      return;
+    }
+
+    const nextX = nextIndex * carouselWidth;
+    latestCarouselOffsetRef.current = nextX;
+    lastSyncedFocusRef.current = nextFocus;
+    syncedCarouselWidthRef.current = carouselWidth;
+    updateVisualFocus(nextFocus);
+
+    if (Math.abs(offsetX - nextX) > 1) {
+      carouselRef.current?.scrollTo({ animated: true, x: nextX, y: 0 });
+    }
+
+    if (nextFocus !== activeFocusRef.current) {
+      activeFocusRef.current = nextFocus;
+      lastSyncedFocusRef.current = nextFocus;
+      setActiveFocus(nextFocus);
+    }
+  }
+
+  function handleCarouselScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    latestCarouselOffsetRef.current = offsetX;
+
+    if (carouselWidth <= 0) {
+      return;
+    }
+
+    const rawIndex = offsetX / carouselWidth;
+    const nextIndex = Math.max(0, Math.min(FOCUS_OPTIONS.length - 1, Math.round(rawIndex)));
+    const nextFocus = FOCUS_OPTIONS[nextIndex]?.value;
+
+    if (nextFocus) {
+      updateVisualFocus(nextFocus);
+    }
+  }
+
+  function handleCarouselScrollEndDrag() {
+    clearCarouselSettleTimer();
+    carouselSettleTimerRef.current = setTimeout(() => {
+      carouselSettleTimerRef.current = null;
+      settleCarousel(latestCarouselOffsetRef.current);
+    }, 140);
+  }
+
+  function handleCarouselMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    clearCarouselSettleTimer();
+    settleCarousel(event.nativeEvent.contentOffset.x);
+  }
+
+  function renderPage(focus: BalanceFocus, content: ReactNode) {
+    const pageContent = onFocusPress ? (
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => onFocusPress(focus)}
+        style={({ pressed }) => [pressed ? styles.pressed : null]}
+      >
+        {content}
+      </Pressable>
+    ) : (
+      content
+    );
+
+    return (
+      <View key={focus} style={[styles.carouselPage, { width: carouselWidth }]}>
+        {pageContent}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View
+        onLayout={(event) => setCarouselWidth(event.nativeEvent.layout.width)}
+        style={styles.carouselViewport}
+      >
+        <ScrollView
+          ref={carouselRef}
+          alwaysBounceHorizontal={false}
+          bounces={false}
+          decelerationRate="fast"
+          directionalLockEnabled
+          disableIntervalMomentum
+          horizontal
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          onMomentumScrollBegin={clearCarouselSettleTimer}
+          onMomentumScrollEnd={handleCarouselMomentumScrollEnd}
+          onScroll={handleCarouselScroll}
+          onScrollBeginDrag={clearCarouselSettleTimer}
+          onScrollEndDrag={handleCarouselScrollEndDrag}
+          overScrollMode="never"
+          pagingEnabled
+          removeClippedSubviews={false}
+          scrollEnabled={swipeEnabled}
+          scrollEventThrottle={16}
+          snapToAlignment="start"
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={carouselWidth > 0 ? carouselWidth : undefined}
+          style={styles.carousel}
+        >
+          {renderPage(
+            'balance',
+            <BalanceFocusCard
+              netBalanceMinor={overview.summary.netBalanceMinor}
+              periodChangeMinor={balanceSummary.deltaMinor}
+              periodContextLabel={periodContextLabel}
+              totalIOweMinor={overview.summary.totalIOweMinor}
+              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
+            />,
+          )}
+
+          {renderPage(
+            'projection',
+            <ProjectionForecastCard
+              currentBalanceMinor={overview.summary.netBalanceMinor}
+              impactMinor={overview.projection.impactMinor}
+              onSegmentPress={onFocusPress ? undefined : onProjectionSegmentPress}
+              pendingCount={overview.projection.pendingCount}
+              pendingIncomingMinor={overview.projection.pendingIncomingMinor}
+              pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}
+              projectedBalanceMinor={overview.projection.projectedNetBalanceMinor}
+              style={styles.focusCard}
+              totalIOweMinor={overview.summary.totalIOweMinor}
+              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
+            />,
+          )}
+
+          {renderPage(
+            'people',
+            <PeopleFocusCard people={sortedPeople} periodContextLabel={periodContextLabel} />,
+          )}
+
+          {renderPage(
+            'categories',
+            <CategoriesFocusCard
+              categories={sortedCategories}
+              periodContextLabel={periodContextLabel}
+            />,
+          )}
+
+          {renderPage(
+            'settlements',
+            <SettlementsFocusCard
+              activeCount={currentPeriod.settlements.activeCount}
+              changeRatio={currentPeriod.settlements.changeRatio}
+              movementCount={currentPeriod.settlements.movementCount}
+              periodContextLabel={periodContextLabel}
+              resolvedMinor={currentPeriod.settlements.resolvedMinor}
+              savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
+            />,
+          )}
+        </ScrollView>
+      </View>
+
+      <CarouselDots
+        activeFocus={visualFocus}
+        onChange={(nextFocus) => {
+          updateVisualFocus(nextFocus);
+          setActiveFocus(nextFocus);
+        }}
+      />
+    </>
+  );
+}
+
 export interface BalanceOverviewScreenProps {
   readonly initialFocus?: string | null;
 }
 
 export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenProps) {
   const router = useRouter();
-  const carouselRef = useRef<ScrollViewType | null>(null);
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const overview = snapshotQuery.data?.balanceOverview ?? null;
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
-  const [carouselWidth, setCarouselWidth] = useState(0);
   const [period, setPeriod] = useState<BalanceAnalyticsPeriod>(analytics?.defaultPeriod ?? 'month');
   const [lens, setLens] = useState<BalanceAnalyticsLens>('balance');
   const [activeFocus, setActiveFocus] = useState<BalanceFocus>(
@@ -1113,18 +1404,6 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
       setActiveFocus(initialFocus);
     }
   }, [initialFocus]);
-
-  useEffect(() => {
-    if (carouselWidth <= 0) {
-      return;
-    }
-
-    carouselRef.current?.scrollTo({
-      animated: true,
-      x: focusIndex(activeFocus) * carouselWidth,
-      y: 0,
-    });
-  }, [activeFocus, carouselWidth]);
 
   if (snapshotQuery.error && (!overview || !analytics)) {
     return (
@@ -1155,8 +1434,6 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
   }
 
   const currentPeriod = analytics.periods[period];
-  const periodContextLabel = periodScopeLabel(period);
-  const balanceSummary = currentPeriod.summaries.balance;
   const sortedPeople = [...currentPeriod.people].sort((left, right) => {
     const amountDiff =
       Math.abs(personLensAmount(right, lens)) - Math.abs(personLensAmount(left, lens));
@@ -1183,94 +1460,9 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
 
     return left.label.localeCompare(right.label, 'es-CO');
   });
-  const handleCarouselMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (carouselWidth <= 0) {
-      return;
-    }
-
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / carouselWidth);
-    const nextFocus = FOCUS_OPTIONS[nextIndex]?.value;
-    if (nextFocus && nextFocus !== activeFocus) {
-      setActiveFocus(nextFocus);
-    }
-  };
 
   return (
     <ScreenShell headerVariant="plain" refresh={refresh} title="Balance">
-      <View
-        onLayout={(event) => setCarouselWidth(event.nativeEvent.layout.width)}
-        style={styles.carouselViewport}
-      >
-        <ScrollView
-          ref={carouselRef}
-          decelerationRate="fast"
-          horizontal
-          onMomentumScrollEnd={handleCarouselMomentumEnd}
-          pagingEnabled
-          scrollEventThrottle={16}
-          snapToAlignment="start"
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={carouselWidth > 0 ? carouselWidth : undefined}
-          style={styles.carousel}
-        >
-          <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <BalanceFocusCard
-              netBalanceMinor={overview.summary.netBalanceMinor}
-              periodContextLabel={periodContextLabel}
-              periodChangeMinor={balanceSummary.deltaMinor}
-              totalIOweMinor={overview.summary.totalIOweMinor}
-              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
-              updatedAtLabel={overview.updatedAtLabel}
-            />
-          </View>
-
-          <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <ProjectionForecastCard
-              currentBalanceMinor={overview.summary.netBalanceMinor}
-              impactMinor={overview.projection.impactMinor}
-              onSegmentPress={(filter) => pushRoute(router, transactionFilterHref(filter))}
-              pendingCount={overview.projection.pendingCount}
-              pendingIncomingMinor={overview.projection.pendingIncomingMinor}
-              pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}
-              projectedBalanceMinor={overview.projection.projectedNetBalanceMinor}
-              style={styles.focusCard}
-              totalIOweMinor={overview.summary.totalIOweMinor}
-              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
-            />
-          </View>
-
-          <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <PeopleFocusCard
-              people={sortedPeople}
-              periodContextLabel={periodContextLabel}
-              periodLabel={currentPeriod.labels.current}
-            />
-          </View>
-
-          <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <CategoriesFocusCard
-              categories={sortedCategories}
-              periodContextLabel={periodContextLabel}
-              periodLabel={currentPeriod.labels.current}
-            />
-          </View>
-
-          <View style={[styles.carouselPage, { width: carouselWidth }]}>
-            <SettlementsFocusCard
-              activeCount={currentPeriod.settlements.activeCount}
-              changeRatio={currentPeriod.settlements.changeRatio}
-              movementCount={currentPeriod.settlements.movementCount}
-              periodContextLabel={periodContextLabel}
-              periodLabel={currentPeriod.labels.current}
-              resolvedMinor={currentPeriod.settlements.resolvedMinor}
-              savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
-            />
-          </View>
-        </ScrollView>
-      </View>
-
-      <CarouselDots activeFocus={activeFocus} onChange={setActiveFocus} />
-
       {activeFocus === 'balance' ? (
         <BalanceDetail
           currentPeriod={currentPeriod}
@@ -1446,13 +1638,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xs,
   },
   focusCard: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.hairline,
     gap: theme.spacing.sm,
     height: FOCUS_CARD_HEIGHT,
   },
   balanceFocusCard: {
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    paddingTop: theme.spacing.xl,
+    gap: theme.spacing.sm,
   },
   balanceHomeBody: {
     alignItems: 'center',
@@ -1460,13 +1652,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: 'center',
     width: '100%',
-  },
-  homeBalanceLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 20,
-    textAlign: 'center',
   },
   homeBalanceAmount: {
     color: theme.colors.text,
@@ -1504,52 +1689,40 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 19,
   },
-  cardHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  cardCharacter: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.large,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-  },
-  cardCharacterFace: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  cardHeaderCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  cardTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    lineHeight: 23,
-  },
-  cardSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
   cardEyebrow: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '800',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
+  },
+  focusCardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+    minHeight: 30,
+  },
+  focusCardTitle: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    lineHeight: 24,
+    minWidth: 0,
+  },
+  focusCardContextPill: {
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  focusCardContextText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
   },
   cardMeta: {
     color: theme.colors.textMuted,

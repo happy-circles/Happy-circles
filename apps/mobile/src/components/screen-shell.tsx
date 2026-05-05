@@ -111,8 +111,7 @@ export function ScreenShell({
     contentMode === 'full' ? styles.contentWidthFull : null,
     contentWidthStyle,
   ];
-  const shouldPinHeader =
-    shouldUseScroll && pinHeaderDuringRefresh && refresh?.contentOffsetEnabled === true;
+  const shouldPinHeader = shouldUseScroll && pinHeaderDuringRefresh && Boolean(refresh);
   const pinnedHeaderNode =
     shouldPinHeader && refreshPinnedHeaderTitle && headerVisible ? (
       <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>

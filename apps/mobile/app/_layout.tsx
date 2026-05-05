@@ -47,7 +47,7 @@ import {
 import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
 import { isAuthRouteTransitionHoldActive } from '@/lib/auth-route-transition-hold';
 import {
-  beginHomeEntryHandoff,
+  beginHomeEntryHandoffAfterScrollReset,
   getHomeEntryReadyVersion,
   subscribeHomeEntryHandoff,
   subscribeHomeEntryReady,
@@ -87,6 +87,8 @@ const LAUNCH_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const LAUNCH_AVATAR_EDIT_PENCIL_SIZE = 32;
 const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
 const HOME_ENTRY_SPIN_MS = 360;
+const HOME_ENTRY_SOURCE_CENTER_MS = 260;
+const HOME_ENTRY_SOURCE_CENTER_THRESHOLD = 18;
 const HOME_ENTRY_SUCCESS_MS = 160;
 const HOME_ENTRY_ROUTE_SETTLE_MS = 80;
 const HOME_ENTRY_LAND_MS = 560;
@@ -401,15 +403,14 @@ function LaunchIntroOverlay({
   const segments = useSegments();
   const targets = useLaunchIntroTargets();
   const { height, width } = useWindowDimensions();
-  const targetPreference: LaunchTargetPreference =
-    session.status !== 'loading' &&
-    session.status !== 'signed_out' &&
-    session.status !== 'signed_in_locked' &&
-    !session.setupState.requiredComplete
+  const isAuthSettledAwayFromHome =
+    session.status === 'signed_out' || session.status === 'signed_in_locked';
+  const isSignedInRouteCandidate = !isAuthSettledAwayFromHome && session.status !== 'loading';
+  const targetPreference: LaunchTargetPreference = isAuthSettledAwayFromHome
+    ? 'identity'
+    : isSignedInRouteCandidate && !session.setupState.requiredComplete
       ? 'identityAvatar'
-      : session.status !== 'loading' &&
-          session.status !== 'signed_out' &&
-          session.status !== 'signed_in_locked' &&
+      : isSignedInRouteCandidate &&
           session.accountAccessState === 'active' &&
           session.profileCompletionState === 'complete'
         ? 'homeHeader'
@@ -419,8 +420,7 @@ function LaunchIntroOverlay({
             ? 'homeHeader'
             : String(segments[0] ?? '') === 'join' ||
                 String(segments[0] ?? '') === 'invite' ||
-                String(segments[0] ?? '') === 'reset-password' ||
-                String(segments[0] ?? '') === '(auth)'
+                String(segments[0] ?? '') === 'reset-password'
               ? 'identity'
               : 'none';
   const target =
@@ -893,6 +893,7 @@ function HomeEntryHandoffOverlay({
   const latestHomeTargetRef = useRef<LaunchIntroTargetSnapshot | null>(homeTarget);
   const latestSourceTargetRef = useRef<LaunchIntroTargetSnapshot | null>(currentSourceTarget);
   const entryMotion = useRef(new Animated.Value(0)).current;
+  const sourceCenterMotion = useRef(new Animated.Value(1)).current;
   const landMotion = useRef(new Animated.Value(0)).current;
   const handoffMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
@@ -910,11 +911,13 @@ function HomeEntryHandoffOverlay({
         }
 
         entryMotion.stopAnimation();
+        sourceCenterMotion.stopAnimation();
         landMotion.stopAnimation();
         handoffMotion.stopAnimation();
         reducedExitMotion.stopAnimation();
         const nextSourceTarget = latestSourceTargetRef.current;
         entryMotion.setValue(nextSourceTarget ? 1 : 0);
+        sourceCenterMotion.setValue(nextSourceTarget ? 0 : 1);
         landMotion.setValue(0);
         handoffMotion.setValue(0);
         reducedExitMotion.setValue(0);
@@ -927,23 +930,55 @@ function HomeEntryHandoffOverlay({
         setRequestReadyVersionAtStart(request.readyVersionAtStart);
         setRequestId(request.id);
 
+        const sourceCenterX = nextSourceTarget
+          ? nextSourceTarget.x + nextSourceTarget.width / 2
+          : width / 2;
+        const sourceCenterY = nextSourceTarget
+          ? nextSourceTarget.y + nextSourceTarget.height / 2
+          : height / 2;
+        const sourceNeedsCentering =
+          nextSourceTarget &&
+          (Math.abs(sourceCenterX - width / 2) > HOME_ENTRY_SOURCE_CENTER_THRESHOLD ||
+            Math.abs(sourceCenterY - height / 2) > HOME_ENTRY_SOURCE_CENTER_THRESHOLD);
+
         if (!nextSourceTarget) {
           Animated.timing(entryMotion, {
             duration: reducedMotion ? 80 : 180,
             easing: Easing.out(Easing.quad),
             toValue: 1,
             useNativeDriver: true,
-          }).start();
+          }).start(({ finished }) => {
+            if (finished) {
+              request.completeSourceCentering();
+            }
+          });
+        } else if (sourceNeedsCentering && !reducedMotion) {
+          Animated.timing(sourceCenterMotion, {
+            duration: HOME_ENTRY_SOURCE_CENTER_MS,
+            easing: Easing.out(Easing.cubic),
+            toValue: 1,
+            useNativeDriver: true,
+          }).start(({ finished }) => {
+            if (finished) {
+              request.completeSourceCentering();
+            }
+          });
+        } else {
+          sourceCenterMotion.setValue(1);
+          request.completeSourceCentering();
         }
       }),
     [
       disabled,
       entryMotion,
       handoffMotion,
+      height,
       landMotion,
       onVisibleChange,
       reducedExitMotion,
       reducedMotion,
+      sourceCenterMotion,
+      width,
     ],
   );
 
@@ -969,12 +1004,21 @@ function HomeEntryHandoffOverlay({
           return;
         }
 
+        const fadeFallbackTimer = setTimeout(() => {
+          completionTimers.delete(fadeFallbackTimer);
+          if (active) {
+            setVisible(false);
+          }
+        }, HOME_ENTRY_FADE_MS + 220);
+        completionTimers.add(fadeFallbackTimer);
         Animated.timing(handoffMotion, {
           duration: HOME_ENTRY_FADE_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
           useNativeDriver: true,
         }).start(() => {
+          clearTimeout(fadeFallbackTimer);
+          completionTimers.delete(fadeFallbackTimer);
           if (active) {
             setVisible(false);
           }
@@ -1128,20 +1172,38 @@ function HomeEntryHandoffOverlay({
 
   const activeTarget = landingTargetLocked ? landingTarget : homeTarget;
   const visualSourceTarget = sourceTarget ?? activeTarget;
-  const sourceCenterX = sourceTarget ? sourceTarget.x + sourceTarget.width / 2 : width / 2;
-  const sourceCenterY = sourceTarget ? sourceTarget.y + sourceTarget.height / 2 : height / 2;
+  const sourceOriginCenterX = sourceTarget ? sourceTarget.x + sourceTarget.width / 2 : width / 2;
+  const sourceOriginCenterY = sourceTarget ? sourceTarget.y + sourceTarget.height / 2 : height / 2;
+  const sourceCenterOffsetX = sourceTarget ? width / 2 - sourceOriginCenterX : 0;
+  const sourceCenterOffsetY = sourceTarget ? height / 2 - sourceOriginCenterY : 0;
+  const centeredSourceCenterX = sourceOriginCenterX + sourceCenterOffsetX;
+  const centeredSourceCenterY = sourceOriginCenterY + sourceCenterOffsetY;
   const sourceScale = sourceTarget ? sourceTarget.stageSize / LAUNCH_LOGO_SIZE : 1;
-  const targetCenterX = activeTarget ? activeTarget.x + activeTarget.width / 2 : sourceCenterX;
-  const targetCenterY = activeTarget ? activeTarget.y + activeTarget.height / 2 : sourceCenterY;
+  const targetCenterX = activeTarget
+    ? activeTarget.x + activeTarget.width / 2
+    : centeredSourceCenterX;
+  const targetCenterY = activeTarget
+    ? activeTarget.y + activeTarget.height / 2
+    : centeredSourceCenterY;
+  const sourceCenterTranslateX = sourceCenterMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, sourceCenterOffsetX],
+  });
+  const sourceCenterTranslateY = sourceCenterMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, sourceCenterOffsetY],
+  });
   const targetScale = activeTarget ? activeTarget.stageSize / LAUNCH_LOGO_SIZE : sourceScale;
   const landTranslateX = landMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, targetCenterX - sourceCenterX],
+    outputRange: [0, targetCenterX - centeredSourceCenterX],
   });
   const landTranslateY = landMotion.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, targetCenterY - sourceCenterY],
+    outputRange: [0, targetCenterY - centeredSourceCenterY],
   });
+  const totalTranslateX = Animated.add(sourceCenterTranslateX, landTranslateX);
+  const totalTranslateY = Animated.add(sourceCenterTranslateY, landTranslateY);
   const landingScale = landMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [sourceScale, targetScale],
@@ -1212,10 +1274,10 @@ function HomeEntryHandoffOverlay({
           styles.launchLogoGroup,
           {
             height: LAUNCH_LOGO_SIZE,
-            left: sourceCenterX - LAUNCH_LOGO_SIZE / 2,
+            left: sourceOriginCenterX - LAUNCH_LOGO_SIZE / 2,
             opacity: entryMotion,
-            top: sourceCenterY - LAUNCH_LOGO_SIZE / 2,
-            transform: [{ translateX: landTranslateX }, { translateY: landTranslateY }],
+            top: sourceOriginCenterY - LAUNCH_LOGO_SIZE / 2,
+            transform: [{ translateX: totalTranslateX }, { translateY: totalTranslateY }],
             width: LAUNCH_LOGO_SIZE,
           },
         ]}
@@ -1677,14 +1739,13 @@ function SessionRouteGuard() {
     async function syncRoutes() {
       const currentRootSegment = String(segments[0] ?? '');
       const isRootRoute = currentRootSegment === '';
-      const inAuthGroup = currentRootSegment === '(auth)';
       const isSetupAccountRoute = currentRootSegment === 'setup-account';
       const isInviteLinkRoute = currentRootSegment === 'invite';
       const isJoinRoute = currentRootSegment === 'join';
       const hasJoinToken = isJoinRoute && segments.length > 1;
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
-      const isPublicSignedOutRoute = inAuthGroup || isPublicInviteRoute || isResetPasswordRoute;
+      const isPublicSignedOutRoute = isPublicInviteRoute || isResetPasswordRoute;
       const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
       const isQaPreviewRoute = __DEV__ && rawPreview === 'true';
       const isAuthRouteTransitionHeld =
@@ -1709,17 +1770,9 @@ function SessionRouteGuard() {
         return;
       }
 
-      if (status === 'signed_in_untrusted') {
-        if (!isSetupAccountRoute && !isResetPasswordRoute && !isPublicInviteRoute && !cancelled) {
-          returnToRoute(router, buildSetupAccountHref('security'));
-        }
-        return;
-      }
-
       const pendingIntent = await readPendingInviteIntent();
       const inviteAwareHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : null;
       const joinRootHref: Href = '/join';
-      const homeHref: Href = '/home';
 
       if (accountAccessState === 'needs_invite') {
         if (!isJoinRoute && !cancelled) {
@@ -1763,27 +1816,16 @@ function SessionRouteGuard() {
         !isQaPreviewRoute &&
         !cancelled
       ) {
-        beginHomeEntryHandoff();
+        await beginHomeEntryHandoffAfterScrollReset();
+        if (cancelled) {
+          return;
+        }
         returnToRoute(router, '/home');
         return;
       }
 
-      const nextSignedInHref =
-        accountAccessState === 'active'
-          ? profileCompletionState === 'complete'
-            ? (inviteAwareHref ?? homeHref)
-            : buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
-          : (inviteAwareHref ?? joinRootHref);
-
       if (isResetPasswordRoute) {
         return;
-      }
-
-      if (inAuthGroup && !cancelled) {
-        if (nextSignedInHref === '/home') {
-          beginHomeEntryHandoff();
-        }
-        returnToRoute(router, nextSignedInHref);
       }
     }
 
@@ -1836,7 +1878,6 @@ function RootNavigator() {
         }}
       >
         <Stack.Screen name="(tabs)" dangerouslySingular options={{ animation: 'none' }} />
-        <Stack.Screen name="advanced/audit" dangerouslySingular />
         <Stack.Screen
           name="activity"
           dangerouslySingular
@@ -1848,10 +1889,10 @@ function RootNavigator() {
             presentation: 'transparentModal',
           }}
         />
-        <Stack.Screen name="balance/analytics" dangerouslySingular />
         <Stack.Screen name="balance/index" dangerouslySingular />
+        <Stack.Screen name="categories" dangerouslySingular />
+        <Stack.Screen name="category/[category]" dangerouslySingular />
         <Stack.Screen name="invite/[token]" dangerouslySingular options={{ animation: 'none' }} />
-        <Stack.Screen name="invite/index" dangerouslySingular options={{ animation: 'none' }} />
         <Stack.Screen
           name="join/[token]/create-account"
           dangerouslySingular
@@ -1912,7 +1953,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     left: 0,
-    padding: theme.spacing.lg,
     position: 'absolute',
     right: 0,
     top: 0,

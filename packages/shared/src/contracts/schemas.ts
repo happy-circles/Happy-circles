@@ -19,6 +19,7 @@ import {
   PROPOSAL_STATUSES,
   REQUEST_STATUSES,
   REQUEST_TYPES,
+  SUPPORT_ERROR_KINDS,
   TRANSACTION_CATEGORIES,
   TRANSACTION_SOURCE_TYPES,
   TRANSACTION_TYPES,
@@ -54,7 +55,14 @@ export const accountInviteChannelSchema = z.enum(ACCOUNT_INVITE_CHANNELS);
 export const peopleTargetStatusSchema = z.enum(PEOPLE_TARGET_STATUSES);
 export const analyticsEventNameSchema = z.enum(ANALYTICS_EVENT_NAMES);
 export const analyticsScreenNameSchema = z.enum(ANALYTICS_SCREEN_NAMES);
+export const supportErrorKindSchema = z.enum(SUPPORT_ERROR_KINDS);
 const analyticsMetadataValueSchema = z.union([
+  z.string().trim().max(120),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+]);
+const supportMetadataValueSchema = z.union([
   z.string().trim().max(120),
   z.number().finite(),
   z.boolean(),
@@ -93,6 +101,38 @@ export const recordProductEventSchema = z.object({
   occurredAt: z.string().datetime({ offset: true }),
   screenName: analyticsScreenNameSchema.nullable().optional(),
   metadata: analyticsMetadataSchema.default({}),
+});
+
+export const supportErrorMetadataSchema = z
+  .object({
+    action: supportMetadataValueSchema.optional(),
+    functionName: supportMetadataValueSchema.optional(),
+    operation: supportMetadataValueSchema.optional(),
+    reason: supportMetadataValueSchema.optional(),
+    result: supportMetadataValueSchema.optional(),
+    source: supportMetadataValueSchema.optional(),
+    status: supportMetadataValueSchema.optional(),
+  })
+  .partial()
+  .strict();
+
+export const reportSupportErrorSchema = z.object({
+  supportId: z
+    .string()
+    .trim()
+    .regex(/^HC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/),
+  kind: supportErrorKindSchema,
+  requestId: z.string().trim().min(1).max(128).nullable().optional(),
+  errorCode: z.string().trim().min(1).max(80).nullable().optional(),
+  errorMessage: z.string().trim().min(1).max(240),
+  functionName: z.string().trim().min(1).max(80).nullable().optional(),
+  screenName: analyticsScreenNameSchema.nullable().optional(),
+  route: z.string().trim().min(1).max(120).nullable().optional(),
+  platform: z.string().trim().min(1).max(40),
+  appVersion: z.string().trim().min(1).max(80).nullable().optional(),
+  fatal: z.boolean().default(false),
+  occurredAt: z.string().datetime({ offset: true }),
+  metadata: supportErrorMetadataSchema.default({}),
 });
 
 export const requestAccountDeletionSchema = z.object({

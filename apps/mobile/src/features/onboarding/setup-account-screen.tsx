@@ -877,7 +877,7 @@ export function SetupAccountScreen() {
                 session.setupState.biometricsEligible
                   ? session.biometricLabel
                   : session.biometricAvailable
-                    ? 'Primero valida el telefono'
+                    ? 'Primero valida este dispositivo'
                     : 'No disponible'
               }
               title="Biometria"

@@ -9,7 +9,7 @@ function firstNonEmpty(...values: readonly (string | undefined)[]): string {
 const env = process.env;
 const appWebOrigin = env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
 const authRedirectMode = env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
-const appLinkPathPrefixes = ['/invite', '/join', '/reset-password', '/setup-account', '/sign-in'];
+const appLinkPathPrefixes = ['/invite/', '/join', '/reset-password', '/setup-account'];
 const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
 const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '1';
 const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '1', 10);

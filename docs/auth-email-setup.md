@@ -71,14 +71,12 @@ In `Authentication -> URL Configuration`, allow at least these redirects:
 
 - `https://app.happy-circles.com/reset-password`
 - `https://app.happy-circles.com/setup-account`
-- `https://app.happy-circles.com/sign-in`
 - `https://app.happy-circles.com/join`
 - `https://app.happy-circles.com/join/*`
-- `https://app.happy-circles.com/invite`
 - `https://app.happy-circles.com/invite/*`
+- `happycircles://join`
 - `happycircles://reset-password`
 - `happycircles://setup-account`
-- `happycircles://sign-in`
 
 If you still test with Expo development URLs, keep those temporary development redirects too.
 

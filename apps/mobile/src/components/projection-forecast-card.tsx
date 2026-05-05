@@ -1,6 +1,6 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -57,13 +57,19 @@ type BarDef = {
 };
 
 // ── Constants ────────────────────────────────────────────────────
-const CHART_H = 120;
+const CHART_H = 100;
 const BAR_W = 34;
 const GAP = 26;
 const DIVIDER_GAP = 34;
+const LABEL_W = 64;
+const FORECAST_ZONE_EXTRA_W = 16;
 const FORECAST_START = 3; // index where forecast section begins
-const DASH_PATTERN = '4,4';
+const DASH_LENGTH = 4;
 const DASH_STROKE_WIDTH = 1.25;
+const BASE_SVG_W = BAR_W * 6 + GAP * 4 + DIVIDER_GAP;
+const LABEL_EDGE_INSET = Math.max(0, LABEL_W / 2 - BAR_W / 2);
+const CHART_EDGE_END = Math.max(LABEL_EDGE_INSET, FORECAST_ZONE_EXTRA_W);
+const CHART_OUTER_W = BASE_SVG_W + LABEL_EDGE_INSET + CHART_EDGE_END;
 
 export function ProjectionForecastCard({
   currentBalanceMinor,
@@ -77,9 +83,30 @@ export function ProjectionForecastCard({
   totalIOweMinor,
   totalOwedToMeMinor,
 }: ProjectionForecastCardProps) {
+  const [chartAvailableWidth, setChartAvailableWidth] = useState(0);
   const hasImpact = pendingCount > 0;
   const impactTone = impactMinor > 0 ? 'positive' : impactMinor < 0 ? 'negative' : 'neutral';
   const pendingLabel = `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}`;
+  const chartScale = chartAvailableWidth > 0 ? Math.min(1, chartAvailableWidth / CHART_OUTER_W) : 1;
+  const chartH = CHART_H * chartScale;
+  const barW = BAR_W * chartScale;
+  const gap = GAP * chartScale;
+  const dividerGap = DIVIDER_GAP * chartScale;
+  const labelW = LABEL_W * chartScale;
+  const chartInsetStart = LABEL_EDGE_INSET * chartScale;
+  const chartInsetEnd = CHART_EDGE_END * chartScale;
+  const dashPattern = `${DASH_LENGTH * chartScale},${DASH_LENGTH * chartScale}`;
+  const dashStrokeWidth = DASH_STROKE_WIDTH * chartScale;
+  const labelIconSize = 12 * chartScale;
+  const labelTextSize = 10 * chartScale;
+  const labelTextLineHeight = 12 * chartScale;
+
+  function handleChartContentLayout(event: LayoutChangeEvent) {
+    const nextWidth = Math.max(0, event.nativeEvent.layout.width);
+    setChartAvailableWidth((currentWidth) =>
+      Math.abs(currentWidth - nextWidth) < 0.5 ? currentWidth : nextWidth,
+    );
+  }
 
   // ── Build bars ─────────────────────────────────────────────────
   const bars: BarDef[] = [
@@ -162,7 +189,7 @@ export function ProjectionForecastCard({
   const range = maxV - minV || 1;
 
   function yPx(v: number): number {
-    return CHART_H * (1 - (v - minV) / range);
+    return chartH * (1 - (v - minV) / range);
   }
 
   const zeroY = yPx(0);
@@ -171,12 +198,13 @@ export function ProjectionForecastCard({
   const xPositions: number[] = [];
   let cx = 0;
   for (let i = 0; i < bars.length; i++) {
-    if (i === FORECAST_START) cx += DIVIDER_GAP;
-    else if (i > 0) cx += GAP;
+    if (i === FORECAST_START) cx += dividerGap;
+    else if (i > 0) cx += gap;
     xPositions.push(cx);
-    cx += BAR_W;
+    cx += barW;
   }
   const svgW = cx;
+  const chartOuterW = svgW + chartInsetStart + chartInsetEnd;
 
   // ── Connectors ─────────────────────────────────────────────────
   type Connector = { x1: number; x2: number; y: number };
@@ -184,14 +212,14 @@ export function ProjectionForecastCard({
 
   // 1. Te deben → Debes
   connectors.push({
-    x1: xPositions[0] + BAR_W,
+    x1: xPositions[0] + barW,
     x2: xPositions[1],
     y: yPx(totalOwedToMeMinor),
   });
 
   // 2. Debes → Balance
   connectors.push({
-    x1: xPositions[1] + BAR_W,
+    x1: xPositions[1] + barW,
     x2: xPositions[2],
     y: yPx(currentBalanceMinor),
   });
@@ -199,7 +227,7 @@ export function ProjectionForecastCard({
   // 3. Balance → First Forecast
   if (bars.length > 3) {
     connectors.push({
-      x1: xPositions[2] + BAR_W,
+      x1: xPositions[2] + barW,
       x2: xPositions[3],
       y: yPx(currentBalanceMinor),
     });
@@ -210,7 +238,7 @@ export function ProjectionForecastCard({
   const idxDeberas = bars.findIndex((b) => b.label === 'Deberás');
   if (idxTeDeberan !== -1 && idxDeberas !== -1) {
     connectors.push({
-      x1: xPositions[idxTeDeberan] + BAR_W,
+      x1: xPositions[idxTeDeberan] + barW,
       x2: xPositions[idxDeberas],
       y: yPx(currentBalanceMinor + pendingIncomingMinor),
     });
@@ -220,37 +248,32 @@ export function ProjectionForecastCard({
   const proyectadoIdx = bars.findIndex((b) => b.label === 'Proyectado');
   if (proyectadoIdx > 3) {
     connectors.push({
-      x1: xPositions[proyectadoIdx - 1] + BAR_W,
+      x1: xPositions[proyectadoIdx - 1] + barW,
       x2: xPositions[proyectadoIdx],
       y: yPx(projectedBalanceMinor),
     });
   }
 
   // ── Divider X position (exactly between Balance right edge and first forecast bar) ──
-  const balanceRightEdge = xPositions[2] + BAR_W;
+  const balanceRightEdge = xPositions[2] + barW;
   const firstForecastLeft = xPositions[FORECAST_START] ?? xPositions[bars.length - 1];
   const dividerX = (balanceRightEdge + firstForecastLeft) / 2;
 
   return (
-    <SurfaceCard padding="none" style={[styles.card, style]} variant="elevated">
+    <SurfaceCard padding="none" style={[styles.card, style]}>
       <View style={styles.body}>
+        <View style={styles.cardHeader}>
+          <Text numberOfLines={1} style={styles.cardTitle}>
+            Proyeccion
+          </Text>
+          <View style={styles.cardContextPill}>
+            <Text numberOfLines={1} style={styles.cardContextText}>
+              {hasImpact ? pendingLabel : 'sin pendientes'}
+            </Text>
+          </View>
+        </View>
         <View style={styles.summaryRow}>
           <View style={styles.projectedStack}>
-            <View style={styles.projectionHeader}>
-              <View style={styles.cardCharacter}>
-                <View style={styles.cardCharacterFace}>
-                  <Ionicons color={theme.colors.primary} name="trending-up-outline" size={24} />
-                </View>
-              </View>
-              <View style={styles.headerCopy}>
-                <Text numberOfLines={1} style={styles.cardTitle}>
-                  Proyeccion
-                </Text>
-                <Text numberOfLines={2} style={styles.cardSubtitle}>
-                  {hasImpact ? `${pendingLabel} por simular` : 'Sin pendientes por simular'}
-                </Text>
-              </View>
-            </View>
             <View style={styles.projectedMetaRow}>
               <Text
                 adjustsFontSizeToFit
@@ -298,16 +321,11 @@ export function ProjectionForecastCard({
               ) : null}
             </View>
           </View>
-          {hasImpact ? (
-            <View style={styles.pendingChip}>
-              <Text style={styles.pendingChipText}>{pendingLabel}</Text>
-            </View>
-          ) : null}
         </View>
 
         {/* Chart content with forecast zone background */}
-        <View style={styles.chartContent}>
-          <View style={{ alignSelf: 'center', width: svgW, position: 'relative' }}>
+        <View onLayout={handleChartContentLayout} style={styles.chartContent}>
+          <View style={{ alignSelf: 'center', width: chartOuterW, position: 'relative' }}>
             {/* Forecast zone background matches projected outcome */}
             <View
               style={[
@@ -317,22 +335,42 @@ export function ProjectionForecastCard({
                     projectedBalanceMinor >= 0
                       ? `${theme.colors.success}10`
                       : `${theme.colors.danger}10`,
-                  left: dividerX,
-                  width: svgW - dividerX + 16,
+                  borderRadius: 12 * chartScale,
+                  bottom: -8 * chartScale,
+                  left: chartInsetStart + dividerX,
+                  top: -4 * chartScale,
+                  width: svgW - dividerX + FORECAST_ZONE_EXTRA_W * chartScale,
                 },
               ]}
             />
 
             {/* Section labels */}
-            <View style={styles.sectionLabelsRow}>
-              <Text style={[styles.sectionLabel, { width: dividerX, textAlign: 'center' }]}>
+            <View style={[styles.sectionLabelsRow, { marginLeft: chartInsetStart, width: svgW }]}>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  {
+                    fontSize: labelTextSize,
+                    letterSpacing: 0.8 * chartScale,
+                    lineHeight: labelTextLineHeight,
+                    width: dividerX,
+                    textAlign: 'center',
+                  },
+                ]}
+              >
                 Hoy
               </Text>
               <Text
                 style={[
                   styles.sectionLabel,
                   styles.sectionLabelForecast,
-                  { width: svgW - dividerX, textAlign: 'center' },
+                  {
+                    fontSize: labelTextSize,
+                    letterSpacing: 0.8 * chartScale,
+                    lineHeight: labelTextLineHeight,
+                    width: svgW - dividerX,
+                    textAlign: 'center',
+                  },
                 ]}
               >
                 Proyección
@@ -340,12 +378,21 @@ export function ProjectionForecastCard({
             </View>
 
             {/* SVG Chart */}
-            <View style={styles.chartWrapper}>
-              <Svg height={CHART_H} width={svgW}>
+            <View
+              style={[
+                styles.chartWrapper,
+                {
+                  paddingBottom: 36 * chartScale,
+                  paddingTop: 8 * chartScale,
+                  width: chartOuterW,
+                },
+              ]}
+            >
+              <Svg height={chartH} style={{ marginLeft: chartInsetStart }} width={svgW}>
                 {/* Zero line */}
                 <Line
                   stroke={theme.colors.border}
-                  strokeWidth={1}
+                  strokeWidth={chartScale}
                   x1={0}
                   x2={svgW}
                   y1={zeroY}
@@ -357,8 +404,8 @@ export function ProjectionForecastCard({
                   <Line
                     key={`conn-${i}`}
                     stroke={theme.colors.muted}
-                    strokeDasharray={DASH_PATTERN}
-                    strokeWidth={DASH_STROKE_WIDTH}
+                    strokeDasharray={dashPattern}
+                    strokeWidth={dashStrokeWidth}
                     x1={c.x1}
                     x2={c.x2}
                     y1={c.y}
@@ -369,12 +416,12 @@ export function ProjectionForecastCard({
                 {/* Forecast divider */}
                 <Line
                   stroke={theme.colors.muted}
-                  strokeDasharray={DASH_PATTERN}
-                  strokeWidth={DASH_STROKE_WIDTH}
+                  strokeDasharray={dashPattern}
+                  strokeWidth={dashStrokeWidth}
                   x1={dividerX}
                   x2={dividerX}
                   y1={0}
-                  y2={CHART_H}
+                  y2={chartH}
                 />
 
                 {/* Bars */}
@@ -382,7 +429,9 @@ export function ProjectionForecastCard({
                   const x = xPositions[i];
                   const top = yPx(bar.valTop);
                   const bottom = yPx(bar.valBottom);
-                  const h = Math.max(bottom - top, 3);
+                  const h = Math.max(bottom - top, 3 * chartScale);
+                  const hitHeight = Math.max(h + 16 * chartScale, 36);
+                  const hitWidth = Math.max(barW + 18 * chartScale, 32);
                   const fill = bar.isForecast ? `${bar.color}30` : bar.color;
 
                   return (
@@ -392,11 +441,11 @@ export function ProjectionForecastCard({
                           opacity={0.64}
                           stroke={bar.color}
                           strokeLinecap="round"
-                          strokeWidth={2}
-                          x1={x + 8}
-                          x2={x + BAR_W - 8}
-                          y1={Math.max(6, Math.min(bottom, CHART_H - 6))}
-                          y2={Math.max(6, Math.min(bottom, CHART_H - 6))}
+                          strokeWidth={2 * chartScale}
+                          x1={x + 8 * chartScale}
+                          x2={x + barW - 8 * chartScale}
+                          y1={Math.max(6 * chartScale, Math.min(bottom, chartH - 6 * chartScale))}
+                          y2={Math.max(6 * chartScale, Math.min(bottom, chartH - 6 * chartScale))}
                         />
                       ) : (
                         <>
@@ -404,22 +453,22 @@ export function ProjectionForecastCard({
                             fill={fill}
                             height={h}
                             onPress={onSegmentPress ? () => onSegmentPress(bar.filter) : undefined}
-                            rx={5}
-                            ry={5}
-                            width={BAR_W}
+                            rx={5 * chartScale}
+                            ry={5 * chartScale}
+                            width={barW}
                             x={x}
                             y={top}
                           />
                           {onSegmentPress ? (
                             <Rect
                               fill="transparent"
-                              height={Math.max(h + 16, 36)}
+                              height={hitHeight}
                               onPress={() => onSegmentPress(bar.filter)}
-                              rx={8}
-                              ry={8}
-                              width={BAR_W + 18}
-                              x={x - 9}
-                              y={Math.max(top - 8, 0)}
+                              rx={8 * chartScale}
+                              ry={8 * chartScale}
+                              width={hitWidth}
+                              x={x - (hitWidth - barW) / 2}
+                              y={Math.max(top - (hitHeight - h) / 2, 0)}
                             />
                           ) : null}
                           {bar.isForecast ? (
@@ -429,12 +478,12 @@ export function ProjectionForecastCard({
                               onPress={
                                 onSegmentPress ? () => onSegmentPress(bar.filter) : undefined
                               }
-                              rx={5}
-                              ry={5}
+                              rx={5 * chartScale}
+                              ry={5 * chartScale}
                               stroke={`${bar.borderColor ?? bar.color}88`}
-                              strokeDasharray={DASH_PATTERN}
-                              strokeWidth={DASH_STROKE_WIDTH}
-                              width={BAR_W}
+                              strokeDasharray={dashPattern}
+                              strokeWidth={dashStrokeWidth}
+                              width={barW}
                               x={x}
                               y={top}
                             />
@@ -470,24 +519,36 @@ export function ProjectionForecastCard({
                       styles.labelCol,
                       onSegmentPress ? styles.labelColPressable : null,
                       {
-                        left: xPositions[i] + BAR_W / 2 - 32,
-                        top: yPx(bar.valBottom) + 14,
+                        gap: 2 * chartScale,
+                        left: chartInsetStart + xPositions[i] + barW / 2 - labelW / 2,
+                        top: yPx(bar.valBottom) + 14 * chartScale,
+                        width: labelW,
                       },
                     ]}
                   >
                     <Ionicons
                       color={bar.isForecast ? `${bar.color}99` : bar.color}
                       name={bar.icon}
-                      size={12}
+                      size={labelIconSize}
                     />
-                    <Text numberOfLines={1} style={styles.labelText}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.labelText,
+                        { fontSize: labelTextSize, lineHeight: labelTextLineHeight },
+                      ]}
+                    >
                       {bar.label}
                     </Text>
                     <Text
                       numberOfLines={1}
                       style={[
                         styles.labelValue,
-                        { color: bar.isForecast ? `${bar.color}BB` : bar.color },
+                        {
+                          color: bar.isForecast ? `${bar.color}BB` : bar.color,
+                          fontSize: labelTextSize,
+                          lineHeight: labelTextLineHeight,
+                        },
                       ]}
                     >
                       {formatCompactCop(displayValue)}
@@ -506,7 +567,7 @@ export function ProjectionForecastCard({
 const styles = StyleSheet.create({
   card: { gap: 0 },
   body: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
   },
@@ -521,44 +582,33 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     minWidth: 0,
   },
-  projectionHeader: {
-    alignItems: 'flex-start',
+  cardHeader: {
+    alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
-  },
-  cardCharacter: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.large,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-  },
-  cardCharacterFace: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
+    justifyContent: 'space-between',
+    minHeight: 30,
   },
   cardTitle: {
+    flex: 1,
     color: theme.colors.text,
     fontSize: theme.typography.title3,
     fontWeight: '800',
-    lineHeight: 23,
+    lineHeight: 24,
+    minWidth: 0,
   },
-  cardSubtitle: {
+  cardContextPill: {
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  cardContextText: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
   },
   projectedMetaRow: {
     alignItems: 'center',
@@ -572,19 +622,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.2,
     lineHeight: 23,
-  },
-  pendingChip: {
-    backgroundColor: 'transparent',
-    borderColor: theme.colors.hairline,
-    borderWidth: 1,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  pendingChipText: {
-    color: 'rgba(26, 39, 68, 0.62)',
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
   },
   impactPill: {
     alignItems: 'center',
@@ -641,17 +678,12 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
   },
   forecastZone: {
-    borderRadius: 12,
-    bottom: -8,
     position: 'absolute',
-    top: -4,
   },
-  chartWrapper: { alignItems: 'center', paddingTop: 10, paddingBottom: 42, position: 'relative' },
+  chartWrapper: { position: 'relative' },
   labelCol: {
     alignItems: 'center',
-    gap: 2,
     position: 'absolute',
-    width: 64,
   },
   labelColPressable: {
     borderRadius: theme.radius.tiny,

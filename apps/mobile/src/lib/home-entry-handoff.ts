@@ -4,9 +4,11 @@ import {
 } from '@/lib/identity-flow-scroll';
 
 export interface HomeEntryHandoffRequest {
+  readonly completeSourceCentering: () => void;
   readonly id: number;
   readonly readyVersionAtStart: number;
   readonly startedAt: number;
+  readonly waitForSourceCentering: boolean;
 }
 
 type HomeEntryHandoffListener = (request: HomeEntryHandoffRequest) => void;
@@ -16,24 +18,69 @@ let nextRequestId = 0;
 let readyVersion = 0;
 const listeners = new Set<HomeEntryHandoffListener>();
 const readyListeners = new Set<HomeEntryReadyListener>();
+const HOME_ENTRY_SOURCE_CENTER_FALLBACK_MS = 420;
+const HOME_ENTRY_SOURCE_CENTER_SETTLE_FRAMES = 1;
 
-export function beginHomeEntryHandoff(options?: { readonly skipScrollReset?: boolean }) {
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+export async function beginHomeEntryHandoff(options?: {
+  readonly skipScrollReset?: boolean;
+  readonly waitForSourceCentering?: boolean;
+}) {
   if (!options?.skipScrollReset) {
     resetIdentityFlowScrollPosition();
   }
 
+  let sourceCenteringSettled = false;
+  let completeSourceCentering = () => {
+    sourceCenteringSettled = true;
+  };
+  const sourceCenteringPromise = options?.waitForSourceCentering
+    ? new Promise<void>((resolve) => {
+        completeSourceCentering = () => {
+          if (sourceCenteringSettled) {
+            return;
+          }
+
+          sourceCenteringSettled = true;
+          resolve();
+        };
+      })
+    : Promise.resolve();
   const request = {
+    completeSourceCentering,
     id: ++nextRequestId,
     readyVersionAtStart: readyVersion,
     startedAt: Date.now(),
+    waitForSourceCentering: Boolean(options?.waitForSourceCentering),
   };
 
   listeners.forEach((listener) => listener(request));
+
+  if (!options?.waitForSourceCentering) {
+    return;
+  }
+
+  await Promise.race([sourceCenteringPromise, wait(HOME_ENTRY_SOURCE_CENTER_FALLBACK_MS)]);
+
+  for (let frame = 0; frame < HOME_ENTRY_SOURCE_CENTER_SETTLE_FRAMES; frame += 1) {
+    await waitForNextFrame();
+  }
 }
 
 export async function beginHomeEntryHandoffAfterScrollReset() {
   await resetIdentityFlowScrollPositionForHandoff();
-  beginHomeEntryHandoff({ skipScrollReset: true });
+  await beginHomeEntryHandoff({ skipScrollReset: true, waitForSourceCentering: true });
 }
 
 export function subscribeHomeEntryHandoff(listener: HomeEntryHandoffListener) {

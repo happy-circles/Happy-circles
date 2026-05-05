@@ -27,7 +27,7 @@ import {
   clearAuthRouteTransitionHold,
 } from '@/lib/auth-route-transition-hold';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
+import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import {
   triggerIdentityErrorHaptic,
   triggerIdentityImpactHaptic,
@@ -419,6 +419,7 @@ function AccountSignInEntry({
       return undefined;
     }
 
+    let cancelled = false;
     const destination = pendingToken
       ? ({
           pathname: '/join/[token]',
@@ -431,14 +432,21 @@ function AccountSignInEntry({
           : ('/join' as Href);
 
     successNavigationTimerRef.current = setTimeout(() => {
-      clearAuthRouteTransitionHold();
-      if (destination === '/home') {
-        beginHomeEntryHandoff();
-      }
-      returnToRoute(router, destination);
+      successNavigationTimerRef.current = null;
+      void (async () => {
+        clearAuthRouteTransitionHold();
+        if (destination === '/home') {
+          await beginHomeEntryHandoffAfterScrollReset();
+        }
+        if (cancelled) {
+          return;
+        }
+        returnToRoute(router, destination);
+      })();
     }, AUTH_SUCCESS_NAVIGATION_DELAY_MS);
 
     return () => {
+      cancelled = true;
       if (successNavigationTimerRef.current) {
         clearTimeout(successNavigationTimerRef.current);
         successNavigationTimerRef.current = null;
@@ -1103,10 +1111,10 @@ function AccountSignInEntry({
             onPress: showSignInMode,
           }
         : {
-          icon: 'key-outline',
-          label: 'Volver a invitacion',
-          onPress: exitToInviteEntry,
-        };
+            icon: 'key-outline',
+            label: 'Volver a invitacion',
+            onPress: exitToInviteEntry,
+          };
 
   const authPrimaryAction = (
     <IdentityFlowPrimaryAction
@@ -1286,152 +1294,152 @@ function AccountSignInEntry({
         tokenContent
       ) : (
         <View style={styles.rememberedMain}>
-        {authOptionsMounted ? (
-          <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
-            <IdentityFlowForm>
-              <IdentityFlowField
-                error={authErrors.email ?? null}
-                icon="mail"
-                label="Correo"
-                status={
-                  authErrors.email
-                    ? 'danger'
-                    : ((locksRememberedEmail ? account?.email : email) ?? '').trim().length > 0
-                      ? 'success'
-                      : 'idle'
-                }
-              >
-                <IdentityFlowTextInput
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  editable={!locksRememberedEmail}
-                  keyboardType="email-address"
-                  onBlur={validateEmailField}
-                  onChangeText={handleEmailChange}
-                  placeholder="tu@correo.com"
-                  placeholderTextColor={theme.colors.muted}
-                  value={email}
-                />
-              </IdentityFlowField>
-
-              {isRecovery && recoveryLinkSent ? (
-                <View style={styles.recoveryCodeBlock}>
-                  <Text style={styles.recoveryCodeHelp}>
-                    Abre el enlace o pega el codigo de 8 digitos del correo.
-                  </Text>
-                  <OtpCodeInput
-                    disabled={authBusy}
-                    hasError={recoveryCode.length > 0 && !recoveryCodeValid}
-                    onChangeText={handleRecoveryCodeChange}
-                    value={recoveryCode}
+          {authOptionsMounted ? (
+            <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
+              <IdentityFlowForm>
+                <IdentityFlowField
+                  error={authErrors.email ?? null}
+                  icon="mail"
+                  label="Correo"
+                  status={
+                    authErrors.email
+                      ? 'danger'
+                      : ((locksRememberedEmail ? account?.email : email) ?? '').trim().length > 0
+                        ? 'success'
+                        : 'idle'
+                  }
+                >
+                  <IdentityFlowTextInput
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    editable={!locksRememberedEmail}
+                    keyboardType="email-address"
+                    onBlur={validateEmailField}
+                    onChangeText={handleEmailChange}
+                    placeholder="tu@correo.com"
+                    placeholderTextColor={theme.colors.muted}
+                    value={email}
                   />
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={authBusy || recoveryResendSeconds > 0}
-                    onPress={
-                      authBusy || recoveryResendSeconds > 0
-                        ? undefined
-                        : () => void handlePasswordRecovery()
-                    }
-                    style={({ pressed }) => [
-                      styles.recoveryResendButton,
-                      pressed && !authBusy && recoveryResendSeconds === 0 ? styles.pressed : null,
-                      authBusy || recoveryResendSeconds > 0 ? styles.actionDisabled : null,
-                    ]}
-                  >
-                    <Text style={styles.recoveryResendText}>
-                      {recoveryResendSeconds > 0
-                        ? `Reenviar enlace en ${recoveryResendSeconds}s`
-                        : 'Reenviar enlace'}
+                </IdentityFlowField>
+
+                {isRecovery && recoveryLinkSent ? (
+                  <View style={styles.recoveryCodeBlock}>
+                    <Text style={styles.recoveryCodeHelp}>
+                      Abre el enlace o pega el codigo de 8 digitos del correo.
                     </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-
-              {!isRecovery ? (
-                <View style={styles.passwordFieldGroup}>
-                  <IdentityFlowField
-                    error={authErrors.password ?? null}
-                    icon="lock-closed"
-                    label="Contrasena"
-                    status={
-                      authErrors.password ? 'danger' : password.length > 0 ? 'success' : 'idle'
-                    }
-                  >
-                    <IdentityFlowTextInput
-                      autoCapitalize="none"
-                      autoComplete="password"
-                      onBlur={validatePasswordField}
-                      onChangeText={handlePasswordChange}
-                      placeholder="Tu contrasena"
-                      placeholderTextColor={theme.colors.muted}
-                      secureTextEntry
-                      value={password}
+                    <OtpCodeInput
+                      disabled={authBusy}
+                      hasError={recoveryCode.length > 0 && !recoveryCodeValid}
+                      onChangeText={handleRecoveryCodeChange}
+                      value={recoveryCode}
                     />
-                  </IdentityFlowField>
-
-                  {showAuthOptions ? (
                     <Pressable
-                      disabled={authBusy}
-                      onPress={authBusy ? undefined : showRecoverMode}
+                      accessibilityRole="button"
+                      disabled={authBusy || recoveryResendSeconds > 0}
+                      onPress={
+                        authBusy || recoveryResendSeconds > 0
+                          ? undefined
+                          : () => void handlePasswordRecovery()
+                      }
                       style={({ pressed }) => [
-                        styles.forgotPasswordInline,
-                        !authErrors.password ? styles.forgotPasswordInlineLifted : null,
-                        pressed && !authBusy ? styles.pressed : null,
-                        authBusy ? styles.actionDisabled : null,
+                        styles.recoveryResendButton,
+                        pressed && !authBusy && recoveryResendSeconds === 0 ? styles.pressed : null,
+                        authBusy || recoveryResendSeconds > 0 ? styles.actionDisabled : null,
                       ]}
                     >
-                      <Text style={styles.forgotPasswordInlineText}>Olvide contrasena</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {authPrimaryAction}
-            </IdentityFlowForm>
-
-            {!isRecovery ? (
-              <View style={styles.authSecondaryBlock}>
-                <View style={styles.socialProviderRow}>
-                  {session.appleSignInAvailable ? (
-                    <Pressable
-                      disabled={authBusy}
-                      onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('apple'))}
-                      style={({ pressed }) => [
-                        styles.socialProviderButton,
-                        styles.appleProviderButton,
-                        pressed && !authBusy ? styles.pressed : null,
-                        authBusy ? styles.actionDisabled : null,
-                      ]}
-                    >
-                      <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
-                      <Text style={[styles.socialProviderText, styles.appleProviderText]}>
-                        {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
+                      <Text style={styles.recoveryResendText}>
+                        {recoveryResendSeconds > 0
+                          ? `Reenviar enlace en ${recoveryResendSeconds}s`
+                          : 'Reenviar enlace'}
                       </Text>
                     </Pressable>
-                  ) : null}
+                  </View>
+                ) : null}
 
-                  <Pressable
-                    disabled={authBusy}
-                    onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('google'))}
-                    style={({ pressed }) => [
-                      styles.socialProviderButton,
-                      styles.googleProviderButton,
-                      !session.appleSignInAvailable ? styles.socialProviderButtonFull : null,
-                      pressed && !authBusy ? styles.pressed : null,
-                      authBusy ? styles.actionDisabled : null,
-                    ]}
-                  >
-                    <Ionicons color={theme.colors.text} name="logo-google" size={18} />
-                    <Text style={styles.socialProviderText}>
-                      {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
-                    </Text>
-                  </Pressable>
+                {!isRecovery ? (
+                  <View style={styles.passwordFieldGroup}>
+                    <IdentityFlowField
+                      error={authErrors.password ?? null}
+                      icon="lock-closed"
+                      label="Contrasena"
+                      status={
+                        authErrors.password ? 'danger' : password.length > 0 ? 'success' : 'idle'
+                      }
+                    >
+                      <IdentityFlowTextInput
+                        autoCapitalize="none"
+                        autoComplete="password"
+                        onBlur={validatePasswordField}
+                        onChangeText={handlePasswordChange}
+                        placeholder="Tu contrasena"
+                        placeholderTextColor={theme.colors.muted}
+                        secureTextEntry
+                        value={password}
+                      />
+                    </IdentityFlowField>
+
+                    {showAuthOptions ? (
+                      <Pressable
+                        disabled={authBusy}
+                        onPress={authBusy ? undefined : showRecoverMode}
+                        style={({ pressed }) => [
+                          styles.forgotPasswordInline,
+                          !authErrors.password ? styles.forgotPasswordInlineLifted : null,
+                          pressed && !authBusy ? styles.pressed : null,
+                          authBusy ? styles.actionDisabled : null,
+                        ]}
+                      >
+                        <Text style={styles.forgotPasswordInlineText}>Olvide contrasena</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {authPrimaryAction}
+              </IdentityFlowForm>
+
+              {!isRecovery ? (
+                <View style={styles.authSecondaryBlock}>
+                  <View style={styles.socialProviderRow}>
+                    {session.appleSignInAvailable ? (
+                      <Pressable
+                        disabled={authBusy}
+                        onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('apple'))}
+                        style={({ pressed }) => [
+                          styles.socialProviderButton,
+                          styles.appleProviderButton,
+                          pressed && !authBusy ? styles.pressed : null,
+                          authBusy ? styles.actionDisabled : null,
+                        ]}
+                      >
+                        <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
+                        <Text style={[styles.socialProviderText, styles.appleProviderText]}>
+                          {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      disabled={authBusy}
+                      onPress={() => runAfterKeyboardDismiss(() => handleSocialSignIn('google'))}
+                      style={({ pressed }) => [
+                        styles.socialProviderButton,
+                        styles.googleProviderButton,
+                        !session.appleSignInAvailable ? styles.socialProviderButtonFull : null,
+                        pressed && !authBusy ? styles.pressed : null,
+                        authBusy ? styles.actionDisabled : null,
+                      ]}
+                    >
+                      <Ionicons color={theme.colors.text} name="logo-google" size={18} />
+                      <Text style={styles.socialProviderText}>
+                        {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            ) : null}
-          </Animated.View>
-        ) : null}
+              ) : null}
+            </Animated.View>
+          ) : null}
         </View>
       )}
     </IdentityFlowScreen>

@@ -11,6 +11,7 @@ import {
   startProductAnalyticsSession,
 } from '@/lib/analytics-client';
 import { getCurrentAppVersion } from '@/lib/device-trust';
+import { setSupportErrorContext } from '@/lib/support-errors';
 import { useSession } from '@/providers/session-provider';
 
 function screenNameFromSegments(segments: readonly string[]): AnalyticsScreenName {
@@ -88,6 +89,10 @@ export function ProductAnalyticsBridge() {
   const [analyticsSessionId, setAnalyticsSessionId] = useState<string | null>(null);
   const screenName = useMemo(() => screenNameFromSegments(segments), [segments]);
   const route = useMemo(() => routeFromSegments(segments), [segments]);
+
+  useEffect(() => {
+    setSupportErrorContext({ route, screenName });
+  }, [route, screenName]);
 
   useEffect(() => {
     if (!session.isSignedIn || !session.userId || !session.currentDeviceId) {

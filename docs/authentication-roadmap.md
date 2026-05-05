@@ -17,7 +17,7 @@ The mobile app already has these auth flows wired in code:
 Relevant files:
 
 - `apps/mobile/src/providers/session-provider.tsx`
-- `apps/mobile/src/features/auth/sign-in-screen.tsx`
+- `apps/mobile/src/features/invites/account-invite-entry-screen.tsx`
 - `apps/mobile/app.config.ts`
 
 Important limitation:

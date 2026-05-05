@@ -26,40 +26,37 @@ describe('app smoke checks', () => {
     );
     expect(APP_LINK_PATHS).toEqual([
       '/invite/*',
-      '/join/*',
+      '/join*',
       '/reset-password*',
       '/setup-account*',
-      '/sign-in*',
     ]);
 
     for (const routePath of [
-      ['apps', 'landing', 'app', '(app-links)', 'invite', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'invite', '[token]', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'join', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'join', '[token]', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'reset-password', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'setup-account', 'page.tsx'],
-      ['apps', 'landing', 'app', '(app-links)', 'sign-in', 'page.tsx'],
     ]) {
       expect(existsSync(join(repoRoot, ...routePath))).toBe(true);
     }
   });
 
   it('keeps invite actions free of internal labels', () => {
-    const inviteScreen = readRepoFile(
+    const inviteSheet = readRepoFile(
       'apps',
       'mobile',
       'src',
       'features',
-      'invites',
-      'invite-person-screen.tsx',
+      'home',
+      'add-person-contacts-sheet.tsx',
     );
 
-    expect(inviteScreen).not.toContain('Fallback light');
-    expect(inviteScreen).not.toContain('Receiver');
-    expect(inviteScreen).toContain('Preparando invitación...');
-    expect(inviteScreen).toContain('Ingresa un celular');
-    expect(inviteScreen).toContain('Abrir invitación');
+    expect(inviteSheet).not.toContain('Fallback light');
+    expect(inviteSheet).not.toContain('Receiver');
+    expect(inviteSheet).toContain('Invitacion a Happy Circles');
+    expect(inviteSheet).toContain('Puede recibir invitacion');
+    expect(inviteSheet).toContain('Pega un link completo o un codigo valido de invitacion.');
   });
 
   it('keeps reset-password recovery and invalid-link states separated', () => {

@@ -32,13 +32,14 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenFinalAction } from '@/components/screen-final-action';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
+import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { showBlockedActionAlert, useDelayedBusy } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useAppSnapshot, useCreateRequestMutation } from '@/lib/live-data';
 import { directionVisual } from '@/lib/direction-ui';
-import { backOrReturnTo, pushRoute } from '@/lib/navigation';
+import { backOrReturnTo } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -215,6 +216,8 @@ export function RegisterFlowScreen() {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [errors, setErrors] = useState<RegisterFormErrors>({});
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+  const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
+  const [addPersonInitialSearch, setAddPersonInitialSearch] = useState('');
   const registerScrollRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const amountInputRef = useRef<TextInput | null>(null);
@@ -233,6 +236,7 @@ export function RegisterFlowScreen() {
   const showBusyOverlay = useDelayedBusy(createRequest.isPending);
 
   const allPeople = snapshotQuery.data?.people ?? [];
+  const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const selectedPerson = allPeople.find((person) => person.userId === personId) ?? null;
   const normalizedQuery = query.trim();
   const normalizedQueryValue = normalizedQuery.toLocaleLowerCase('es-CO');
@@ -304,6 +308,17 @@ export function RegisterFlowScreen() {
           direction,
         })
       : null;
+  const addPersonTransactionContext = useMemo(() => {
+    if (amountMinor <= 0) {
+      return null;
+    }
+
+    return {
+      amountMinor,
+      description: description.trim().length > 0 ? description.trim() : null,
+      direction,
+    };
+  }, [amountMinor, description, direction]);
   const canShowForm = !snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0;
   const keyboardAwareScrollContentStyle = [
     styles.sheetScrollContent,
@@ -489,16 +504,8 @@ export function RegisterFlowScreen() {
 
   function openInviteFlow(suggestedName?: string) {
     closePersonSearch();
-    pushRoute(router, {
-      pathname: '/people',
-      params: {
-        addPerson: '1',
-        inviteeName: suggestedName?.trim() ? suggestedName.trim() : undefined,
-        amountMinor: amountMinor > 0 ? String(amountMinor) : undefined,
-        direction,
-        description: description.trim().length > 0 ? description.trim() : undefined,
-      },
-    });
+    setAddPersonInitialSearch(suggestedName?.trim() ?? '');
+    setAddPersonSheetVisible(true);
   }
 
   async function handleSave() {
@@ -935,6 +942,14 @@ export function RegisterFlowScreen() {
       </View>
 
       <LoadingOverlay title="Guardando movimiento" visible={showBusyOverlay} />
+      <AddPersonContactsSheet
+        currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
+        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+        initialSearchValue={addPersonInitialSearch}
+        onClose={() => setAddPersonSheetVisible(false)}
+        transactionContext={addPersonTransactionContext}
+        visible={addPersonSheetVisible}
+      />
     </SafeAreaView>
   );
 }

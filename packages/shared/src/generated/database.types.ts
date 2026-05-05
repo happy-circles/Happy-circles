@@ -1735,6 +1735,154 @@ export type Database = {
           },
         ]
       }
+      support_error_reports: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string
+          fatal: boolean
+          function_name: string | null
+          id: string
+          kind: string
+          metadata_json: Json
+          occurred_at: string
+          platform: string
+          request_id: string | null
+          route: string | null
+          screen_name: string | null
+          support_id: string
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message: string
+          fatal?: boolean
+          function_name?: string | null
+          id?: string
+          kind: string
+          metadata_json?: Json
+          occurred_at: string
+          platform: string
+          request_id?: string | null
+          route?: string | null
+          screen_name?: string | null
+          support_id: string
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string
+          fatal?: boolean
+          function_name?: string | null
+          id?: string
+          kind?: string
+          metadata_json?: Json
+          occurred_at?: string
+          platform?: string
+          request_id?: string | null
+          route?: string | null
+          screen_name?: string | null
+          support_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_views: {
+        Row: {
+          created_at: string
+          notification_key: string
+          notification_kind: string
+          notification_status: string
+          source_item_id: string
+          updated_at: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          created_at?: string
+          notification_key: string
+          notification_kind: string
+          notification_status: string
+          source_item_id: string
+          updated_at?: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          created_at?: string
+          notification_key?: string
+          notification_kind?: string
+          notification_status?: string
+          source_item_id?: string
+          updated_at?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       public_invite_preview_rate_limits: {
         Row: {
           client_fingerprint_hash: string
@@ -3399,6 +3547,25 @@ export type Database = {
         }
         Returns: string
       }
+      record_support_error_report: {
+        Args: {
+          p_actor_user_id: string
+          p_support_id: string
+          p_kind: string
+          p_request_id?: string
+          p_error_code?: string
+          p_error_message?: string
+          p_function_name?: string
+          p_screen_name?: string
+          p_route?: string
+          p_platform?: string
+          p_app_version?: string
+          p_fatal?: boolean
+          p_occurred_at?: string
+          p_metadata_json?: Json
+        }
+        Returns: string
+      }
       refresh_all_pair_net_edges_cache: { Args: never; Returns: undefined }
       refresh_analytics_daily_facts: {
         Args: { p_day: string }
@@ -3453,6 +3620,10 @@ export type Database = {
         Returns: Json
       }
       sanitize_product_event_metadata: {
+        Args: { p_metadata_json: Json }
+        Returns: Json
+      }
+      sanitize_support_error_metadata: {
         Args: { p_metadata_json: Json }
         Returns: Json
       }

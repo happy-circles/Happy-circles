@@ -130,6 +130,7 @@ export const BrandedRefreshScrollView = forwardRef<
   const releaseHandledRef = useRef(false);
   const thresholdHapticFiredRef = useRef(false);
   const refreshingRef = useRef(Boolean(refresh?.refreshing));
+  const onPullStateChangeRef = useRef(refresh?.onPullStateChange);
   const pullingRef = useRef(false);
   const settlingRef = useRef(false);
   const closeFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,6 +149,7 @@ export const BrandedRefreshScrollView = forwardRef<
 
   const refreshEnabled = Boolean(refresh);
   const visible = pulling || settling || Boolean(refresh?.refreshing);
+  const pullStateVisible = pulling || Boolean(refresh?.refreshing);
   const shouldShowIndicator = visible && refresh?.indicatorVisible !== false;
   const shouldOffsetContent = refreshEnabled && refresh?.contentOffsetEnabled === true;
 
@@ -256,11 +258,43 @@ export const BrandedRefreshScrollView = forwardRef<
     }
   }, [clearCloseFallback, closePull, pullDistance, refresh?.refreshing, setPulling, setSettling]);
 
+  useEffect(() => {
+    if (refreshEnabled) {
+      return;
+    }
+
+    const previousOnPullStateChange = onPullStateChangeRef.current;
+    startYRef.current = null;
+    startScrollYRef.current = 0;
+    releaseHandledRef.current = false;
+    refreshingRef.current = false;
+    forceClosePull();
+    previousOnPullStateChange?.(false);
+    onPullStateChangeRef.current = undefined;
+  }, [forceClosePull, refreshEnabled]);
+
   useEffect(() => () => clearCloseFallback(), [clearCloseFallback]);
 
   useEffect(() => {
-    refresh?.onPullStateChange?.(visible);
-  }, [refresh, visible]);
+    const previousOnPullStateChange = onPullStateChangeRef.current;
+    const nextOnPullStateChange = refresh?.onPullStateChange;
+    if (
+      previousOnPullStateChange &&
+      previousOnPullStateChange !== nextOnPullStateChange &&
+      pullStateVisible
+    ) {
+      previousOnPullStateChange(false);
+    }
+    onPullStateChangeRef.current = nextOnPullStateChange;
+    nextOnPullStateChange?.(pullStateVisible);
+  }, [pullStateVisible, refresh?.onPullStateChange]);
+
+  useEffect(
+    () => () => {
+      onPullStateChangeRef.current?.(false);
+    },
+    [],
+  );
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextY = event.nativeEvent.contentOffset.y;
@@ -410,7 +444,7 @@ export const BrandedRefreshScrollView = forwardRef<
       >
         {scrollChildren}
       </ScrollView>
-      {shouldOffsetContent && fixedHeader ? (
+      {fixedHeader ? (
         <View pointerEvents="none" style={styles.fixedHeaderOverlay}>
           {fixedHeader}
         </View>

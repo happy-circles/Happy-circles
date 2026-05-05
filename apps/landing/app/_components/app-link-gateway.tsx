@@ -9,6 +9,7 @@ const GATEWAY_COPY: Record<
     readonly title: string;
     readonly subtitle: string;
     readonly fallbackPath: string;
+    readonly nativePath?: string;
   }
 > = {
   'account-invite': {
@@ -21,6 +22,12 @@ const GATEWAY_COPY: Record<
     subtitle: 'Abre Happy Circles para continuar con esta invitacion.',
     fallbackPath: '/invite',
   },
+  join: {
+    title: 'Ingresar',
+    subtitle: 'Abre Happy Circles para continuar.',
+    fallbackPath: '/join',
+    nativePath: '/join?mode=sign-in',
+  },
   'reset-password': {
     title: 'Restablecer clave',
     subtitle: 'Abre Happy Circles para terminar el cambio de clave.',
@@ -30,11 +37,6 @@ const GATEWAY_COPY: Record<
     title: 'Completar perfil',
     subtitle: 'Abre Happy Circles para terminar tu configuracion.',
     fallbackPath: '/setup-account',
-  },
-  'sign-in': {
-    title: 'Ingresar',
-    subtitle: 'Abre Happy Circles para continuar.',
-    fallbackPath: '/sign-in',
   },
 };
 
@@ -49,7 +51,8 @@ export function AppLinkGateway({
   const fallbackPath = token
     ? `${copy.fallbackPath}/${encodeURIComponent(token)}`
     : copy.fallbackPath;
-  const nativeHref = buildNativeAppUrl(fallbackPath);
+  const nativePath = token ? fallbackPath : (copy.nativePath ?? fallbackPath);
+  const nativeHref = buildNativeAppUrl(nativePath);
 
   return (
     <main className="landingShell gatewayShell">
@@ -63,7 +66,7 @@ export function AppLinkGateway({
         </div>
 
         <nav className="landingActions gatewayActions" aria-label="Abrir Happy Circles">
-          <AppOpenButton fallbackPath={fallbackPath} />
+          <AppOpenButton fallbackPath={fallbackPath} nativePath={nativePath} />
           <StoreButtonGrid />
           <a className="textLink" href={nativeHref}>
             Reintentar abrir la app

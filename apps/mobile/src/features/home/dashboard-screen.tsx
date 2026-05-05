@@ -1,22 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { BalanceSummaryCard } from '@/components/balance-summary-card';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
-import { HappyCircleCard } from '@/components/happy-circle-card';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { SurfaceCard } from '@/components/surface-card';
 import { SwipePager } from '@/components/swipe-pager';
-import { TransactionSummaryRow } from '@/components/transaction-summary-row';
+import { TransactionEventCard } from '@/components/transaction-event-card';
+import { BalanceLensCarousel, type BalanceFocus } from '@/features/balance/balance-overview-screen';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import {
@@ -26,9 +25,11 @@ import {
 } from '@/components/brand-lockup';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
+import { pushRoute } from '@/lib/navigation';
 import {
   type AccountInviteListItem,
   type FriendshipInviteListItem,
+  notificationViewKeyForItem,
   useAppSnapshot,
   useCancelAccountInviteMutation,
   useCancelFriendshipInviteMutation,
@@ -90,7 +91,7 @@ type InviteRequestItem = FriendshipInviteListItem | AccountInviteListItem;
 type TransactionTargetPanel = 'pending' | 'history';
 const INVITE_REQUEST_TABS: readonly InviteRequestsTab[] = ['received', 'sent', 'history'];
 
-function initialsBackgroundColor(person: PersonCardDto): string {
+function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'displayName'>): string {
   const source = `${person.userId}:${person.displayName}`;
   let hash = 0;
 
@@ -120,6 +121,14 @@ function firstName(value: string): string {
 
 function badgeLabel(count: number): string {
   return count > 99 ? '99+' : String(count);
+}
+
+function setupNotificationKey(id: string): string {
+  return notificationViewKeyForItem({
+    id,
+    kind: 'system_note',
+    status: 'pending',
+  });
 }
 
 function formatRelativeLabel(value: string): string {
@@ -241,6 +250,22 @@ function transactionPersonHref(
   return `/person/${person.userId}?panel=${panel}&focus=${encodeURIComponent(
     transactionFocusId(item),
   )}` as Href;
+}
+
+function balanceFocusHref(focus: BalanceFocus): Href {
+  if (focus === 'balance') {
+    return '/balance' as Href;
+  }
+
+  if (focus === 'people') {
+    return '/people' as Href;
+  }
+
+  if (focus === 'categories') {
+    return '/categories' as Href;
+  }
+
+  return `/balance?segment=${focus}` as Href;
 }
 
 function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
@@ -762,36 +787,44 @@ function TransactionPreviewCard({
   readonly unread?: boolean;
 }) {
   const sign = compactTransactionSign(item);
-  const name = sign === 'cycle' ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
+  const isSystemTransaction = sign === 'cycle';
+  const name = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
   const person = transactionPersonForItem(people, item);
+  const fallbackPerson = {
+    displayName: name,
+    userId: person?.userId ?? item.id,
+  };
   const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
   const href = transactionPersonHref(person, item, targetPanel);
   const amountLabel = compactTransactionAmountLabel(item);
   const meta = transactionCreatedByMetaLabel(item, name);
   const category = transactionVisualCategory(item);
-  const statusLabel = isPending ? 'Pendiente' : transactionStatusLabel(item);
-  const content = (
-    <TransactionSummaryRow
+
+  return (
+    <TransactionEventCard
+      accentColor={transactionToneColor(item)}
+      actorAvatarUrl={isSystemTransaction ? null : (person?.avatarUrl ?? null)}
+      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
+      actorFallbackColor={
+        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
+      }
+      actorLabel={name}
       amountColor={transactionToneColor(item)}
       amountLabel={amountLabel}
       amountStruckThrough={transactionAmountIsVoided(item)}
       category={category}
-      highlighted={highlightPending}
+      categoryPlacement={isSystemTransaction ? 'none' : 'avatar'}
+      compact
+      compactMetaLayout="inline"
+      context=""
+      href={href}
       meta={meta}
-      statusLabel={statusLabel}
-      statusTone={isPending ? 'warning' : transactionStatusTone(item)}
-      surface
-      title={name}
+      pending={highlightPending}
+      pendingHighlightColor={transactionToneColor(item)}
+      statusLabel={transactionStatusLabel(item)}
+      statusTone={transactionStatusTone(item)}
       unread={unread}
     />
-  );
-
-  return (
-    <Link href={href} asChild>
-      <Pressable style={({ pressed }) => [pressed ? styles.quickActionPressed : null]}>
-        {content}
-      </Pressable>
-    </Link>
   );
 }
 
@@ -1134,6 +1167,7 @@ function InviteRequestsSheet({
 }
 
 export function DashboardScreen() {
+  const router = useRouter();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -1141,7 +1175,6 @@ export function DashboardScreen() {
   const homeRefresh = useMemo(
     () => ({
       ...refresh,
-      contentOffsetEnabled: true,
       indicatorVisible: false,
       indicatorLogoVisible: false,
       onPullStateChange: setHomeRefreshActive,
@@ -1156,6 +1189,8 @@ export function DashboardScreen() {
   const cancelFriendshipInvite = useCancelFriendshipInviteMutation();
   const handledHomeIntentIdRef = useRef<number | null>(null);
   const dashboard = snapshotQuery.data?.dashboard;
+  const balanceOverview = snapshotQuery.data?.balanceOverview ?? null;
+  const balanceAnalytics = snapshotQuery.data?.balanceAnalytics ?? null;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const [nativeSetupMessage, setNativeSetupMessage] = useState<string | null>(null);
   const [busyNativeSetup, setBusyNativeSetup] = useState<'contacts' | 'notifications' | null>(null);
@@ -1191,8 +1226,6 @@ export function DashboardScreen() {
   const historySection = snapshotQuery.data?.activitySections.find(
     (section) => section.key === 'history',
   );
-  const activeSettlementProposal =
-    snapshotQuery.data?.balanceOverview.resolution.activeProposal ?? null;
   const pendingTransactionItems = (pendingSection?.items ?? [])
     .filter(isPendingTransactionItem)
     .slice(0, 2);
@@ -1217,11 +1250,54 @@ export function DashboardScreen() {
       unread: false,
     })),
   ];
+  const accountSetupEligible =
+    session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
   const needsContacts =
     session.setupState.contactsPermissionStatus !== 'granted' &&
     session.setupState.contactsPermissionStatus !== 'limited';
   const needsNotifications = !session.notificationsEnabled;
-  const showNativeSetup = (needsContacts || needsNotifications) && setupPromptDismissed === false;
+  const deviceTrustPending = accountSetupEligible && !session.isTrustedDevice;
+  const biometricsPending =
+    accountSetupEligible && session.biometricAvailable && !session.biometricsEnabled;
+  const passwordAuthPending = accountSetupEligible && !session.linkedMethods.hasEmailPassword;
+  const googleAuthPending = accountSetupEligible && !session.linkedMethods.hasGoogle;
+  const appleAuthPending =
+    accountSetupEligible && session.appleSignInAvailable && !session.linkedMethods.hasApple;
+  const deviceTrustHref = {
+    pathname: '/profile',
+    params: { focus: 'trust-password', section: 'device' },
+  } as Href;
+  const biometricsHref = {
+    pathname: '/profile',
+    params: { focus: 'biometrics', section: 'account' },
+  } as Href;
+  const passwordAuthHref = {
+    pathname: '/profile',
+    params: { focus: 'attach-password', section: 'methods' },
+  } as Href;
+  const accessMethodsHref = {
+    pathname: '/profile',
+    params: { section: 'methods' },
+  } as Href;
+  const pendingSetupNotificationKeys = [
+    needsContacts ? setupNotificationKey('local-contacts-reminder') : null,
+    needsNotifications ? setupNotificationKey('local-notifications-reminder') : null,
+    deviceTrustPending ? setupNotificationKey('local-device-trust-reminder') : null,
+    biometricsPending ? setupNotificationKey('local-biometrics-reminder') : null,
+    passwordAuthPending ? setupNotificationKey('local-password-auth-reminder') : null,
+    googleAuthPending ? setupNotificationKey('local-google-auth-reminder') : null,
+    appleAuthPending ? setupNotificationKey('local-apple-auth-reminder') : null,
+  ].filter((key): key is string => Boolean(key));
+  const pendingSetupCount = pendingSetupNotificationKeys.length;
+  const viewedNotificationKeys = snapshotQuery.data?.notificationViewedKeys;
+  const unreadSetupCount = pendingSetupNotificationKeys.filter(
+    (key) => !(viewedNotificationKeys?.has(key) ?? false),
+  ).length;
+  const showPendingSetupCard = setupPromptDismissed === false && pendingSetupCount > 0;
+  const notificationCount = snapshotQuery.data
+    ? snapshotQuery.data.notificationUnreadCount + unreadSetupCount
+    : 0;
+  const homeEntryReady = Boolean(dashboard) || Boolean(snapshotQuery.error);
 
   useEffect(() => {
     if (!homeIntent || homeIntent.kind !== 'open_invite_requests') {
@@ -1448,6 +1524,10 @@ export function DashboardScreen() {
   }
 
   useEffect(() => {
+    if (!homeEntryReady) {
+      return undefined;
+    }
+
     let secondFrame: ReturnType<typeof requestAnimationFrame> | null = null;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
@@ -1461,7 +1541,7 @@ export function DashboardScreen() {
         cancelAnimationFrame(secondFrame);
       }
     };
-  }, []);
+  }, [homeEntryReady]);
 
   if (snapshotQuery.error && !dashboard) {
     return (
@@ -1491,6 +1571,7 @@ export function DashboardScreen() {
       <ScreenShell
         headerTitle={
           <HeaderBrandTitle
+            launchTargetDisabled
             logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
             titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
           />
@@ -1571,7 +1652,7 @@ export function DashboardScreen() {
           titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
         />
       }
-      headerSlot={<NotificationBellButton count={dashboard.urgentCount} href="/activity" />}
+      headerSlot={<NotificationBellButton count={notificationCount} href="/activity" />}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
       pinHeaderDuringRefresh
@@ -1580,29 +1661,36 @@ export function DashboardScreen() {
       title="Happy Circles"
       titleAlign="center"
     >
-      <BalanceSummaryCard
-        detailsHref={'/balance' as Href}
-        netBalanceMinor={dashboard.summary.netBalanceMinor}
-        totalIOweMinor={dashboard.summary.totalIOweMinor}
-        totalOwedToMeMinor={dashboard.summary.totalOwedToMeMinor}
-      />
-
-      {activeSettlementProposal ? (
-        <View style={styles.dashboardSettlementContainer}>
-          <HappyCircleCard proposal={activeSettlementProposal} variant="compact" />
-        </View>
+      {balanceOverview && balanceAnalytics ? (
+        <BalanceLensCarousel
+          analytics={balanceAnalytics}
+          onFocusPress={(focus) => pushRoute(router, balanceFocusHref(focus))}
+          overview={balanceOverview}
+        />
       ) : null}
 
       {nativeSetupMessage ? <MessageBanner message={nativeSetupMessage} tone="neutral" /> : null}
 
-      {showNativeSetup ? (
+      {showPendingSetupCard ? (
         <SetupPromptCard
+          biometricLabel={session.biometricLabel}
           busyKind={busyNativeSetup}
+          dismissible
+          needsAppleAuth={appleAuthPending}
+          needsBiometrics={biometricsPending}
           needsContacts={needsContacts}
+          needsDeviceTrust={deviceTrustPending}
+          needsGoogleAuth={googleAuthPending}
           needsNotifications={needsNotifications}
+          needsPasswordAuth={passwordAuthPending}
+          onAppleAuthPress={() => pushRoute(router, accessMethodsHref)}
+          onBiometricsPress={() => pushRoute(router, biometricsHref)}
           onContactsPress={() => void handleContactsPermission()}
+          onDeviceTrustPress={() => pushRoute(router, deviceTrustHref)}
           onDismiss={() => void handleDismissNativeSetup()}
+          onGoogleAuthPress={() => pushRoute(router, accessMethodsHref)}
           onNotificationsPress={() => void handleNotificationsPermission()}
+          onPasswordAuthPress={() => pushRoute(router, passwordAuthHref)}
         />
       ) : null}
 
@@ -1859,11 +1947,8 @@ const styles = StyleSheet.create({
     minHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
     textAlign: 'center',
   },
-  dashboardSettlementContainer: {
-    paddingHorizontal: theme.spacing.lg,
-  },
   transactionList: {
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     paddingBottom: HOME_REGISTER_FAB_CLEARANCE,
   },
   sheetScrim: {

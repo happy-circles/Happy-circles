@@ -3,9 +3,9 @@ import { Link, useRouter, type Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
 import { StatusChip, type StatusChipProps } from '@/components/status-chip';
-import { SurfaceCard } from '@/components/surface-card';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import {
@@ -14,6 +14,10 @@ import {
   transactionCategoryIcon,
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
+
+const DEFAULT_PENDING_SURFACE_COLOR = '#fff9ed';
+const DEFAULT_PENDING_BORDER_COLOR = 'rgba(163, 95, 25, 0.14)';
+const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
 export interface TransactionEventCardProps extends PropsWithChildren {
   readonly accentColor: string;
@@ -117,12 +121,13 @@ export function TransactionEventCard({
   const resolvedBadgeColor = badgeColor ?? transactionCategoryColor(safeCategory);
   const pendingSurfaceColor = pendingHighlightColor
     ? withAlpha(pendingHighlightColor, 0.1)
-    : styles.pendingCard.backgroundColor;
+    : DEFAULT_PENDING_SURFACE_COLOR;
   const pendingBorderColor = pendingHighlightColor
     ? withAlpha(pendingHighlightColor, 0.22)
-    : styles.pendingCard.borderColor;
+    : DEFAULT_PENDING_BORDER_COLOR;
   const hasAction = Boolean(href || onPress);
   const hasContentAction = !hasAction && Boolean(contentHref || onContentPress);
+
   function handleContentPress() {
     if (onContentPress) {
       onContentPress();
@@ -167,242 +172,189 @@ export function TransactionEventCard({
       label: metaCategoryLabel,
     });
   }
-  const card = (
-    <SurfaceCard
-      padding={compact ? 'sm' : 'md'}
-      style={[
-        styles.card,
-        compact ? styles.cardCompact : null,
-        pending
-          ? [
-              styles.pendingCard,
-              { backgroundColor: pendingSurfaceColor, borderColor: pendingBorderColor },
-            ]
-          : null,
-        { borderLeftColor: accentColor },
-      ]}
-      variant={variant}
-    >
-      <View style={[styles.body, compact ? styles.bodyCompact : null]}>
-        <Pressable
-          accessibilityLabel={hasContentAction ? `Abrir perfil de ${actorLabel}` : undefined}
-          accessibilityRole={hasContentAction ? 'button' : undefined}
-          disabled={!hasContentAction}
-          onPress={hasContentAction ? handleContentPress : undefined}
-          style={({ pressed }) => [
-            styles.leading,
-            compact ? styles.leadingCompact : null,
-            hasContentAction ? styles.leadingAction : null,
-            pressed ? styles.leadingPressed : null,
+
+  const leadingNode = (
+    <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
+      <AppAvatar
+        fallbackBackgroundColor={actorFallbackColor}
+        fallbackTextColor={theme.colors.white}
+        imageUrl={actorAvatarUrl}
+        label={actorLabel}
+        rounded={false}
+        size={compact ? 38 : 44}
+        variant={actorAvatarVariant}
+      />
+      {categoryPlacement === 'avatar' ? (
+        <View
+          style={[
+            styles.categoryBadge,
+            compact ? styles.categoryBadgeCompact : null,
+            {
+              backgroundColor: resolvedBadgeBackgroundColor,
+              borderColor: theme.colors.surface,
+            },
           ]}
         >
-          <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
-            <AppAvatar
-              fallbackBackgroundColor={actorFallbackColor}
-              fallbackTextColor={theme.colors.white}
-              imageUrl={actorAvatarUrl}
-              label={actorLabel}
-              rounded={false}
-              size={compact ? 38 : 44}
-              variant={actorAvatarVariant}
-            />
-            {categoryPlacement === 'avatar' ? (
-              <View
-                style={[
-                  styles.categoryBadge,
-                  compact ? styles.categoryBadgeCompact : null,
-                  {
-                    backgroundColor: resolvedBadgeBackgroundColor,
-                    borderColor: theme.colors.surface,
-                  },
-                ]}
-              >
-                <Ionicons color={resolvedBadgeColor} name={categoryIcon} size={compact ? 11 : 13} />
-              </View>
-            ) : null}
-          </View>
-          <View style={[styles.copy, compact ? styles.copyCompact : null]}>
-            <View style={styles.actorRow}>
-              <Text numberOfLines={1} style={[styles.actor, compact ? styles.actorCompact : null]}>
-                {actorLabel}
-              </Text>
-              {statusLabel ? <StatusChip compact label={statusLabel} tone={statusTone} /> : null}
-              {unread ? <View style={styles.unreadDot} /> : null}
-            </View>
-            {compact && categoryPlacement === 'meta' ? (
-              compactMetaLayout === 'stacked' ? (
-                <View style={styles.compactMetaStack}>
-                  {context ? (
-                    contextVariant === 'badge' ? (
-                      <View
-                        style={[
-                          styles.contextBadge,
-                          amountColor === theme.colors.success ? styles.contextBadgePositive : null,
-                          amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
-                          amountColor === transactionCategoryColor('cycle')
-                            ? styles.contextBadgeCycle
-                            : null,
-                        ]}
-                      >
-                        <Text style={styles.contextBadgeText}>{context}</Text>
-                      </View>
-                    ) : (
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.context, compact ? styles.contextCompact : null]}
-                      >
-                        {context}
+          <Ionicons color={resolvedBadgeColor} name={categoryIcon} size={compact ? 11 : 13} />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const contextNode = context ? (
+    contextVariant === 'badge' ? (
+      <View
+        style={[
+          styles.contextBadge,
+          amountColor === theme.colors.success ? styles.contextBadgePositive : null,
+          amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
+          amountColor === transactionCategoryColor('cycle') ? styles.contextBadgeCycle : null,
+        ]}
+      >
+        <Text style={styles.contextBadgeText}>{context}</Text>
+      </View>
+    ) : (
+      <Text numberOfLines={1} style={[styles.context, compact ? styles.contextCompact : null]}>
+        {context}
+      </Text>
+    )
+  ) : null;
+
+  const metaNode =
+    compact && categoryPlacement === 'meta' ? (
+      compactMetaLayout === 'stacked' ? (
+        <View style={styles.compactMetaStack}>
+          {contextNode}
+          <View style={styles.compactMetaRow}>
+            {compactMetaSegments
+              .filter((segment) => segment.key !== 'context')
+              .map((segment, index) => (
+                <View key={segment.key} style={styles.compactMetaSegment}>
+                  {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+                  {segment.kind === 'category' ? (
+                    <View style={styles.compactMetaCategory}>
+                      <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
+                      <Text numberOfLines={1} style={styles.compactMetaText}>
+                        {segment.label}
                       </Text>
-                    )
-                  ) : null}
-                  <View style={styles.compactMetaRow}>
-                    {compactMetaSegments
-                      .filter((segment) => segment.key !== 'context')
-                      .map((segment, index) => (
-                        <View key={segment.key} style={styles.compactMetaSegment}>
-                          {index > 0 ? <View style={styles.compactMetaDot} /> : null}
-                          {segment.kind === 'category' ? (
-                            <View style={styles.compactMetaCategory}>
-                              <Ionicons
-                                color={theme.colors.textMuted}
-                                name={categoryIcon}
-                                size={11}
-                              />
-                              <Text numberOfLines={1} style={styles.compactMetaText}>
-                                {segment.label}
-                              </Text>
-                            </View>
-                          ) : (
-                            <Text numberOfLines={1} style={styles.compactMetaText}>
-                              {segment.label}
-                            </Text>
-                          )}
-                        </View>
-                      ))}
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.compactMetaRow}>
-                  {compactMetaSegments.map((segment, index) => (
-                    <View key={segment.key} style={styles.compactMetaSegment}>
-                      {index > 0 ? <View style={styles.compactMetaDot} /> : null}
-                      {segment.kind === 'badge' ? (
-                        <View
-                          style={[
-                            styles.contextBadge,
-                            amountColor === theme.colors.success
-                              ? styles.contextBadgePositive
-                              : null,
-                            amountColor === theme.colors.warning
-                              ? styles.contextBadgeNegative
-                              : null,
-                            amountColor === transactionCategoryColor('cycle')
-                              ? styles.contextBadgeCycle
-                              : null,
-                          ]}
-                        >
-                          <Text style={styles.contextBadgeText}>{segment.label}</Text>
-                        </View>
-                      ) : segment.kind === 'category' ? (
-                        <View style={styles.compactMetaCategory}>
-                          <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
-                          <Text numberOfLines={1} style={styles.compactMetaText}>
-                            {segment.label}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text numberOfLines={1} style={styles.compactMetaText}>
-                          {segment.label}
-                        </Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )
-            ) : (
-              <>
-                {context ? (
-                  contextVariant === 'badge' ? (
-                    <View
-                      style={[
-                        styles.contextBadge,
-                        amountColor === theme.colors.success ? styles.contextBadgePositive : null,
-                        amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
-                        amountColor === transactionCategoryColor('cycle')
-                          ? styles.contextBadgeCycle
-                          : null,
-                      ]}
-                    >
-                      <Text style={styles.contextBadgeText}>{context}</Text>
                     </View>
                   ) : (
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.context, compact ? styles.contextCompact : null]}
-                    >
-                      {context}
+                    <Text numberOfLines={1} style={styles.compactMetaText}>
+                      {segment.label}
                     </Text>
-                  )
-                ) : null}
-                {meta ? (
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.meta, compact ? styles.metaCompact : null]}
-                  >
-                    {meta.replace(/\s*\|\s*/g, ' · ')}
-                  </Text>
-                ) : null}
-              </>
-            )}
-          </View>
-        </Pressable>
-
-        <View style={[styles.side, compact ? styles.sideCompact : null]}>
-          <View style={[styles.amountLine, compact ? styles.amountLineCompact : null]}>
-            <View
-              style={[
-                styles.amountStack,
-                directionLayout === 'floating' ? styles.amountStackFloating : null,
-              ]}
-            >
-              {directionLabel ? (
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.direction,
-                    compact ? styles.directionCompact : null,
-                    directionLayout === 'floating' ? styles.directionFloating : null,
-                    directionLayout === 'floating' && compact
-                      ? styles.directionFloatingCompact
-                      : null,
-                    { color: amountColor },
-                  ]}
-                >
-                  {directionLabel}
-                </Text>
-              ) : null}
-              {amountLabel ? (
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.amount,
-                    compact ? styles.amountCompact : null,
-                    { color: amountColor },
-                    amountStruckThrough ? styles.amountStruckThrough : null,
-                  ]}
-                >
-                  {amountLabel}
-                </Text>
-              ) : null}
-            </View>
-            {hasAction ? (
-              <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
-            ) : null}
+                  )}
+                </View>
+              ))}
           </View>
         </View>
+      ) : (
+        <View style={styles.compactMetaRow}>
+          {compactMetaSegments.map((segment, index) => (
+            <View key={segment.key} style={styles.compactMetaSegment}>
+              {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+              {segment.kind === 'badge' ? (
+                <View
+                  style={[
+                    styles.contextBadge,
+                    amountColor === theme.colors.success ? styles.contextBadgePositive : null,
+                    amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
+                    amountColor === transactionCategoryColor('cycle')
+                      ? styles.contextBadgeCycle
+                      : null,
+                  ]}
+                >
+                  <Text style={styles.contextBadgeText}>{segment.label}</Text>
+                </View>
+              ) : segment.kind === 'category' ? (
+                <View style={styles.compactMetaCategory}>
+                  <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
+                  <Text numberOfLines={1} style={styles.compactMetaText}>
+                    {segment.label}
+                  </Text>
+                </View>
+              ) : (
+                <Text numberOfLines={1} style={styles.compactMetaText}>
+                  {segment.label}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )
+    ) : (
+      <>
+        {contextNode}
+        {meta ? (
+          <Text numberOfLines={1} style={[styles.meta, compact ? styles.metaCompact : null]}>
+            {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
+          </Text>
+        ) : null}
+      </>
+    );
+
+  const sideNode = (
+    <View style={[styles.amountLine, compact ? styles.amountLineCompact : null]}>
+      <View
+        style={[
+          styles.amountStack,
+          directionLayout === 'floating' ? styles.amountStackFloating : null,
+        ]}
+      >
+        {directionLabel ? (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.direction,
+              compact ? styles.directionCompact : null,
+              directionLayout === 'floating' ? styles.directionFloating : null,
+              directionLayout === 'floating' && compact ? styles.directionFloatingCompact : null,
+              { color: amountColor },
+            ]}
+          >
+            {directionLabel}
+          </Text>
+        ) : null}
+        {amountLabel ? (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.amount,
+              compact ? styles.amountCompact : null,
+              { color: amountColor },
+              amountStruckThrough ? styles.amountStruckThrough : null,
+            ]}
+          >
+            {amountLabel}
+          </Text>
+        ) : null}
       </View>
-      {children ? <View style={styles.actions}>{children}</View> : null}
-    </SurfaceCard>
+      {hasAction ? (
+        <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
+      ) : null}
+    </View>
+  );
+
+  const card = (
+    <ActivityItemCard
+      accentColor={accentColor}
+      compact={compact}
+      leadingAccessibilityLabel={`Abrir perfil de ${actorLabel}`}
+      leadingDisabled={!hasContentAction}
+      leadingNode={leadingNode}
+      metaNode={metaNode}
+      onLeadingPress={hasContentAction ? handleContentPress : undefined}
+      pendingBorderColor={pending ? pendingBorderColor : undefined}
+      pendingSurfaceColor={pending ? pendingSurfaceColor : undefined}
+      sideNode={sideNode}
+      title={actorLabel}
+      titleAccessoryNode={
+        statusLabel ? <StatusChip compact iconOnly label={statusLabel} tone={statusTone} /> : null
+      }
+      unread={unread}
+      variant={variant}
+    >
+      {children}
+    </ActivityItemCard>
   );
 
   if (href) {
@@ -425,44 +377,6 @@ export function TransactionEventCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderLeftWidth: 3,
-    minHeight: 92,
-  },
-  cardCompact: {
-    borderRadius: theme.radius.medium,
-    minHeight: 76,
-  },
-  pendingCard: {
-    backgroundColor: '#fff9ed',
-    borderColor: 'rgba(163, 95, 25, 0.14)',
-  },
-  body: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 58,
-  },
-  bodyCompact: {
-    minHeight: 48,
-  },
-  leading: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  leadingCompact: {
-    gap: 10,
-  },
-  leadingAction: {
-    borderRadius: theme.radius.medium,
-  },
-  leadingPressed: {
-    opacity: 0.72,
-  },
   avatarWrap: {
     height: 48,
     justifyContent: 'center',
@@ -488,31 +402,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     height: 18,
     width: 18,
-  },
-  copy: {
-    flex: 1,
-    gap: 1,
-    minWidth: 0,
-  },
-  copyCompact: {
-    gap: 2,
-  },
-  actorRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    minWidth: 0,
-  },
-  actor: {
-    color: theme.colors.text,
-    flexShrink: 1,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-    lineHeight: 19,
-  },
-  actorCompact: {
-    fontWeight: '800',
-    lineHeight: 18,
   },
   context: {
     color: theme.colors.text,
@@ -540,14 +429,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: 6,
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    minWidth: 0,
     rowGap: 4,
   },
   compactMetaSegment: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexShrink: 1,
     gap: 4,
     maxWidth: '100%',
+    minWidth: 0,
   },
   compactMetaDot: {
     backgroundColor: theme.colors.muted,
@@ -558,11 +450,14 @@ const styles = StyleSheet.create({
   compactMetaCategory: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexShrink: 1,
     gap: 4,
     maxWidth: '100%',
+    minWidth: 0,
   },
   compactMetaText: {
     color: theme.colors.textMuted,
+    flexShrink: 1,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -585,21 +480,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     lineHeight: 12,
-  },
-  side: {
-    alignItems: 'flex-end',
-    gap: 4,
-    minWidth: 88,
-  },
-  sideCompact: {
-    gap: 3,
-    minWidth: 92,
-  },
-  unreadDot: {
-    backgroundColor: '#2f80ed',
-    borderRadius: theme.radius.pill,
-    height: 8,
-    width: 8,
   },
   direction: {
     fontSize: theme.typography.caption,
@@ -638,16 +518,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 72,
   },
-  amountRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    minHeight: 20,
-  },
-  amountRowCompact: {
-    gap: 4,
-    minHeight: 18,
-  },
   amount: {
     fontSize: theme.typography.callout,
     fontWeight: '800',
@@ -661,9 +531,6 @@ const styles = StyleSheet.create({
   amountStruckThrough: {
     opacity: 0.72,
     textDecorationLine: 'line-through',
-  },
-  actions: {
-    gap: theme.spacing.xs,
   },
   pressed: {
     opacity: 0.6,

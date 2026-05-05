@@ -1,565 +1,100 @@
 
-> @happy-circles/mobile@0.1.0 start C:\Users\Samuel\Documents\Happy_circles\apps\mobile
-> node ./scripts/start-expo.mjs "--web"
+> @happy-circles/mobile@0.1.0 web C:\Users\Samuel\Documents\Happy_circles\apps\mobile
+> node ./scripts/start-expo.mjs --web
 
-Starting Expo on port 8094
+Starting Expo on port 8092
 env: load .env
 env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 Starting project at C:\Users\Samuel\Documents\Happy_circles\apps\mobile
 Starting Metro Bundler
-Waiting on http://localhost:8094
+Waiting on http://localhost:8092
 Logs for your project will appear below.
 Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 2567ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1215 modules)
- LOG  [web] Logs will appear in the browser console
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token, expected "}" (160:12)
-
-  158 |           ) : (
-  159 |             <View style={styles.impactMetric} />
-> 160 |           ) : null}
-      |             ^
-  161 |           <View style={styles.toggleRow}>
-  162 |             <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver detalle'}</Text>
-  163 |             <Ionicons
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.expect (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6899:12)
-    at TypeScriptParserMixin.jsxParseExpressionContainer (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4637:10)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4711:36)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4698:32)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4698:32)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4759:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10800:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12426:12)
-    at TypeScriptParserMixin.parseMaybeAssignAllowIn (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10800:17)
-    at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12493:17)
-    at TypeScriptParserMixin.parseParenAndDistinguishExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11675:28)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11331:23)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4764:20)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9786:20)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseReturnStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13142:28)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12798:21)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseStatementListItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12747:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:61)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseBlock (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13297:10)
-    at TypeScriptParserMixin.parseFunctionBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12100:24)
-Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 54ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
-Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 151ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
-Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 231ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
-Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 346ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
-Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 209ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
+Web Bundled 1350ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1205 modules)
  LOG  [web] Logs will appear in the browser console
 Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 56ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
+Web Bundled 303ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
  LOG  [web] Logs will appear in the browser console
 Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 54ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
+Web Bundled 283ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
  LOG  [web] Logs will appear in the browser console
+Unable to resolve "@/components/transaction-event-card" from "apps\mobile\src\features\home\dashboard-screen.tsx"
+[0m [90m 15 |[39m [36mimport[39m { [33mSurfaceCard[39m } [36mfrom[39m [32m'@/components/surface-card'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mSwipePager[39m } [36mfrom[39m [32m'@/components/swipe-pager'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 17 |[39m [36mimport[39m { [33mTransactionEventCard[39m } [36mfrom[39m [32m'@/components/transaction-event-card'[39m[33m;[39m
+ [90m    |[39m                                       [31m[1m^[22m[39m
+ [90m 18 |[39m [36mimport[39m { [33mBalanceLensCarousel[39m[33m,[39m type [33mBalanceFocus[39m } [36mfrom[39m [32m'@/features/balance/balance-overview-screen'[39m[33m;[39m
+ [90m 19 |[39m [36mimport[39m { [33mAddPersonContactsSheet[39m } [36mfrom[39m [32m'@/features/home/add-person-contacts-sheet'[39m[33m;[39m
+ [90m 20 |[39m [36mimport[39m { resolveAvatarUrl } [36mfrom[39m [32m'@/lib/avatar'[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\features\home\dashboard-screen.tsx
+ | import "@/components/transaction-event-card"
+
+ apps\mobile\app\(tabs)\home.tsx
+ | import "@/features/home/dashboard-screen"
+
+ apps\mobile\app (require.context)
+
+Unable to resolve "@/components/transaction-event-card" from "apps\mobile\src\features\home\dashboard-screen.tsx"
+[0m [90m 15 |[39m [36mimport[39m { [33mSurfaceCard[39m } [36mfrom[39m [32m'@/components/surface-card'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mSwipePager[39m } [36mfrom[39m [32m'@/components/swipe-pager'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 17 |[39m [36mimport[39m { [33mTransactionEventCard[39m } [36mfrom[39m [32m'@/components/transaction-event-card'[39m[33m;[39m
+ [90m    |[39m                                       [31m[1m^[22m[39m
+ [90m 18 |[39m [36mimport[39m { [33mBalanceLensCarousel[39m[33m,[39m type [33mBalanceFocus[39m } [36mfrom[39m [32m'@/features/balance/balance-overview-screen'[39m[33m;[39m
+ [90m 19 |[39m [36mimport[39m { [33mAddPersonContactsSheet[39m } [36mfrom[39m [32m'@/features/home/add-person-contacts-sheet'[39m[33m;[39m
+ [90m 20 |[39m [36mimport[39m { resolveAvatarUrl } [36mfrom[39m [32m'@/lib/avatar'[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\features\home\dashboard-screen.tsx
+ | import "@/components/transaction-event-card"
+
+ apps\mobile\app\(tabs)\home.tsx
+ | import "@/features/home/dashboard-screen"
+
+ apps\mobile\app (require.context)
+
+Unable to resolve "@/components/transaction-event-card" from "apps\mobile\src\features\home\dashboard-screen.tsx"
+[0m [90m 15 |[39m [36mimport[39m { [33mSurfaceCard[39m } [36mfrom[39m [32m'@/components/surface-card'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mSwipePager[39m } [36mfrom[39m [32m'@/components/swipe-pager'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 17 |[39m [36mimport[39m { [33mTransactionEventCard[39m } [36mfrom[39m [32m'@/components/transaction-event-card'[39m[33m;[39m
+ [90m    |[39m                                       [31m[1m^[22m[39m
+ [90m 18 |[39m [36mimport[39m { [33mBalanceLensCarousel[39m[33m,[39m type [33mBalanceFocus[39m } [36mfrom[39m [32m'@/features/balance/balance-overview-screen'[39m[33m;[39m
+ [90m 19 |[39m [36mimport[39m { [33mAddPersonContactsSheet[39m } [36mfrom[39m [32m'@/features/home/add-person-contacts-sheet'[39m[33m;[39m
+ [90m 20 |[39m [36mimport[39m { resolveAvatarUrl } [36mfrom[39m [32m'@/lib/avatar'[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\features\home\dashboard-screen.tsx
+ | import "@/components/transaction-event-card"
+
+ apps\mobile\app\(tabs)\home.tsx
+ | import "@/features/home/dashboard-screen"
+
+ apps\mobile\app (require.context)
+
+Unable to resolve "@/components/transaction-event-card" from "apps\mobile\src\features\home\dashboard-screen.tsx"
+[0m [90m 15 |[39m [36mimport[39m { [33mSurfaceCard[39m } [36mfrom[39m [32m'@/components/surface-card'[39m[33m;[39m
+ [90m 16 |[39m [36mimport[39m { [33mSwipePager[39m } [36mfrom[39m [32m'@/components/swipe-pager'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 17 |[39m [36mimport[39m { [33mTransactionEventCard[39m } [36mfrom[39m [32m'@/components/transaction-event-card'[39m[33m;[39m
+ [90m    |[39m                                       [31m[1m^[22m[39m
+ [90m 18 |[39m [36mimport[39m { [33mBalanceLensCarousel[39m[33m,[39m type [33mBalanceFocus[39m } [36mfrom[39m [32m'@/features/balance/balance-overview-screen'[39m[33m;[39m
+ [90m 19 |[39m [36mimport[39m { [33mAddPersonContactsSheet[39m } [36mfrom[39m [32m'@/features/home/add-person-contacts-sheet'[39m[33m;[39m
+ [90m 20 |[39m [36mimport[39m { resolveAvatarUrl } [36mfrom[39m [32m'@/lib/avatar'[39m[33m;[39m[0m
+
+Import stack:
+
+ apps\mobile\src\features\home\dashboard-screen.tsx
+ | import "@/components/transaction-event-card"
+
+ apps\mobile\app\(tabs)\home.tsx
+ | import "@/features/home/dashboard-screen"
+
+ apps\mobile\app (require.context)
+
 Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
-Web Bundled 52ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
- LOG  [web] Logs will appear in the browser console
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\features\transactions\transactions-screen.tsx: Missing semicolon. (70:30)
-
-  68 | ];
-  69 |
-> 70 |   { label: 'Te deberán', value: 'pending_incoming' },
-     |                               ^
-  71 |   { label: 'Deberás', value: 'pending_outgoing' },
-  72 |   { label: 'Proyección', value: 'projection' },
-  73 | ];
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.semicolon (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6895:10)
-    at TypeScriptParserMixin.parseExpressionStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13285:10)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12899:19)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12760:17)
-    at TypeScriptParserMixin.parseLabeledStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13278:95)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12897:19)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseStatementListItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12747:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:61)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseBlock (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13297:10)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12858:21)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\babel-transformer.js:127:58)
-    at transformJSWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\metro-transform-worker.js:468:47)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\metro-transform-worker.js:583:12)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js:178:19)
-    at transformFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js:67:36)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js:42:10)
-    at execFunction (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:149:17)
-    at execHelper (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:137:5)
-    at execMethod (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:140:5)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\features\transactions\transactions-screen.tsx: Unterminated comment. (70:0)
-
-  68 | ];
-  69 |
-> 70 | /*
-     | ^
-  71 |   { label: 'Te deberán', value: 'pending_incoming' },
-  72 |   { label: 'Deberás', value: 'pending_outgoing' },
-  73 |   { label: 'Proyección', value: 'projection' },
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.skipBlockComment (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:5790:18)
-    at TypeScriptParserMixin.skipSpace (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:5858:38)
-    at TypeScriptParserMixin.skipSpace (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4769:42)
-    at TypeScriptParserMixin.nextToken (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:5775:10)
-    at TypeScriptParserMixin.next (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:5692:10)
-    at TypeScriptParserMixin.eat (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:5696:12)
-    at TypeScriptParserMixin.isLineTerminator (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6891:17)
-    at TypeScriptParserMixin.semicolon (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6894:25)
-    at TypeScriptParserMixin.parseVarStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13231:10)
-    at TypeScriptParserMixin.parseVarStatement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9408:31)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12851:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\babel-transformer.js:127:58)
-    at transformJSWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\metro-transform-worker.js:468:47)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\metro-transform-worker.js:583:12)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js:178:19)
-    at transformFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js:67:36)
-    at Object.transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js:42:10)
-    at execFunction (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:149:17)
-    at execHelper (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:137:5)
-    at execMethod (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:140:5)
-    at process.messageListener (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js:44:7)
-    at process.emit (node:events:508:28)
-    at emit (node:internal/child_process:948:14)
-    at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
- ERROR  SyntaxError: C:\Users\Samuel\Documents\Happy_circles\apps\mobile\src\components\history-case-card.tsx: Unexpected token (193:21)
-
-  191 |   );
-  192 | }
-> 193 |                     </Text>
-      |                      ^
-  194 |                   ) : null}
-  195 |                 </View>
-  196 |                 {step.impact && !step.amountLabel ? (
-    at constructor (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:365:19)
-    at TypeScriptParserMixin.raise (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6599:19)
-    at TypeScriptParserMixin.unexpected (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6619:16)
-    at TypeScriptParserMixin.jsxParseIdentifier (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4569:12)
-    at TypeScriptParserMixin.jsxParseNamespacedName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4576:23)
-    at TypeScriptParserMixin.jsxParseElementName (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4585:21)
-    at TypeScriptParserMixin.jsxParseOpeningElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4661:22)
-    at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4686:33)
-    at TypeScriptParserMixin.jsxParseElement (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4749:17)
-    at TypeScriptParserMixin.parseExprAtom (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:4762:19)
-    at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11081:23)
-    at TypeScriptParserMixin.parseUpdate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11066:21)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:11046:23)
-    at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9837:18)
-    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10899:61)
-    at TypeScriptParserMixin.parseExprOps (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10904:23)
-    at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10881:23)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10831:21)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:39
-    at TypeScriptParserMixin.tryParse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:6907:20)
-    at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9775:18)
-    at TypeScriptParserMixin.parseExpressionBase (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10784:23)
-    at C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:39
-    at TypeScriptParserMixin.allowInAnd (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12421:16)
-    at TypeScriptParserMixin.parseExpression (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10780:17)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12895:23)
-    at TypeScriptParserMixin.parseStatementContent (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:9508:18)
-    at TypeScriptParserMixin.parseStatementLike (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12767:17)
-    at TypeScriptParserMixin.parseModuleItem (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12744:17)
-    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13316:36)
-    at TypeScriptParserMixin.parseBlockBody (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:13309:10)
-    at TypeScriptParserMixin.parseProgram (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12622:10)
-    at TypeScriptParserMixin.parseTopLevel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:12612:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14488:25)
-    at TypeScriptParserMixin.parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:10126:18)
-    at parse (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+parser@7.29.2\node_modules\@babel\parser\lib\index.js:14501:26)
-    at parser (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\parser\index.js:41:34)
-    at parser.next (<anonymous>)
-    at normalizeFile (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
-    at normalizeFile.next (<anonymous>)
-    at run (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transformation\index.js:22:50)
-    at run.next (<anonymous>)
-    at transform (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:22:33)
-    at transform.next (<anonymous>)
-    at evaluateSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:251:28)
-    at sync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\gensync@1.0.0-beta.2\node_modules\gensync\index.js:89:14)
-    at stopHiding - secret - don't use this - v1 (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\errors\rewrite-stack-trace.js:47:12)
-    at Object.transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@babel+core@7.29.0\node_modules\@babel\core\lib\transform.js:40:76)
-    at parseWithBabel (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:75:18)
-    at transformSync (C:\Users\Samuel\Documents\Happy_circles\node_modules\.pnpm\@expo+metro-config@54.0.15_expo@54.0.34\node_modules\@expo\metro-config\build\transformSync.js:54:16)
+Web Bundled 43ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)
+Web node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 34ms node_modules\.pnpm\expo-router@6.0.23_@expo+me_753e3bb6649822203655d2f5a6300d18\node_modules\expo-router\entry.js (1 module)

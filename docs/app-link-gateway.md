@@ -9,11 +9,9 @@ The `app.happy-circles.com` routes are served by the landing Next.js project, bu
 
 - `/join`
 - `/join/{token}`
-- `/invite`
 - `/invite/{token}`
 - `/reset-password`
 - `/setup-account`
-- `/sign-in`
 
 Each route renders a minimal fallback screen and attempts to open the native app through the `happycircles` scheme. If iOS Universal Links or Android App Links are configured and the app is installed, the OS should open the app before the browser fallback renders.
 
@@ -59,14 +57,12 @@ In Supabase Auth URL Configuration, allow:
 
 - `https://app.happy-circles.com/reset-password`
 - `https://app.happy-circles.com/setup-account`
-- `https://app.happy-circles.com/sign-in`
 - `https://app.happy-circles.com/join`
 - `https://app.happy-circles.com/join/*`
-- `https://app.happy-circles.com/invite`
 - `https://app.happy-circles.com/invite/*`
+- `happycircles://join`
 - `happycircles://reset-password`
 - `happycircles://setup-account`
-- `happycircles://sign-in`
 
 Keep the `happycircles://...` entries while development builds or older app versions still rely on scheme redirects.
 

@@ -90,6 +90,7 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
               </View>
               <StatusChip
                 compact
+                iconOnly
                 label={proposal.status === 'approved' ? 'Listo' : 'En curso'}
                 tone={proposal.status === 'approved' ? 'cycle' : 'warning'}
               />

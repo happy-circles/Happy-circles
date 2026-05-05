@@ -194,9 +194,9 @@ export function ProfileScreen() {
   const pendingScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const delayedFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [highlightTarget, setHighlightTarget] = useState<
-    'account' | 'methods' | 'device' | null
-  >(null);
+  const [highlightTarget, setHighlightTarget] = useState<'account' | 'methods' | 'device' | null>(
+    null,
+  );
 
   const accountLabel =
     currentUserProfile?.displayName ??
@@ -795,7 +795,7 @@ export function ProfileScreen() {
               session.setupState.biometricsEligible
                 ? session.biometricLabel
                 : session.biometricAvailable
-                  ? 'Primero valida el telefono'
+                  ? 'Primero valida este dispositivo'
                   : 'No disponible'
             }
             title="Biometria"

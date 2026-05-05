@@ -21,7 +21,7 @@ flowchart TD
     H --> I
     I --> L{"app/_layout"}
     K --> L
-    L -->|"signed_out"| M["/sign-in"]
+    L -->|"signed_out"| M["/join?mode=sign-in"]
     L -->|"setup incompleto"| N["/setup-account?step=..."]
     L -->|"pending invite intent"| O["/invite/{token}"]
     L -->|"perfil completo"| P["/home"]
@@ -97,7 +97,7 @@ flowchart TD
     C --> D["deliveryToken + inviteLink + expiresAt"]
     D --> E["Compartir link, copiar o mostrar QR"]
     F["Abrir /invite/{token}"] --> G{"Sesion y perfil listos?"}
-    G -->|"No session"| H["writePendingInviteIntent + /sign-in"]
+    G -->|"No session"| H["writePendingInviteIntent + /join?mode=sign-in"]
     G -->|"Perfil incompleto"| I["writePendingInviteIntent + /setup-account"]
     G -->|"Si"| J["get-friendship-invite-preview"]
     J --> K{"preview.canClaim?"}
@@ -111,7 +111,7 @@ flowchart TD
 
 Hechos del codigo:
 
-- `InvitePersonScreen` usa `useCreateExternalFriendshipInviteMutation`.
+- `AddPersonContactsSheet` usa `useCreateExternalFriendshipInviteMutation`.
 - La mutacion invoca la Edge Function `create-external-friendship-invite` con `idempotencyKey`.
 - `InviteLinkScreen` guarda `pendingInviteIntent` si la persona esta signed out o con setup incompleto.
 - `useFriendshipInvitePreviewQuery` llama `get-friendship-invite-preview`.

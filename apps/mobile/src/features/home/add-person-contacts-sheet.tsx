@@ -287,12 +287,14 @@ function ContactRow({
 export function AddPersonContactsSheet({
   currentUserAvatarUrl,
   currentUserLabel,
+  initialSearchValue,
   onClose,
   transactionContext,
   visible,
 }: {
   readonly currentUserAvatarUrl?: string | null;
   readonly currentUserLabel: string;
+  readonly initialSearchValue?: string | null;
   readonly onClose: () => void;
   readonly transactionContext?: AddPersonTransactionContext | null;
   readonly visible: boolean;
@@ -434,8 +436,9 @@ export function AddPersonContactsSheet({
     }
 
     setMessage(null);
+    setSearchValue(initialSearchValue?.trim() ?? '');
     void loadContacts();
-  }, [loadContacts, visible]);
+  }, [initialSearchValue, loadContacts, visible]);
 
   useEffect(() => {
     if (!visible || !canReadContacts || contactResolutionWindow.length === 0) {

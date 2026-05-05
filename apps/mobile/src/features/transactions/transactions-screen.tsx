@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
+import type { TransactionCategory } from '@happy-circles/shared';
 
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
@@ -36,6 +37,12 @@ import {
   markPendingTransactionIdsSeen,
 } from '@/lib/pending-transaction-views';
 import { theme } from '@/lib/theme';
+import {
+  normalizeTransactionCategory,
+  transactionCategoryColor,
+  transactionCategoryIcon,
+  transactionCategoryLabel,
+} from '@/lib/transaction-categories';
 import {
   normalizeTransactionFilter,
   primaryTransactionFilter,
@@ -112,6 +119,13 @@ function matchesHistoryFilter(item: ActivityItemDto, filter: TransactionRootFilt
   }
 
   return false;
+}
+
+function matchesCategoryFilter(
+  item: ActivityItemDto,
+  category: TransactionCategory | null,
+): boolean {
+  return !category || transactionVisualCategory(item) === category;
 }
 
 function emptyFilterTitle(filter: TransactionRootFilter): string {
@@ -314,11 +328,18 @@ function FilterPill({
 
 export function TransactionsScreen() {
   const router = useRouter();
-  const searchParams = useLocalSearchParams<{ filter?: string | string[] }>();
+  const searchParams = useLocalSearchParams<{
+    category?: string | string[];
+    filter?: string | string[];
+  }>();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const initialFilter = normalizeTransactionFilter(searchParams.filter);
+  const rawCategory = Array.isArray(searchParams.category)
+    ? searchParams.category[0]
+    : searchParams.category;
+  const categoryFilter = rawCategory ? normalizeTransactionCategory(rawCategory) : null;
   const [activeFilter, setActiveFilter] = useState<TransactionRootFilter>(initialFilter);
   const [expandedCaseIds, setExpandedCaseIds] = useState<readonly string[]>([]);
   const [seenPendingTransactionIds, setSeenPendingTransactionIds] =
@@ -329,12 +350,16 @@ export function TransactionsScreen() {
   const historySection = sections.find((section) => section.key === 'history');
   const activePrimaryFilter = primaryTransactionFilter(activeFilter);
   const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
-  const visiblePendingTransactionItems = pendingTransactionItems.filter((item) =>
-    matchesPendingFilter(item, activeFilter),
+  const visiblePendingTransactionItems = pendingTransactionItems.filter(
+    (item) =>
+      matchesPendingFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
   );
   const historyTransactionItems = (historySection?.items ?? [])
     .filter(isConsolidatedTransactionItem)
-    .filter((item) => matchesHistoryFilter(item, activeFilter));
+    .filter(
+      (item) =>
+        matchesHistoryFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
+    );
   const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const historyCases = useMemo(
     () => buildHistoryCases(historyTransactionItems.map((item) => activityHistoryCaseItem(item))),
@@ -445,6 +470,18 @@ export function TransactionsScreen() {
             />
           ))}
         </ScrollView>
+        {categoryFilter ? (
+          <View style={styles.categoryFilterChip}>
+            <Ionicons
+              color={transactionCategoryColor(categoryFilter)}
+              name={transactionCategoryIcon(categoryFilter) as keyof typeof Ionicons.glyphMap}
+              size={13}
+            />
+            <Text style={styles.categoryFilterText}>
+              Categoria: {transactionCategoryLabel(categoryFilter)}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {!hasVisibleTransactions ? (
@@ -533,6 +570,24 @@ const styles = StyleSheet.create({
   },
   filterStack: {
     gap: theme.spacing.xs,
+  },
+  categoryFilterChip: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  categoryFilterText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 16,
   },
   filterRail: {
     gap: theme.spacing.xs,

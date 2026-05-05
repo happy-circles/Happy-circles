@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { StatusChip } from '@/components/status-chip';
 import { theme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
@@ -70,21 +71,8 @@ export function TransactionSummaryRow({
             {title}
           </Text>
           {statusLabel ? (
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.status,
-                statusTone === 'primary' ? styles.statusPrimary : null,
-                statusTone === 'success' ? styles.statusSuccess : null,
-                statusTone === 'warning' ? styles.statusWarning : null,
-                statusTone === 'danger' ? styles.statusDanger : null,
-                statusTone === 'cycle' ? styles.statusCycle : null,
-              ]}
-            >
-              {statusLabel}
-            </Text>
+            <StatusChip compact iconOnly label={statusLabel} tone={statusTone} />
           ) : null}
-          {unread ? <View style={styles.unreadDot} /> : null}
         </View>
         {meta ? (
           <Text numberOfLines={1} style={styles.meta}>
@@ -116,6 +104,7 @@ export function TransactionSummaryRow({
           ) : null}
         </View>
       </View>
+      {unread ? <View pointerEvents="none" style={styles.unreadDot} /> : null}
     </View>
   );
 }
@@ -127,6 +116,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
     minHeight: 54,
+    position: 'relative',
   },
   surfaceRow: {
     backgroundColor: theme.colors.surface,
@@ -167,34 +157,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     minWidth: 0,
   },
-  status: {
-    color: theme.colors.textMuted,
-    flexShrink: 1,
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 12,
-    maxWidth: 118,
-  },
-  statusPrimary: {
-    color: theme.colors.primary,
-  },
-  statusSuccess: {
-    color: theme.colors.success,
-  },
-  statusWarning: {
-    color: theme.colors.warning,
-  },
-  statusDanger: {
-    color: theme.colors.danger,
-  },
-  statusCycle: {
-    color: transactionCategoryColor('cycle'),
-  },
   unreadDot: {
     backgroundColor: '#2f80ed',
     borderRadius: theme.radius.pill,
-    flexShrink: 0,
     height: 6,
+    position: 'absolute',
+    right: 0,
+    top: 0,
     width: 6,
   },
   meta: {

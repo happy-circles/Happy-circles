@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const MINIMUM_REFRESH_MS = 500;
+const MAXIMUM_REFRESH_MS = 8_000;
 
 interface SnapshotRefreshTarget {
   readonly isLoading: boolean;
@@ -16,6 +17,7 @@ function wait(ms: number) {
 export function useSnapshotRefresh(snapshotQuery: SnapshotRefreshTarget) {
   const [refreshing, setRefreshing] = useState(false);
   const mountedRef = useRef(true);
+  const { isLoading, refetch } = snapshotQuery;
 
   useEffect(
     () => () => {
@@ -25,15 +27,18 @@ export function useSnapshotRefresh(snapshotQuery: SnapshotRefreshTarget) {
   );
 
   const onRefresh = useCallback(async () => {
-    if (snapshotQuery.isLoading || refreshing) {
+    if (isLoading || refreshing) {
       return;
     }
 
     const startedAt = Date.now();
     setRefreshing(true);
+    const refetchPromise = refetch();
+    const timeoutPromise = wait(MAXIMUM_REFRESH_MS);
+    void refetchPromise.catch(() => undefined);
 
     try {
-      await snapshotQuery.refetch();
+      await Promise.race([refetchPromise, timeoutPromise]);
     } catch {
       // React Query keeps the request error in query state; the refresh affordance should close.
     } finally {
@@ -43,7 +48,7 @@ export function useSnapshotRefresh(snapshotQuery: SnapshotRefreshTarget) {
         setRefreshing(false);
       }
     }
-  }, [refreshing, snapshotQuery]);
+  }, [isLoading, refetch, refreshing]);
 
   return useMemo(
     () => ({

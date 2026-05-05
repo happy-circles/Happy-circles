@@ -15,7 +15,7 @@ import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
-import { beginHomeEntryHandoff } from '@/lib/home-entry-handoff';
+import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import {
@@ -301,7 +301,11 @@ export function InviteLinkScreen() {
 
   async function handleDismissInvite() {
     await clearPendingInviteIntent();
-    beginHomeEntryHandoff();
+    await navigateHome();
+  }
+
+  async function navigateHome() {
+    await beginHomeEntryHandoffAfterScrollReset();
     returnToRoute(router, '/home');
   }
 
@@ -378,10 +382,7 @@ export function InviteLinkScreen() {
           {!preview.canClaim && !preview.canApprove ? (
             <PrimaryAction
               label="Volver al inicio"
-              onPress={() => {
-                beginHomeEntryHandoff();
-                returnToRoute(router, '/home');
-              }}
+              onPress={() => void navigateHome()}
               variant="secondary"
             />
           ) : null}

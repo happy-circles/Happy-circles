@@ -92,6 +92,11 @@ export interface BalanceAnalyticsPersonRowDto {
   readonly periodOwedToMeMinor: number;
   readonly previousPeriodNetMinor: number;
   readonly topCategories: readonly TransactionCategory[];
+  readonly topCategoryBreakdown: readonly {
+    readonly category: TransactionCategory;
+    readonly netMinor: number;
+    readonly movementCount: number;
+  }[];
 }
 
 export interface BalanceAnalyticsCategoryRowDto {

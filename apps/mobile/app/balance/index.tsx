@@ -1,9 +1,12 @@
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { BalanceOverviewScreen } from '@/features/balance/balance-overview-screen';
 import { theme } from '@/lib/theme';
 
 export default function BalanceRoute() {
+  const params = useLocalSearchParams<{ segment?: string | string[] }>();
+  const rawSegment = Array.isArray(params.segment) ? params.segment[0] : params.segment;
+
   return (
     <>
       <Stack.Screen
@@ -16,7 +19,7 @@ export default function BalanceRoute() {
           headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
         }}
       />
-      <BalanceOverviewScreen />
+      <BalanceOverviewScreen initialFocus={rawSegment ?? null} />
     </>
   );
 }

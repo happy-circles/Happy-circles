@@ -213,8 +213,8 @@ El primer prototipo es `click-through`, sin microinteracciones complejas.
 
 Recorridos minimos:
 
-1. `/sign-in` -> `/setup-account?step=profile` -> `/setup-account?step=photo` -> `/setup-account?step=security` -> `/home`
-2. `/home` -> `/invite` -> `share remote invite`
+1. `/join?mode=sign-in` -> `/setup-account?step=profile` -> `/setup-account?step=photo` -> `/setup-account?step=security` -> `/home`
+2. `/home` -> `/people?addPerson=1` -> `share remote invite`
 3. `/invite/[token]` -> `claim` o `review`
 4. `/home` -> `/profile`
 5. `/profile` -> `/setup-account?step=security`

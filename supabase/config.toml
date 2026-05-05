@@ -68,6 +68,9 @@ verify_jwt = true
 [functions.record-product-event]
 verify_jwt = true
 
+[functions.report-client-error]
+verify_jwt = true
+
 [functions.send-welcome-email]
 verify_jwt = true
 

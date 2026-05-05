@@ -14,10 +14,22 @@ import { SwipePager } from '@/components/swipe-pager';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
-import { useAppSnapshot } from '@/lib/live-data';
+import {
+  markNotificationItemsViewed,
+  notificationViewKeyForItem,
+  useAppSnapshot,
+} from '@/lib/live-data';
 import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
-import { buildSetupReminderItem, getSetupPromptDismissed } from '@/lib/setup-reminder';
+import {
+  buildAppleAuthReminderItem,
+  buildBiometricsReminderItem,
+  buildContactsReminderItem,
+  buildDeviceTrustReminderItem,
+  buildGoogleAuthReminderItem,
+  buildNotificationsReminderItem,
+  buildPasswordAuthReminderItem,
+} from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
@@ -122,6 +134,28 @@ const NOTIFICATION_CATEGORY_KEYS: readonly NotificationCategoryKey[] = [
   'friends',
   'reminders',
 ];
+const SETUP_REMINDER_BADGE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  'local-apple-auth-reminder': 'logo-apple',
+  'local-biometrics-reminder': 'finger-print',
+  'local-contacts-reminder': 'people-outline',
+  'local-device-trust-reminder': 'shield-checkmark-outline',
+  'local-google-auth-reminder': 'logo-google',
+  'local-notifications-reminder': 'notifications-outline',
+  'local-password-auth-reminder': 'key-outline',
+};
+const SETUP_REMINDER_STATUS_LABELS: Record<string, string> = {
+  'local-apple-auth-reminder': 'Acceso',
+  'local-biometrics-reminder': 'Seguridad',
+  'local-contacts-reminder': 'Conexion',
+  'local-device-trust-reminder': 'Prioritario',
+  'local-google-auth-reminder': 'Acceso',
+  'local-notifications-reminder': 'Avisos',
+  'local-password-auth-reminder': 'Acceso',
+};
+const SETUP_REMINDER_WARNING_IDS = new Set([
+  'local-biometrics-reminder',
+  'local-device-trust-reminder',
+]);
 
 function avatarColorForLabel(label: string): string {
   let hash = 0;
@@ -202,6 +236,17 @@ function notificationCategoryMeta(item: ActivityItemDto): NotificationCategoryMe
   return (
     NOTIFICATION_CATEGORIES.find((option) => option.key === category) ?? NOTIFICATION_CATEGORIES[0]
   );
+}
+
+function setupReminderBadgeIcon(
+  item: ActivityItemDto,
+  fallback: keyof typeof Ionicons.glyphMap,
+): keyof typeof Ionicons.glyphMap {
+  return SETUP_REMINDER_BADGE_ICONS[item.id] ?? fallback;
+}
+
+function setupReminderStatusLabel(item: ActivityItemDto): string | null {
+  return SETUP_REMINDER_STATUS_LABELS[item.id] ?? null;
 }
 
 function readStringField(value: unknown, key: string): string | null {
@@ -445,6 +490,14 @@ function NotificationSection({
 }
 
 function buildPendingCardPresentation(item: ActivityItemDto): PendingCardPresentation {
+  const setupStatusLabel = setupReminderStatusLabel(item);
+
+  if (setupStatusLabel) {
+    return {
+      eyebrow: setupStatusLabel,
+    };
+  }
+
   if (item.kind === 'financial_request' && item.status === 'requires_you') {
     return {
       eyebrow: 'Requiere tu respuesta',
@@ -596,6 +649,18 @@ function inviteNotificationStatusTone(status: string): 'primary' | 'warning' | '
   return 'neutral';
 }
 
+function pendingNotificationStatusTone(item: ActivityItemDto): 'primary' | 'warning' | 'neutral' {
+  if (SETUP_REMINDER_WARNING_IDS.has(item.id)) {
+    return 'warning';
+  }
+
+  if (setupReminderStatusLabel(item)) {
+    return 'primary';
+  }
+
+  return inviteNotificationStatusTone(item.status);
+}
+
 function pendingDetailHref(
   item: ActivityItemDto,
   people: readonly PersonCardDto[],
@@ -680,45 +745,90 @@ export function ActivityScreen() {
   );
   const [visualActiveCategory, setVisualActiveCategory] =
     useState<NotificationCategoryKey>(activeCategory);
-  const [setupPromptDismissed, setSetupPromptDismissed] = useState(false);
+  const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = useMemo(() => sections.find((item) => item.key === 'pending'), [sections]);
   const basePendingItems = pendingSection?.items ?? [];
+  const notificationViewedKeys = useMemo(() => {
+    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
+    for (const key of optimisticNotificationViewedKeys) {
+      keys.add(key);
+    }
+
+    return keys;
+  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
+  const accountSetupEligible =
+    session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
   const needsContacts =
     session.setupState.contactsPermissionStatus !== 'granted' &&
     session.setupState.contactsPermissionStatus !== 'limited';
   const needsNotifications = !session.notificationsEnabled;
-  const setupReminderItem = useMemo(
+  const needsPasswordAuth = accountSetupEligible && !session.linkedMethods.hasEmailPassword;
+  const needsGoogleAuth = accountSetupEligible && !session.linkedMethods.hasGoogle;
+  const needsAppleAuth =
+    accountSetupEligible && session.appleSignInAvailable && !session.linkedMethods.hasApple;
+  const setupReminderItems = useMemo(
     () =>
-      setupPromptDismissed
-        ? buildSetupReminderItem({
-            needsContacts,
-            needsNotifications,
-          })
-        : null,
-    [needsContacts, needsNotifications, setupPromptDismissed],
+      [
+        accountSetupEligible && !session.isTrustedDevice ? buildDeviceTrustReminderItem() : null,
+        accountSetupEligible && session.biometricAvailable && !session.biometricsEnabled
+          ? buildBiometricsReminderItem()
+          : null,
+        needsPasswordAuth ? buildPasswordAuthReminderItem() : null,
+        needsGoogleAuth ? buildGoogleAuthReminderItem() : null,
+        needsAppleAuth ? buildAppleAuthReminderItem() : null,
+        needsContacts ? buildContactsReminderItem() : null,
+        needsNotifications ? buildNotificationsReminderItem() : null,
+      ].filter((item): item is ActivityItemDto => Boolean(item)),
+    [
+      accountSetupEligible,
+      needsAppleAuth,
+      needsContacts,
+      needsGoogleAuth,
+      needsNotifications,
+      needsPasswordAuth,
+      session.biometricAvailable,
+      session.biometricsEnabled,
+      session.isTrustedDevice,
+    ],
   );
   const allPendingItems = useMemo(
-    () => (setupReminderItem ? [setupReminderItem, ...basePendingItems] : basePendingItems),
-    [basePendingItems, setupReminderItem],
+    () => [...setupReminderItems, ...basePendingItems],
+    [basePendingItems, setupReminderItems],
+  );
+  const unviewedPendingItems = useMemo(
+    () =>
+      allPendingItems.filter(
+        (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      ),
+    [allPendingItems, notificationViewedKeys],
+  );
+  const reviewedPendingItems = useMemo(
+    () =>
+      allPendingItems.filter((item) =>
+        notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      ),
+    [allPendingItems, notificationViewedKeys],
   );
   const people = snapshotQuery.data?.people ?? [];
   const categoryCounts = useMemo(() => {
     const counts: Record<NotificationCategoryKey, number> = {
-      all: allPendingItems.length,
+      all: unviewedPendingItems.length,
       transactions: 0,
       friends: 0,
       reminders: 0,
     };
 
-    for (const item of allPendingItems) {
+    for (const item of unviewedPendingItems) {
       const category = notificationCategoryForItem(item);
       counts[category] += 1;
     }
 
     return counts;
-  }, [allPendingItems]);
+  }, [unviewedPendingItems]);
 
   useEffect(() => {
     setVisualActiveCategory(activeCategory);
@@ -736,18 +846,36 @@ export function ActivityScreen() {
   }, [requestedCategory, requestedDomain]);
 
   useEffect(() => {
-    let isMounted = true;
+    setOptimisticNotificationViewedKeys(new Set());
+  }, [session.userId]);
 
-    void getSetupPromptDismissed(session.userId).then((dismissed) => {
-      if (isMounted) {
-        setSetupPromptDismissed(dismissed);
+  useEffect(() => {
+    if (!session.userId || unviewedPendingItems.length === 0) {
+      return;
+    }
+
+    const nextKeys = unviewedPendingItems.map((item) => notificationViewKeyForItem(item));
+    const nextKeySet = new Set(nextKeys);
+    setOptimisticNotificationViewedKeys((current) => {
+      const merged = new Set(current);
+      for (const key of nextKeys) {
+        merged.add(key);
       }
+
+      return merged;
     });
 
-    return () => {
-      isMounted = false;
-    };
-  }, [session.userId]);
+    void markNotificationItemsViewed(session.userId, unviewedPendingItems).catch(() => {
+      setOptimisticNotificationViewedKeys((current) => {
+        const next = new Set(current);
+        for (const key of nextKeySet) {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    });
+  }, [session.userId, unviewedPendingItems]);
 
   function closeNotifications() {
     backOrReturnTo(router, '/home');
@@ -772,7 +900,7 @@ export function ActivityScreen() {
     returnToRoute(router, target.href);
   }
 
-  function renderPendingCard(item: ActivityItemDto) {
+  function renderPendingCard(item: ActivityItemDto, unread: boolean) {
     const category = notificationCategoryMeta(item);
     const actor = notificationActorForItem(item, people);
     const detailHref = pendingDetailHref(item, people);
@@ -812,7 +940,7 @@ export function ActivityScreen() {
           onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
           statusLabel={null}
           statusTone={transactionStatusTone(item)}
-          unread
+          unread={unread}
         >
           {detailHref ? (
             <PrimaryAction
@@ -832,8 +960,7 @@ export function ActivityScreen() {
 
     if (notificationCategoryForItem(item) === 'transactions') {
       const isSystemTransaction = isCycleTransactionItem(item);
-      const transactionActorLabel =
-        isSystemTransaction ? 'Happy Circle' : actor.label;
+      const transactionActorLabel = isSystemTransaction ? 'Happy Circle' : actor.label;
 
       return (
         <TransactionEventCard
@@ -841,9 +968,7 @@ export function ActivityScreen() {
           actorAvatarUrl={isSystemTransaction ? null : actor.avatarUrl}
           actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
           actorFallbackColor={
-            isSystemTransaction
-              ? transactionToneColor(item)
-              : avatarColorForLabel(actor.label)
+            isSystemTransaction ? transactionToneColor(item) : avatarColorForLabel(actor.label)
           }
           actorLabel={transactionActorLabel}
           amountColor={transactionToneColor(item)}
@@ -860,7 +985,7 @@ export function ActivityScreen() {
           onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
           statusLabel={null}
           statusTone={transactionStatusTone(item)}
-          unread
+          unread={unread}
         />
       );
     }
@@ -877,7 +1002,7 @@ export function ActivityScreen() {
         amountColor={category.color}
         badgeBackgroundColor={category.backgroundColor}
         badgeColor={category.color}
-        badgeIcon={category.icon}
+        badgeIcon={setupReminderBadgeIcon(item, category.icon)}
         categoryPlacement="meta"
         compact
         compactMetaLayout="stacked"
@@ -889,20 +1014,23 @@ export function ActivityScreen() {
         )}
         onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
         statusLabel={cardPresentation.eyebrow}
-        statusTone={inviteNotificationStatusTone(item.status)}
-        unread
+        statusTone={pendingNotificationStatusTone(item)}
+        unread={unread}
       />
     );
   }
 
   function renderNotificationPage(categoryKey: NotificationCategoryKey) {
-    const categoryItems = allPendingItems.filter((item) =>
+    const categoryPendingItems = unviewedPendingItems.filter((item) =>
+      matchesNotificationCategory(item, categoryKey),
+    );
+    const categoryReviewedItems = reviewedPendingItems.filter((item) =>
       matchesNotificationCategory(item, categoryKey),
     );
     const categoryMeta =
       NOTIFICATION_CATEGORIES.find((option) => option.key === categoryKey) ??
       NOTIFICATION_CATEGORIES[0];
-    const hasNotifications = categoryItems.length > 0;
+    const hasNotifications = categoryPendingItems.length > 0 || categoryReviewedItems.length > 0;
 
     return (
       <BrandedRefreshScrollView
@@ -929,9 +1057,18 @@ export function ActivityScreen() {
             }
           />
         ) : (
-          <NotificationSection title="Pendientes">
-            {categoryItems.map((item) => renderPendingCard(item))}
-          </NotificationSection>
+          <>
+            {categoryPendingItems.length > 0 ? (
+              <NotificationSection title="Pendientes">
+                {categoryPendingItems.map((item) => renderPendingCard(item, true))}
+              </NotificationSection>
+            ) : null}
+            {categoryReviewedItems.length > 0 ? (
+              <NotificationSection title="Revisadas">
+                {categoryReviewedItems.map((item) => renderPendingCard(item, false))}
+              </NotificationSection>
+            ) : null}
+          </>
         )}
       </BrandedRefreshScrollView>
     );
@@ -966,48 +1103,50 @@ export function ActivityScreen() {
     <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <Pressable onPress={closeNotifications} style={styles.backdropTapTarget} />
       <View style={styles.layout}>
-        <View style={styles.fixedTop}>
-          <View style={styles.heroRow}>
-            <Text style={styles.heroTitle}>Notificaciones</Text>
-            <Pressable
-              onPress={closeNotifications}
-              style={({ pressed }) => [
-                styles.closeButton,
-                pressed ? styles.tabButtonPressed : null,
-              ]}
-            >
-              <Ionicons color={theme.colors.text} name="close" size={22} />
-            </Pressable>
+        <View style={styles.sheetContent}>
+          <View style={styles.fixedTop}>
+            <View style={styles.heroRow}>
+              <Text style={styles.heroTitle}>Notificaciones</Text>
+              <Pressable
+                onPress={closeNotifications}
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  pressed ? styles.tabButtonPressed : null,
+                ]}
+              >
+                <Ionicons color={theme.colors.text} name="close" size={22} />
+              </Pressable>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.panelArea}>
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.notificationTabs}
-            showsHorizontalScrollIndicator={false}
-            style={styles.notificationTabsScroll}
-          >
-            {NOTIFICATION_CATEGORIES.map((category) => (
-              <NotificationCategoryTab
-                count={categoryCounts[category.key]}
-                key={category.key}
-                meta={category}
-                onPress={() => changeActiveCategory(category.key)}
-                selected={visualActiveCategory === category.key}
-              />
-            ))}
-          </ScrollView>
+          <View style={styles.panelArea}>
+            <ScrollView
+              horizontal
+              contentContainerStyle={styles.notificationTabs}
+              showsHorizontalScrollIndicator={false}
+              style={styles.notificationTabsScroll}
+            >
+              {NOTIFICATION_CATEGORIES.map((category) => (
+                <NotificationCategoryTab
+                  count={categoryCounts[category.key]}
+                  key={category.key}
+                  meta={category}
+                  onPress={() => changeActiveCategory(category.key)}
+                  selected={visualActiveCategory === category.key}
+                />
+              ))}
+            </ScrollView>
 
-          <SwipePager
-            accessibilityLabel="Categorias de notificaciones"
-            onChange={changeActiveCategory}
-            onPreviewChange={setVisualActiveCategory}
-            renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
-            style={styles.sheetScrollWrap}
-            value={activeCategory}
-            values={NOTIFICATION_CATEGORY_KEYS}
-          />
+            <SwipePager
+              accessibilityLabel="Categorias de notificaciones"
+              onChange={changeActiveCategory}
+              onPreviewChange={setVisualActiveCategory}
+              renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
+              style={styles.sheetScrollWrap}
+              value={activeCategory}
+              values={NOTIFICATION_CATEGORY_KEYS}
+            />
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -1031,12 +1170,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
-    gap: theme.spacing.md,
     height: '88%',
     maxHeight: '88%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
+    width: '100%',
+  },
+  sheetContent: {
+    alignSelf: 'center',
+    flex: 1,
+    gap: theme.spacing.md,
+    maxWidth: 560,
+    minHeight: 0,
     width: '100%',
   },
   fixedTop: {

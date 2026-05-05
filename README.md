@@ -11,7 +11,7 @@ The repository currently contains two user-facing apps:
 - `apps/mobile`: Expo + React Native app with authentication, onboarding, people, invitations, balances, analytics, transactions, settlements, profile, security, notifications, and audit surfaces.
 - `apps/landing`: Next.js app for the public landing page, store/download routing, native app-link gateway routes, and iOS/Android association files.
 
-The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage, and Edge Functions. The web app supports Universal Links and Android App Links for operational routes such as `/join`, `/invite`, `/reset-password`, `/setup-account`, and `/sign-in`.
+The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage, and Edge Functions. The web app supports Universal Links and Android App Links for operational routes such as `/join`, `/join/{token}`, `/invite/{token}`, `/reset-password`, and `/setup-account`.
 
 ## How The App Works
 
@@ -178,11 +178,9 @@ The landing app serves the operational gateway for:
 
 - `/join`
 - `/join/{token}`
-- `/invite`
 - `/invite/{token}`
 - `/reset-password`
 - `/setup-account`
-- `/sign-in`
 
 It also serves:
 
@@ -198,6 +196,7 @@ Production setup still requires DNS, Vercel domain attachment, Apple Team ID, An
 - `docs/app-link-gateway.md`: web gateway, Universal Links, Android App Links, and auth redirects.
 - `docs/security-architecture.md`: RLS, Edge Function, invite-token, device-trust, and migration rules.
 - `docs/analytics-data-model.md`: product analytics schema, privacy rules, and metric sources.
+- `docs/support-observability.md`: support codes, client error reports, and how to trace user-reported failures.
 - `docs/graph-cycle-worker.md`: durable graph job queue and scheduled worker fallback.
 - `docs/store-release-readiness.md`: App Store and Play Store release checklist.
 - `docs/ux-copy-standards.md`: visible copy, UI state, and design source guidance.

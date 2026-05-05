@@ -53,7 +53,7 @@ export function PendingSnippetCard({
           <Text style={styles.eyebrow}>{eyebrow}</Text>
           <Text style={styles.title}>{title}</Text>
         </View>
-        <StatusChip label={statusLabel} tone={statusTone} />
+        <StatusChip compact iconOnly label={statusLabel} tone={statusTone} />
       </View>
 
       {amountLabel ? (
@@ -108,7 +108,7 @@ export function PendingSnippetCard({
 const styles = StyleSheet.create({
   card: {
     gap: theme.spacing.sm,
-    marginVertical: theme.spacing.xxs,
+    minHeight: 76,
   },
   header: {
     alignItems: 'flex-start',

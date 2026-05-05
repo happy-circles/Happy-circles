@@ -7,19 +7,22 @@ import { buildNativeAppUrl } from '@/lib/app-links';
 export function AppOpenButton({
   fallbackPath,
   label = 'Abrir Happy Circles',
+  nativePath,
 }: Readonly<{
   fallbackPath: string;
   label?: string;
+  nativePath?: string;
 }>) {
-  const fallbackHref = useMemo(() => buildNativeAppUrl(fallbackPath), [fallbackPath]);
+  const fallbackHref = useMemo(
+    () => buildNativeAppUrl(nativePath ?? fallbackPath),
+    [fallbackPath, nativePath],
+  );
   const [href, setHref] = useState(fallbackHref);
 
   useEffect(() => {
-    const nextHref = buildNativeAppUrl(
-      window.location.pathname,
-      window.location.search,
-      window.location.hash,
-    );
+    const nextHref = nativePath
+      ? buildNativeAppUrl(nativePath)
+      : buildNativeAppUrl(window.location.pathname, window.location.search, window.location.hash);
     setHref(nextHref);
 
     const timer = window.setTimeout(() => {
@@ -27,7 +30,7 @@ export function AppOpenButton({
     }, 350);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [nativePath]);
 
   return (
     <a className="primaryButton" href={href}>

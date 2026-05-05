@@ -55,6 +55,12 @@ import { createIdempotencyKey } from './idempotency';
 import { queryClient } from './query-client';
 import { supabase } from './supabase';
 import {
+  createSupportId,
+  isJwtAuthError,
+  readFunctionErrorDetails,
+  reportAndCreateSupportError,
+} from './support-errors';
+import {
   DEFAULT_TRANSACTION_CATEGORY,
   USER_TRANSACTION_CATEGORIES,
   normalizeTransactionCategory,
@@ -103,6 +109,7 @@ type SettlementProposalRow = Database['public']['Tables']['settlement_proposals'
 type SettlementParticipantRow =
   Database['public']['Tables']['settlement_proposal_participants']['Row'];
 type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
+type NotificationViewRow = Database['public']['Tables']['notification_views']['Row'];
 type OpenDebtRow = NonNullFields<
   Database['public']['Views']['v_open_debts']['Row'],
   | 'amount_minor'
@@ -537,6 +544,8 @@ export interface AppSnapshot {
   readonly accountInviteHistoryItems: readonly AccountInviteListItem[];
   readonly accountInviteSummary: AccountInviteSummary;
   readonly activitySections: readonly ActivitySectionDto[];
+  readonly notificationUnreadCount: number;
+  readonly notificationViewedKeys: ReadonlySet<string>;
   readonly pendingCount: number;
   readonly auditEvents: readonly AuditListItem[];
   readonly settlementsById: Readonly<Record<string, SettlementDetailDto>>;
@@ -597,6 +606,26 @@ function assertSupabaseClient() {
   }
 
   return supabase;
+}
+
+export function notificationViewKeyForItem(
+  item: Pick<ActivityItemDto, 'id' | 'kind' | 'status'>,
+): string {
+  return [item.kind, item.id, item.status].map((part) => String(part).trim()).join(':');
+}
+
+function notificationViewRowForItem(
+  userId: string,
+  item: Pick<ActivityItemDto, 'id' | 'kind' | 'status'>,
+): Database['public']['Tables']['notification_views']['Insert'] {
+  return {
+    user_id: userId,
+    notification_key: notificationViewKeyForItem(item),
+    notification_kind: String(item.kind),
+    source_item_id: String(item.id),
+    notification_status: String(item.status),
+    viewed_at: new Date().toISOString(),
+  };
 }
 
 function getCounterpartyUserId(
@@ -3492,7 +3521,9 @@ function buildCurrentPersonBalances(
   }));
 }
 
-function topCategoriesForEvents(events: readonly AnalyticsEvent[]): readonly TransactionCategory[] {
+function topCategoryBreakdownForEvents(
+  events: readonly AnalyticsEvent[],
+): BalanceAnalyticsPersonRowDto['topCategoryBreakdown'] {
   const totals = new Map<
     TransactionCategory,
     {
@@ -3527,7 +3558,11 @@ function topCategoriesForEvents(events: readonly AnalyticsEvent[]): readonly Tra
       return right.movementCount - left.movementCount;
     })
     .slice(0, 3)
-    .map((entry) => entry.category);
+    .map((entry) => ({
+      category: entry.category,
+      netMinor: entry.netMinor,
+      movementCount: entry.movementCount,
+    }));
 }
 
 function buildPeopleAnalyticsRows(input: {
@@ -3551,6 +3586,7 @@ function buildPeopleAnalyticsRows(input: {
         (total, event) => total + event.netMinor,
         0,
       );
+      const topCategoryBreakdown = topCategoryBreakdownForEvents(currentEvents);
 
       return {
         key: person.userId,
@@ -3564,7 +3600,8 @@ function buildPeopleAnalyticsRows(input: {
         periodIOweMinor,
         periodOwedToMeMinor,
         previousPeriodNetMinor,
-        topCategories: topCategoriesForEvents(currentEvents),
+        topCategories: topCategoryBreakdown.map((entry) => entry.category),
+        topCategoryBreakdown,
       };
     })
     .filter(
@@ -4234,10 +4271,14 @@ function buildLiveSnapshot(input: {
   readonly inboxItems: readonly InboxItemRow[];
   readonly settlementProposals: readonly SettlementProposalRow[];
   readonly settlementParticipants: readonly SettlementParticipantRow[];
+  readonly notificationViews: readonly NotificationViewRow[];
   readonly auditEvents: readonly AuditEventRow[];
 }): AppSnapshot {
   const nameByUserId = buildNameByUserId(input.profiles, input.currentUserId);
   const profileByUserId = buildProfileByUserId(input.profiles);
+  const notificationViewedKeys = new Set(
+    input.notificationViews.map((view) => view.notification_key),
+  );
   const relationshipsByCounterpartyId = new Map<string, RelationshipRow>();
   const counterpartyByRelationshipId = new Map<
     string,
@@ -4497,6 +4538,9 @@ function buildLiveSnapshot(input: {
     ...friendshipState.pendingItems,
     ...accountInviteState.pendingItems,
   ]);
+  const unviewedPendingItems = pendingItems.filter(
+    (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+  );
 
   const historyItems = uniqueActivityItemsById(
     sortHistoryItems([
@@ -4640,6 +4684,8 @@ function buildLiveSnapshot(input: {
         items: historyItems,
       },
     ],
+    notificationUnreadCount: unviewedPendingItems.length,
+    notificationViewedKeys,
     pendingCount: pendingItems.length,
     auditEvents: buildAuditItems(input.auditEvents),
     settlementsById,
@@ -4727,6 +4773,14 @@ async function fetchLiveSnapshot(
         .select('id, settlement_proposal_id, participant_user_id, decision, decided_at, created_at')
         .abortSignal(signal),
       client
+        .from('notification_views')
+        .select(
+          'user_id, notification_key, notification_kind, source_item_id, notification_status, viewed_at, created_at, updated_at',
+        )
+        .eq('user_id', currentUserId)
+        .order('viewed_at', { ascending: false })
+        .abortSignal(signal),
+      client
         .from('audit_events')
         .select(
           'id, actor_user_id, entity_type, entity_id, event_name, request_id, metadata_json, created_at',
@@ -4750,6 +4804,7 @@ async function fetchLiveSnapshot(
       inboxItemsResult,
       settlementProposalsResult,
       settlementParticipantsResult,
+      notificationViewsResult,
       auditResult,
     ] = await Promise.race([snapshotResultsPromise, snapshotAbort.timeoutPromise]);
 
@@ -4809,6 +4864,10 @@ async function fetchLiveSnapshot(
       throw new Error(settlementParticipantsResult.error.message);
     }
 
+    if (notificationViewsResult.error) {
+      throw new Error(notificationViewsResult.error.message);
+    }
+
     if (auditResult.error) {
       throw new Error(auditResult.error.message);
     }
@@ -4829,6 +4888,7 @@ async function fetchLiveSnapshot(
       inboxItems: (inboxItemsResult.data ?? []) as readonly InboxItemRow[],
       settlementProposals: settlementProposalsResult.data ?? [],
       settlementParticipants: settlementParticipantsResult.data ?? [],
+      notificationViews: notificationViewsResult.data ?? [],
       auditEvents: auditResult.data ?? [],
     });
   } catch (error) {
@@ -4851,58 +4911,16 @@ async function fetchAppSnapshot(userId: string | null, signal?: AbortSignal) {
     throw new Error('No hay una sesion lista para cargar datos.');
   }
 
-  return fetchLiveSnapshot(userId, signal);
-}
-
-async function parseFunctionError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return 'Unexpected error';
+  try {
+    return await fetchLiveSnapshot(userId, signal);
+  } catch (error) {
+    throw reportAndCreateSupportError({
+      error,
+      fallbackMessage: 'No pudimos sincronizar tus datos.',
+      kind: 'data_sync',
+      metadata: { operation: 'fetch_app_snapshot' },
+    });
   }
-
-  const maybeContext =
-    'context' in error && error.context instanceof Response ? error.context : null;
-
-  if (maybeContext) {
-    try {
-      const cloned = maybeContext.clone();
-      const body = (await cloned.json()) as { error?: string; message?: string; code?: string };
-      if (typeof body.error === 'string' && body.error.length > 0) {
-        if (body.code === 'auth_required') {
-          return `${body.code}: ${body.error}`;
-        }
-
-        return body.error;
-      }
-
-      if (typeof body.message === 'string' && body.message.length > 0) {
-        return body.message;
-      }
-    } catch {
-      try {
-        const text = await maybeContext.text();
-        if (text.trim().length > 0) {
-          return `${error.message}: ${text}`;
-        }
-      } catch {
-        return error.message;
-      }
-    }
-  }
-
-  return error.message;
-}
-
-function isJwtAuthError(message: string): boolean {
-  const normalized = message.trim().toLocaleLowerCase('en-US');
-
-  return (
-    normalized.includes('invalid jwt') ||
-    normalized.includes('jwt expired') ||
-    normalized.includes('jwt malformed') ||
-    normalized.includes('bad jwt') ||
-    normalized.includes('auth_required') ||
-    normalized.includes('missing authorization header')
-  );
 }
 
 async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TResult>(
@@ -4910,12 +4928,20 @@ async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TRe
   body: TBody,
 ): Promise<TResult> {
   const client = assertSupabaseClient();
-  const invoke = async () => client.functions.invoke<TResult>(name, { body });
+  const supportId = createSupportId();
+  const invoke = async () =>
+    client.functions.invoke<TResult>(name, {
+      body,
+      headers: {
+        'x-client-info': 'happy-circles-mobile',
+        'x-request-id': supportId,
+      },
+    });
   let result = await invoke();
 
   if (result.error) {
-    const parsedMessage = await parseFunctionError(result.error);
-    if (isJwtAuthError(parsedMessage)) {
+    const details = await readFunctionErrorDetails(result.error);
+    if (isJwtAuthError(details)) {
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
       if (refreshError || !refreshData.session) {
         await client.auth.signOut();
@@ -4924,21 +4950,56 @@ async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TRe
 
       result = await invoke();
       if (result.error) {
-        throw new Error(await parseFunctionError(result.error));
+        const retryDetails = await readFunctionErrorDetails(result.error);
+        throw reportAndCreateSupportError({
+          error: new Error(retryDetails.message),
+          errorCode: retryDetails.code,
+          functionName: name,
+          kind: 'edge_function',
+          metadata: { status: retryDetails.status ?? null },
+          requestId: retryDetails.requestId ?? supportId,
+          status: retryDetails.status,
+          supportId,
+        });
       }
 
       if (result.data === null) {
-        throw new Error(`La funcion ${name} respondio sin payload.`);
+        throw reportAndCreateSupportError({
+          error: new Error(`La funcion ${name} respondio sin payload.`),
+          errorCode: 'empty_payload',
+          functionName: name,
+          kind: 'edge_function',
+          metadata: { status: 'empty_payload' },
+          requestId: supportId,
+          supportId,
+        });
       }
 
       return result.data;
     }
 
-    throw new Error(parsedMessage);
+    throw reportAndCreateSupportError({
+      error: new Error(details.message),
+      errorCode: details.code,
+      functionName: name,
+      kind: 'edge_function',
+      metadata: { status: details.status ?? null },
+      requestId: details.requestId ?? supportId,
+      status: details.status,
+      supportId,
+    });
   }
 
   if (result.data === null) {
-    throw new Error(`La funcion ${name} respondio sin payload.`);
+    throw reportAndCreateSupportError({
+      error: new Error(`La funcion ${name} respondio sin payload.`),
+      errorCode: 'empty_payload',
+      functionName: name,
+      kind: 'edge_function',
+      metadata: { status: 'empty_payload' },
+      requestId: supportId,
+      supportId,
+    });
   }
 
   return result.data;
@@ -4948,6 +5009,33 @@ async function invalidateAppSnapshot() {
   await queryClient.invalidateQueries({
     queryKey: [APP_SNAPSHOT_QUERY_KEY],
   });
+}
+
+export async function markNotificationItemsViewed(
+  userId: string | null,
+  items: readonly ActivityItemDto[],
+): Promise<void> {
+  if (!userId || items.length === 0) {
+    return;
+  }
+
+  const client = assertSupabaseClient();
+  const rowsByKey = new Map(
+    items.map((item) => {
+      const row = notificationViewRowForItem(userId, item);
+      return [row.notification_key, row] as const;
+    }),
+  );
+  const rows = Array.from(rowsByKey.values());
+  const { error } = await client.from('notification_views').upsert(rows, {
+    onConflict: 'user_id,notification_key',
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await invalidateAppSnapshot();
 }
 
 function useSensitiveMutationGuard() {
@@ -5269,16 +5357,39 @@ export function useUpdateProfileAvatarMutation() {
         uri: input.uri,
       } as unknown as Blob);
 
+      const supportId = createSupportId();
       const result = await client.functions.invoke<{ avatarPath: string }>('upload-avatar', {
         body: formData,
+        headers: {
+          'x-client-info': 'happy-circles-mobile',
+          'x-request-id': supportId,
+        },
       });
 
       if (result.error) {
-        throw new Error(await parseFunctionError(result.error));
+        const details = await readFunctionErrorDetails(result.error);
+        throw reportAndCreateSupportError({
+          error: new Error(details.message),
+          errorCode: details.code,
+          functionName: 'upload-avatar',
+          kind: 'edge_function',
+          metadata: { status: details.status ?? null },
+          requestId: details.requestId ?? supportId,
+          status: details.status,
+          supportId,
+        });
       }
 
       if (!result.data?.avatarPath) {
-        throw new Error('No se pudo actualizar la foto.');
+        throw reportAndCreateSupportError({
+          error: new Error('No se pudo actualizar la foto.'),
+          errorCode: 'empty_payload',
+          functionName: 'upload-avatar',
+          kind: 'edge_function',
+          metadata: { status: 'empty_payload' },
+          requestId: supportId,
+          supportId,
+        });
       }
 
       return result.data.avatarPath;
