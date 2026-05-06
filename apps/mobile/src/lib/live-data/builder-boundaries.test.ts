@@ -31,6 +31,22 @@ describe('live-data builder boundaries', () => {
     expect(source).not.toContain('function buildBalanceAnalytics');
   });
 
+  it('keeps public builder entrypoints compact', () => {
+    const budgets = new Map<string, number>([
+      ['builders/balance-analytics.ts', 500],
+      ['builders/financial-requests.ts', 500],
+      ['builders/friendship-invites.ts', 500],
+      ['builders/settlements.ts', 500],
+      ['types.ts', 500],
+    ]);
+
+    for (const [path, maxLines] of budgets) {
+      expect(readRepoFile(...path.split('/')).split(/\r?\n/).length, path).toBeLessThanOrEqual(
+        maxLines,
+      );
+    }
+  });
+
   it('keeps pure builders and utilities away from React, React Query and Supabase', () => {
     const files = [
       ...listTypeScriptFiles(resolve(liveDataRoot, 'builders')),

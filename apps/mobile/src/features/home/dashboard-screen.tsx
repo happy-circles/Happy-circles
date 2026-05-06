@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Text, View } from 'react-native';
+import {
+  HOME_REGISTER_FAB_CLEARANCE,
+  PEOPLE_TILE_AVATAR_SIZE,
+  dashboardStyles as styles,
+} from '@/features/home/dashboard-screen.styles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
-import { NotificationBellButton } from '@/components/notification-bell-button';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
-import { SurfaceCard } from '@/components/surface-card';
-import { SwipePager } from '@/components/swipe-pager';
-import { TransactionEventCard } from '@/components/transaction-event-card';
 import { BalanceLensCarousel } from '@/features/balance/balance-overview-screen';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
+import { InviteRequestsSheet } from '@/features/home/dashboard-invite-requests-sheet';
+import { DashboardLoadingState } from '@/features/home/dashboard-loading-state';
+import {
+  DashboardPeopleSection,
+  DashboardTransactionsSection,
+} from '@/features/home/dashboard-main-sections';
+import {
+  setupNotificationKey,
+  transactionPersonForItem,
+  transactionPersonHref,
+} from '@/features/home/dashboard-preview-cards';
 import {
   INVITE_REQUEST_TABS,
   balanceFocusHref,
@@ -25,8 +35,6 @@ import {
   inviteAccentBackgroundColor,
   inviteAccentColor,
   inviteCardIcon,
-  inviteRequestEmptyDescription,
-  inviteRequestEmptyTitle,
   inviteRequestMeta,
   isActiveQrInvite,
   isReceivedInvite,
@@ -40,6 +48,12 @@ import {
   type InviteRequestsTab,
   type TransactionTargetPanel,
 } from '@/features/home/dashboard-helpers';
+import {
+  HOME_CHROME_EXPANDED_HEIGHT,
+  HomeCollapsibleChrome,
+  HomeRegisterFab,
+  useCollapsibleHomeChrome,
+} from '@/features/home/home-collapsible-chrome';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
@@ -82,581 +96,12 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 const RECENT_TRANSACTION_LIMIT = 8;
-const PEOPLE_TILE_WIDTH = 68;
-const PEOPLE_TILE_CIRCLE_SIZE = 56;
-const PEOPLE_TILE_AVATAR_SIZE = 52;
-const PEOPLE_TILE_LABEL_LINE_HEIGHT = 15;
-const HOME_HEADER_ACTION_SIZE = 48;
-const HOME_HEADER_AVATAR_SIZE = 40;
-const HOME_HEADER_BRAND_LOGO_SIZE = 60;
-const HOME_HEADER_BRAND_TITLE_SIZE = 22;
-const HOME_REGISTER_FAB_CLEARANCE = 76;
-
-function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'displayName'>): string {
-  const source = `${person.userId}:${person.displayName}`;
-  let hash = 0;
-
-  for (let index = 0; index < source.length; index += 1) {
-    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
-  }
-
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? theme.colors.primary;
-}
-
-function personDebtBorderColor(person: PersonCardDto): string {
-  if (person.direction === 'owes_me' && person.netAmountMinor > 0) {
-    return theme.colors.success;
-  }
-
-  if (person.direction === 'i_owe' && person.netAmountMinor > 0) {
-    return theme.colors.warning;
-  }
-
-  return theme.colors.accent;
-}
-
-function firstName(value: string): string {
-  const [name] = value.trim().split(/\s+/);
-  return name && name.length > 0 ? name : 'Persona';
-}
-
-function badgeLabel(count: number): string {
-  return count > 99 ? '99+' : String(count);
-}
-
-function setupNotificationKey(id: string): string {
-  return notificationViewKeyForItem({
-    id,
-    kind: 'system_note',
-    status: 'pending',
-  });
-}
-
-function compactTransactionSign(item: ActivityItemDto): '+' | '-' | 'cycle' | 'neutral' {
-  if (isCycleTransactionItem(item)) {
-    return 'cycle';
-  }
-
-  if (transactionAmountIsVoided(item)) {
-    return 'neutral';
-  }
-
-  if (item.tone === 'positive') {
-    return '+';
-  }
-
-  if (item.tone === 'negative') {
-    return '-';
-  }
-
-  return 'neutral';
-}
-
-function compactTransactionAmountLabel(item: ActivityItemDto): string | null {
-  const amountLabel = transactionAmountLabel(item);
-  const sign = compactTransactionSign(item);
-
-  if (!amountLabel) {
-    return sign === 'cycle' ? 'Circle' : null;
-  }
-
-  if (sign === '+') {
-    return `+ ${amountLabel}`;
-  }
-
-  if (sign === '-') {
-    return `- ${amountLabel}`;
-  }
-
-  return amountLabel;
-}
-
-function personIdFromHref(href: string | undefined): string | null {
-  const match = href?.match(/^\/person\/([^/?#]+)/);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
-function transactionPersonForItem(
-  people: readonly PersonCardDto[],
-  item: ActivityItemDto,
-): PersonCardDto | undefined {
-  const hrefPersonId = personIdFromHref(item.href);
-  if (hrefPersonId) {
-    const personByHref = people.find((entry) => entry.userId === hrefPersonId);
-    if (personByHref) {
-      return personByHref;
-    }
-  }
-
-  return people.find((entry) => entry.displayName === item.counterpartyLabel);
-}
-
-function transactionPersonHref(
-  person: PersonCardDto | undefined,
-  item: ActivityItemDto,
-  panel: TransactionTargetPanel,
-): Href {
-  if (!person) {
-    return (item.href ?? '/transactions') as Href;
-  }
-
-  return `/person/${person.userId}?panel=${panel}&focus=${encodeURIComponent(
-    transactionFocusId(item),
-  )}` as Href;
-}
-
-function ShortcutTile({
-  href,
-  icon,
-  label,
-  badgeCount,
-  dashed = false,
-  onPress,
-}: {
-  readonly href?: Href;
-  readonly icon: keyof typeof Ionicons.glyphMap;
-  readonly label: string;
-  readonly badgeCount?: number;
-  readonly dashed?: boolean;
-  readonly onPress?: () => void;
-}) {
-  const content = (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.peopleTile, pressed ? styles.quickActionPressed : null]}
-    >
-      <View style={[styles.shortcutCircle, dashed ? styles.shortcutCircleDashed : null]}>
-        <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
-        {typeof badgeCount === 'number' && badgeCount > 0 ? (
-          <View style={styles.requestBadge}>
-            <Text style={styles.requestBadgeText}>{badgeLabel(badgeCount)}</Text>
-          </View>
-        ) : null}
-      </View>
-      <Text numberOfLines={1} style={styles.peopleTileLabel}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} asChild>
-        {content}
-      </Link>
-    );
-  }
-
-  return content;
-}
-
-function PersonTile({ person }: { readonly person: PersonCardDto }) {
-  return (
-    <Link href={`/person/${person.userId}` as Href} asChild>
-      <Pressable
-        style={({ pressed }) => [styles.peopleTile, pressed ? styles.quickActionPressed : null]}
-      >
-        <View style={[styles.personAvatarRing, { borderColor: personDebtBorderColor(person) }]}>
-          <AppAvatar
-            fallbackBackgroundColor={initialsBackgroundColor(person)}
-            fallbackTextColor={theme.colors.white}
-            imageUrl={person.avatarUrl ?? null}
-            label={person.displayName}
-            size={PEOPLE_TILE_AVATAR_SIZE}
-          />
-        </View>
-        <Text numberOfLines={1} style={styles.peopleTileLabel}>
-          {firstName(person.displayName)}
-        </Text>
-      </Pressable>
-    </Link>
-  );
-}
-
-function TransactionPreviewCard({
-  highlightPending = false,
-  isPending = false,
-  item,
-  onPress,
-  people,
-  unread = false,
-}: {
-  readonly highlightPending?: boolean;
-  readonly isPending?: boolean;
-  readonly item: ActivityItemDto;
-  readonly onPress?: () => void;
-  readonly people: readonly PersonCardDto[];
-  readonly unread?: boolean;
-}) {
-  const sign = compactTransactionSign(item);
-  const isSystemTransaction = sign === 'cycle';
-  const name = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
-  const person = transactionPersonForItem(people, item);
-  const fallbackPerson = {
-    displayName: name,
-    userId: person?.userId ?? item.id,
-  };
-  const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
-  const href = transactionPersonHref(person, item, targetPanel);
-  const amountLabel = compactTransactionAmountLabel(item);
-  const meta = transactionCreatedByMetaLabel(item, name);
-  const category = transactionVisualCategory(item);
-
-  return (
-    <TransactionEventCard
-      accentColor={transactionToneColor(item)}
-      actorAvatarUrl={isSystemTransaction ? null : (person?.avatarUrl ?? null)}
-      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-      actorFallbackColor={
-        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
-      }
-      actorLabel={name}
-      amountColor={transactionToneColor(item)}
-      amountLabel={amountLabel}
-      amountStruckThrough={transactionAmountIsVoided(item)}
-      category={category}
-      categoryPlacement={isSystemTransaction ? 'none' : 'avatar'}
-      compact
-      compactMetaLayout="inline"
-      context=""
-      href={onPress ? undefined : href}
-      meta={meta}
-      onPress={onPress}
-      pending={highlightPending}
-      pendingHighlightColor={transactionToneColor(item)}
-      statusLabel={transactionStatusLabel(item)}
-      statusTone={transactionStatusTone(item)}
-      unread={unread}
-    />
-  );
-}
-
-function InviteRequestTabButton({
-  count,
-  label,
-  selected,
-  onPress,
-}: {
-  readonly count: number;
-  readonly label: string;
-  readonly selected: boolean;
-  readonly onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.sheetTab,
-        selected ? styles.sheetTabActive : null,
-        pressed ? styles.quickActionPressed : null,
-      ]}
-    >
-      <Text style={[styles.sheetTabText, selected ? styles.sheetTabTextActive : null]}>
-        {label}
-      </Text>
-      {count > 0 ? (
-        <View style={styles.sheetTabBadge}>
-          <Text style={styles.sheetTabBadgeText}>{badgeLabel(count)}</Text>
-        </View>
-      ) : null}
-    </Pressable>
-  );
-}
-
-function InviteRequestRow({
-  item,
-  busyKey,
-  onAction,
-}: {
-  readonly item: InviteRequestItem;
-  readonly busyKey: string | null;
-  readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
-}) {
-  const displayName = displayNameForInvite(item);
-  const meta = inviteRequestMeta(item);
-  const accentColor = inviteAccentColor(item);
-  const accentBackgroundColor = inviteAccentBackgroundColor(item);
-  const busyPrefix = `${item.kind}:${item.inviteId}:`;
-  const isBusy = Boolean(busyKey?.startsWith(busyPrefix));
-  const showRespondingProfile = shouldShowRespondingInviteProfile(item);
-  const avatarUrl =
-    (showRespondingProfile ? item.respondingProfileAvatarUrl : null) ??
-    item.profileAvatarUrl ??
-    (item.kind === 'friendship_invite'
-      ? showRespondingProfile
-        ? resolveAvatarUrl(item.claimantSnapshot?.avatarPath ?? null)
-        : null
-      : showRespondingProfile
-        ? item.activatedUserAvatarUrl
-        : null);
-  const fallbackPerson: PersonCardDto = {
-    userId: item.inviteId,
-    displayName,
-    avatarUrl: null,
-    direction: 'settled',
-    lastActivityLabel: '',
-    netAmountMinor: 0,
-    pendingCount: 0,
-  };
-
-  const actionContent =
-    item.actionState === 'requires_you_response' ? (
-      <View style={styles.requestActions}>
-        <Pressable
-          accessibilityLabel="Rechazar solicitud"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonDanger,
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Aceptar solicitud"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => onAction(item, 'accept')}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonPrimary,
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
-        </Pressable>
-      </View>
-    ) : item.actionState === 'requires_you_review' ? (
-      <View style={styles.requestActions}>
-        <Pressable
-          accessibilityLabel="Rechazar solicitud"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonDanger,
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Aceptar solicitud"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => onAction(item, 'approve')}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonPrimary,
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
-        </Pressable>
-      </View>
-    ) : (item.kind === 'friendship_invite' && item.actionState === 'pending_claim') ||
-      (item.kind === 'account_invite' &&
-        item.actionState === 'pending_activation' &&
-        !item.activatedUserId) ? (
-      <View style={[styles.requestActions, styles.requestSingleActionRow]}>
-        <Pressable
-          accessibilityLabel="Cancelar invitacion"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => onAction(item, 'cancel')}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonDanger,
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={15} />
-        </Pressable>
-      </View>
-    ) : null;
-  const typeIcon = (
-    <View style={[styles.requestTypeIcon, { backgroundColor: accentBackgroundColor }]}>
-      <Ionicons color={accentColor} name={inviteCardIcon(item)} size={15} />
-    </View>
-  );
-  const profileContent = (
-    <View style={styles.requestPersonRow}>
-      <View style={styles.requestAvatarSlot}>
-        <AppAvatar
-          fallbackBackgroundColor={initialsBackgroundColor(fallbackPerson)}
-          fallbackTextColor={theme.colors.white}
-          imageUrl={avatarUrl}
-          label={displayName}
-          size={48}
-        />
-      </View>
-      <View style={styles.requestPersonCopy}>
-        <Text numberOfLines={1} style={styles.requestPersonName}>
-          {displayName}
-        </Text>
-        <Text numberOfLines={1} style={styles.requestPersonMeta}>
-          {meta}
-        </Text>
-      </View>
-    </View>
-  );
-
-  return (
-    <SurfaceCard
-      padding="md"
-      style={[styles.requestCard, { borderLeftColor: accentColor }]}
-      variant="elevated"
-    >
-      <View style={styles.requestCardHeader}>
-        {profileContent}
-        <View style={styles.requestHeaderSide}>
-          {actionContent ? (
-            <>
-              {isActiveQrInvite(item) ? typeIcon : null}
-              {actionContent}
-            </>
-          ) : (
-            typeIcon
-          )}
-        </View>
-      </View>
-    </SurfaceCard>
-  );
-}
-
-function InviteRequestsSheet({
-  activeTab,
-  busyKey,
-  historyItems,
-  message,
-  onAction,
-  onChangeTab,
-  onClose,
-  receivedItems,
-  sentItems,
-  visible,
-}: {
-  readonly activeTab: InviteRequestsTab;
-  readonly busyKey: string | null;
-  readonly historyItems: readonly InviteRequestItem[];
-  readonly message: string | null;
-  readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
-  readonly onChangeTab: (tab: InviteRequestsTab) => void;
-  readonly onClose: () => void;
-  readonly receivedItems: readonly InviteRequestItem[];
-  readonly sentItems: readonly InviteRequestItem[];
-  readonly visible: boolean;
-}) {
-  const [visualTab, setVisualTab] = useState<InviteRequestsTab>(activeTab);
-
-  useEffect(() => {
-    setVisualTab(activeTab);
-  }, [activeTab]);
-
-  function changeTab(tab: InviteRequestsTab) {
-    setVisualTab(tab);
-    onChangeTab(tab);
-  }
-
-  function renderRequestPage(tab: InviteRequestsTab) {
-    const items = tab === 'received' ? receivedItems : tab === 'sent' ? sentItems : historyItems;
-
-    return (
-      <ScrollView
-        contentContainerStyle={[
-          styles.requestList,
-          items.length === 0 ? styles.requestListEmpty : null,
-        ]}
-        showsVerticalScrollIndicator={false}
-        style={styles.requestScroll}
-      >
-        {items.length === 0 ? (
-          <View style={styles.sheetEmpty}>
-            <Text style={styles.sheetEmptyTitle}>{inviteRequestEmptyTitle(tab)}</Text>
-            <Text style={styles.sheetEmptyText}>{inviteRequestEmptyDescription(tab)}</Text>
-          </View>
-        ) : (
-          items.map((item) => (
-            <InviteRequestRow
-              busyKey={busyKey}
-              item={item}
-              key={`${item.kind}:${item.inviteId}`}
-              onAction={onAction}
-            />
-          ))
-        )}
-      </ScrollView>
-    );
-  }
-
-  return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.sheetScrim}>
-        <Pressable onPress={onClose} style={styles.sheetBackdrop} />
-        <View style={styles.friendshipSheet}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Solicitudes</Text>
-            <Pressable onPress={onClose} style={styles.sheetCloseButton}>
-              <Ionicons color={theme.colors.text} name="close" size={22} />
-            </Pressable>
-          </View>
-          <View style={styles.sheetTabs}>
-            <InviteRequestTabButton
-              count={receivedItems.length}
-              label="Recibidas"
-              onPress={() => changeTab('received')}
-              selected={visualTab === 'received'}
-            />
-            <InviteRequestTabButton
-              count={sentItems.length}
-              label="Enviadas"
-              onPress={() => changeTab('sent')}
-              selected={visualTab === 'sent'}
-            />
-            <InviteRequestTabButton
-              count={historyItems.length}
-              label="Historico"
-              onPress={() => changeTab('history')}
-              selected={visualTab === 'history'}
-            />
-          </View>
-          {message ? <MessageBanner message={message} tone="neutral" /> : null}
-          <SwipePager
-            accessibilityLabel="Pestanas de solicitudes"
-            onChange={changeTab}
-            onPreviewChange={setVisualTab}
-            renderPage={(tab) => renderRequestPage(tab)}
-            style={styles.requestPager}
-            value={activeTab}
-            values={INVITE_REQUEST_TABS}
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 export function DashboardScreen() {
   const router = useRouter();
   const session = useSession();
   const insets = useSafeAreaInsets();
+  const homeChrome = useCollapsibleHomeChrome();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const homeIntent = useHomeNavigationIntent();
@@ -783,10 +228,34 @@ export function DashboardScreen() {
     0;
   const showPendingSetupCard = setupPromptDismissed === false && pendingSetupCount > 0;
   const notificationCount = snapshotQuery.data ? pendingNotificationCount + unreadSetupCount : 0;
+  const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
   const homeEntryReady = Boolean(dashboard) || Boolean(snapshotQuery.error);
+  const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu';
   const homeContentContainerStyle = useMemo(
-    () => ({ paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom) }),
-    [insets.bottom],
+    () => ({
+      paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom),
+      paddingTop:
+        HOME_CHROME_EXPANDED_HEIGHT + Math.max(0, insets.top) + theme.spacing.md,
+    }),
+    [insets.bottom, insets.top],
+  );
+  const homeChromeOverlay = (
+    <>
+      <HomeCollapsibleChrome
+        avatarLabel={currentUserLabel}
+        avatarUrl={currentUserProfile?.avatarUrl ?? null}
+        isCompact={homeChrome.isCompact}
+        notificationCount={notificationCount}
+        pendingCount={pendingCount}
+        progress={homeChrome.progress}
+        topInset={Math.max(0, insets.top)}
+      />
+      <HomeRegisterFab
+        bottomInset={Math.max(0, insets.bottom)}
+        isCompact={homeChrome.isCompact}
+        progress={homeChrome.progress}
+      />
+    </>
   );
 
   useEffect(() => {
@@ -1039,14 +508,13 @@ export function DashboardScreen() {
     return (
       <ScreenShell
         contentContainerStyle={homeContentContainerStyle}
-        headerTitle={
-          <HeaderBrandTitle
-            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
-          />
-        }
+        headerVisible={false}
         headerVariant="plain"
+        onScroll={homeChrome.onScroll}
+        overlay={homeChromeOverlay}
         refresh={refresh}
+        safeAreaEdges={['left', 'right']}
+        scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
       >
@@ -1059,36 +527,16 @@ export function DashboardScreen() {
     return (
       <ScreenShell
         contentContainerStyle={homeContentContainerStyle}
-        headerTitle={
-          <HeaderBrandTitle
-            launchTargetDisabled
-            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
-          />
-        }
+        headerVisible={false}
         headerVariant="plain"
+        onScroll={homeChrome.onScroll}
+        overlay={homeChromeOverlay}
+        safeAreaEdges={['left', 'right']}
+        scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
       >
-        <View style={styles.homeLoadingStack}>
-          <View style={styles.homeLoadingHero}>
-            <View style={styles.homeLoadingTitleLine} />
-            <View style={styles.homeLoadingBodyLine} />
-          </View>
-          <View style={styles.homeLoadingGrid}>
-            <View style={styles.homeLoadingTile} />
-            <View style={styles.homeLoadingTile} />
-            <View style={styles.homeLoadingTile} />
-          </View>
-          <View style={styles.homeLoadingList}>
-            <View style={styles.homeLoadingListLine} />
-            <View style={styles.homeLoadingListLine} />
-            <View style={styles.homeLoadingListLineShort} />
-          </View>
-        </View>
-        <Text style={styles.supportText}>
-          Estamos sincronizando el panorama general de tu cuenta.
-        </Text>
+        <DashboardLoadingState />
       </ScreenShell>
     );
   }
@@ -1097,14 +545,13 @@ export function DashboardScreen() {
     return (
       <ScreenShell
         contentContainerStyle={homeContentContainerStyle}
-        headerTitle={
-          <HeaderBrandTitle
-            logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-            titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
-          />
-        }
+        headerVisible={false}
         headerVariant="plain"
+        onScroll={homeChrome.onScroll}
+        overlay={homeChromeOverlay}
         refresh={refresh}
+        safeAreaEdges={['left', 'right']}
+        scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
       >
@@ -1116,32 +563,14 @@ export function DashboardScreen() {
   return (
     <ScreenShell
       contentContainerStyle={homeContentContainerStyle}
-      headerLeading={
-        <Link href="/profile" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.profileButton,
-              pressed ? styles.quickActionPressed : null,
-            ]}
-          >
-            <AppAvatar
-              imageUrl={currentUserProfile?.avatarUrl ?? null}
-              label={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
-              size={HOME_HEADER_AVATAR_SIZE}
-            />
-          </Pressable>
-        </Link>
-      }
-      headerTitle={
-        <HeaderBrandTitle
-          logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-          titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
-        />
-      }
-      headerSlot={<NotificationBellButton count={notificationCount} href="/activity" />}
+      headerVisible={false}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
+      onScroll={homeChrome.onScroll}
+      overlay={homeChromeOverlay}
       refresh={refresh}
+      safeAreaEdges={['left', 'right']}
+      scrollEventThrottle={16}
       title="Happy Circles"
       titleAlign="center"
     >
@@ -1178,75 +607,18 @@ export function DashboardScreen() {
         />
       ) : null}
 
-      <SectionBlock
-        action={
-          <Link href="/people" asChild>
-            <Pressable
-              style={({ pressed }) => [
-                styles.peopleSectionAction,
-                pressed ? styles.quickActionPressed : null,
-              ]}
-            >
-              <Text style={styles.peopleSectionActionText}>Ver todas</Text>
-            </Pressable>
-          </Link>
-        }
-        title="Personas"
-      >
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.peopleRailContent}
-          showsHorizontalScrollIndicator={false}
-        >
-          <ShortcutTile
-            badgeCount={inviteRequestCount}
-            icon="person-add-outline"
-            label="Solicitudes"
-            onPress={openInviteRequests}
-          />
-          <ShortcutTile
-            dashed
-            icon="add"
-            label="Agregar"
-            onPress={() => setAddPersonSheetVisible(true)}
-          />
-          {dashboard.activePeople.map((person) => (
-            <PersonTile key={person.userId} person={person} />
-          ))}
-        </ScrollView>
-      </SectionBlock>
+      <DashboardPeopleSection
+        activePeople={dashboard.activePeople}
+        inviteRequestCount={inviteRequestCount}
+        onAddPerson={() => setAddPersonSheetVisible(true)}
+        onOpenInviteRequests={openInviteRequests}
+      />
 
-      {transactionPreviewItems.length > 0 ? (
-        <SectionBlock
-          action={
-            <Link href="/transactions" asChild>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.peopleSectionAction,
-                  pressed ? styles.quickActionPressed : null,
-                ]}
-              >
-                <Text style={styles.peopleSectionActionText}>Ver todas</Text>
-              </Pressable>
-            </Link>
-          }
-          title="Transacciones"
-        >
-          <View style={styles.transactionList}>
-            {transactionPreviewItems.map(({ highlightPending, isPending, item, unread }) => (
-              <TransactionPreviewCard
-                highlightPending={highlightPending}
-                isPending={isPending}
-                item={item}
-                key={item.id}
-                onPress={() => openTransactionPreviewItem(item, isPending)}
-                people={dashboard.activePeople}
-                unread={unread}
-              />
-            ))}
-          </View>
-        </SectionBlock>
-      ) : null}
+      <DashboardTransactionsSection
+        items={transactionPreviewItems}
+        onOpenItem={openTransactionPreviewItem}
+        people={dashboard.activePeople}
+      />
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
         currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
@@ -1268,340 +640,3 @@ export function DashboardScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  homeContent: {
-    gap: theme.spacing.xl,
-  },
-  supportText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  homeLoadingStack: {
-    gap: theme.spacing.md,
-    width: '100%',
-  },
-  homeLoadingHero: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-  },
-  homeLoadingTitleLine: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    height: 22,
-    width: '58%',
-  },
-  homeLoadingBodyLine: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    height: 14,
-    width: '82%',
-  },
-  homeLoadingGrid: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  homeLoadingTile: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    flex: 1,
-    height: 74,
-  },
-  homeLoadingList: {
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-  },
-  homeLoadingListLine: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 16,
-    width: '100%',
-  },
-  homeLoadingListLineShort: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 16,
-    width: '68%',
-  },
-  profileButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: HOME_HEADER_ACTION_SIZE,
-    justifyContent: 'center',
-    width: HOME_HEADER_ACTION_SIZE,
-  },
-  quickActionPressed: {
-    opacity: 0.6,
-  },
-  peopleSectionAction: {
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 3,
-  },
-  peopleSectionActionText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  peopleRailContent: {
-    gap: theme.spacing.sm,
-    paddingRight: theme.spacing.xs,
-  },
-  peopleTile: {
-    alignItems: 'center',
-    gap: 6,
-    width: PEOPLE_TILE_WIDTH,
-  },
-  shortcutCircle: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    borderColor: theme.colors.accent,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: PEOPLE_TILE_CIRCLE_SIZE,
-    justifyContent: 'center',
-    position: 'relative',
-    width: PEOPLE_TILE_CIRCLE_SIZE,
-  },
-  shortcutCircleDashed: {
-    borderStyle: 'dashed',
-  },
-  requestBadge: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.danger,
-    borderColor: theme.colors.background,
-    borderRadius: theme.radius.pill,
-    borderWidth: 2,
-    height: 20,
-    justifyContent: 'center',
-    minWidth: 20,
-    paddingHorizontal: 5,
-    position: 'absolute',
-    right: -3,
-    top: -3,
-  },
-  requestBadgeText: {
-    color: theme.colors.white,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  personAvatarRing: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.radius.pill,
-    borderWidth: 2,
-    height: PEOPLE_TILE_CIRCLE_SIZE,
-    justifyContent: 'center',
-    width: PEOPLE_TILE_CIRCLE_SIZE,
-  },
-  peopleTileLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-    includeFontPadding: false,
-    lineHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
-    maxWidth: PEOPLE_TILE_WIDTH,
-    minHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
-    textAlign: 'center',
-  },
-  transactionList: {
-    gap: theme.spacing.sm,
-  },
-  sheetScrim: {
-    backgroundColor: theme.colors.overlay,
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheetBackdrop: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  friendshipSheet: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radius.large,
-    borderTopRightRadius: theme.radius.large,
-    gap: theme.spacing.sm,
-    height: '82%',
-    maxHeight: '88%',
-    paddingBottom: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-  },
-  sheetHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  sheetTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-  },
-  sheetCloseButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  sheetTabs: {
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: theme.spacing.lg,
-  },
-  sheetTab: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    paddingBottom: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
-  },
-  sheetTabActive: {
-    borderBottomColor: theme.colors.primary,
-    borderBottomWidth: 2,
-  },
-  sheetTabText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
-  sheetTabTextActive: {
-    color: theme.colors.text,
-  },
-  sheetTabBadge: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.danger,
-    borderRadius: theme.radius.pill,
-    height: 18,
-    justifyContent: 'center',
-    minWidth: 18,
-    paddingHorizontal: 5,
-  },
-  sheetTabBadgeText: {
-    color: theme.colors.white,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  requestList: {
-    flexGrow: 1,
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
-  },
-  requestListEmpty: {
-    justifyContent: 'center',
-    paddingBottom: theme.spacing.xl,
-  },
-  requestPager: {
-    flex: 1,
-    minHeight: 0,
-  },
-  requestScroll: {
-    flex: 1,
-    minHeight: 0,
-  },
-  requestCard: {
-    borderLeftWidth: 3,
-  },
-  requestCardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  requestPersonRow: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  requestAvatarSlot: {
-    flexShrink: 0,
-    height: 48,
-    width: 48,
-  },
-  requestPersonCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  requestPersonName: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  requestPersonMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  requestHeaderSide: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    flexShrink: 0,
-    marginLeft: 'auto',
-  },
-  requestTypeIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primaryGhost,
-    borderRadius: theme.radius.pill,
-    height: 30,
-    justifyContent: 'center',
-    width: 30,
-  },
-  requestActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 5,
-    justifyContent: 'center',
-  },
-  requestSingleActionRow: {
-    justifyContent: 'flex-end',
-  },
-  requestIconButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  requestIconButtonPrimary: {
-    backgroundColor: theme.colors.primaryGhost,
-  },
-  requestIconButtonDanger: {
-    backgroundColor: theme.colors.dangerSoft,
-  },
-  actionDisabled: {
-    opacity: 0.46,
-  },
-  sheetEmpty: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xl,
-  },
-  sheetEmptyTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  sheetEmptyText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-});

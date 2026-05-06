@@ -79,7 +79,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const LAUNCH_INTRO_MIN_MS = 760;
-const LAUNCH_LAND_MS = 620;
+const LAUNCH_LAND_MS = 700;
 const LAUNCH_ROUTE_SETTLE_MS = 120;
 const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
 const LAUNCH_FACE_ID_DELAY_MS = 25;
@@ -95,9 +95,8 @@ const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
 const HOME_ENTRY_SPIN_MS = 360;
 const HOME_ENTRY_SOURCE_CENTER_MS = 260;
 const HOME_ENTRY_SOURCE_CENTER_THRESHOLD = 18;
-const HOME_ENTRY_SUCCESS_MS = 680;
 const HOME_ENTRY_ROUTE_SETTLE_MS = 120;
-const HOME_ENTRY_LAND_MS = 560;
+const HOME_ENTRY_LAND_MS = 720;
 const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
 const HOME_ENTRY_FADE_MS = 120;
 const HOME_ENTRY_READY_WAIT_MS = 8000;
@@ -685,8 +684,6 @@ function LaunchIntroOverlay({
         return;
       }
 
-      setLockupState('success');
-      await wait(HOME_ENTRY_SUCCESS_MS);
       setLockupState('idle');
       await waitForNextFrame();
 
@@ -762,14 +759,17 @@ function LaunchIntroOverlay({
     ? introOpacity
     : Animated.multiply(introOpacity, fallbackLogoOpacity);
   const markOpacity = landMotion.interpolate({
-    inputRange: [0, 0.48, 0.92, 1],
-    outputRange: activeTarget?.visualKind === 'headerBrand' ? [1, 1, 0, 0] : [1, 1, 1, 1],
+    inputRange: [0, 0.9, 1],
+    outputRange: activeTarget?.visualKind === 'headerBrand' ? [1, 1, 0] : [1, 1, 1],
   });
   const logoScale = Animated.multiply(introScale, landingScale);
-  const backdropOpacity = landMotion.interpolate({
-    inputRange: [0, 0.72, 1],
-    outputRange: [1, 1, 0],
-  });
+  const backdropOpacity =
+    reducedMotion || !activeTarget
+      ? landMotion.interpolate({
+          inputRange: [0, 0.72, 1],
+          outputRange: [1, 1, 0],
+        })
+      : 1;
   const overlayFadeOpacity = landMotion.interpolate({
     inputRange: [0, 0.72, 1],
     outputRange: [1, 1, 0],
@@ -789,8 +789,8 @@ function LaunchIntroOverlay({
       ? Animated.multiply(overlayOpacity, handoffOpacity)
       : handoffOpacity;
   const headerGlyphOpacity = landMotion.interpolate({
-    inputRange: [0, 0.48, 0.92, 1],
-    outputRange: activeTarget?.visualKind === 'headerBrand' ? [0, 0, 1, 1] : [0, 0, 0, 0],
+    inputRange: [0, 0.9, 1],
+    outputRange: activeTarget?.visualKind === 'headerBrand' ? [0, 0, 1] : [0, 0, 0],
   });
   const avatarSize =
     activeTarget?.visualKind === 'identityAvatar'
@@ -1145,8 +1145,6 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      setLockupState('success');
-      await wait(HOME_ENTRY_SUCCESS_MS);
       setLockupState('idle');
       await waitForNextFrame();
 
@@ -1236,29 +1234,26 @@ function HomeEntryHandoffOverlay({
     outputRange: [sourceTarget ? 1 : 0.96, 1],
   });
   const logoScale = Animated.multiply(entryScale, landingScale);
-  const backdropOpacity = Animated.multiply(
-    entryMotion,
-    reducedMotion
-      ? reducedExitMotion.interpolate({
+  const backdropOpacity = reducedMotion
+    ? Animated.multiply(
+        entryMotion,
+        reducedExitMotion.interpolate({
           inputRange: [0, 1],
           outputRange: [1, 0],
-        })
-      : landMotion.interpolate({
-          inputRange: [0, 0.82, 1],
-          outputRange: [1, 1, 0],
         }),
-  );
+      )
+    : entryMotion;
   const rootOpacity = handoffMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
   });
   const markOpacity = landMotion.interpolate({
-    inputRange: [0, 0.5, 0.9, 1],
-    outputRange: activeTarget ? [1, 1, 0, 0] : [1, 1, 1, 1],
+    inputRange: [0, 0.9, 1],
+    outputRange: activeTarget ? [1, 1, 0] : [1, 1, 1],
   });
   const headerGlyphOpacity = landMotion.interpolate({
-    inputRange: [0, 0.5, 0.9, 1],
-    outputRange: activeTarget ? [0, 0, 1, 1] : [0, 0, 0, 0],
+    inputRange: [0, 0.9, 1],
+    outputRange: activeTarget ? [0, 0, 1] : [0, 0, 0],
   });
   const sourceAvatarSize =
     visualSourceTarget?.visualKind === 'identityAvatar'
@@ -1991,16 +1986,20 @@ const styles = StyleSheet.create({
   launchOverlayBackdrop: {
     backgroundColor: theme.colors.background,
     bottom: 0,
+    elevation: 0,
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
+    zIndex: 0,
   },
   launchLogoGroup: {
     alignItems: 'center',
+    elevation: 1,
     justifyContent: 'center',
     maxWidth: 1000,
     position: 'absolute',
+    zIndex: 1,
   },
   launchAvatarLayer: {
     alignItems: 'center',

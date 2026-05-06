@@ -51,12 +51,21 @@ describe('app smoke checks', () => {
       'home',
       'add-person-contacts-sheet.tsx',
     );
+    const inviteSheetController = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'home',
+      'add-person-contacts-sheet-controller.ts',
+    );
+    const inviteSurface = `${inviteSheet}\n${inviteSheetController}`;
 
-    expect(inviteSheet).not.toContain('Fallback light');
-    expect(inviteSheet).not.toContain('Receiver');
-    expect(inviteSheet).toContain('Invitacion a Happy Circles');
-    expect(inviteSheet).toContain('Puede recibir invitacion');
-    expect(inviteSheet).toContain('Pega un link completo o un codigo valido de invitacion.');
+    expect(inviteSurface).not.toContain('Fallback light');
+    expect(inviteSurface).not.toContain('Receiver');
+    expect(inviteSurface).toContain('Invitacion a Happy Circles');
+    expect(inviteSurface).toContain('Puede recibir invitacion');
+    expect(inviteSurface).toContain('Pega un link completo o un codigo valido de invitacion.');
   });
 
   it('keeps reset-password recovery and invalid-link states separated', () => {
@@ -91,7 +100,7 @@ describe('app smoke checks', () => {
       'src',
       'features',
       'profile',
-      'profile-screen.tsx',
+      'profile-screen-runtime.tsx',
     );
     const profileHelpers = readRepoFile(
       'apps',
@@ -128,7 +137,7 @@ describe('app smoke checks', () => {
       'src',
       'features',
       'activity',
-      'activity-screen.tsx',
+      'activity-screen-runtime.tsx',
     );
 
     expect(activityScreen).toContain('openNotificationTarget(detailHref)');

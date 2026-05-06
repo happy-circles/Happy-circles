@@ -28,17 +28,27 @@ function listTypeScriptFiles(directory: string): string[] {
 describe('mobile architecture boundaries', () => {
   it('keeps the current large orchestrators from growing without an explicit split', () => {
     const budgets = new Map<string, number>([
-      ['providers/session-provider.tsx', 2000],
-      ['features/balance/balance-overview-screen.tsx', 1850],
-      ['features/home/dashboard-screen.tsx', 1650],
-      ['features/invites/account-invite-entry-screen.tsx', 1620],
-      ['features/home/add-person-contacts-sheet.tsx', 1600],
-      ['features/profile/profile-screen.tsx', 1450],
-      ['features/activity/activity-screen.tsx', 1300],
-      ['features/onboarding/setup-account-screen.tsx', 1220],
-      ['features/register/register-flow-screen.tsx', 1220],
-      ['features/people/person-detail-screen.tsx', 1120],
-      ['components/identity-flow.tsx', 1000],
+      ['providers/session-provider.tsx', 500],
+      ['features/balance/balance-overview-screen.tsx', 650],
+      ['features/home/dashboard-screen.tsx', 650],
+      ['features/invites/account-invite-entry-screen.tsx', 650],
+      ['features/invites/account-create-account-screen.tsx', 650],
+      ['features/invites/account-invite-screen.tsx', 650],
+      ['features/home/add-person-contacts-sheet.tsx', 650],
+      ['features/profile/profile-screen.tsx', 650],
+      ['features/activity/activity-screen.tsx', 650],
+      ['features/onboarding/setup-account-screen.tsx', 650],
+      ['features/register/register-flow-screen.tsx', 650],
+      ['features/people/person-detail-screen.tsx', 650],
+      ['features/settlements/settlement-detail-screen.tsx', 500],
+      ['features/transactions/transactions-screen.tsx', 500],
+      ['features/categories/categories-index-screen.tsx', 500],
+      ['components/projection-forecast-card.tsx', 500],
+      ['components/pending-financial-request-card.tsx', 500],
+      ['components/transaction-event-card.tsx', 500],
+      ['components/brand-verification-lockup.tsx', 500],
+      ['components/identity-flow.tsx', 550],
+      ['lib/history-cases.ts', 500],
     ]);
 
     for (const [path, maxLines] of budgets) {

@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode, RefObject } from 'react';
-import type { ScrollView, StyleProp, ViewStyle } from 'react-native';
+import type { ScrollView, ScrollViewProps, StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
+import type { Edge } from 'react-native-safe-area-context';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -26,7 +27,10 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly headerVisible?: boolean;
   readonly overlay?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
+  readonly safeAreaEdges?: Edge[];
   readonly scrollEnabled?: boolean;
+  readonly onScroll?: ScrollViewProps['onScroll'];
+  readonly scrollEventThrottle?: ScrollViewProps['scrollEventThrottle'];
   readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
@@ -51,7 +55,10 @@ export function ScreenShell({
   headerVisible = true,
   overlay,
   refresh,
+  safeAreaEdges = ['top', 'left', 'right'],
   scrollEnabled = true,
+  onScroll,
+  scrollEventThrottle,
   scrollViewRef,
   children,
   contentContainerStyle,
@@ -133,7 +140,7 @@ export function ScreenShell({
   ];
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+    <SafeAreaView edges={safeAreaEdges} style={styles.safeArea}>
       {shouldUseScroll ? (
         <BrandedRefreshScrollView
           ref={scrollViewRef}
@@ -141,7 +148,9 @@ export function ScreenShell({
           contentContainerStyle={contentStyle}
           fillViewport
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
           refresh={refresh}
+          scrollEventThrottle={scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
           {scrollBody}

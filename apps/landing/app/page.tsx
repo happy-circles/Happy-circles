@@ -8,7 +8,6 @@ export default function LandingPage() {
           <HappyCirclesMark />
           <div className="brandCopy">
             <h1 id="landing-title">Happy Circles</h1>
-            <p>Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.</p>
             <ul className="landingHighlights" aria-label="Beneficios principales">
               <li>Saldos confirmados por ambas partes</li>
               <li>Invitaciones privadas para cada círculo</li>

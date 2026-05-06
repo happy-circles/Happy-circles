@@ -17,13 +17,21 @@ The current large files are accepted as the post-refactor baseline because each 
 
 Primary candidates for later mechanical splits:
 
-- `src/providers/session-provider.tsx`: move remaining action handlers into session domain hooks after profile/auth flows are stable.
-- `src/features/balance/balance-overview-screen.tsx`: split carousel, focus panels and empty states into local components.
-- `src/features/home/dashboard-screen.tsx`: split dashboard sections and notification marking hook.
-- `src/features/home/add-person-contacts-sheet.tsx`: split rows, permission state and invite action footer.
-- `src/features/invites/account-invite-entry-screen.tsx`: split token entry, remembered auth and recovery form components.
-- `src/features/profile/profile-screen.tsx`: split security, notifications, account and danger-zone sections.
-- `src/features/activity/activity-screen.tsx`: split category tabs, pending renderer and history renderer.
-- `src/features/people/person-detail-screen.tsx`: split summary, action panels and timeline.
+- `src/providers/session-runtime/session-controller.tsx`: split remaining action handlers into session domain hooks after profile/auth flows are stable. `src/providers/session-provider.tsx` is now only the public context facade.
+- `src/features/balance/balance-lens-carousel.tsx`: split focus cards, detail panels and carousel mechanics. The public balance screen is now under its first reduction budget.
+- `src/features/home/add-person-contacts-sheet-controller.ts`: split directory resolution/cache from QR and outreach actions. The public dashboard and contacts sheet screens are now under their first reduction budget.
+- `src/features/invites/account-invite-entry-flow.tsx`: split token entry, remembered auth and recovery form components. The public invite entry, create account and invite preview screens are now under their first reduction budgets.
+- `src/features/profile/profile-screen-runtime.tsx`: split security, notifications, account and danger-zone sections. `profile-screen.tsx` is now only the public facade.
+- `src/features/activity/activity-screen-runtime.tsx`: split category tabs, pending renderer and history renderer. `activity-screen.tsx` is now only the public facade.
+- `src/features/people/person-detail-screen-runtime.tsx`: split summary, action panels and timeline. `person-detail-screen.tsx` is now only the public facade.
+- `src/features/register/register-flow-screen-runtime.tsx`: split person selector, amount form, category picker and submit state. `register-flow-screen.tsx` is now only the public facade.
+- `src/features/onboarding/setup-account-screen-runtime.tsx`: split profile, phone, security, invite activation and avatar actions. `setup-account-screen.tsx` is now only the public facade.
+- `src/components/identity-flow-runtime.tsx`: split shell, identity layer, form primitives and layout helpers. `identity-flow.tsx` is now only the shared public facade.
+- `src/lib/history-cases-runtime.ts`: split case matching, labels, impact formatting and feed conversion. `history-cases.ts` remains the public facade.
+- `src/features/settlements/settlement-detail-screen-runtime.tsx`: split participants, timeline, approval actions and status header.
+- `src/features/transactions/transactions-screen-runtime.tsx`: split filters, list rows, empty states and route param parsing.
+- `src/features/categories/categories-index-screen-runtime.tsx`: split category grouping, rows and empty states.
+- `src/components/projection-forecast-card-runtime.tsx`, `src/components/pending-financial-request-card-runtime.tsx`, `src/components/transaction-event-card-runtime.tsx` and `src/components/brand-verification-lockup-runtime.tsx`: split derivations from visual primitives while keeping public component wrappers stable.
+- `src/lib/live-data/builders/*-runtime.ts` and `src/lib/live-data/types-runtime.ts`: split large live-data builders by subdomain while keeping the compact builder/type entrypoints stable.
 
 `src/mobile-architecture-boundaries.test.ts` protects these budgets and the helper purity rule.

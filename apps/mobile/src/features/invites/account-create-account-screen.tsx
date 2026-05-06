@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
   type ViewStyle,
@@ -21,7 +20,7 @@ import {
   IdentityFlowSecondaryAction,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
-import { MessageBanner, type MessageBannerTone } from '@/components/message-banner';
+import { MessageBanner } from '@/components/message-banner';
 import { OtpCodeInput } from '@/components/otp-code-input';
 import { PrimaryAction } from '@/components/primary-action';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
@@ -35,22 +34,30 @@ import {
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
-import { COUNTRY_OPTIONS, DEFAULT_COUNTRY, normalizePhoneDigits } from '@/lib/phone';
+import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { theme } from '@/lib/theme';
+import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
 import { useSession } from '@/providers/session-provider';
 import {
   MIN_ACCOUNT_INVITE_TOKEN_LENGTH,
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
-
-function countryFlag(iso2: string) {
-  return iso2
-    .toUpperCase()
-    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
-}
+import {
+  ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE,
+  ACCOUNT_CREATED_SETUP_MESSAGE,
+  ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE,
+  countryFlag,
+  formatCreateAccountValidationMessage,
+  isValidEmail,
+  isValidPassword,
+  isValidPhoneNumber,
+  resolveCreateAccountMessageTone,
+  type FieldName,
+  type FieldStatus,
+} from './account-create-account-helpers';
 
 const COUNTRY_OPTION_HEIGHT = 42;
 const COUNTRY_MENU_VISIBLE_OPTIONS = 4;
@@ -67,75 +74,6 @@ const COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT = Math.min(
 const COUNTRY_MENU_SCROLLBAR_TRAVEL = COUNTRY_MENU_HEIGHT - COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT;
 const countryMenuScrollWebStyle =
   Platform.OS === 'web' ? ({ overscrollBehavior: 'contain' } as unknown as ViewStyle) : null;
-
-type FieldStatus = 'idle' | 'valid' | 'invalid';
-type FieldName = 'email' | 'phone' | 'password';
-
-const ACCOUNT_CREATED_SETUP_MESSAGE = 'Cuenta creada. Ahora termina tu setup.';
-const ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE = 'Cuenta creada. Revisa tu correo.';
-const ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE = 'No se pudo crear la cuenta.';
-
-function joinReadableList(items: readonly string[]) {
-  if (items.length <= 1) {
-    return items[0] ?? '';
-  }
-
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
-}
-
-function formatCreateAccountValidationMessage(input: {
-  readonly emailValid: boolean;
-  readonly passwordValid: boolean;
-  readonly phoneValid: boolean;
-}) {
-  const invalidFields: string[] = [];
-
-  if (!input.emailValid) {
-    invalidFields.push('correo');
-  }
-
-  if (!input.phoneValid) {
-    invalidFields.push('celular');
-  }
-
-  if (!input.passwordValid) {
-    invalidFields.push('clave');
-  }
-
-  return `Revisa ${joinReadableList(invalidFields)}.`;
-}
-
-function resolveCreateAccountMessageTone(message: string): MessageBannerTone {
-  if (
-    message === ACCOUNT_CREATED_SETUP_MESSAGE ||
-    message === ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE
-  ) {
-    return 'success';
-  }
-
-  if (message.startsWith('No se pudo')) {
-    return 'danger';
-  }
-
-  if (message.startsWith('Vista temporal de QA')) {
-    return 'neutral';
-  }
-
-  return 'warning';
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function isValidPhoneNumber(value: string) {
-  const digits = normalizePhoneDigits(value);
-  return digits.length >= 6 && digits.length <= 20;
-}
-
-function isValidPassword(value: string) {
-  return value.length >= 8 && value.length <= 72;
-}
 
 export function AccountCreateAccountScreen() {
   const params = useLocalSearchParams<{ preview?: string | string[]; token?: string | string[] }>();
@@ -692,119 +630,3 @@ export function AccountCreateAccountScreen() {
     </IdentityFlowScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  messageBlock: {
-    gap: theme.spacing.md,
-  },
-  verificationActions: {
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-  },
-  phoneField: {
-    position: 'relative',
-    zIndex: 20,
-  },
-  phoneRow: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  callingCodeBox: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(61, 186, 110, 0.24)',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xxs,
-    height: 56,
-    justifyContent: 'center',
-    minWidth: 88,
-    paddingHorizontal: theme.spacing.xs,
-  },
-  countryFlag: {
-    fontSize: 17,
-    lineHeight: 21,
-  },
-  callingCodeText: {
-    color: theme.colors.brandNavy,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  phoneInput: {
-    flex: 1,
-  },
-  countryMenu: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    left: 0,
-    marginTop: theme.spacing.xs,
-    maxHeight: COUNTRY_MENU_HEIGHT,
-    overflow: 'hidden',
-    position: 'absolute',
-    top: '100%',
-    width: 220,
-    zIndex: 30,
-    ...theme.shadow.floating,
-  },
-  countryMenuScroll: {
-    maxHeight: COUNTRY_MENU_HEIGHT,
-  },
-  countryMenuScrollbarTrack: {
-    backgroundColor: 'rgba(61, 186, 110, 0.14)',
-    borderRadius: theme.radius.pill,
-    bottom: theme.spacing.xxs,
-    position: 'absolute',
-    right: theme.spacing.xxs,
-    top: theme.spacing.xxs,
-    width: 4,
-  },
-  countryMenuScrollbarThumb: {
-    backgroundColor: theme.colors.brandGreen,
-    borderRadius: theme.radius.pill,
-    width: 4,
-  },
-  countryOption: {
-    alignItems: 'center',
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    height: COUNTRY_OPTION_HEIGHT,
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.sm,
-  },
-  countryOptionSelected: {
-    backgroundColor: theme.colors.successSoft,
-  },
-  countryOptionLabel: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    minWidth: 0,
-  },
-  countryOptionLast: {
-    borderBottomWidth: 0,
-  },
-  countryLabel: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  countryCode: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    marginLeft: theme.spacing.sm,
-  },
-  countryCodeSelected: {
-    color: theme.colors.brandGreen,
-  },
-  pressed: {
-    opacity: 0.9,
-  },
-});

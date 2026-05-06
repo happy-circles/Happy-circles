@@ -1,0 +1,1930 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { Session } from '@supabase/supabase-js';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import { AppState, Platform } from 'react-native';
+import {
+  attachEmailPasswordSchema,
+  completeProfileSchema,
+  emailOtpVerificationSchema,
+  emailPasswordSignInSchema,
+  passwordResetRequestSchema,
+  passwordResetSchema,
+  registrationSchema,
+} from '@happy-circles/shared';
+
+import {
+  getCurrentAppVersion,
+  getCurrentDeviceName,
+  getOrCreateDeviceId,
+} from '@/lib/device-trust';
+import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
+import {
+  getBiometricSupport,
+  authenticateWithBiometrics,
+  authenticateWithBiometricsResult,
+  type BiometricAuthResult,
+} from '@/lib/security';
+import {
+  getContactsPermissionStatus,
+  requestContactsPermissionStatus,
+} from '@/lib/contacts-permissions';
+import { isLowQualityDisplayName } from '@/lib/setup-account';
+import { recordProductEventSafe } from '@/lib/analytics-client';
+import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
+import { readPendingInviteIntent } from '@/lib/invite-intent';
+import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
+import {
+  getLocalNotificationPermissionStatus,
+  requestLocalNotificationPermissionStatus,
+} from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
+import {
+  createSupportId,
+  readFunctionErrorDetails,
+  reportClientErrorSafe,
+  withSupportCode,
+} from '@/lib/support-errors';
+import {
+  extractAuthCallbackCode,
+  extractAuthCallbackTokens,
+  isPasswordRecoveryCallbackUrl,
+} from '../session/auth-callbacks';
+import { buildAppleFullName, generateSecureNonce } from '../session/apple-auth';
+import {
+  deriveAccountAccessState,
+  deriveDeviceTrustState,
+  deriveProfileCompletionState,
+  isAuthUserEmailConfirmed,
+  isSessionEmailConfirmed,
+  resolveStatusAfterAccountLoad,
+} from '../session/account-state';
+import {
+  formatSupabaseAuthErrorMessage,
+  formatValidationMessage,
+  readErrorMessage,
+} from '../session/auth-errors';
+import {
+  BIOMETRICS_KEY,
+  EMPTY_LINKED_METHODS,
+  EMPTY_SETUP_STATE,
+  LOCK_AFTER_MS,
+  NOTIFICATIONS_KEY,
+  REMEMBERED_ACCOUNT_KEY,
+  STEP_UP_WINDOW_MS,
+} from '../session/constants';
+import { deriveLinkedMethods, normalizeIdentityProvider } from '../session/linked-methods';
+import {
+  persistRememberedAccountSnapshot,
+  readRememberedAccountSnapshot,
+} from '../session/remembered-account';
+import {
+  createRecentPasswordAuth,
+  isRecentPasswordAuthValid,
+  type RecentPasswordAuth,
+} from '../session/recent-password-auth';
+import { buildSetupState } from '../session/setup-state';
+import { formatStepUpErrorMessage, wait } from '../session/step-up';
+import type {
+  AccountAccessState,
+  AccountRegistrationPreviewResult,
+  AttachEmailPasswordInput,
+  AuthIdentity,
+  AuthMode,
+  BiometricToggleResult,
+  CompleteProfileInput,
+  DeviceTrustState,
+  EmailOtpVerificationInput,
+  EmailPasswordCredentials,
+  IdentityProvider,
+  LinkedMethods,
+  PasswordResetInput,
+  ProfileCompletionState,
+  RefreshAccountStateOptions,
+  RegistrationInput,
+  RememberedAccountSnapshot,
+  SessionContextValue,
+  SessionStatus,
+  SetupPermissionStatus,
+  SetupState,
+  TrustCurrentDeviceInput,
+  TrustedDeviceRow,
+  UserProfileRow,
+} from '../session/types';
+
+WebBrowser.maybeCompleteAuthSession();
+
+async function hashInviteTokenForRegistration(deliveryToken: string): Promise<string> {
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    deliveryToken.trim(),
+  );
+
+  return digest.toLocaleLowerCase('en-US');
+}
+
+async function resolveUserIdentities(currentSession: Session): Promise<readonly AuthIdentity[]> {
+  if (!supabase) {
+    return [];
+  }
+
+  const authApi = supabase.auth as unknown as {
+    readonly getUserIdentities?: () => Promise<{
+      data?: { identities?: readonly AuthIdentity[] | null };
+    }>;
+  };
+
+  if (typeof authApi.getUserIdentities === 'function') {
+    try {
+      const result = await authApi.getUserIdentities();
+      return result.data?.identities ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  const user = currentSession.user as { readonly identities?: readonly AuthIdentity[] | null };
+  return user.identities ?? [];
+}
+
+export function useSessionController(): SessionContextValue {
+  const authMode: AuthMode = 'supabase';
+
+  const [status, setStatusState] = useState<SessionStatus>('loading');
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<UserProfileRow | null>(null);
+  const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
+  const [accountAccessState, setAccountAccessState] = useState<AccountAccessState>('loading');
+  const [rememberedAccount, setRememberedAccount] = useState<RememberedAccountSnapshot | null>(
+    null,
+  );
+  const [linkedMethods, setLinkedMethods] = useState<LinkedMethods>(EMPTY_LINKED_METHODS);
+  const [profileCompletionState, setProfileCompletionState] =
+    useState<ProfileCompletionState>('loading');
+  const [deviceTrustState, setDeviceTrustState] = useState<DeviceTrustState>('loading');
+  const [trustedDevices, setTrustedDevices] = useState<readonly TrustedDeviceRow[]>([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
+  const [authProvider, setAuthProvider] = useState<IdentityProvider | null>(null);
+  const [stepUpFreshUntil, setStepUpFreshUntil] = useState<number | null>(null);
+  const [recentPasswordAuth, setRecentPasswordAuth] = useState<RecentPasswordAuth | null>(null);
+  const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
+  const [contactsPermissionStatus, setContactsPermissionStatus] =
+    useState<SetupPermissionStatus>('loading');
+  const [notificationsPermissionStatus, setNotificationsPermissionStatus] =
+    useState<SetupPermissionStatus>('loading');
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState('biometria');
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
+  const [passwordRecoverySessionUserId, setPasswordRecoverySessionUserIdState] = useState<
+    string | null
+  >(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  const backgroundedAtRef = useRef<number | null>(null);
+  const accountLoadIdRef = useRef(0);
+  const sessionRef = useRef<Session | null>(null);
+  const statusRef = useRef<SessionStatus>('loading');
+  const passwordRecoverySessionUserIdRef = useRef<string | null>(null);
+  const welcomeEmailAttemptedUserIdsRef = useRef(new Set<string>());
+
+  const setSessionStatus = useCallback((nextStatus: SessionStatus) => {
+    statusRef.current = nextStatus;
+    setStatusState(nextStatus);
+  }, []);
+
+  const setPasswordRecoverySessionUserId = useCallback((userId: string | null) => {
+    passwordRecoverySessionUserIdRef.current = userId;
+    setPasswordRecoverySessionUserIdState(userId);
+  }, []);
+
+  const clearSignedInState = useCallback(() => {
+    accountLoadIdRef.current += 1;
+    sessionRef.current = null;
+    setPasswordRecoverySessionUserId(null);
+    setSession(null);
+    setProfile(null);
+    setIsEmailConfirmed(false);
+    setAccountAccessState('loading');
+    setLinkedMethods(EMPTY_LINKED_METHODS);
+    setProfileCompletionState('loading');
+    setDeviceTrustState('unknown');
+    setTrustedDevices([]);
+    setCurrentDeviceId(null);
+    setAuthProvider(null);
+    setStepUpFreshUntil(null);
+    setRecentPasswordAuth(null);
+    welcomeEmailAttemptedUserIdsRef.current.clear();
+  }, [setPasswordRecoverySessionUserId]);
+
+  const refreshNativePermissionStatuses = useCallback(async () => {
+    const [nextContactsPermissionStatus, nextNotificationsPermissionStatus] = await Promise.all([
+      getContactsPermissionStatus(),
+      getLocalNotificationPermissionStatus(),
+    ]);
+
+    setContactsPermissionStatus(nextContactsPermissionStatus);
+    setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
+  }, []);
+
+  const applySessionFromUrl = useCallback(
+    async (url: string | null) => {
+      if (!supabase || !url) {
+        return;
+      }
+
+      const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
+      const authCode = extractAuthCallbackCode(url);
+      if (authCode) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+
+        if (error) {
+          console.warn(
+            'Failed to exchange Supabase auth code from auth callback',
+            error instanceof Error ? error.message : String(error),
+          );
+        } else if (isPasswordRecoveryCallback && data.session) {
+          setPasswordRecoverySessionUserId(data.session.user.id);
+        }
+
+        return;
+      }
+
+      const tokens = extractAuthCallbackTokens(url);
+      if (!tokens) {
+        return;
+      }
+
+      const { data, error } = await supabase.auth.setSession({
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+      });
+
+      if (error) {
+        console.warn(
+          'Failed to restore Supabase session from auth callback',
+          error instanceof Error ? error.message : String(error),
+        );
+      } else if (isPasswordRecoveryCallback && data.session) {
+        setPasswordRecoverySessionUserId(data.session.user.id);
+      }
+    },
+    [setPasswordRecoverySessionUserId],
+  );
+
+  const loadAccountState = useCallback(
+    async (
+      nextSession: Session,
+      options: {
+        readonly initialLock: boolean;
+        readonly preserveLocked: boolean;
+        readonly preserveTrustedDeviceDuringLoad: boolean;
+        readonly biometricPreference?: boolean;
+      },
+    ) => {
+      if (!supabase) {
+        return;
+      }
+      const client = supabase;
+
+      const loadId = accountLoadIdRef.current + 1;
+      accountLoadIdRef.current = loadId;
+
+      setProfileCompletionState('loading');
+      setDeviceTrustState((current) =>
+        options.preserveTrustedDeviceDuringLoad && current === 'trusted' ? 'trusted' : 'loading',
+      );
+      setAuthProvider(normalizeIdentityProvider(nextSession.user.app_metadata?.provider ?? null));
+
+      const deviceId = await getOrCreateDeviceId();
+      const timestamp = new Date().toISOString();
+      const devicePatch = {
+        platform: Platform.OS,
+        device_name: getCurrentDeviceName(),
+        app_version: getCurrentAppVersion(),
+        last_seen_at: timestamp,
+      };
+      const devicePayload = {
+        user_id: nextSession.user.id,
+        device_id: deviceId,
+        ...devicePatch,
+      };
+
+      async function persistCurrentDevice(): Promise<TrustedDeviceRow> {
+        const existingResult = await client
+          .from('trusted_devices')
+          .select('*')
+          .eq('user_id', nextSession.user.id)
+          .eq('device_id', deviceId)
+          .maybeSingle();
+
+        if (existingResult.error) {
+          throw new Error(existingResult.error.message);
+        }
+
+        const existingDevice = existingResult.data as TrustedDeviceRow | null;
+
+        if (existingDevice) {
+          const updateResult = await client
+            .from('trusted_devices')
+            .update(devicePatch as never)
+            .eq('id', existingDevice.id)
+            .select('*')
+            .single();
+
+          if (updateResult.error) {
+            throw new Error(updateResult.error.message);
+          }
+
+          return updateResult.data as TrustedDeviceRow;
+        }
+
+        const insertResult = await client
+          .from('trusted_devices')
+          .insert(devicePayload as never)
+          .select('*')
+          .single();
+
+        if (!insertResult.error) {
+          return insertResult.data as TrustedDeviceRow;
+        }
+
+        if (!insertResult.error.message.includes('duplicate key')) {
+          throw new Error(insertResult.error.message);
+        }
+
+        const retryUpdateResult = await client
+          .from('trusted_devices')
+          .update(devicePatch as never)
+          .eq('user_id', nextSession.user.id)
+          .eq('device_id', deviceId)
+          .select('*')
+          .single();
+
+        if (retryUpdateResult.error) {
+          throw new Error(retryUpdateResult.error.message);
+        }
+
+        return retryUpdateResult.data as TrustedDeviceRow;
+      }
+
+      const [profileResult, identities, currentDevice, pendingInviteIntent, authUserResult] =
+        await Promise.all([
+          client
+            .from('user_profiles')
+            .select(
+              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+            )
+            .eq('id', nextSession.user.id)
+            .single(),
+          resolveUserIdentities(nextSession),
+          persistCurrentDevice(),
+          readPendingInviteIntent(),
+          client.auth.getUser(),
+        ]);
+
+      if (profileResult.error) {
+        throw new Error(profileResult.error.message);
+      }
+
+      if (authUserResult.error) {
+        throw new Error(authUserResult.error.message);
+      }
+
+      const devicesResult = await client
+        .from('trusted_devices')
+        .select('*')
+        .eq('user_id', nextSession.user.id)
+        .order('created_at', { ascending: false });
+
+      if (devicesResult.error) {
+        throw new Error(devicesResult.error.message);
+      }
+
+      if (loadId !== accountLoadIdRef.current) {
+        return;
+      }
+
+      const nextProfile = profileResult.data;
+      const nextEmailConfirmed = isAuthUserEmailConfirmed(
+        authUserResult.data.user ?? nextSession.user,
+      );
+      const nextAccountAccessState =
+        deriveAccountAccessState(nextProfile) === 'needs_invite' &&
+        pendingInviteIntent?.type === 'account_invite'
+          ? 'needs_activation'
+          : deriveAccountAccessState(nextProfile);
+      const nextLinkedMethods = deriveLinkedMethods({
+        session: nextSession,
+        profile: nextProfile,
+        identities,
+      });
+      const nextDeviceTrustState = deriveDeviceTrustState(currentDevice);
+
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      setProfile(nextProfile);
+      setIsEmailConfirmed(nextEmailConfirmed);
+      setAccountAccessState(nextAccountAccessState);
+      setLinkedMethods(nextLinkedMethods);
+      setProfileCompletionState(deriveProfileCompletionState(nextProfile, nextEmailConfirmed));
+      setDeviceTrustState(nextDeviceTrustState);
+      setTrustedDevices(devicesResult.data ?? []);
+      setCurrentDeviceId(deviceId);
+      void persistRememberedAccountSnapshot(nextProfile).then((snapshot) => {
+        if (loadId === accountLoadIdRef.current) {
+          setRememberedAccount(
+            snapshot
+              ? {
+                  ...snapshot,
+                  accountAccessState:
+                    nextAccountAccessState === 'loading' ? 'needs_invite' : nextAccountAccessState,
+                }
+              : null,
+          );
+        }
+      });
+      setSessionStatus(
+        resolveStatusAfterAccountLoad({
+          hasSession: true,
+          biometricsEnabled: options.biometricPreference ?? biometricsEnabled,
+          deviceTrustState: nextDeviceTrustState,
+          initialLock: options.initialLock,
+          preserveLocked: options.preserveLocked && statusRef.current === 'signed_in_locked',
+        }),
+      );
+    },
+    [biometricsEnabled, setSessionStatus],
+  );
+
+  const refreshAccountState = useCallback(
+    async (options?: RefreshAccountStateOptions) => {
+      if (!supabase) {
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      const nextSession = data.session;
+
+      if (!nextSession) {
+        clearSignedInState();
+        setSessionStatus('signed_out');
+        return;
+      }
+
+      await loadAccountState(nextSession, {
+        initialLock: false,
+        preserveLocked: options?.preserveLocked ?? statusRef.current === 'signed_in_locked',
+        preserveTrustedDeviceDuringLoad: options?.preserveTrustedDeviceDuringLoad ?? false,
+        biometricPreference: biometricsEnabled,
+      });
+    },
+    [biometricsEnabled, clearSignedInState, loadAccountState, setSessionStatus],
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrate() {
+      const [
+        biometricValue,
+        notificationValue,
+        support,
+        appleAvailable,
+        nextContactsPermissionStatus,
+        nextNotificationsPermissionStatus,
+        rememberedSnapshot,
+      ] = await Promise.all([
+        getStoredItem(BIOMETRICS_KEY),
+        getStoredItem(NOTIFICATIONS_KEY),
+        getBiometricSupport(),
+        Platform.OS === 'ios'
+          ? AppleAuthentication.isAvailableAsync().catch(() => false)
+          : Promise.resolve(false),
+        getContactsPermissionStatus(),
+        getLocalNotificationPermissionStatus(),
+        readRememberedAccountSnapshot(),
+      ]);
+
+      if (!active) {
+        return;
+      }
+
+      const nextBiometricsEnabled = biometricValue === 'true';
+      const nextNotificationsEnabled = notificationValue === 'true';
+
+      setBiometricsEnabledState(nextBiometricsEnabled);
+      setNotificationsEnabledState(nextNotificationsEnabled);
+      setBiometricAvailable(support.available);
+      setBiometricLabel(support.label);
+      setAppleSignInAvailable(appleAvailable);
+      setContactsPermissionStatus(nextContactsPermissionStatus);
+      setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
+      setRememberedAccount(rememberedSnapshot);
+
+      if (!supabase) {
+        clearSignedInState();
+        setSessionStatus('signed_out');
+        setHydrated(true);
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!active) {
+        return;
+      }
+
+      const nextSession = data.session;
+      if (!nextSession) {
+        clearSignedInState();
+        setRememberedAccount(rememberedSnapshot);
+        setSessionStatus('signed_out');
+        setHydrated(true);
+        return;
+      }
+
+      if (!nextBiometricsEnabled) {
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) {
+          console.warn(
+            'Failed to clear restored Supabase session without biometrics',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+
+        clearSignedInState();
+        setRememberedAccount(rememberedSnapshot);
+        setSessionStatus('signed_out');
+        setHydrated(true);
+        return;
+      }
+
+      try {
+        await loadAccountState(nextSession, {
+          initialLock: nextBiometricsEnabled,
+          preserveLocked: false,
+          preserveTrustedDeviceDuringLoad: false,
+          biometricPreference: nextBiometricsEnabled,
+        });
+      } catch (error) {
+        console.warn(
+          'Failed to hydrate account state',
+          error instanceof Error ? error.message : String(error),
+        );
+        clearSignedInState();
+        setSessionStatus('signed_out');
+      }
+
+      if (active) {
+        setHydrated(true);
+      }
+    }
+
+    void hydrate();
+
+    return () => {
+      active = false;
+    };
+  }, [clearSignedInState, loadAccountState]);
+
+  useEffect(() => {
+    if (!supabase || !hydrated) {
+      return;
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!nextSession) {
+        clearSignedInState();
+        setSessionStatus('signed_out');
+        return;
+      }
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecoverySessionUserId(nextSession.user.id);
+      } else if (
+        event === 'SIGNED_IN' &&
+        passwordRecoverySessionUserIdRef.current !== nextSession.user.id
+      ) {
+        setPasswordRecoverySessionUserId(null);
+      }
+
+      void loadAccountState(nextSession, {
+        initialLock: false,
+        preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
+        preserveTrustedDeviceDuringLoad: event !== 'SIGNED_IN',
+        biometricPreference: biometricsEnabled,
+      }).catch((error) => {
+        console.warn(
+          'Failed to refresh account state after auth change',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [
+    biometricsEnabled,
+    clearSignedInState,
+    hydrated,
+    loadAccountState,
+    setPasswordRecoverySessionUserId,
+    setSessionStatus,
+  ]);
+
+  useEffect(() => {
+    if (!supabase || !hydrated) {
+      return;
+    }
+
+    void Linking.getInitialURL().then((url) => applySessionFromUrl(url));
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      void applySessionFromUrl(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [applySessionFromUrl, hydrated]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        backgroundedAtRef.current = Date.now();
+        return;
+      }
+
+      if (nextState === 'active') {
+        void refreshNativePermissionStatuses();
+        const backgroundedAt = backgroundedAtRef.current;
+        backgroundedAtRef.current = null;
+
+        if (
+          biometricsEnabled &&
+          status === 'signed_in_unlocked' &&
+          backgroundedAt &&
+          Date.now() - backgroundedAt >= LOCK_AFTER_MS
+        ) {
+          setSessionStatus('signed_in_locked');
+          setStepUpFreshUntil(null);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [biometricsEnabled, refreshNativePermissionStatuses, setSessionStatus, status]);
+
+  useEffect(() => {
+    if (!recentPasswordAuth) {
+      return;
+    }
+
+    const timeoutMs = Math.max(0, recentPasswordAuth.expiresAt - Date.now());
+    const timer = setTimeout(() => {
+      setRecentPasswordAuth((current) => (current === recentPasswordAuth ? null : current));
+    }, timeoutMs);
+
+    return () => clearTimeout(timer);
+  }, [recentPasswordAuth]);
+
+  const performGoogleOAuthFlow = useCallback(
+    async (mode: 'sign-in' | 'link'): Promise<string> => {
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      const redirectTo = Linking.createURL('/join?mode=sign-in');
+      const authApi = supabase.auth as unknown as {
+        readonly linkIdentity?: (input: {
+          readonly provider: 'google';
+          readonly options?: {
+            readonly redirectTo?: string;
+            readonly queryParams?: Record<string, string>;
+          };
+        }) => Promise<{ data?: { url?: string | null }; error?: { message: string } | null }>;
+      };
+
+      const authResult =
+        mode === 'link' && typeof authApi.linkIdentity === 'function'
+          ? await authApi.linkIdentity({
+              provider: 'google',
+              options: {
+                redirectTo,
+                queryParams: {
+                  prompt: 'select_account',
+                },
+              },
+            })
+          : await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo,
+                queryParams: {
+                  prompt: 'select_account',
+                },
+              },
+            });
+
+      if (authResult.error) {
+        return formatSupabaseAuthErrorMessage(authResult.error.message);
+      }
+
+      if (!authResult.data?.url) {
+        return mode === 'link'
+          ? 'No se pudo abrir Google para vincularlo.'
+          : 'No se pudo iniciar Google.';
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(authResult.data.url, redirectTo);
+      const resultType = String(result.type);
+
+      if (resultType === 'cancel' || resultType === 'dismiss') {
+        return mode === 'link'
+          ? 'Vinculacion con Google cancelada.'
+          : 'Inicio con Google cancelado.';
+      }
+
+      if (resultType === 'success') {
+        const redirectUrl = 'url' in result && typeof result.url === 'string' ? result.url : null;
+        await applySessionFromUrl(redirectUrl);
+        return mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.';
+      }
+
+      return mode === 'link'
+        ? 'No se pudo completar la vinculacion con Google.'
+        : 'No se pudo completar el inicio con Google.';
+    },
+    [applySessionFromUrl],
+  );
+
+  const performAppleAuth = useCallback(
+    async (
+      mode: 'sign-in' | 'link',
+    ): Promise<{ readonly message: string; readonly userId: string | null }> => {
+      if (Platform.OS !== 'ios') {
+        return {
+          message: 'Apple solo esta disponible en iPhone.',
+          userId: null,
+        };
+      }
+
+      if (!supabase) {
+        return {
+          message: 'Supabase no esta configurado en esta app.',
+          userId: null,
+        };
+      }
+
+      const available = await AppleAuthentication.isAvailableAsync().catch(() => false);
+      if (!available) {
+        return {
+          message: 'Apple no esta disponible en este dispositivo.',
+          userId: null,
+        };
+      }
+
+      try {
+        const nonce = generateSecureNonce();
+        const credential = await AppleAuthentication.signInAsync({
+          nonce,
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+
+        if (!credential.identityToken) {
+          return {
+            message: 'Apple no devolvio un token valido.',
+            userId: null,
+          };
+        }
+
+        if (mode === 'link') {
+          const authApi = supabase.auth as unknown as {
+            readonly linkIdentity?: (input: {
+              readonly provider: 'apple';
+              readonly token: string;
+              readonly nonce: string;
+            }) => Promise<{ error?: { message: string } | null }>;
+          };
+
+          if (typeof authApi.linkIdentity !== 'function') {
+            return {
+              message: 'Esta version de Supabase no expone linkIdentity para Apple.',
+              userId: null,
+            };
+          }
+
+          const { error } = await authApi.linkIdentity({
+            provider: 'apple',
+            token: credential.identityToken,
+            nonce,
+          });
+
+          if (error) {
+            return {
+              message: formatSupabaseAuthErrorMessage(error.message),
+              userId: null,
+            };
+          }
+        } else {
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: credential.identityToken,
+            nonce,
+          });
+
+          if (error) {
+            return {
+              message: formatSupabaseAuthErrorMessage(error.message),
+              userId: null,
+            };
+          }
+        }
+
+        const fullName = buildAppleFullName(credential.fullName);
+        if (fullName) {
+          const { error: metadataError } = await supabase.auth.updateUser({
+            data: {
+              display_name: fullName,
+              full_name: fullName,
+              given_name: credential.fullName?.givenName?.trim() ?? null,
+              family_name: credential.fullName?.familyName?.trim() ?? null,
+            },
+          });
+
+          if (metadataError) {
+            console.warn(
+              'Failed to persist Apple full name metadata',
+              metadataError instanceof Error ? metadataError.message : String(metadataError),
+            );
+          }
+        }
+
+        const { data } = await supabase.auth.getSession();
+        return {
+          message: mode === 'link' ? 'Apple vinculado.' : 'Sesion iniciada.',
+          userId: data.session?.user.id ?? null,
+        };
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { readonly code?: string }).code === 'ERR_REQUEST_CANCELED'
+        ) {
+          return {
+            message:
+              mode === 'link' ? 'Vinculacion con Apple cancelada.' : 'Inicio con Apple cancelado.',
+            userId: null,
+          };
+        }
+
+        return {
+          message: formatValidationMessage(error),
+          userId: null,
+        };
+      }
+    },
+    [],
+  );
+
+  const signInWithPassword = useCallback(async (input: EmailPasswordCredentials) => {
+    try {
+      const parsed = emailPasswordSignInSchema.parse(input);
+      const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: parsed.password,
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      if (data.user?.id) {
+        setRecentPasswordAuth(createRecentPasswordAuth(data.user.id));
+      }
+
+      return 'Sesion iniciada.';
+    } catch (error) {
+      return formatValidationMessage(error);
+    }
+  }, []);
+
+  const registerAccount = useCallback(async (input: RegistrationInput) => {
+    try {
+      const parsed = registrationSchema.parse(input);
+      const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+      const phoneCountryCallingCode = normalizeCallingCode(parsed.phoneCountryCallingCode);
+      const phoneNationalNumber = normalizePhoneDigits(parsed.phoneNationalNumber);
+      const phoneE164 = buildPhoneE164(phoneCountryCallingCode, phoneNationalNumber);
+      const pendingIntent = await readPendingInviteIntent();
+
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      if (pendingIntent?.type !== 'account_invite') {
+        return 'Necesitas una invitacion valida para crear una cuenta nueva.';
+      }
+
+      const supportId = createSupportId();
+      const registrationPreview = await supabase.functions.invoke<AccountRegistrationPreviewResult>(
+        'get-account-invite-preview-public',
+        {
+          body: {
+            deliveryToken: pendingIntent.token,
+            email: normalizedEmail,
+            phoneE164,
+            recordAppOpen: false,
+          },
+          headers: {
+            'x-client-info': 'happy-circles-mobile',
+            'x-request-id': supportId,
+          },
+        },
+      );
+
+      if (registrationPreview.error) {
+        const details = await readFunctionErrorDetails(registrationPreview.error);
+        return formatSupabaseAuthErrorMessage(
+          withSupportCode(
+            details.message || readErrorMessage(registrationPreview.error),
+            supportId,
+          ),
+        );
+      }
+
+      if (
+        registrationPreview.data?.emailAlreadyRegistered &&
+        registrationPreview.data.phoneAlreadyRegistered
+      ) {
+        return 'Ese correo y celular ya existen.';
+      }
+
+      if (registrationPreview.data?.emailAlreadyRegistered) {
+        return 'Ese correo ya existe.';
+      }
+
+      if (registrationPreview.data?.phoneAlreadyRegistered) {
+        return 'Ese celular ya esta vinculado.';
+      }
+
+      if (
+        !registrationPreview.data ||
+        registrationPreview.data.status !== 'pending_activation' ||
+        registrationPreview.data.deliveryStatus !== 'issued'
+      ) {
+        return 'Esta invitacion ya fue usada o ya no esta disponible.';
+      }
+
+      const accountInviteDeliveryTokenHash = await hashInviteTokenForRegistration(
+        pendingIntent.token,
+      );
+      const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: parsed.password,
+        options: {
+          data: {
+            account_invite_delivery_token_hash: accountInviteDeliveryTokenHash,
+            phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
+            phone_country_calling_code: phoneCountryCallingCode,
+            phone_national_number: phoneNationalNumber,
+            phone_e164: phoneE164,
+          },
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      if (data.session) {
+        setRecentPasswordAuth(createRecentPasswordAuth(data.session.user.id));
+        return 'Cuenta creada. Ahora termina tu setup.';
+      }
+
+      return 'Cuenta creada. Revisa tu correo.';
+    } catch (error) {
+      return formatValidationMessage(error);
+    }
+  }, []);
+
+  const signInWithGoogle = useCallback(
+    async () => performGoogleOAuthFlow('sign-in'),
+    [performGoogleOAuthFlow],
+  );
+
+  const signInWithApple = useCallback(async () => {
+    const result = await performAppleAuth('sign-in');
+    return result.message;
+  }, [performAppleAuth]);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    try {
+      const parsed = passwordResetRequestSchema.parse({ email });
+      const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      const redirectTo = buildEmailAuthRedirect('/reset-password');
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo,
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      return 'Si el correo existe, enviamos un enlace para restablecer la clave.';
+    } catch (error) {
+      return formatValidationMessage(error);
+    }
+  }, []);
+
+  const resendEmailConfirmation = useCallback(
+    async (emailInput?: string) => {
+      if (!supabase) {
+        return 'Supabase no esta configurado en esta app.';
+      }
+
+      const email = (emailInput ?? sessionRef.current?.user.email)
+        ?.trim()
+        .toLocaleLowerCase('en-US');
+      if (!email) {
+        return 'Escribe el correo para reenviar la confirmacion.';
+      }
+
+      if (sessionRef.current && isSessionEmailConfirmed(sessionRef.current)) {
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        return 'Tu correo ya esta confirmado.';
+      }
+
+      const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
+      const { error } = await supabase.auth.resend({
+        email,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+        type: 'signup',
+      });
+
+      if (error) {
+        return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      return 'Enviamos un nuevo correo de confirmacion. Puedes abrir el enlace o copiar el codigo de 8 digitos.';
+    },
+    [refreshAccountState],
+  );
+
+  const verifyEmailOtp = useCallback(
+    async (input: EmailOtpVerificationInput) => {
+      try {
+        const parsed = emailOtpVerificationSchema.parse(input);
+        const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+        const token = parsed.code.trim();
+
+        if (!supabase) {
+          return 'Supabase no esta configurado en esta app.';
+        }
+
+        const { error } = await supabase.auth.verifyOtp({
+          email: normalizedEmail,
+          token,
+          type: 'signup',
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        await refreshAccountState({
+          preserveLocked: false,
+          preserveTrustedDeviceDuringLoad: true,
+        });
+        return 'Correo confirmado.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [refreshAccountState],
+  );
+
+  const verifyPasswordRecoveryOtp = useCallback(
+    async (input: EmailOtpVerificationInput) => {
+      try {
+        const parsed = emailOtpVerificationSchema.parse(input);
+        const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
+        const token = parsed.code.trim();
+
+        if (!supabase) {
+          return 'Supabase no esta configurado en esta app.';
+        }
+
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: normalizedEmail,
+          token,
+          type: 'recovery',
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        const nextSession = data.session ?? (await supabase.auth.getSession()).data.session;
+        if (!nextSession) {
+          return 'Codigo verificado, pero no pudimos abrir la sesion de recuperacion. Pide un enlace nuevo.';
+        }
+
+        setPasswordRecoverySessionUserId(nextSession.user.id);
+        await refreshAccountState({ preserveLocked: false });
+        return 'Codigo verificado.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [refreshAccountState, setPasswordRecoverySessionUserId],
+  );
+
+  const updatePassword = useCallback(
+    async (input: PasswordResetInput) => {
+      try {
+        const parsed = passwordResetSchema.parse(input);
+
+        if (
+          !supabase ||
+          !sessionRef.current ||
+          passwordRecoverySessionUserIdRef.current !== sessionRef.current.user.id
+        ) {
+          return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
+        }
+
+        const { error } = await supabase.auth.updateUser({
+          password: parsed.password,
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        setPasswordRecoverySessionUserId(null);
+        await refreshAccountState();
+        return 'Clave actualizada.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [refreshAccountState, setPasswordRecoverySessionUserId],
+  );
+
+  const signOut = useCallback(async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+
+    clearSignedInState();
+    setSessionStatus('signed_out');
+  }, [clearSignedInState, setSessionStatus]);
+
+  const stepUpAuth = useCallback(
+    async (force = false): Promise<BiometricAuthResult> => {
+      if (deviceTrustState !== 'trusted') {
+        return {
+          success: false,
+          error: 'device_untrusted',
+        };
+      }
+
+      if (!force && stepUpFreshUntil && stepUpFreshUntil > Date.now()) {
+        return {
+          success: true,
+          error: null,
+        };
+      }
+
+      let result = await authenticateWithBiometricsResult();
+
+      if (!result.success && (result.error === 'app_cancel' || result.error === 'system_cancel')) {
+        await wait(250);
+        result = await authenticateWithBiometricsResult();
+      }
+
+      if (result.success) {
+        setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+        if (status === 'signed_in_locked') {
+          setSessionStatus('signed_in_unlocked');
+        }
+      }
+
+      return result;
+    },
+    [deviceTrustState, setSessionStatus, status, stepUpFreshUntil],
+  );
+
+  const unlock = useCallback(async (): Promise<BiometricAuthResult> => {
+    if (status === 'signed_in_untrusted') {
+      return {
+        success: false,
+        error: 'device_untrusted',
+      };
+    }
+
+    if (!biometricsEnabled) {
+      setSessionStatus('signed_in_unlocked');
+      return {
+        success: true,
+        error: null,
+      };
+    }
+
+    const result = await authenticateWithBiometricsResult();
+    if (result.success) {
+      setSessionStatus('signed_in_unlocked');
+      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+    }
+
+    return result;
+  }, [biometricsEnabled, setSessionStatus, status]);
+
+  const lock = useCallback(() => {
+    if (status === 'signed_in_unlocked') {
+      setSessionStatus('signed_in_locked');
+      setStepUpFreshUntil(null);
+    }
+  }, [setSessionStatus, status]);
+
+  const setBiometricsEnabled = useCallback(
+    async (enabled: boolean): Promise<BiometricToggleResult> => {
+      if (!enabled) {
+        if (biometricsEnabled && deviceTrustState === 'trusted') {
+          const result = await stepUpAuth(true);
+          if (!result.success) {
+            return {
+              ok: false,
+              message: 'No se pudo validar tu identidad para desactivar la biometria.',
+            };
+          }
+        }
+
+        await removeStoredItem(BIOMETRICS_KEY);
+        setBiometricsEnabledState(false);
+        setStepUpFreshUntil(null);
+
+        if (sessionRef.current && deviceTrustState === 'trusted') {
+          setSessionStatus('signed_in_unlocked');
+        }
+
+        return {
+          ok: true,
+          message: 'Ingreso con biometria desactivado.',
+        };
+      }
+
+      if (deviceTrustState !== 'trusted') {
+        return {
+          ok: false,
+          message: 'Primero valida este dispositivo para activar la biometria.',
+        };
+      }
+
+      const support = await getBiometricSupport();
+      setBiometricAvailable(support.available);
+      setBiometricLabel(support.label);
+
+      if (!support.available) {
+        return {
+          ok: false,
+          message: 'Este dispositivo no tiene biometria disponible.',
+        };
+      }
+
+      const authenticated = await authenticateWithBiometrics();
+      if (!authenticated) {
+        return {
+          ok: false,
+          message: 'No se pudo confirmar la biometria.',
+        };
+      }
+
+      await setStoredItem(BIOMETRICS_KEY, 'true');
+      setBiometricsEnabledState(true);
+      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+
+      return {
+        ok: true,
+        message: `Happy Circles pedira ${support.label} al abrirse y volvera a entrar apenas se valide.`,
+      };
+    },
+    [biometricsEnabled, deviceTrustState, setSessionStatus, stepUpAuth],
+  );
+
+  const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    setNotificationsEnabledState(enabled);
+
+    if (enabled) {
+      await setStoredItem(NOTIFICATIONS_KEY, 'true');
+      return;
+    }
+
+    await removeStoredItem(NOTIFICATIONS_KEY);
+  }, []);
+
+  const requestContactsPermission = useCallback(async () => {
+    const nextStatus = await requestContactsPermissionStatus();
+    setContactsPermissionStatus(nextStatus);
+
+    if (nextStatus === 'granted') {
+      return 'Contactos activados.';
+    }
+
+    if (nextStatus === 'limited') {
+      return 'El sistema compartio solo algunos contactos. Puedes ampliar el acceso despues desde Personas.';
+    }
+
+    if (nextStatus === 'unavailable') {
+      return 'Contactos no disponibles en este entorno.';
+    }
+
+    if (nextStatus === 'denied') {
+      return 'Contactos bloqueados. Abre Ajustes para permitir el acceso.';
+    }
+
+    return 'Puedes seguir sin contactos por ahora.';
+  }, []);
+
+  const requestNotificationsPermission = useCallback(async () => {
+    const nextStatus = await requestLocalNotificationPermissionStatus();
+    setNotificationsPermissionStatus(nextStatus);
+
+    if (nextStatus !== 'granted') {
+      await removeStoredItem(NOTIFICATIONS_KEY);
+      setNotificationsEnabledState(false);
+
+      if (nextStatus === 'unavailable') {
+        return 'Notificaciones no disponibles en este entorno.';
+      }
+
+      if (nextStatus === 'denied') {
+        return 'Notificaciones bloqueadas. Abre Ajustes para activarlas.';
+      }
+
+      return 'Puedes seguir sin notificaciones por ahora.';
+    }
+
+    await setStoredItem(NOTIFICATIONS_KEY, 'true');
+    setNotificationsEnabledState(true);
+    return 'Recordatorios activados.';
+  }, []);
+
+  const completeProfile = useCallback(
+    async (input: CompleteProfileInput) => {
+      try {
+        const parsed = completeProfileSchema.parse(input);
+        const normalizedDisplayName = parsed.fullName.trim();
+        const phoneCountryCallingCode = normalizeCallingCode(parsed.phoneCountryCallingCode);
+        const phoneNationalNumber = normalizePhoneDigits(parsed.phoneNationalNumber);
+        const phoneE164 = buildPhoneE164(phoneCountryCallingCode, phoneNationalNumber);
+
+        if (isLowQualityDisplayName(normalizedDisplayName)) {
+          return 'Escribe tu nombre, no el correo.';
+        }
+
+        if (!supabase || !sessionRef.current) {
+          return 'No hay una sesion activa.';
+        }
+
+        const wasCompletingRequiredProfile = profileCompletionState !== 'complete';
+        const changingProtectedProfileData =
+          profileCompletionState === 'complete' &&
+          profile?.phone_e164 &&
+          profile.phone_e164 !== phoneE164;
+
+        if (changingProtectedProfileData && deviceTrustState !== 'trusted') {
+          return 'Confiar este dispositivo es obligatorio antes de cambiar el celular.';
+        }
+
+        if (changingProtectedProfileData) {
+          const result = await stepUpAuth(true);
+          if (!result.success) {
+            return formatStepUpErrorMessage('cambiar el perfil', biometricLabel, result.error);
+          }
+        }
+
+        const updatePayload = {
+          display_name: normalizedDisplayName,
+          phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
+          phone_country_calling_code: phoneCountryCallingCode,
+          phone_national_number: phoneNationalNumber,
+          phone_e164: phoneE164,
+        };
+
+        if (wasCompletingRequiredProfile) {
+          recordProductEventSafe({
+            eventName: 'registration_started',
+            screenName: 'setup_account',
+            metadata: { source: 'complete_profile' },
+          });
+        }
+
+        const { error } = await supabase
+          .from('user_profiles')
+          .update(updatePayload as never)
+          .eq('id', sessionRef.current.user.id);
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: updatePayload,
+        });
+
+        if (metadataError) {
+          console.warn(
+            'Failed to mirror profile metadata into auth user',
+            metadataError instanceof Error ? metadataError.message : String(metadataError),
+          );
+        }
+
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        if (wasCompletingRequiredProfile) {
+          recordProductEventSafe({
+            eventName: 'registration_completed',
+            screenName: 'setup_account',
+            metadata: { source: 'complete_profile' },
+          });
+        }
+        return 'Perfil actualizado.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [
+      biometricLabel,
+      deviceTrustState,
+      profile,
+      profileCompletionState,
+      refreshAccountState,
+      stepUpAuth,
+    ],
+  );
+
+  const linkGoogle = useCallback(async () => {
+    if (deviceTrustState !== 'trusted') {
+      return 'Solo puedes vincular Google desde un dispositivo confiable.';
+    }
+
+    const authResult = await stepUpAuth(true);
+    if (!authResult.success) {
+      return formatStepUpErrorMessage('vincular Google', biometricLabel, authResult.error);
+    }
+
+    const oauthResult = await performGoogleOAuthFlow('link');
+    if (oauthResult === 'Google vinculado.') {
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+    }
+
+    return oauthResult;
+  }, [biometricLabel, deviceTrustState, performGoogleOAuthFlow, refreshAccountState, stepUpAuth]);
+
+  const linkApple = useCallback(async () => {
+    if (deviceTrustState !== 'trusted') {
+      return 'Solo puedes vincular Apple desde un dispositivo confiable.';
+    }
+
+    const authResult = await stepUpAuth(true);
+    if (!authResult.success) {
+      return formatStepUpErrorMessage('vincular Apple', biometricLabel, authResult.error);
+    }
+
+    const appleResult = await performAppleAuth('link');
+    if (appleResult.message === 'Apple vinculado.') {
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+    }
+
+    return appleResult.message;
+  }, [biometricLabel, deviceTrustState, performAppleAuth, refreshAccountState, stepUpAuth]);
+
+  const attachEmailPassword = useCallback(
+    async (input: AttachEmailPasswordInput) => {
+      try {
+        const parsed = attachEmailPasswordSchema.parse(input);
+
+        if (!supabase || !sessionRef.current) {
+          return 'No hay una sesion activa.';
+        }
+
+        if (!sessionRef.current.user.email) {
+          return 'Esta cuenta no tiene un correo disponible para adjuntar clave.';
+        }
+
+        if (deviceTrustState !== 'trusted') {
+          return 'Solo puedes agregar clave desde un dispositivo confiable.';
+        }
+
+        const result = await stepUpAuth(true);
+        if (!result.success) {
+          return formatStepUpErrorMessage('agregar una clave', biometricLabel, result.error);
+        }
+
+        const { error } = await supabase.auth.updateUser({
+          password: parsed.password,
+        });
+
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        return 'Clave agregada a tu cuenta actual.';
+      } catch (error) {
+        return formatValidationMessage(error);
+      }
+    },
+    [biometricLabel, deviceTrustState, refreshAccountState, stepUpAuth],
+  );
+
+  const trustCurrentDevice = useCallback(
+    async (input?: TrustCurrentDeviceInput) => {
+      if (!supabase || !sessionRef.current || !currentDeviceId) {
+        return 'No hay una sesion activa.';
+      }
+
+      if (deviceTrustState === 'trusted') {
+        return 'Este dispositivo ya es confiable.';
+      }
+
+      const expectedUserId = sessionRef.current.user.id;
+      const hasRecentPasswordAuth = isRecentPasswordAuthValid({
+        recentPasswordAuth,
+        userId: expectedUserId,
+      });
+
+      if (linkedMethods.hasEmailPassword) {
+        if (!hasRecentPasswordAuth) {
+          if (!sessionRef.current.user.email) {
+            return 'No encontramos un correo para verificar esta cuenta.';
+          }
+
+          if (!input?.password) {
+            return 'Escribe tu clave actual para confiar este dispositivo.';
+          }
+
+          const { error, data } = await supabase.auth.signInWithPassword({
+            email: sessionRef.current.user.email,
+            password: input.password,
+          });
+
+          if (error) {
+            return formatSupabaseAuthErrorMessage(error.message);
+          }
+
+          if (data.user?.id !== expectedUserId) {
+            await supabase.auth.signOut();
+            clearSignedInState();
+            setSessionStatus('signed_out');
+            return 'La validacion abrio otra cuenta. Cerramos la sesion por seguridad.';
+          }
+
+          setRecentPasswordAuth(createRecentPasswordAuth(expectedUserId));
+        }
+      } else if (linkedMethods.hasGoogle) {
+        const result = await performGoogleOAuthFlow('sign-in');
+        if (result !== 'Sesion iniciada.') {
+          return result;
+        }
+
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user.id !== expectedUserId) {
+          await supabase.auth.signOut();
+          clearSignedInState();
+          setSessionStatus('signed_out');
+          return 'Google abrio otra cuenta. Cerramos la sesion por seguridad.';
+        }
+      } else if (linkedMethods.hasApple) {
+        const result = await performAppleAuth('sign-in');
+        if (result.message !== 'Sesion iniciada.') {
+          return result.message;
+        }
+
+        if (result.userId !== expectedUserId) {
+          await supabase.auth.signOut();
+          clearSignedInState();
+          setSessionStatus('signed_out');
+          return 'Apple abrio otra cuenta. Cerramos la sesion por seguridad.';
+        }
+      } else {
+        return 'Esta cuenta no tiene un metodo disponible para revalidar el dispositivo.';
+      }
+
+      const timestamp = new Date().toISOString();
+      const updateResult = await supabase
+        .from('trusted_devices')
+        .update({
+          trust_state: 'trusted',
+          trusted_at: timestamp,
+          revoked_at: null,
+          last_seen_at: timestamp,
+        } as never)
+        .eq('user_id', expectedUserId)
+        .eq('device_id', currentDeviceId);
+
+      if (updateResult.error) {
+        return updateResult.error.message;
+      }
+
+      setRecentPasswordAuth(null);
+      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      return 'Este dispositivo ahora es confiable.';
+    },
+    [
+      clearSignedInState,
+      currentDeviceId,
+      deviceTrustState,
+      linkedMethods,
+      performAppleAuth,
+      performGoogleOAuthFlow,
+      recentPasswordAuth,
+      refreshAccountState,
+      setSessionStatus,
+    ],
+  );
+
+  const revokeTrustedDevice = useCallback(
+    async (deviceId: string) => {
+      if (!supabase || !sessionRef.current) {
+        return 'No hay una sesion activa.';
+      }
+
+      if (deviceTrustState !== 'trusted') {
+        return 'Solo puedes revocar dispositivos desde un dispositivo confiable.';
+      }
+
+      const result = await stepUpAuth(true);
+      if (!result.success) {
+        return formatStepUpErrorMessage('revocar el dispositivo', biometricLabel, result.error);
+      }
+
+      const timestamp = new Date().toISOString();
+      const { error } = await supabase
+        .from('trusted_devices')
+        .update({
+          trust_state: 'revoked',
+          revoked_at: timestamp,
+          last_seen_at: timestamp,
+        } as never)
+        .eq('user_id', sessionRef.current.user.id)
+        .eq('device_id', deviceId);
+
+      if (error) {
+        return error.message;
+      }
+
+      await refreshAccountState();
+      return deviceId === currentDeviceId
+        ? 'Este dispositivo fue revocado y quedo sin confianza.'
+        : 'Dispositivo revocado.';
+    },
+    [biometricLabel, currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
+  );
+
+  const clearRememberedAccount = useCallback(async () => {
+    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
+    setRememberedAccount(null);
+  }, []);
+
+  const canTrustCurrentDeviceWithoutPassword = useMemo(
+    () =>
+      deviceTrustState !== 'trusted' &&
+      linkedMethods.hasEmailPassword &&
+      isRecentPasswordAuthValid({
+        recentPasswordAuth,
+        userId: session?.user.id,
+      }),
+    [deviceTrustState, linkedMethods.hasEmailPassword, recentPasswordAuth, session?.user.id],
+  );
+
+  const setupState = useMemo<SetupState>(() => {
+    return buildSetupState({
+      profile,
+      isEmailConfirmed,
+      deviceTrustState,
+      biometricAvailable,
+      contactsPermissionStatus,
+      notificationsPermissionStatus,
+      emptyState: EMPTY_SETUP_STATE,
+    });
+  }, [
+    biometricAvailable,
+    contactsPermissionStatus,
+    deviceTrustState,
+    isEmailConfirmed,
+    notificationsPermissionStatus,
+    profile,
+  ]);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (
+      !supabase ||
+      !userId ||
+      accountAccessState !== 'active' ||
+      !isEmailConfirmed ||
+      !setupState.requiredComplete ||
+      setupState.securityPending
+    ) {
+      return;
+    }
+
+    if (welcomeEmailAttemptedUserIdsRef.current.has(userId)) {
+      return;
+    }
+
+    welcomeEmailAttemptedUserIdsRef.current.add(userId);
+    const supportId = createSupportId();
+    void supabase.functions
+      .invoke('send-welcome-email', {
+        body: {},
+        headers: {
+          'x-client-info': 'happy-circles-mobile',
+          'x-request-id': supportId,
+        },
+      })
+      .then(async (result) => {
+        if (result.error) {
+          const details = await readFunctionErrorDetails(result.error);
+          reportClientErrorSafe({
+            error: new Error(details.message),
+            errorCode: details.code,
+            errorMessage: details.message,
+            functionName: 'send-welcome-email',
+            kind: 'edge_function',
+            metadata: { source: 'welcome_email_effect', status: details.status ?? null },
+            requestId: details.requestId ?? supportId,
+            supportId,
+          });
+        }
+      })
+      .catch((error) => {
+        reportClientErrorSafe({
+          error,
+          errorMessage: readErrorMessage(error),
+          functionName: 'send-welcome-email',
+          kind: 'client_action',
+          metadata: { source: 'welcome_email_effect' },
+          requestId: supportId,
+          supportId,
+        });
+        // Welcome email delivery is best-effort and should never block setup.
+      });
+  }, [
+    accountAccessState,
+    isEmailConfirmed,
+    session?.user.id,
+    setupState.requiredComplete,
+    setupState.securityPending,
+  ]);
+
+  const value = useMemo<SessionContextValue>(
+    () => ({
+      authMode,
+      status,
+      userId: session?.user.id ?? null,
+      email: session?.user.email ?? null,
+      isEmailConfirmed,
+      authProvider,
+      profile,
+      accountAccessState,
+      rememberedAccount,
+      linkedMethods,
+      profileCompletionState,
+      setupState,
+      deviceTrustState,
+      trustedDevices,
+      currentDeviceId,
+      stepUpFreshUntil,
+      biometricsEnabled,
+      notificationsEnabled,
+      biometricLabel,
+      biometricAvailable,
+      appleSignInAvailable,
+      isSignedIn:
+        status === 'signed_in_unlocked' ||
+        status === 'signed_in_locked' ||
+        status === 'signed_in_untrusted',
+      isPasswordRecoverySession: session
+        ? passwordRecoverySessionUserId === session.user.id
+        : false,
+      isLocked: status === 'signed_in_locked',
+      isTrustedDevice: deviceTrustState === 'trusted',
+      canTrustCurrentDeviceWithoutPassword,
+      requiresProfileCompletion: !setupState.requiredComplete,
+      requiresInvite: accountAccessState === 'needs_invite',
+      requiresAccountActivation: accountAccessState === 'needs_activation',
+      requestPasswordReset,
+      resendEmailConfirmation,
+      verifyEmailOtp,
+      verifyPasswordRecoveryOtp,
+      updatePassword,
+      signInWithPassword,
+      registerAccount,
+      signInWithGoogle,
+      signInWithApple,
+      completeProfile,
+      linkGoogle,
+      linkApple,
+      attachEmailPassword,
+      trustCurrentDevice,
+      revokeTrustedDevice,
+      refreshAccountState,
+      signOut,
+      unlock,
+      lock,
+      stepUpAuth,
+      setBiometricsEnabled,
+      setNotificationsEnabled,
+      requestContactsPermission,
+      requestNotificationsPermission,
+      clearRememberedAccount,
+    }),
+    [
+      attachEmailPassword,
+      accountAccessState,
+      authMode,
+      authProvider,
+      biometricAvailable,
+      biometricLabel,
+      biometricsEnabled,
+      canTrustCurrentDeviceWithoutPassword,
+      completeProfile,
+      contactsPermissionStatus,
+      currentDeviceId,
+      deviceTrustState,
+      isEmailConfirmed,
+      appleSignInAvailable,
+      clearRememberedAccount,
+      linkApple,
+      linkGoogle,
+      linkedMethods,
+      lock,
+      notificationsEnabled,
+      notificationsPermissionStatus,
+      passwordRecoverySessionUserId,
+      profile,
+      profileCompletionState,
+      resendEmailConfirmation,
+      requestPasswordReset,
+      requestContactsPermission,
+      requestNotificationsPermission,
+      rememberedAccount,
+      refreshAccountState,
+      registerAccount,
+      revokeTrustedDevice,
+      session,
+      setBiometricsEnabled,
+      setNotificationsEnabled,
+      setupState,
+      signInWithApple,
+      signInWithGoogle,
+      signInWithPassword,
+      signOut,
+      status,
+      updatePassword,
+      stepUpAuth,
+      stepUpFreshUntil,
+      trustCurrentDevice,
+      trustedDevices,
+      unlock,
+      verifyEmailOtp,
+      verifyPasswordRecoveryOtp,
+    ],
+  );
+
+  return value;
+}
