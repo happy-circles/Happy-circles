@@ -156,16 +156,16 @@ export function useCollapsibleHomeChrome() {
 }
 
 function HomeMorphLogo({
-  compactLeft,
-  compactTop,
-  expandedLeft,
-  expandedTop,
+  compactCenterX,
+  compactCenterY,
+  expandedCenterX,
+  expandedCenterY,
   progress,
 }: {
-  readonly compactLeft: number;
-  readonly compactTop: number;
-  readonly expandedLeft: number;
-  readonly expandedTop: number;
+  readonly compactCenterX: number;
+  readonly compactCenterY: number;
+  readonly expandedCenterX: number;
+  readonly expandedCenterY: number;
   readonly progress: HomeChromeProgress;
 }) {
   const maskId = useMemo(() => `home-morph-brand-${Math.random().toString(36).slice(2)}`, []);
@@ -184,11 +184,17 @@ function HomeMorphLogo({
   });
   const left = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [expandedLeft, compactLeft],
+    outputRange: [
+      expandedCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
+      compactCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
+    ],
   });
   const top = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [expandedTop, compactTop],
+    outputRange: [
+      expandedCenterY - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
+      compactCenterY - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
+    ],
   });
 
   return (
@@ -268,29 +274,39 @@ export function HomeCollapsibleChrome({
   const attentionCount = notificationCount > 0 ? notificationCount : pendingCount;
   const contentWidth = Math.min(560, Math.max(0, width - theme.spacing.lg * 2));
   const contentLeft = (width - contentWidth) / 2;
+  const profileCenterX = contentLeft + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
+  const profileCenterY =
+    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
   const expandedLogoCenterX =
     contentLeft + contentWidth / 2 - (HOME_CHROME_TITLE_WIDTH + HOME_CHROME_BRAND_GAP) / 2;
-  const compactLogoLeft =
-    contentLeft + (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2;
-  const expandedLogoLeft = expandedLogoCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2;
-  const expandedLogoTop =
-    topInset +
-    HOME_CHROME_TOP_GAP -
-    (HOME_CHROME_ANCHOR_LOGO_SIZE - HOME_CHROME_EXPANDED_LOGO_SIZE) / 2;
-  const compactLogoTop =
-    topInset +
-    HOME_CHROME_TOP_GAP +
-    (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2 +
-    HOME_CHROME_COMPACT_LOGO_Y_OFFSET;
-  const badgeStartLeft = contentLeft + contentWidth - HOME_CHROME_PROFILE_BUTTON_SIZE + 23;
-  const badgeFinalLeft = compactLogoLeft + HOME_CHROME_ANCHOR_LOGO_SIZE - 26;
+  const expandedLogoCenterY =
+    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_EXPANDED_LOGO_SIZE / 2;
+  const compactLogoCenterX = profileCenterX;
+  const compactLogoCenterY = profileCenterY + HOME_CHROME_LOGO_VISUAL_Y_OFFSET;
+  const badgeStartCenterX =
+    contentLeft + contentWidth - HOME_CHROME_PROFILE_BUTTON_SIZE + 42;
+  const badgeStartCenterY =
+    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_BADGE_SIZE / 2 - 4;
+  const compactBadgeAngle = (HOME_CHROME_BADGE_COMPACT_ANGLE * Math.PI) / 180;
+  const compactBadgeRadius =
+    HOME_CHROME_ANCHOR_LOGO_SIZE * HOME_CHROME_BADGE_COMPACT_RADIUS;
+  const badgeFinalCenterX =
+    compactLogoCenterX + Math.cos(compactBadgeAngle) * compactBadgeRadius;
+  const badgeFinalCenterY =
+    compactLogoCenterY + Math.sin(compactBadgeAngle) * compactBadgeRadius;
   const badgeLeft = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [badgeStartLeft, badgeFinalLeft],
+    outputRange: [
+      badgeStartCenterX - HOME_CHROME_BADGE_SIZE / 2,
+      badgeFinalCenterX - HOME_CHROME_BADGE_SIZE / 2,
+    ],
   });
   const badgeTop = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [topInset + HOME_CHROME_TOP_GAP - 4, compactLogoTop + 7],
+    outputRange: [
+      badgeStartCenterY - HOME_CHROME_BADGE_SIZE / 2,
+      badgeFinalCenterY - HOME_CHROME_BADGE_SIZE / 2,
+    ],
   });
   const titleOpacity = progress.interpolate({
     inputRange: [0, 0.5, 1],
@@ -319,10 +335,10 @@ export function HomeCollapsibleChrome({
       style={[styles.chromeRoot, { height: topInset + HOME_CHROME_EXPANDED_HEIGHT }]}
     >
       <HomeMorphLogo
-        compactLeft={compactLogoLeft}
-        compactTop={compactLogoTop}
-        expandedLeft={expandedLogoLeft}
-        expandedTop={expandedLogoTop}
+        compactCenterX={compactLogoCenterX}
+        compactCenterY={compactLogoCenterY}
+        expandedCenterX={expandedLogoCenterX}
+        expandedCenterY={expandedLogoCenterY}
         progress={progress}
       />
       <Animated.View
