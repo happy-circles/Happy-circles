@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { toneVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 type BalanceTone = 'positive' | 'negative' | 'neutral';
 
@@ -56,17 +57,17 @@ function BalanceMetricItem({
   return (
     <View style={styles.metricItem}>
       <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
-      <Text numberOfLines={1} style={[styles.metricLabel, { color: visual.accentColor }]}>
+      <AppText numberOfLines={1} style={[styles.metricLabel, { color: visual.accentColor }]}>
         {visual.label}
-      </Text>
-      <Text
+      </AppText>
+      <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.82}
         numberOfLines={1}
         style={[styles.metricAmount, { color: visual.accentColor }]}
       >
         {formatCop(amountMinor)}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -82,7 +83,7 @@ export function BalanceSummaryCard({
   const detailContent = (
     <Pressable style={({ pressed }) => [styles.detailsLink, pressed ? styles.pressed : null]}>
       <View style={styles.detailsContent}>
-        <Text style={styles.detailsText}>Ver balance</Text>
+        <AppText style={styles.detailsText}>Ver balance</AppText>
         <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={15} />
       </View>
     </Pressable>
@@ -91,17 +92,17 @@ export function BalanceSummaryCard({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.label}>Tu balance</Text>
+        <AppText style={styles.label}>Tu balance</AppText>
       </View>
 
-      <Text
+      <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.78}
         numberOfLines={1}
         style={[styles.amount, balanceVisual ? { color: balanceVisual.accentColor } : null]}
       >
         {formatSignedCop(netBalanceMinor)}
-      </Text>
+      </AppText>
 
       <View style={styles.metricsRow}>
         <BalanceMetricItem amountMinor={totalIOweMinor} tone="negative" />

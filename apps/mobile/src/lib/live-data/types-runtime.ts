@@ -17,7 +17,8 @@ export type NonNullFields<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: NonNullable<T[P]>;
 };
 export type OverrideFields<T, U> = Omit<T, keyof U> & U;
-export type GeneratedFriendshipInviteRow = Database['public']['Views']['v_friendship_invites_live']['Row'];
+export type GeneratedFriendshipInviteRow =
+  Database['public']['Views']['v_friendship_invites_live']['Row'];
 export type FriendshipInviteRow = OverrideFields<
   NonNullFields<
     GeneratedFriendshipInviteRow,
@@ -34,7 +35,8 @@ export type FriendshipInviteDeliveryRow = OverrideFields<
   >,
   { readonly status: string }
 >;
-export type GeneratedAccountInviteRow = Database['public']['Views']['v_account_invites_live']['Row'];
+export type GeneratedAccountInviteRow =
+  Database['public']['Views']['v_account_invites_live']['Row'];
 export type AccountInviteRow = OverrideFields<
   NonNullFields<
     GeneratedAccountInviteRow,

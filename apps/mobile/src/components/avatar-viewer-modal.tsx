@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 
 import { AppAvatar } from './app-avatar';
+import { AppText } from '@/components/app-text';
 
 export interface AvatarViewerModalProps {
   readonly imageUrl?: string | null;
@@ -53,9 +54,9 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
             />
           )}
 
-          <Text numberOfLines={2} style={styles.label}>
+          <AppText numberOfLines={2} style={styles.label}>
             {label}
-          </Text>
+          </AppText>
         </View>
       </View>
     </Modal>

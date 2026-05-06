@@ -15,7 +15,13 @@ import type {
   SettlementProposalRow,
   UserProfileRow,
 } from '../types';
-import { buildPersonPendingRequest, buildPersonTimeline, buildPendingRequestHistorySteps, formatPendingRequestSubtitle, formatPendingRequestTitle } from './financial-requests';
+import {
+  buildPersonPendingRequest,
+  buildPersonTimeline,
+  buildPendingRequestHistorySteps,
+  formatPendingRequestSubtitle,
+  formatPendingRequestTitle,
+} from './financial-requests';
 import { buildSettlementProposalHistoryTimelineItems } from './settlements';
 import { upsertInviteProfilePeople } from './invite-profiles';
 import { deriveDirection, requestDirectionForUser } from '../utils/money-and-direction';
@@ -134,7 +140,9 @@ export function buildPeopleState(input: {
         ...personPendingRequests,
         ...personPendingSettlements,
       ]).map(actionableItemToActivityItem);
-      const historyRows = relationship ? (input.historyByRelationshipId.get(relationship.id) ?? []) : [];
+      const historyRows = relationship
+        ? (input.historyByRelationshipId.get(relationship.id) ?? [])
+        : [];
       const timeline = [
         ...buildPersonTimeline({
           requests,

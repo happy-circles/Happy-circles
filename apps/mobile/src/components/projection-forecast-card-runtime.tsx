@@ -1,13 +1,14 @@
 import { Fragment, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 import type { ProjectionChartFilter } from '@/lib/transaction-filters';
+import { AppText } from '@/components/app-text';
 
 function formatCompactCop(minor: number): string {
   const value = Math.abs(minor) / 100;
@@ -263,26 +264,26 @@ export function ProjectionForecastCard({
     <SurfaceCard padding="none" style={[styles.card, style]}>
       <View style={styles.body}>
         <View style={styles.cardHeader}>
-          <Text numberOfLines={1} style={styles.cardTitle}>
+          <AppText numberOfLines={1} style={styles.cardTitle}>
             Proyeccion
-          </Text>
+          </AppText>
           <View style={styles.cardContextPill}>
-            <Text numberOfLines={1} style={styles.cardContextText}>
+            <AppText numberOfLines={1} style={styles.cardContextText}>
               {hasImpact ? pendingLabel : 'sin pendientes'}
-            </Text>
+            </AppText>
           </View>
         </View>
         <View style={styles.summaryRow}>
           <View style={styles.projectedStack}>
             <View style={styles.projectedMetaRow}>
-              <Text
+              <AppText
                 adjustsFontSizeToFit
                 minimumFontScale={0.82}
                 numberOfLines={1}
                 style={styles.projectedValue}
               >
                 {formatCompactCop(projectedBalanceMinor)}
-              </Text>
+              </AppText>
               {hasImpact ? (
                 <View
                   style={[
@@ -303,10 +304,10 @@ export function ProjectionForecastCard({
                     size={12}
                   />
                   <View style={styles.impactTextStack}>
-                    <Text numberOfLines={1} style={styles.impactLabel}>
+                    <AppText numberOfLines={1} style={styles.impactLabel}>
                       Impacto
-                    </Text>
-                    <Text
+                    </AppText>
+                    <AppText
                       numberOfLines={1}
                       style={[
                         styles.impactValue,
@@ -315,7 +316,7 @@ export function ProjectionForecastCard({
                       ]}
                     >
                       {formatSignedCompactCop(impactMinor)}
-                    </Text>
+                    </AppText>
                   </View>
                 </View>
               ) : null}
@@ -346,7 +347,7 @@ export function ProjectionForecastCard({
 
             {/* Section labels */}
             <View style={[styles.sectionLabelsRow, { marginLeft: chartInsetStart, width: svgW }]}>
-              <Text
+              <AppText
                 style={[
                   styles.sectionLabel,
                   {
@@ -359,8 +360,8 @@ export function ProjectionForecastCard({
                 ]}
               >
                 Hoy
-              </Text>
-              <Text
+              </AppText>
+              <AppText
                 style={[
                   styles.sectionLabel,
                   styles.sectionLabelForecast,
@@ -374,7 +375,7 @@ export function ProjectionForecastCard({
                 ]}
               >
                 Proyección
-              </Text>
+              </AppText>
             </View>
 
             {/* SVG Chart */}
@@ -531,7 +532,7 @@ export function ProjectionForecastCard({
                       name={bar.icon}
                       size={labelIconSize}
                     />
-                    <Text
+                    <AppText
                       numberOfLines={1}
                       style={[
                         styles.labelText,
@@ -539,8 +540,8 @@ export function ProjectionForecastCard({
                       ]}
                     >
                       {bar.label}
-                    </Text>
-                    <Text
+                    </AppText>
+                    <AppText
                       numberOfLines={1}
                       style={[
                         styles.labelValue,
@@ -552,7 +553,7 @@ export function ProjectionForecastCard({
                       ]}
                     >
                       {formatCompactCop(displayValue)}
-                    </Text>
+                    </AppText>
                   </Pressable>
                 );
               })}

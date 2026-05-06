@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter, type Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
@@ -14,6 +14,7 @@ import {
   transactionCategoryIcon,
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
+import { AppText } from '@/components/app-text';
 
 const DEFAULT_PENDING_SURFACE_COLOR = '#fff9ed';
 const DEFAULT_PENDING_BORDER_COLOR = 'rgba(163, 95, 25, 0.14)';
@@ -211,12 +212,12 @@ export function TransactionEventCard({
           amountColor === transactionCategoryColor('cycle') ? styles.contextBadgeCycle : null,
         ]}
       >
-        <Text style={styles.contextBadgeText}>{context}</Text>
+        <AppText style={styles.contextBadgeText}>{context}</AppText>
       </View>
     ) : (
-      <Text numberOfLines={1} style={[styles.context, compact ? styles.contextCompact : null]}>
+      <AppText numberOfLines={1} style={[styles.context, compact ? styles.contextCompact : null]}>
         {context}
-      </Text>
+      </AppText>
     )
   ) : null;
 
@@ -234,14 +235,14 @@ export function TransactionEventCard({
                   {segment.kind === 'category' ? (
                     <View style={styles.compactMetaCategory}>
                       <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
-                      <Text numberOfLines={1} style={styles.compactMetaText}>
+                      <AppText numberOfLines={1} style={styles.compactMetaText}>
                         {segment.label}
-                      </Text>
+                      </AppText>
                     </View>
                   ) : (
-                    <Text numberOfLines={1} style={styles.compactMetaText}>
+                    <AppText numberOfLines={1} style={styles.compactMetaText}>
                       {segment.label}
-                    </Text>
+                    </AppText>
                   )}
                 </View>
               ))}
@@ -263,19 +264,19 @@ export function TransactionEventCard({
                       : null,
                   ]}
                 >
-                  <Text style={styles.contextBadgeText}>{segment.label}</Text>
+                  <AppText style={styles.contextBadgeText}>{segment.label}</AppText>
                 </View>
               ) : segment.kind === 'category' ? (
                 <View style={styles.compactMetaCategory}>
                   <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
-                  <Text numberOfLines={1} style={styles.compactMetaText}>
+                  <AppText numberOfLines={1} style={styles.compactMetaText}>
                     {segment.label}
-                  </Text>
+                  </AppText>
                 </View>
               ) : (
-                <Text numberOfLines={1} style={styles.compactMetaText}>
+                <AppText numberOfLines={1} style={styles.compactMetaText}>
                   {segment.label}
-                </Text>
+                </AppText>
               )}
             </View>
           ))}
@@ -285,9 +286,9 @@ export function TransactionEventCard({
       <>
         {contextNode}
         {meta ? (
-          <Text numberOfLines={1} style={[styles.meta, compact ? styles.metaCompact : null]}>
+          <AppText numberOfLines={1} style={[styles.meta, compact ? styles.metaCompact : null]}>
             {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
-          </Text>
+          </AppText>
         ) : null}
       </>
     );
@@ -301,7 +302,7 @@ export function TransactionEventCard({
         ]}
       >
         {directionLabel ? (
-          <Text
+          <AppText
             numberOfLines={1}
             style={[
               styles.direction,
@@ -312,10 +313,10 @@ export function TransactionEventCard({
             ]}
           >
             {directionLabel}
-          </Text>
+          </AppText>
         ) : null}
         {amountLabel ? (
-          <Text
+          <AppText
             numberOfLines={1}
             style={[
               styles.amount,
@@ -325,7 +326,7 @@ export function TransactionEventCard({
             ]}
           >
             {amountLabel}
-          </Text>
+          </AppText>
         ) : null}
       </View>
       {hasAction ? (

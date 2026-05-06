@@ -12,13 +12,9 @@ export function useResolvePeopleTargetsMutation() {
       return invokeParsedEdgeFunction<
         ReturnType<typeof resolvePeopleTargetsSchema.parse>,
         PeopleTargetResolution[]
-      >(
-        'resolve-people-targets',
-        resolvePeopleTargetsSchema,
-        {
-          phoneE164List,
-        },
-      );
+      >('resolve-people-targets', resolvePeopleTargetsSchema, {
+        phoneE164List,
+      });
     },
   });
 }
@@ -32,7 +28,10 @@ export function useCreatePeopleOutreachMutation() {
       readonly intendedRecipientPhoneE164: string;
       readonly intendedRecipientPhoneLabel?: string;
     }) => {
-      return invokeParsedEdgeFunction<ReturnType<typeof createPeopleOutreachSchema.parse>, PeopleOutreachResult>(
+      return invokeParsedEdgeFunction<
+        ReturnType<typeof createPeopleOutreachSchema.parse>,
+        PeopleOutreachResult
+      >(
         'create-people-outreach',
         createPeopleOutreachSchema,
         withIdempotencyKey(`create_people_outreach_${input.channel}`, {

@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
 
 import {
   IdentityFlowField,
@@ -58,6 +51,7 @@ import {
   type FieldName,
   type FieldStatus,
 } from './account-create-account-helpers';
+import { AppText } from '@/components/app-text';
 
 const COUNTRY_OPTION_HEIGHT = 42;
 const COUNTRY_MENU_VISIBLE_OPTIONS = 4;
@@ -540,8 +534,8 @@ export function AccountCreateAccountScreen() {
                   }}
                   style={({ pressed }) => [styles.callingCodeBox, pressed ? styles.pressed : null]}
                 >
-                  <Text style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</Text>
-                  <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
+                  <AppText style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</AppText>
+                  <AppText style={styles.callingCodeText}>{selectedCountry.callingCode}</AppText>
                   <Ionicons color={theme.colors.brandGreen} name="chevron-down" size={13} />
                 </Pressable>
 
@@ -588,17 +582,19 @@ export function AccountCreateAccountScreen() {
                           ]}
                         >
                           <View style={styles.countryOptionLabel}>
-                            <Text style={styles.countryFlag}>{countryFlag(country.iso2)}</Text>
-                            <Text style={styles.countryLabel}>{country.label}</Text>
+                            <AppText style={styles.countryFlag}>
+                              {countryFlag(country.iso2)}
+                            </AppText>
+                            <AppText style={styles.countryLabel}>{country.label}</AppText>
                           </View>
-                          <Text
+                          <AppText
                             style={[
                               styles.countryCode,
                               selected ? styles.countryCodeSelected : null,
                             ]}
                           >
                             {country.callingCode}
-                          </Text>
+                          </AppText>
                         </Pressable>
                       );
                     })}

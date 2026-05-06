@@ -1,8 +1,9 @@
 import { Fragment } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const APPROVED_COLOR = theme.colors.success;
 const PENDING_COLOR = theme.colors.muted;
@@ -128,9 +129,9 @@ function ParticipantNode({
           justifyContent: 'center',
         }}
       >
-        <Text numberOfLines={1} style={styles.nodeLabel}>
+        <AppText numberOfLines={1} style={styles.nodeLabel}>
           {displayLabel}
-        </Text>
+        </AppText>
       </View>
     </Fragment>
   );

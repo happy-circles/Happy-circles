@@ -27,16 +27,13 @@ function firstNonEmpty(...values: readonly (string | undefined)[]): string {
 
 export const appConfig: AppConfig = {
   supabaseUrl: firstNonEmpty(extra?.supabaseUrl, runtimeEnv.EXPO_PUBLIC_SUPABASE_URL),
-  supabaseAnonKey:
-    firstNonEmpty(
-      extra?.supabaseAnonKey,
-      runtimeEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      runtimeEnv.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-    ),
+  supabaseAnonKey: firstNonEmpty(
+    extra?.supabaseAnonKey,
+    runtimeEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    runtimeEnv.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  ),
   appWebOrigin:
-    extra?.appWebOrigin ??
-    runtimeEnv.EXPO_PUBLIC_APP_WEB_ORIGIN ??
-    'https://app.happy-circles.com',
+    extra?.appWebOrigin ?? runtimeEnv.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com',
   authRedirectMode:
     extra?.authRedirectMode ?? runtimeEnv.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link',
 };

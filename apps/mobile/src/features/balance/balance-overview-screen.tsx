@@ -8,7 +8,7 @@ import type {
   NativeSyntheticEvent,
   ScrollView as ScrollViewType,
 } from 'react-native';
-import { Text } from 'react-native';
+
 import {
   BalanceDetail,
   BalanceLensCarousel,
@@ -64,6 +64,7 @@ import {
   transactionFilterHref,
   type BalanceFocus,
 } from './balance-helpers';
+import { AppText } from '@/components/app-text';
 
 export type { BalanceFocus } from './balance-helpers';
 
@@ -116,7 +117,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
         subtitle="No pudimos cargar el resumen financiero."
         title="Balance"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -130,7 +131,7 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
         title="Balance"
       >
         <SurfaceCard padding="lg" variant="elevated">
-          <Text style={styles.loadingText}>Cargando tu balance...</Text>
+          <AppText style={styles.loadingText}>Cargando tu balance...</AppText>
         </SurfaceCard>
       </ScreenShell>
     );

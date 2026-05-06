@@ -1,11 +1,10 @@
 import { useSyncExternalStore } from 'react';
 
-export type HomeNavigationIntent =
-  | {
-      readonly id: number;
-      readonly kind: 'open_invite_requests';
-      readonly tab: 'received' | 'sent';
-    };
+export type HomeNavigationIntent = {
+  readonly id: number;
+  readonly kind: 'open_invite_requests';
+  readonly tab: 'received' | 'sent';
+};
 
 let currentIntent: HomeNavigationIntent | null = null;
 let nextIntentId = 1;

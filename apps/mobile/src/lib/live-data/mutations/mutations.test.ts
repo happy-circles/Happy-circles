@@ -60,7 +60,10 @@ import { withIdempotencyKey } from './edge-action';
 import { useCreateRequestMutation } from './financial-requests';
 import { markNotificationItemsViewed } from './notifications';
 import { useApproveSettlementMutation } from './settlements';
-import { guardSensitiveMutationAction, type SensitiveMutationSession } from './sensitive-action-check';
+import {
+  guardSensitiveMutationAction,
+  type SensitiveMutationSession,
+} from './sensitive-action-check';
 
 interface MutationOptions<TInput = unknown> {
   readonly mutationFn: (input: TInput) => Promise<unknown>;
@@ -114,7 +117,9 @@ describe('live-data mutation helpers', () => {
       contentType: 'image/png',
       fileExtension: 'png',
     });
-    expect(resolveAvatarUploadMetadata({ contentType: ' image/webp ', uri: 'file:///avatar.jpg' })).toEqual({
+    expect(
+      resolveAvatarUploadMetadata({ contentType: ' image/webp ', uri: 'file:///avatar.jpg' }),
+    ).toEqual({
       contentType: 'image/webp',
       fileExtension: 'webp',
     });
@@ -176,11 +181,7 @@ describe('live-data mutation hooks', () => {
 
   it('keeps account invite preview query keys and enabled state stable', async () => {
     const missingTokenQuery = useAccountInvitePreviewQuery(null) as unknown as QueryOptions;
-    expect(missingTokenQuery.queryKey).toEqual([
-      'account-invite-preview',
-      'user-1',
-      'missing',
-    ]);
+    expect(missingTokenQuery.queryKey).toEqual(['account-invite-preview', 'user-1', 'missing']);
     expect(missingTokenQuery.enabled).toBe(false);
 
     const deliveryToken = 'delivery-token-123';
@@ -188,10 +189,9 @@ describe('live-data mutation hooks', () => {
     expect(query.queryKey).toEqual(['account-invite-preview', 'user-1', deliveryToken]);
     expect(query.enabled).toBe(true);
     await query.queryFn();
-    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(
-      'get-account-invite-preview-public',
-      { deliveryToken },
-    );
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('get-account-invite-preview-public', {
+      deliveryToken,
+    });
   });
 
   it('guards financial request creation before invoking the Edge Function', async () => {
@@ -242,13 +242,10 @@ describe('live-data mutation hooks', () => {
     await mutation.mutationFn('44444444-4444-4444-8444-444444444444');
 
     expect(session.stepUpAuth).toHaveBeenCalledTimes(1);
-    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(
-      'approve-cycle-settlement',
-      {
-        idempotencyKey: 'approve_settlement_fixed',
-        proposalId: '44444444-4444-4444-8444-444444444444',
-      },
-    );
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('approve-cycle-settlement', {
+      idempotencyKey: 'approve_settlement_fixed',
+      proposalId: '44444444-4444-4444-8444-444444444444',
+    });
 
     await mutation.onSuccess?.();
     expect(mocks.recordProductEventSafe).toHaveBeenCalledWith({

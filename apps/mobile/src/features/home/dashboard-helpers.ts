@@ -32,9 +32,7 @@ export function balanceFocusHref(focus: BalanceFocus): Href {
   return `/balance?segment=${focus}` as Href;
 }
 
-export function sortInviteRequestItems(
-  items: readonly InviteRequestItem[],
-): InviteRequestItem[] {
+export function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
   return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
 }
 
@@ -54,9 +52,7 @@ export function inviteHistoryTimestamp(item: InviteRequestItem): string {
   return item.createdAt;
 }
 
-export function sortInviteHistoryItems(
-  items: readonly InviteRequestItem[],
-): InviteRequestItem[] {
+export function sortInviteHistoryItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
   return [...items].sort(
     (left, right) =>
       Date.parse(inviteHistoryTimestamp(right)) - Date.parse(inviteHistoryTimestamp(left)),

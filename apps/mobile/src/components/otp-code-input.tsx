@@ -2,13 +2,13 @@ import { useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 
+import { AppText } from '@/components/app-text';
 import { theme } from '@/lib/theme';
 
 interface OtpCodeInputProps {
@@ -71,7 +71,9 @@ export function OtpCodeInput({
                 hasError ? styles.boxError : null,
               ]}
             >
-              <Text style={styles.digit}>{digit}</Text>
+              <AppText scaleRole="control" style={styles.digit}>
+                {digit}
+              </AppText>
             </View>
           );
         })}

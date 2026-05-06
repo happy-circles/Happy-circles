@@ -1,10 +1,11 @@
 import { Link } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
+import { AppText } from '@/components/app-text';
 
 export function DashboardPeopleSection({
   activePeople,
@@ -27,7 +28,7 @@ export function DashboardPeopleSection({
               pressed ? styles.quickActionPressed : null,
             ]}
           >
-            <Text style={styles.peopleSectionActionText}>Ver todas</Text>
+            <AppText style={styles.peopleSectionActionText}>Ver todas</AppText>
           </Pressable>
         </Link>
       }
@@ -81,7 +82,7 @@ export function DashboardTransactionsSection({
               pressed ? styles.quickActionPressed : null,
             ]}
           >
-            <Text style={styles.peopleSectionActionText}>Ver todas</Text>
+            <AppText style={styles.peopleSectionActionText}>Ver todas</AppText>
           </Pressable>
         </Link>
       }

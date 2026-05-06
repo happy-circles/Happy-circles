@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 type SnackbarTone = 'success' | 'danger' | 'neutral';
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -57,7 +58,7 @@ export function Snackbar({ visible, message, tone = 'neutral' }: SnackbarProps) 
         {tone === 'success' ? (
           <HappyCirclesMotion color={theme.colors.white} size={42} tone="mono" variant="success" />
         ) : null}
-        <Text style={styles.text}>{message}</Text>
+        <AppText style={styles.text}>{message}</AppText>
       </View>
     </Animated.View>
   );

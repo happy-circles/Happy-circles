@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import {
-  avatarPathIsRemoteUrl,
-  normalizeStoredAvatarPath,
-} from './avatar-url';
+import { avatarPathIsRemoteUrl, normalizeStoredAvatarPath } from './avatar-url';
 import { supabase } from './supabase';
 
 export const AVATAR_BUCKET = 'avatars';

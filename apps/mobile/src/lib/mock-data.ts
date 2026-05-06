@@ -262,8 +262,8 @@ export const mockSettlement = {
 export const mockAudit = [
   {
     id: 'audit-1',
-        title: 'Propuesta aceptada',
-        subtitle: 'Laura acepto el movimiento de mercado.',
+    title: 'Propuesta aceptada',
+    subtitle: 'Laura acepto el movimiento de mercado.',
   },
   {
     id: 'audit-2',

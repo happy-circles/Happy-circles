@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface SegmentedOption<T extends string> {
   readonly label: string;
@@ -22,20 +23,22 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   return (
     <View style={styles.root}>
-      {label ? <Text style={styles.controlLabel}>{label}</Text> : null}
+      {label ? <AppText style={styles.controlLabel}>{label}</AppText> : null}
       <View style={styles.container}>
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={[styles.segment, selected ? styles.segmentSelected : null]}
-          >
-            <Text style={[styles.label, selected ? styles.labelSelected : null]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onChange(option.value)}
+              style={[styles.segment, selected ? styles.segmentSelected : null]}
+            >
+              <AppText style={[styles.label, selected ? styles.labelSelected : null]}>
+                {option.label}
+              </AppText>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );

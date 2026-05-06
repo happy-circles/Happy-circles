@@ -7,7 +7,6 @@ import {
   Animated,
   Pressable,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -19,24 +18,27 @@ import {
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const HOME_CHROME_MORPH_START_Y = 8;
-const HOME_CHROME_MORPH_END_Y = 132;
 const HOME_CHROME_COMPACT_STATE_Y = 88;
 const HOME_CHROME_EXPANDED_STATE_Y = 18;
 const HOME_CHROME_COMPACT_PROGRESS = 0.82;
 const HOME_CHROME_EXPANDED_PROGRESS = 0.18;
-const HOME_CHROME_SCROLL_EXPAND_DISTANCE = 108;
-const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 84;
+const HOME_CHROME_SCROLL_EXPAND_DISTANCE = 82;
+const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 132;
 const HOME_CHROME_PROFILE_BUTTON_SIZE = 48;
 const HOME_CHROME_AVATAR_SIZE = 40;
 const HOME_CHROME_EXPANDED_LOGO_SIZE = 60;
 const HOME_CHROME_ANCHOR_LOGO_SIZE = 78;
+const HOME_CHROME_LOGO_VISUAL_Y_OFFSET = 3;
 const HOME_CHROME_BRAND_GAP = 6;
 const HOME_CHROME_TITLE_SIZE = 22;
 const HOME_CHROME_TITLE_LINE_HEIGHT = 28;
 const HOME_CHROME_TITLE_WIDTH = 150;
-const HOME_CHROME_BADGE_SIZE = 21;
+const HOME_CHROME_BADGE_SIZE = 25;
+const HOME_CHROME_BADGE_COMPACT_RADIUS = 0.34;
+const HOME_CHROME_BADGE_COMPACT_ANGLE = -42;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 const HOME_CHROME_FAB_EXIT_DISTANCE = 88;
 
@@ -76,13 +78,6 @@ function compactCountLabel(count: number) {
 
 function clampProgress(value: number) {
   return Math.min(1, Math.max(0, value));
-}
-
-function positionProgress(y: number) {
-  return clampProgress(
-    (y - HOME_CHROME_MORPH_START_Y) /
-      (HOME_CHROME_MORPH_END_Y - HOME_CHROME_MORPH_START_Y),
-  );
 }
 
 export function useCollapsibleHomeChrome() {
@@ -138,8 +133,8 @@ export function useCollapsibleHomeChrome() {
         return;
       }
 
-      if (y <= HOME_CHROME_MORPH_END_Y) {
-        setProgressValue(positionProgress(y));
+      if (y <= HOME_CHROME_MORPH_START_Y) {
+        setProgressValue(0);
         return;
       }
 
@@ -151,9 +146,7 @@ export function useCollapsibleHomeChrome() {
       }
 
       if (delta > 0) {
-        setProgressValue(
-          progressValueRef.current + delta / HOME_CHROME_SCROLL_COMPACT_DISTANCE,
-        );
+        setProgressValue(progressValueRef.current + delta / HOME_CHROME_SCROLL_COMPACT_DISTANCE);
       }
     },
     [reducedMotion, setProgressValue],
@@ -175,10 +168,7 @@ function HomeMorphLogo({
   readonly expandedTop: number;
   readonly progress: HomeChromeProgress;
 }) {
-  const maskId = useMemo(
-    () => `home-morph-brand-${Math.random().toString(36).slice(2)}`,
-    [],
-  );
+  const maskId = useMemo(() => `home-morph-brand-${Math.random().toString(36).slice(2)}`, []);
   const palette = resolveHappyCirclesPalette('brand');
   const rotate = progress.interpolate({
     inputRange: [0, 1],
@@ -213,11 +203,7 @@ function HomeMorphLogo({
         },
       ]}
     >
-      <HappyCirclesOuterSvg
-        maskId={maskId}
-        palette={palette}
-        size={HOME_CHROME_ANCHOR_LOGO_SIZE}
-      />
+      <HappyCirclesOuterSvg maskId={maskId} palette={palette} size={HOME_CHROME_ANCHOR_LOGO_SIZE} />
       <Animated.View
         pointerEvents="none"
         style={[styles.morphLogoFaceLayer, { opacity: faceOpacity }]}
@@ -241,9 +227,7 @@ function HomeActivityButton({
     <Link href="/activity" asChild>
       <Pressable
         accessibilityLabel={
-          hasAttention
-            ? `${compactCountLabel(count)} pendientes o notificaciones`
-            : 'Actividad'
+          hasAttention ? `${compactCountLabel(count)} pendientes o notificaciones` : 'Actividad'
         }
         accessibilityRole="button"
         style={({ pressed }) => [
@@ -285,12 +269,9 @@ export function HomeCollapsibleChrome({
   const contentWidth = Math.min(560, Math.max(0, width - theme.spacing.lg * 2));
   const contentLeft = (width - contentWidth) / 2;
   const expandedLogoCenterX =
-    contentLeft +
-    contentWidth / 2 -
-    (HOME_CHROME_TITLE_WIDTH + HOME_CHROME_BRAND_GAP) / 2;
+    contentLeft + contentWidth / 2 - (HOME_CHROME_TITLE_WIDTH + HOME_CHROME_BRAND_GAP) / 2;
   const compactLogoLeft =
-    contentLeft +
-    (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2;
+    contentLeft + (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2;
   const expandedLogoLeft = expandedLogoCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2;
   const expandedLogoTop =
     topInset +
@@ -299,9 +280,9 @@ export function HomeCollapsibleChrome({
   const compactLogoTop =
     topInset +
     HOME_CHROME_TOP_GAP +
-    (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2;
-  const badgeStartLeft =
-    contentLeft + contentWidth - HOME_CHROME_PROFILE_BUTTON_SIZE + 23;
+    (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_ANCHOR_LOGO_SIZE) / 2 +
+    HOME_CHROME_COMPACT_LOGO_Y_OFFSET;
+  const badgeStartLeft = contentLeft + contentWidth - HOME_CHROME_PROFILE_BUTTON_SIZE + 23;
   const badgeFinalLeft = compactLogoLeft + HOME_CHROME_ANCHOR_LOGO_SIZE - 26;
   const badgeLeft = progress.interpolate({
     inputRange: [0, 1],
@@ -381,9 +362,9 @@ export function HomeCollapsibleChrome({
           >
             <View style={styles.titleLockup}>
               <View style={styles.titleLogoPlaceholder} />
-              <Text numberOfLines={1} style={styles.brandTitle}>
+              <AppText numberOfLines={1} style={styles.brandTitle}>
                 Happy Circles
-              </Text>
+              </AppText>
             </View>
           </Animated.View>
           <Animated.View
@@ -420,12 +401,9 @@ export function HomeCollapsibleChrome({
               )} pendientes o notificaciones`}
               accessibilityRole="button"
               hitSlop={8}
-              style={({ pressed }) => [
-                styles.morphBadge,
-                pressed ? styles.pressed : null,
-              ]}
+              style={({ pressed }) => [styles.morphBadge, pressed ? styles.pressed : null]}
             >
-              <Text style={styles.compactBadgeText}>{compactCountLabel(attentionCount)}</Text>
+              <AppText style={styles.compactBadgeText}>{compactCountLabel(attentionCount)}</AppText>
             </Pressable>
           </Link>
         </Animated.View>
@@ -471,7 +449,7 @@ export function HomeRegisterFab({
           style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
         >
           <Ionicons color={theme.colors.white} name="add" size={22} />
-          <Text style={styles.fabLabel}>Registrar</Text>
+          <AppText style={styles.fabLabel}>Registrar</AppText>
         </Pressable>
       </Link>
     </Animated.View>

@@ -1,8 +1,9 @@
 import type { StyleProp, ViewStyle } from 'react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 type BrandMarkSize = 'sm' | 'md' | 'lg';
 type BrandMarkOrientation = 'horizontal' | 'stacked';
@@ -53,7 +54,7 @@ export function BrandMark({
       />
 
       <View style={[styles.copy, isStacked ? styles.copyStacked : null]}>
-        <Text
+        <AppText
           style={[
             styles.title,
             { color: titleColor, fontSize: config.title },
@@ -62,8 +63,8 @@ export function BrandMark({
           ]}
         >
           Happy Circles
-        </Text>
-        <Text
+        </AppText>
+        <AppText
           style={[
             styles.subtitle,
             { color: subtitleColor, fontSize: config.subtitle },
@@ -71,7 +72,7 @@ export function BrandMark({
           ]}
         >
           tu app de finanzas entre amigos
-        </Text>
+        </AppText>
       </View>
     </View>
   );

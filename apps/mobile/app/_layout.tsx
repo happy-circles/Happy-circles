@@ -17,7 +17,6 @@ import {
   Linking,
   Platform,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -73,6 +72,7 @@ import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 SplashScreen.setOptions({ duration: 140, fade: true });
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -383,11 +383,11 @@ function MandatoryUpdateGate() {
   return (
     <View style={styles.overlay}>
       <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
-        <Text style={styles.lockTitle}>Actualizacion obligatoria</Text>
-        <Text style={styles.lockSubtitle}>{message}</Text>
-        <Text style={styles.lockMessage}>
+        <AppText style={styles.lockTitle}>Actualizacion obligatoria</AppText>
+        <AppText style={styles.lockSubtitle}>{message}</AppText>
+        <AppText style={styles.lockMessage}>
           Version actual: {currentVersion} · Version minima: {minimumVersion}
-        </Text>
+        </AppText>
         <PrimaryAction
           label="Abrir sitio de actualizacion"
           subtitle={appConfig.appWebOrigin}

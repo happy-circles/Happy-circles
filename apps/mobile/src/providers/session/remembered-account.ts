@@ -3,9 +3,7 @@ import { REMEMBERED_ACCOUNT_KEY } from './constants';
 import { deriveAccountAccessState } from './account-state';
 import type { RememberedAccountSnapshot, UserProfileRow } from './types';
 
-export function isRememberedAccountSnapshot(
-  value: unknown,
-): value is RememberedAccountSnapshot {
+export function isRememberedAccountSnapshot(value: unknown): value is RememberedAccountSnapshot {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }

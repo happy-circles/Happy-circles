@@ -75,9 +75,9 @@ describe('activity helpers', () => {
   });
 
   it('derives notification targets for settlements, invites and transactions', () => {
-    expect(pendingDetailHref(item({ id: 'settlement-1', kind: 'settlement_proposal' }), [])).toEqual(
-      { href: '/settlements/settlement-1' },
-    );
+    expect(
+      pendingDetailHref(item({ id: 'settlement-1', kind: 'settlement_proposal' }), []),
+    ).toEqual({ href: '/settlements/settlement-1' });
     expect(
       pendingDetailHref(
         item({
@@ -109,11 +109,15 @@ describe('activity helpers', () => {
 
   it('decodes person ids and invite tabs', () => {
     expect(personIdFromHref('/person/user%2Fencoded?panel=pending')).toBe('user/encoded');
-    expect(inviteRequestTabForNotification(item({ kind: 'account_invite', status: 'pending_activation' }))).toBe(
-      'sent',
-    );
-    expect(inviteRequestTabForNotification(item({ kind: 'friendship_invite', status: 'requires_you_response' }))).toBe(
-      'received',
-    );
+    expect(
+      inviteRequestTabForNotification(
+        item({ kind: 'account_invite', status: 'pending_activation' }),
+      ),
+    ).toBe('sent');
+    expect(
+      inviteRequestTabForNotification(
+        item({ kind: 'friendship_invite', status: 'requires_you_response' }),
+      ),
+    ).toBe('received');
   });
 });

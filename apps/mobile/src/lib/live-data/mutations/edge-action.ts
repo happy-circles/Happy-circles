@@ -22,10 +22,7 @@ export function parseEdgePayload<TPayload extends Record<string, unknown>>(
   return schema.parse(input);
 }
 
-export async function invokeParsedEdgeFunction<
-  TPayload extends Record<string, unknown>,
-  TResult,
->(
+export async function invokeParsedEdgeFunction<TPayload extends Record<string, unknown>, TResult>(
   name: string,
   schema: EdgePayloadSchema<TPayload>,
   input: unknown,

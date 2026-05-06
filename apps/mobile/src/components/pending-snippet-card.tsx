@@ -1,11 +1,12 @@
 import type { PropsWithChildren } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 type PendingSnippetVariant = 'default' | 'muted' | 'accent' | 'elevated';
 type PendingSnippetTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
@@ -50,14 +51,14 @@ export function PendingSnippetCard({
     <>
       <View style={styles.header}>
         <View style={styles.copy}>
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
+          <AppText style={styles.eyebrow}>{eyebrow}</AppText>
+          <AppText style={styles.title}>{title}</AppText>
         </View>
         <StatusChip compact iconOnly label={statusLabel} tone={statusTone} />
       </View>
 
       {amountLabel ? (
-        <Text
+        <AppText
           style={[
             styles.amount,
             amountTone === 'positive' ? styles.amountPositive : null,
@@ -67,11 +68,11 @@ export function PendingSnippetCard({
           ]}
         >
           {amountLabel}
-        </Text>
+        </AppText>
       ) : null}
-      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
-      {meta ? <Text style={styles.meta}>{meta}</Text> : null}
-      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+      {detail ? <AppText style={styles.detail}>{detail}</AppText> : null}
+      {meta ? <AppText style={styles.meta}>{meta}</AppText> : null}
+      {helperText ? <AppText style={styles.helper}>{helperText}</AppText> : null}
     </>
   );
 

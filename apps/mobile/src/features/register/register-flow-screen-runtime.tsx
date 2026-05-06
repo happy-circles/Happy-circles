@@ -9,16 +9,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput as NativeTextInput,
-  type TextInput,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput } from '@/components/app-text-input';
+import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import {
   BrandedRefreshScrollView,
   type BrandedRefreshProps,
@@ -61,6 +58,7 @@ import {
   type Direction,
   type RegisterPerson,
 } from './register-flow-helpers';
+import { AppText } from '@/components/app-text';
 
 const KEYBOARD_SCROLL_GAP = 16;
 const INPUT_FOCUS_SCROLL_DELAY_MS = 120;
@@ -96,9 +94,9 @@ function QuickPersonChip({
       ]}
     >
       <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={30} />
-      <Text numberOfLines={1} style={styles.quickPersonLabel}>
+      <AppText numberOfLines={1} style={styles.quickPersonLabel}>
         {person.displayName}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -134,9 +132,9 @@ export function RegisterFlowScreen() {
   const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
   const [addPersonInitialSearch, setAddPersonInitialSearch] = useState('');
   const registerScrollRef = useRef<ScrollView | null>(null);
-  const searchInputRef = useRef<TextInput | null>(null);
-  const amountInputRef = useRef<TextInput | null>(null);
-  const descriptionInputRef = useRef<TextInput | null>(null);
+  const searchInputRef = useRef<AppTextInputRef | null>(null);
+  const amountInputRef = useRef<AppTextInputRef | null>(null);
+  const descriptionInputRef = useRef<AppTextInputRef | null>(null);
   const focusedFieldRef = useRef<RegisterFocusTarget | null>(null);
   const footerHeightRef = useRef(0);
   const keyboardOverlapRef = useRef(0);
@@ -501,7 +499,7 @@ export function RegisterFlowScreen() {
         <View style={styles.fixedTop}>
           <View style={styles.sheetHandle} />
           <View style={styles.heroRow}>
-            <Text style={styles.heroTitle}>Nuevo movimiento</Text>
+            <AppText style={styles.heroTitle}>Nuevo movimiento</AppText>
             <Pressable
               onPress={closeRegister}
               style={({ pressed }) => [
@@ -536,13 +534,13 @@ export function RegisterFlowScreen() {
                   <View style={styles.loadingMotion}>
                     <HappyCirclesMotion size={88} variant="loading" />
                   </View>
-                  <Text style={styles.supportText}>Cargando relaciones activas...</Text>
+                  <AppText style={styles.supportText}>Cargando relaciones activas...</AppText>
                 </View>
               ) : null}
 
               {snapshotQuery.error ? (
                 <View style={styles.loadingState}>
-                  <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+                  <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
                 </View>
               ) : null}
 
@@ -568,15 +566,16 @@ export function RegisterFlowScreen() {
                       style={[styles.amountCard, errors.amount ? styles.amountCardError : null]}
                     >
                       <View style={styles.amountDisplayRow}>
-                        <Text
+                        <AppText
                           style={[
                             styles.currencySymbol,
                             { color: activeDirectionVisual.accentColor },
                           ]}
                         >
                           $
-                        </Text>
-                        <NativeTextInput
+                        </AppText>
+                        <AppTextInput
+                          chrome="plain"
                           keyboardType="number-pad"
                           onFocus={() => scrollFormToField('amount')}
                           onChangeText={(value) => {
@@ -620,7 +619,7 @@ export function RegisterFlowScreen() {
                         />
                       </View>
                       {errors.amount ? (
-                        <Text style={styles.inlineError}>Ingresa un monto valido</Text>
+                        <AppText style={styles.inlineError}>Ingresa un monto valido</AppText>
                       ) : null}
                     </View>
 
@@ -641,9 +640,9 @@ export function RegisterFlowScreen() {
 
                     <View onLayout={recordFieldOffset('person')} style={styles.fieldStack}>
                       <View style={styles.labelRow}>
-                        <Text style={styles.sectionLabel}>Persona</Text>
+                        <AppText style={styles.sectionLabel}>Persona</AppText>
                         {errors.personId ? (
-                          <Text style={styles.inlineError}>Selecciona una persona</Text>
+                          <AppText style={styles.inlineError}>Selecciona una persona</AppText>
                         ) : null}
                       </View>
                       <Pressable
@@ -665,20 +664,20 @@ export function RegisterFlowScreen() {
                               size={42}
                             />
                             <View style={styles.personPrimaryCopy}>
-                              <Text numberOfLines={1} style={styles.personPrimaryName}>
+                              <AppText numberOfLines={1} style={styles.personPrimaryName}>
                                 {selectedPerson.displayName}
-                              </Text>
-                              <Text numberOfLines={1} style={styles.personPrimaryMeta}>
+                              </AppText>
+                              <AppText numberOfLines={1} style={styles.personPrimaryMeta}>
                                 {contextualPersonId === selectedPerson.userId
                                   ? 'Seleccionada desde personas'
                                   : 'Toca para cambiar o invitar'}
-                              </Text>
+                              </AppText>
                             </View>
                           </>
                         ) : (
                           <View style={styles.personPrimaryCopy}>
-                            <Text style={styles.personPrimaryName}>Seleccionar persona</Text>
-                            <Text style={styles.personPrimaryMeta}>Buscar o invitar</Text>
+                            <AppText style={styles.personPrimaryName}>Seleccionar persona</AppText>
+                            <AppText style={styles.personPrimaryMeta}>Buscar o invitar</AppText>
                           </View>
                         )}
                         <Ionicons
@@ -723,24 +722,24 @@ export function RegisterFlowScreen() {
                                       size={40}
                                     />
                                     <View style={styles.personOptionCopy}>
-                                      <Text numberOfLines={1} style={styles.personOptionName}>
+                                      <AppText numberOfLines={1} style={styles.personOptionName}>
                                         {person.displayName}
-                                      </Text>
-                                      <Text numberOfLines={1} style={styles.personOptionMeta}>
+                                      </AppText>
+                                      <AppText numberOfLines={1} style={styles.personOptionMeta}>
                                         Relacion activa
-                                      </Text>
+                                      </AppText>
                                     </View>
                                   </Pressable>
                                 ))}
                               </View>
                             ) : (
                               <View style={styles.personSearchEmptyState}>
-                                <Text style={styles.supportTitle}>
+                                <AppText style={styles.supportTitle}>
                                   No encontramos a esa persona.
-                                </Text>
-                                <Text style={styles.supportText}>
+                                </AppText>
+                                <AppText style={styles.supportText}>
                                   Puedes invitarla sin salir de este flujo.
-                                </Text>
+                                </AppText>
                                 <PrimaryAction
                                   label="Invitar persona"
                                   onPress={() => openInviteFlow(normalizedQuery)}
@@ -749,9 +748,9 @@ export function RegisterFlowScreen() {
                               </View>
                             )
                           ) : (
-                            <Text style={styles.personSearchHint}>
+                            <AppText style={styles.personSearchHint}>
                               Escribe un nombre y te mostraremos coincidencias aqui mismo.
-                            </Text>
+                            </AppText>
                           )}
                         </View>
                       ) : null}
@@ -777,7 +776,7 @@ export function RegisterFlowScreen() {
                     </View>
 
                     <View style={styles.fieldStack}>
-                      <Text style={styles.sectionLabel}>Categoria</Text>
+                      <AppText style={styles.sectionLabel}>Categoria</AppText>
                       <TransactionCategoryPicker
                         onChange={setCategory}
                         value={category}
@@ -787,9 +786,9 @@ export function RegisterFlowScreen() {
 
                     <View onLayout={recordFieldOffset('description')} style={styles.fieldStack}>
                       <View style={styles.labelRow}>
-                        <Text style={styles.sectionLabel}>Nota</Text>
+                        <AppText style={styles.sectionLabel}>Nota</AppText>
                         {errors.description ? (
-                          <Text style={styles.inlineError}>Es obligatoria</Text>
+                          <AppText style={styles.inlineError}>Es obligatoria</AppText>
                         ) : null}
                       </View>
                       <AppTextInput
@@ -823,13 +822,13 @@ export function RegisterFlowScreen() {
             style={styles.footer}
           >
             <View style={styles.footerSummary}>
-              <Text numberOfLines={1} style={styles.footerSummaryText}>
+              <AppText numberOfLines={1} style={styles.footerSummaryText}>
                 {summaryText
                   ? summaryText
                   : draftPreview
                     ? draftPreview.summary
                     : 'Completa el monto y la persona'}
-              </Text>
+              </AppText>
               {summaryText ? (
                 <View style={styles.footerCategoryBadge}>
                   <View
@@ -837,9 +836,9 @@ export function RegisterFlowScreen() {
                   >
                     <Ionicons color={categoryIconColor} name={categoryIconName} size={14} />
                   </View>
-                  <Text numberOfLines={1} style={styles.footerCategoryText}>
+                  <AppText numberOfLines={1} style={styles.footerCategoryText}>
                     {transactionCategoryLabel(category)}
-                  </Text>
+                  </AppText>
                 </View>
               ) : null}
             </View>
@@ -994,6 +993,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 66,
     minHeight: 76,
+    paddingHorizontal: 0,
     paddingVertical: 0,
     textAlign: 'center',
     width: '72%',

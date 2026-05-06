@@ -4,8 +4,10 @@ import { StyleSheet, View } from 'react-native';
 import { PrimaryAction, type PrimaryActionProps } from '@/components/primary-action';
 import { theme } from '@/lib/theme';
 
-interface ScreenFinalActionProps
-  extends Pick<PrimaryActionProps, 'disabled' | 'icon' | 'label' | 'loading' | 'onPress'> {
+interface ScreenFinalActionProps extends Pick<
+  PrimaryActionProps,
+  'disabled' | 'icon' | 'label' | 'loading' | 'onPress'
+> {
   readonly anchored?: boolean;
   readonly bottomPadding?: boolean;
   readonly style?: StyleProp<ViewStyle>;

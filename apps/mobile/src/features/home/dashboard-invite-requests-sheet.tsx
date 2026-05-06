@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { MessageBanner } from '@/components/message-banner';
@@ -26,6 +26,7 @@ import {
   type InviteRequestsTab,
 } from './dashboard-helpers';
 import type { PersonCardDto } from '@happy-circles/application';
+import { AppText } from '@/components/app-text';
 
 function badgeLabel(count: number): string {
   return count > 99 ? '99+' : String(count);
@@ -51,12 +52,12 @@ function InviteRequestTabButton({
         pressed ? styles.quickActionPressed : null,
       ]}
     >
-      <Text style={[styles.sheetTabText, selected ? styles.sheetTabTextActive : null]}>
+      <AppText style={[styles.sheetTabText, selected ? styles.sheetTabTextActive : null]}>
         {label}
-      </Text>
+      </AppText>
       {count > 0 ? (
         <View style={styles.sheetTabBadge}>
-          <Text style={styles.sheetTabBadgeText}>{badgeLabel(count)}</Text>
+          <AppText style={styles.sheetTabBadgeText}>{badgeLabel(count)}</AppText>
         </View>
       ) : null}
     </Pressable>
@@ -200,12 +201,12 @@ function InviteRequestRow({
         />
       </View>
       <View style={styles.requestPersonCopy}>
-        <Text numberOfLines={1} style={styles.requestPersonName}>
+        <AppText numberOfLines={1} style={styles.requestPersonName}>
           {displayName}
-        </Text>
-        <Text numberOfLines={1} style={styles.requestPersonMeta}>
+        </AppText>
+        <AppText numberOfLines={1} style={styles.requestPersonMeta}>
           {meta}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -281,8 +282,8 @@ export function InviteRequestsSheet({
       >
         {items.length === 0 ? (
           <View style={styles.sheetEmpty}>
-            <Text style={styles.sheetEmptyTitle}>{inviteRequestEmptyTitle(tab)}</Text>
-            <Text style={styles.sheetEmptyText}>{inviteRequestEmptyDescription(tab)}</Text>
+            <AppText style={styles.sheetEmptyTitle}>{inviteRequestEmptyTitle(tab)}</AppText>
+            <AppText style={styles.sheetEmptyText}>{inviteRequestEmptyDescription(tab)}</AppText>
           </View>
         ) : (
           items.map((item) => (
@@ -304,7 +305,7 @@ export function InviteRequestsSheet({
         <Pressable onPress={onClose} style={styles.sheetBackdrop} />
         <View style={styles.friendshipSheet}>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Solicitudes</Text>
+            <AppText style={styles.sheetTitle}>Solicitudes</AppText>
             <Pressable onPress={onClose} style={styles.sheetCloseButton}>
               <Ionicons color={theme.colors.text} name="close" size={22} />
             </Pressable>

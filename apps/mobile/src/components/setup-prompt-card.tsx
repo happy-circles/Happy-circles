@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 type SetupKind =
   | 'appleAuth'
@@ -93,23 +94,23 @@ function ActionRow({
       </View>
       <View style={styles.actionCopy}>
         <View style={styles.actionTitleRow}>
-          <Text style={styles.actionTitle}>{action.title}</Text>
+          <AppText style={styles.actionTitle}>{action.title}</AppText>
           <View style={[styles.statusBadge, { backgroundColor: toneBackground }]}>
-            <Text style={[styles.statusBadgeText, { color: toneColor }]}>
+            <AppText style={[styles.statusBadgeText, { color: toneColor }]}>
               {action.statusLabel}
-            </Text>
+            </AppText>
           </View>
         </View>
-        <Text style={styles.actionDescription}>{action.description}</Text>
+        <AppText style={styles.actionDescription}>{action.description}</AppText>
       </View>
       {isBusy ? (
         <View style={styles.actionBusy}>
           <HappyCirclesMotion size={30} style={styles.actionMotion} variant="loading" />
-          <Text style={styles.loadingLabel}>{action.loadingLabel}</Text>
+          <AppText style={styles.loadingLabel}>{action.loadingLabel}</AppText>
         </View>
       ) : (
         <View style={styles.actionCta}>
-          <Text style={styles.actionCtaText}>{action.actionLabel}</Text>
+          <AppText style={styles.actionCtaText}>{action.actionLabel}</AppText>
           <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
         </View>
       )}
@@ -248,8 +249,8 @@ export function SetupPromptCard({
           <Ionicons color={theme.colors.primary} name="options-outline" size={21} />
         </View>
         <View style={styles.copy}>
-          <Text style={styles.title}>Termina tu configuracion</Text>
-          <Text style={styles.body}>{summaryCopy(actions.length)}</Text>
+          <AppText style={styles.title}>Termina tu configuracion</AppText>
+          <AppText style={styles.body}>{summaryCopy(actions.length)}</AppText>
         </View>
         {dismissible ? (
           <Pressable
@@ -257,7 +258,7 @@ export function SetupPromptCard({
             onPress={onDismiss}
             style={({ pressed }) => [styles.dismissButton, pressed ? styles.pressed : null]}
           >
-            <Text style={styles.dismissText}>Omitir</Text>
+            <AppText style={styles.dismissText}>Omitir</AppText>
           </Pressable>
         ) : null}
       </View>

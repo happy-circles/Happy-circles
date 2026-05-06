@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { InteractionManager, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { InteractionManager, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
@@ -56,6 +56,7 @@ import {
   type NotificationCategoryKey,
   type NotificationTarget,
 } from './activity-helpers';
+import { AppText } from '@/components/app-text';
 
 interface PendingSnippetContent {
   readonly detail?: string;
@@ -361,15 +362,15 @@ function NotificationCategoryTab({
         pressed ? styles.tabButtonPressed : null,
       ]}
     >
-      <Text
+      <AppText
         numberOfLines={1}
         style={[styles.notificationTabLabel, selected ? styles.notificationTabLabelActive : null]}
       >
         {meta.label}
-      </Text>
+      </AppText>
       {count > 0 ? (
         <View style={styles.notificationTabBadge}>
-          <Text style={styles.notificationTabBadgeText}>{count > 99 ? '99+' : count}</Text>
+          <AppText style={styles.notificationTabBadgeText}>{count > 99 ? '99+' : count}</AppText>
         </View>
       ) : null}
     </Pressable>
@@ -385,7 +386,7 @@ function NotificationSection({
 }) {
   return (
     <View style={styles.notificationSection}>
-      <Text style={styles.notificationSectionTitle}>{title}</Text>
+      <AppText style={styles.notificationSectionTitle}>{title}</AppText>
       <View style={styles.notificationSectionContent}>{children}</View>
     </View>
   );
@@ -770,16 +771,16 @@ export function ActivityScreen() {
         }
         metaNode={
           content.meta ? (
-            <Text numberOfLines={1} style={styles.notificationActionMeta}>
+            <AppText numberOfLines={1} style={styles.notificationActionMeta}>
               {content.meta}
-            </Text>
+            </AppText>
           ) : null
         }
         sideNode={
           content.amountLabel || detailHref ? (
             <View style={styles.notificationActionSide}>
               {content.amountLabel ? (
-                <Text
+                <AppText
                   numberOfLines={1}
                   style={[
                     styles.notificationActionAmount,
@@ -788,7 +789,7 @@ export function ActivityScreen() {
                   ]}
                 >
                   {content.amountLabel}
-                </Text>
+                </AppText>
               ) : null}
               {detailHref ? (
                 <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
@@ -1005,9 +1006,9 @@ export function ActivityScreen() {
           <View style={styles.loadingMotion}>
             <HappyCirclesMotion size={108} variant="loading" />
           </View>
-          <Text style={styles.supportText}>
+          <AppText style={styles.supportText}>
             Estamos leyendo las acciones reales desde Supabase.
-          </Text>
+          </AppText>
         </View>
       </SafeAreaView>
     );
@@ -1017,7 +1018,7 @@ export function ActivityScreen() {
     return (
       <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <View style={styles.loadingState}>
-          <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+          <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
         </View>
       </SafeAreaView>
     );
@@ -1030,7 +1031,7 @@ export function ActivityScreen() {
         <View style={styles.sheetContent}>
           <View style={styles.fixedTop}>
             <View style={styles.heroRow}>
-              <Text style={styles.heroTitle}>Notificaciones</Text>
+              <AppText style={styles.heroTitle}>Notificaciones</AppText>
               <Pressable
                 onPress={closeNotifications}
                 style={({ pressed }) => [

@@ -1,10 +1,5 @@
 import { derivePendingRequiredSetupSteps } from '@/lib/setup-account';
-import type {
-  DeviceTrustState,
-  SetupPermissionStatus,
-  SetupState,
-  UserProfileRow,
-} from './types';
+import type { DeviceTrustState, SetupPermissionStatus, SetupState, UserProfileRow } from './types';
 
 export function buildSetupState(input: {
   readonly profile: UserProfileRow | null;

@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode, RefObject } from 'react';
 import type { ScrollView, ScrollViewProps, StyleProp, ViewStyle } from 'react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import {
   type BrandedRefreshProps,
 } from '@/components/branded-refresh-control';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface ScreenShellProps extends PropsWithChildren {
   readonly title: string;
@@ -82,7 +83,7 @@ export function ScreenShell({
     <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
       {eyebrow ? (
         <View style={styles.eyebrowBadge}>
-          <Text style={styles.eyebrowText}>{eyebrow}</Text>
+          <AppText style={styles.eyebrowText}>{eyebrow}</AppText>
         </View>
       ) : null}
       <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
@@ -95,7 +96,7 @@ export function ScreenShell({
         ) : (
           <>
             {headerLeading}
-            <Text
+            <AppText
               style={[
                 styles.title,
                 titleAlign === 'center' ? styles.titleCentered : null,
@@ -103,12 +104,12 @@ export function ScreenShell({
               ]}
             >
               {title}
-            </Text>
+            </AppText>
             {headerSlot}
           </>
         )}
       </View>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {subtitle ? <AppText style={styles.subtitle}>{subtitle}</AppText> : null}
     </View>
   ) : null;
 

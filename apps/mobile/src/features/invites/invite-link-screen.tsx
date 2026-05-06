@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import {
@@ -25,6 +25,7 @@ import {
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'identity_incomplete') {
@@ -114,7 +115,7 @@ function InviteDecisionButton({
         name={icon}
         size={16}
       />
-      <Text
+      <AppText
         numberOfLines={1}
         style={[
           styles.decisionButtonText,
@@ -122,7 +123,7 @@ function InviteDecisionButton({
         ]}
       >
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -324,10 +325,12 @@ export function InviteLinkScreen() {
           <View style={styles.invitePersonRow}>
             <AppAvatar imageUrl={previewAvatarUrl} label={previewPersonName} size={52} />
             <View style={styles.invitePersonCopy}>
-              <Text numberOfLines={1} style={styles.title}>
+              <AppText numberOfLines={1} style={styles.title}>
                 {previewPersonName}
-              </Text>
-              {previewInviteType ? <Text style={styles.helper}>{previewInviteType}</Text> : null}
+              </AppText>
+              {previewInviteType ? (
+                <AppText style={styles.helper}>{previewInviteType}</AppText>
+              ) : null}
             </View>
           </View>
 

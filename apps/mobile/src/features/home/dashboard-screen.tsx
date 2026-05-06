@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Linking, Text, View } from 'react-native';
+import { Alert, Linking, View } from 'react-native';
 import {
   HOME_REGISTER_FAB_CLEARANCE,
   PEOPLE_TILE_AVATAR_SIZE,
@@ -93,6 +93,7 @@ import {
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
+import { AppText } from '@/components/app-text';
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 const RECENT_TRANSACTION_LIMIT = 8;
@@ -234,8 +235,7 @@ export function DashboardScreen() {
   const homeContentContainerStyle = useMemo(
     () => ({
       paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom),
-      paddingTop:
-        HOME_CHROME_EXPANDED_HEIGHT + Math.max(0, insets.top) + theme.spacing.md,
+      paddingTop: HOME_CHROME_EXPANDED_HEIGHT + Math.max(0, insets.top) + theme.spacing.md,
     }),
     [insets.bottom, insets.top],
   );
@@ -518,7 +518,7 @@ export function DashboardScreen() {
         title="Happy Circles"
         titleAlign="center"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -555,7 +555,7 @@ export function DashboardScreen() {
         title="Happy Circles"
         titleAlign="center"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }

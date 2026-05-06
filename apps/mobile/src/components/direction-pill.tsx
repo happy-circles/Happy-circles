@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { directionVisual, type LedgerDirection } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface DirectionPillProps {
   readonly direction: LedgerDirection;
@@ -30,7 +31,7 @@ export function DirectionPill({ direction, onPress, selected = true, style }: Di
       ]}
     >
       <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
-      <Text style={[styles.label, { color: visual.accentColor }]}>{visual.label}</Text>
+      <AppText style={[styles.label, { color: visual.accentColor }]}>{visual.label}</AppText>
     </Pressable>
   );
 }

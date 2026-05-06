@@ -1,6 +1,7 @@
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
+import { AppText } from '@/components/app-text';
 
 export function DashboardLoadingState() {
   return (
@@ -21,9 +22,9 @@ export function DashboardLoadingState() {
           <View style={styles.homeLoadingListLineShort} />
         </View>
       </View>
-      <Text style={styles.supportText}>
+      <AppText style={styles.supportText}>
         Estamos sincronizando el panorama general de tu cuenta.
-      </Text>
+      </AppText>
     </>
   );
 }

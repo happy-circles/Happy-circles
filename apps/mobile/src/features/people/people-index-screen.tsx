@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppTextInput } from '@/components/app-text-input';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
@@ -14,6 +14,7 @@ import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { AppText } from '@/components/app-text';
 
 export function PeopleIndexScreen() {
   const params = useLocalSearchParams<{
@@ -71,7 +72,7 @@ export function PeopleIndexScreen() {
         <View style={styles.loadingMotion}>
           <HappyCirclesMotion size={108} variant="loading" />
         </View>
-        <Text style={styles.supportText}>Estamos cargando tu red real.</Text>
+        <AppText style={styles.supportText}>Estamos cargando tu red real.</AppText>
       </ScreenShell>
     );
   }
@@ -79,7 +80,7 @@ export function PeopleIndexScreen() {
   if (snapshotQuery.error) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Personas">
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }

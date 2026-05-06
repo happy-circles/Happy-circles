@@ -19,7 +19,11 @@ export function buildActivityState(input: {
   readonly relationshipPeopleById: Record<string, PersonDetailDto>;
   readonly notificationViewedKeys: ReadonlySet<string>;
 }): {
-  readonly pendingItems: readonly (ActionableItem | FriendshipInviteListItem | AccountInviteListItem)[];
+  readonly pendingItems: readonly (
+    | ActionableItem
+    | FriendshipInviteListItem
+    | AccountInviteListItem
+  )[];
   readonly unviewedPendingItems: readonly (
     | ActionableItem
     | FriendshipInviteListItem

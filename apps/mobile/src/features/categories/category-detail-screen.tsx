@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type {
   ActivityItemDto,
@@ -42,6 +42,7 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { AppText } from '@/components/app-text';
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -151,7 +152,7 @@ export function CategoryDetailScreen({
         refresh={refresh}
         title={transactionCategoryLabel(category)}
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -165,7 +166,7 @@ export function CategoryDetailScreen({
       >
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <Text style={styles.supportText}>Estamos leyendo esta categoria.</Text>
+          <AppText style={styles.supportText}>Estamos leyendo esta categoria.</AppText>
         </View>
       </ScreenShell>
     );
@@ -205,34 +206,34 @@ export function CategoryDetailScreen({
               <Ionicons color={color} name={icon} size={24} />
             </View>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>Impacto del periodo</Text>
-              <Text
+              <AppText style={styles.heroEyebrow}>Impacto del periodo</AppText>
+              <AppText
                 adjustsFontSizeToFit
                 minimumFontScale={0.76}
                 numberOfLines={1}
                 style={[styles.heroAmount, amountToneStyle(categoryRow.netMinor)]}
               >
                 {formatCop(categoryRow.netMinor)}
-              </Text>
-              <Text style={styles.heroMeta}>
+              </AppText>
+              <AppText style={styles.heroMeta}>
                 {movementCountLabel(categoryRow.movementCount)} - {categoryRow.personLabels.length}{' '}
                 persona{categoryRow.personLabels.length === 1 ? '' : 's'}
-              </Text>
+              </AppText>
             </View>
           </SurfaceCard>
 
           <View style={styles.metricGrid}>
             <SurfaceCard padding="md" style={styles.metricCard}>
-              <Text style={styles.metricLabel}>Te deben</Text>
-              <Text style={[styles.metricAmount, styles.positive]}>
+              <AppText style={styles.metricLabel}>Te deben</AppText>
+              <AppText style={[styles.metricAmount, styles.positive]}>
                 {formatCop(categoryRow.owedToMeMinor)}
-              </Text>
+              </AppText>
             </SurfaceCard>
             <SurfaceCard padding="md" style={styles.metricCard}>
-              <Text style={styles.metricLabel}>Debes</Text>
-              <Text style={[styles.metricAmount, styles.negative]}>
+              <AppText style={styles.metricLabel}>Debes</AppText>
+              <AppText style={[styles.metricAmount, styles.negative]}>
                 {formatCop(categoryRow.iOweMinor)}
-              </Text>
+              </AppText>
             </SurfaceCard>
           </View>
 
@@ -250,7 +251,7 @@ export function CategoryDetailScreen({
                           pressed ? styles.personChipPressed : null,
                         ]}
                       >
-                        <Text style={styles.personChipText}>{label}</Text>
+                        <AppText style={styles.personChipText}>{label}</AppText>
                       </Pressable>
                     );
 
@@ -264,7 +265,9 @@ export function CategoryDetailScreen({
                   })}
                 </View>
               ) : (
-                <Text style={styles.supportText}>No hay personas visibles en este periodo.</Text>
+                <AppText style={styles.supportText}>
+                  No hay personas visibles en este periodo.
+                </AppText>
               )}
             </SurfaceCard>
           </SectionBlock>

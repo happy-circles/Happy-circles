@@ -20,16 +20,15 @@ import type {
   SettlementProposalRow,
 } from '../types';
 import type { AnalyticsRange } from '../utils/dates';
-import {
-  computeChangeRatio,
-  dateMs,
-  isWithinRange,
-  periodRange,
-} from '../utils/dates';
+import { computeChangeRatio, dateMs, isWithinRange, periodRange } from '../utils/dates';
 import { groupBy } from '../utils/context';
 import { requestDirectionForUser } from '../utils/money-and-direction';
 import { parseSettlementMovements, buildSettlementMetrics } from './settlements';
-import { transactionCategoryLabel, USER_TRANSACTION_CATEGORIES, normalizeTransactionCategory } from '../../transaction-categories';
+import {
+  transactionCategoryLabel,
+  USER_TRANSACTION_CATEGORIES,
+  normalizeTransactionCategory,
+} from '../../transaction-categories';
 
 export interface AnalyticsEvent {
   readonly id: string;
@@ -51,8 +50,10 @@ export interface CurrentPersonBalanceSnapshot {
   readonly owedToMeMinor: number;
 }
 
-
-export function formatPeriodComparison(changeRatio: number | null, previousLabel: string | null): string {
+export function formatPeriodComparison(
+  changeRatio: number | null,
+  previousLabel: string | null,
+): string {
   if (changeRatio === null || !previousLabel) {
     return 'No hay comparacion disponible todavia.';
   }
@@ -548,7 +549,6 @@ export function buildLensSummary(input: {
     movementCount: input.currentEvents.length,
   };
 }
-
 
 export function buildBalanceProjection(input: {
   readonly financialRequests: readonly FinancialRequestRow[];

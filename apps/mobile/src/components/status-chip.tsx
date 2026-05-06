@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
+import { AppText } from '@/components/app-text';
 
 type StatusChipTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'cycle';
 
@@ -103,7 +104,7 @@ export function StatusChip({
       {iconOnly ? (
         <Ionicons color={statusTextColor(tone)} name={iconName} size={compact ? 13 : 15} />
       ) : (
-        <Text
+        <AppText
           numberOfLines={1}
           style={[
             styles.label,
@@ -117,7 +118,7 @@ export function StatusChip({
           ]}
         >
           {label}
-        </Text>
+        </AppText>
       )}
     </View>
   );

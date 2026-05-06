@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const NOTIFICATION_BUTTON_SIZE = 48;
 const NOTIFICATION_ICON_SIZE = 24;
@@ -39,7 +40,7 @@ export function NotificationBellButton({ count, href }: NotificationBellButtonPr
         />
         {hasUnread ? (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeLabel(count)}</Text>
+            <AppText style={styles.badgeText}>{badgeLabel(count)}</AppText>
           </View>
         ) : null}
       </Pressable>

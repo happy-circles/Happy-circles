@@ -1,4 +1,1 @@
-export {
-  PersonDetailScreen,
-  type PersonDetailScreenProps,
-} from './person-detail-screen-runtime';
+export { PersonDetailScreen, type PersonDetailScreenProps } from './person-detail-screen-runtime';

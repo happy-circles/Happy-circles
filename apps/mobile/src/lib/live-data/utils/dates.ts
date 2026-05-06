@@ -33,7 +33,6 @@ export function formatRelativeLabel(value: string, nowMs: number): string {
   }).format(new Date(timestamp));
 }
 
-
 export interface AnalyticsRange {
   readonly currentStartMs: number | null;
   readonly currentEndMs: number | null;
@@ -135,7 +134,11 @@ export function periodRange(period: BalanceAnalyticsPeriod, now: Date): Analytic
   };
 }
 
-export function isWithinRange(timeMs: number, startMs: number | null, endMs: number | null): boolean {
+export function isWithinRange(
+  timeMs: number,
+  startMs: number | null,
+  endMs: number | null,
+): boolean {
   if (startMs !== null && timeMs < startMs) {
     return false;
   }
@@ -146,7 +149,6 @@ export function isWithinRange(timeMs: number, startMs: number | null, endMs: num
 
   return true;
 }
-
 
 export function computeChangeRatio(current: number, previous: number): number | null {
   if (previous === 0) {

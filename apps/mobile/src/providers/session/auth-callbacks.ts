@@ -64,8 +64,7 @@ export function isPasswordRecoveryCallbackUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     return (
-      parsedUrl.pathname.startsWith('/reset-password') ||
-      parsedUrl.hostname === 'reset-password'
+      parsedUrl.pathname.startsWith('/reset-password') || parsedUrl.hostname === 'reset-password'
     );
   } catch {
     return url.includes('/reset-password') || url.includes('://reset-password');

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto } from '@happy-circles/application';
@@ -80,6 +80,7 @@ import {
   type PendingActionKey,
   type PersonSegmentKey,
 } from './person-detail-helpers';
+import { AppText } from '@/components/app-text';
 
 export interface PersonDetailScreenProps {
   readonly focusItemId?: string;
@@ -576,9 +577,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 pressed ? styles.inlineActionPressed : null,
               ]}
             >
-              <Text style={[styles.inlineActionText, styles.inlineActionDangerText]}>
+              <AppText style={[styles.inlineActionText, styles.inlineActionDangerText]}>
                 {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
-              </Text>
+              </AppText>
             </Pressable>
           </View>
         ) : item.kind === 'settlement_proposal' && item.status === 'approved' ? (
@@ -704,7 +705,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         title="Persona"
       >
         <HappyCirclesMotion size={108} variant="loading" />
-        <Text style={styles.supportText}>Estamos leyendo el saldo y el historial real.</Text>
+        <AppText style={styles.supportText}>Estamos leyendo el saldo y el historial real.</AppText>
       </ScreenShell>
     );
   }
@@ -718,7 +719,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         subtitle="No pudimos cargar esta relacion."
         title="Persona"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -775,9 +776,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             >
               <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
             </Pressable>
-            <Text style={styles.contactFlatName}>{person.displayName}</Text>
+            <AppText style={styles.contactFlatName}>{person.displayName}</AppText>
             {!isSettledBalance ? (
-              <Text
+              <AppText
                 style={[
                   styles.balanceSummary,
                   styles.balanceSummaryAmount,
@@ -788,9 +789,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 numberOfLines={1}
               >
                 {balanceSummary}
-              </Text>
+              </AppText>
             ) : !hasPendingItems ? (
-              <Text
+              <AppText
                 style={[
                   styles.balanceSummary,
                   balanceSummaryColor ? { color: balanceSummaryColor } : null,
@@ -800,12 +801,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 numberOfLines={1}
               >
                 {balanceSummary}
-              </Text>
+              </AppText>
             ) : null}
             {hasPendingItems ? (
               <View style={styles.pendingHeroBadge}>
                 <Ionicons color={theme.colors.warning} name="alert-circle-outline" size={12} />
-                <Text style={styles.pendingHeroBadgeText}>{pendingLabel}</Text>
+                <AppText style={styles.pendingHeroBadgeText}>{pendingLabel}</AppText>
               </View>
             ) : null}
             {heroMeta ? (
@@ -813,7 +814,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 {isSettledBalance && hasPendingItems ? (
                   <Ionicons color={theme.colors.muted} name="shield-checkmark-outline" size={14} />
                 ) : null}
-                <Text style={styles.heroMeta}>{heroMeta}</Text>
+                <AppText style={styles.heroMeta}>{heroMeta}</AppText>
               </View>
             ) : null}
           </View>
@@ -828,9 +829,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
               <DirectionPill
                 direction="owes_me"
-                onPress={() =>
-                  pushRoute(router, buildPersonRegisterHref(person.userId, 'owes_me'))
-                }
+                onPress={() => pushRoute(router, buildPersonRegisterHref(person.userId, 'owes_me'))}
                 style={styles.quickActionPill}
               />
             </View>
@@ -847,14 +846,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
-              <Text
+              <AppText
                 style={[
                   styles.tabLabel,
                   visualPanelSegment === 'pending' ? styles.tabLabelActive : null,
                 ]}
               >
                 Pendientes
-              </Text>
+              </AppText>
             </Pressable>
             <View style={styles.tabDivider} />
             <Pressable
@@ -865,14 +864,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 pressed ? styles.tabButtonPressed : null,
               ]}
             >
-              <Text
+              <AppText
                 style={[
                   styles.tabLabel,
                   visualPanelSegment === 'history' ? styles.tabLabelActive : null,
                 ]}
               >
                 Historial
-              </Text>
+              </AppText>
             </Pressable>
           </View>
 

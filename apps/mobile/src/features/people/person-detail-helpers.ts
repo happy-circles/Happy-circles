@@ -118,10 +118,7 @@ export function matchesFocusedTransaction(
   );
 }
 
-export function buildPersonRegisterHref(
-  personId: string,
-  direction: 'i_owe' | 'owes_me',
-): Href {
+export function buildPersonRegisterHref(personId: string, direction: 'i_owe' | 'owes_me'): Href {
   return {
     pathname: '/register',
     params: {

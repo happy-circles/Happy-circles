@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type {
   ActivityItemDto,
@@ -37,6 +37,7 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { AppText } from '@/components/app-text';
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -134,21 +135,21 @@ function CategoryRow({
             <Ionicons color={color} name={icon} size={20} />
           </View>
           <View style={styles.categoryCopy}>
-            <Text numberOfLines={1} style={styles.categoryTitle}>
+            <AppText numberOfLines={1} style={styles.categoryTitle}>
               {row.label}
-            </Text>
-            <Text numberOfLines={1} style={styles.categoryMeta}>
+            </AppText>
+            <AppText numberOfLines={1} style={styles.categoryMeta}>
               {peoplePreviewLabel(row)}
-            </Text>
+            </AppText>
           </View>
         </View>
 
         <View style={styles.trailing}>
-          <Text style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</Text>
+          <AppText style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</AppText>
           <View style={styles.amountRow}>
-            <Text numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
+            <AppText numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
               {formatCop(row.netMinor)}
-            </Text>
+            </AppText>
             <Ionicons color={theme.colors.textMuted} name="funnel-outline" size={15} />
           </View>
         </View>
@@ -172,19 +173,19 @@ function CategoriesSummaryCard({
 }) {
   return (
     <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
-      <Text style={styles.summaryEyebrow}>{label}</Text>
-      <Text
+      <AppText style={styles.summaryEyebrow}>{label}</AppText>
+      <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.78}
         numberOfLines={1}
         style={[styles.summaryAmount, amountToneStyle(totalMinor)]}
       >
         {formatCop(totalMinor)}
-      </Text>
-      <Text style={styles.summaryMeta}>
+      </AppText>
+      <AppText style={styles.summaryMeta}>
         Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoria
         {categoryCount === 1 ? '' : 's'} | {movementCountLabel(movementCount)}
-      </Text>
+      </AppText>
     </SurfaceCard>
   );
 }
@@ -216,9 +217,9 @@ function ActiveCategoryPill({
         ]}
       >
         <Ionicons color={color} name={icon} size={16} />
-        <Text numberOfLines={1} style={[styles.activeFilterText, { color }]}>
+        <AppText numberOfLines={1} style={[styles.activeFilterText, { color }]}>
           {label}
-        </Text>
+        </AppText>
         <Ionicons color={color} name="close" size={15} />
       </Pressable>
     </View>
@@ -271,7 +272,7 @@ export function CategoriesIndexScreen() {
   if (snapshotQuery.error && !analytics) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Categorias">
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -281,7 +282,7 @@ export function CategoriesIndexScreen() {
       <ScreenShell headerVariant="plain" largeTitle={false} title="Categorias">
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <Text style={styles.supportText}>Estamos organizando tus categorias.</Text>
+          <AppText style={styles.supportText}>Estamos organizando tus categorias.</AppText>
         </View>
       </ScreenShell>
     );

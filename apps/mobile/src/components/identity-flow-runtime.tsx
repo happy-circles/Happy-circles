@@ -17,21 +17,18 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput as NativeTextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
-import type {
-  KeyboardEvent,
-  ScrollView,
-  StyleProp,
-  TextInput as TextInputHandle,
-  ViewStyle,
-} from 'react-native';
+import type { KeyboardEvent, ScrollView, StyleProp, ViewStyle } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput, type AppTextInputProps } from '@/components/app-text-input';
+import {
+  AppTextInput,
+  getCurrentlyFocusedTextInput,
+  type AppTextInputProps,
+  type AppTextInputRef,
+} from '@/components/app-text-input';
 import {
   BrandVerificationMark,
   type BrandVerificationState,
@@ -46,6 +43,7 @@ import {
   type IdentityFlowCenterLayout,
   type IdentityFlowIdentityPosition,
 } from './identity-flow-helpers';
+import { AppText } from '@/components/app-text';
 
 export const IDENTITY_FLOW_CONTENT_MAX_WIDTH = 460;
 export const IDENTITY_FLOW_STAGE_SIZE = 208;
@@ -224,7 +222,7 @@ export function IdentityFlowScreen({
         windowHeight,
         event.endCoordinates.screenY + keyboardVerticalOffset,
       );
-      const focusedInput = NativeTextInput.State.currentlyFocusedInput() as
+      const focusedInput = getCurrentlyFocusedTextInput() as
         | MeasurableFocusedInput
         | null
         | undefined;
@@ -340,7 +338,7 @@ export function IdentityFlowScreen({
           titleAlign="center"
         >
           <View pointerEvents="none" style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}>
-            <Text style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</Text>
+            <AppText style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</AppText>
           </View>
           <View
             onLayout={(event) => {
@@ -551,8 +549,8 @@ export function IdentityFlowStatusCopy({
 }) {
   return (
     <View style={styles.statusCopy}>
-      <Text style={styles.statusTitle}>{title}</Text>
-      <Text style={styles.statusSubtitle}>{subtitle}</Text>
+      <AppText style={styles.statusTitle}>{title}</AppText>
+      <AppText style={styles.statusSubtitle}>{subtitle}</AppText>
     </View>
   );
 }
@@ -566,10 +564,10 @@ export function IdentityFlowLogoCopy({
 }) {
   return (
     <View style={styles.logoCopy}>
-      <Text adjustsFontSizeToFit minimumFontScale={0.86} style={styles.logoCopyTitle}>
+      <AppText adjustsFontSizeToFit minimumFontScale={0.86} style={styles.logoCopyTitle}>
         {title}
-      </Text>
-      {subtitle ? <Text style={styles.logoCopySubtitle}>{subtitle}</Text> : null}
+      </AppText>
+      {subtitle ? <AppText style={styles.logoCopySubtitle}>{subtitle}</AppText> : null}
     </View>
   );
 }
@@ -608,7 +606,9 @@ export function IdentityFlowField({
   return (
     <View style={[styles.fieldBlock, style]}>
       {showLabel ? (
-        <Text style={[styles.fieldLabel, error ? styles.fieldLabelError : null]}>{label}</Text>
+        <AppText style={[styles.fieldLabel, error ? styles.fieldLabelError : null]}>
+          {label}
+        </AppText>
       ) : null}
       <View accessibilityLabel={label} style={styles.fieldRow}>
         <View style={[styles.fieldIcon, { backgroundColor: visual.backgroundColor }]}>
@@ -627,11 +627,11 @@ export function IdentityFlowField({
             {children}
           </View>
           {reserveError ? (
-            <Text style={[styles.fieldError, !error ? styles.fieldErrorHidden : null]}>
+            <AppText style={[styles.fieldError, !error ? styles.fieldErrorHidden : null]}>
               {error ?? ' '}
-            </Text>
+            </AppText>
           ) : error ? (
-            <Text style={styles.fieldError}>{error}</Text>
+            <AppText style={styles.fieldError}>{error}</AppText>
           ) : null}
         </View>
       </View>
@@ -639,28 +639,27 @@ export function IdentityFlowField({
   );
 }
 
-export const IdentityFlowTextInput = forwardRef<
-  TextInputHandle,
-  AppTextInputProps
->(function IdentityFlowTextInput(
-  { chrome = 'plain', density = 'identity', onFocus, ...props },
-  ref,
-) {
-  const scheduleKeyboardAdjustment = useContext(IdentityFlowKeyboardAvoidanceContext);
+export const IdentityFlowTextInput = forwardRef<AppTextInputRef, AppTextInputProps>(
+  function IdentityFlowTextInput(
+    { chrome = 'plain', density = 'identity', onFocus, ...props },
+    ref,
+  ) {
+    const scheduleKeyboardAdjustment = useContext(IdentityFlowKeyboardAvoidanceContext);
 
-  return (
-    <AppTextInput
-      {...props}
-      chrome={chrome}
-      density={density}
-      onFocus={(event) => {
-        onFocus?.(event);
-        scheduleKeyboardAdjustment?.();
-      }}
-      ref={ref}
-    />
-  );
-});
+    return (
+      <AppTextInput
+        {...props}
+        chrome={chrome}
+        density={density}
+        onFocus={(event) => {
+          onFocus?.(event);
+          scheduleKeyboardAdjustment?.();
+        }}
+        ref={ref}
+      />
+    );
+  },
+);
 
 export function IdentityFlowMessageSlot({
   children,
@@ -747,7 +746,7 @@ export function IdentityFlowSecondaryAction({
       ]}
     >
       <Ionicons color={theme.colors.textMuted} name={icon} size={18} />
-      <Text style={styles.secondaryActionText}>{label}</Text>
+      <AppText style={styles.secondaryActionText}>{label}</AppText>
     </Pressable>
   );
 }

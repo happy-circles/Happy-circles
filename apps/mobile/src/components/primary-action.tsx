@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface PrimaryActionProps {
   readonly label: string;
@@ -55,7 +56,7 @@ export function PrimaryAction({
       ]}
     >
       <View style={[styles.copy, fullWidth ? styles.copyFullWidth : null]}>
-        <Text
+        <AppText
           style={[
             styles.label,
             compact ? styles.labelCompact : null,
@@ -65,9 +66,9 @@ export function PrimaryAction({
           ]}
         >
           {label}
-        </Text>
+        </AppText>
         {subtitle ? (
-          <Text
+          <AppText
             style={[
               styles.subtitle,
               compact ? styles.subtitleCompact : null,
@@ -76,19 +77,19 @@ export function PrimaryAction({
             ]}
           >
             {subtitle}
-          </Text>
+          </AppText>
         ) : null}
       </View>
       {loading ? (
         <HappyCirclesMotion
-          color={variant === 'primary' ? theme.colors.white : color ?? theme.colors.text}
+          color={variant === 'primary' ? theme.colors.white : (color ?? theme.colors.text)}
           size={compact ? 30 : 36}
           tone="mono"
           variant="loading"
         />
       ) : icon || variant !== 'ghost' ? (
         <Ionicons
-          color={variant === 'primary' ? theme.colors.white : color ?? theme.colors.text}
+          color={variant === 'primary' ? theme.colors.white : (color ?? theme.colors.text)}
           name={icon ?? 'arrow-forward'}
           size={compact ? 16 : 18}
         />

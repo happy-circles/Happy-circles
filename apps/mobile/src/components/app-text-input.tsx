@@ -1,18 +1,29 @@
 import { forwardRef, useState } from 'react';
-import { Platform, StyleSheet, TextInput, type TextInputProps } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  TextInput as NativeTextInput,
+  type TextInputProps,
+} from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { typographyScaleRoleMaxFontSizeMultiplier } from '@/lib/typography';
 
 type InputChrome = 'default' | 'glass' | 'plain';
 type InputDensity = 'compact' | 'identity' | 'regular';
 
-export interface AppTextInputProps extends TextInputProps {
+export type AppTextInputRef = NativeTextInput;
+
+export interface AppTextInputProps extends Omit<
+  TextInputProps,
+  'allowFontScaling' | 'maxFontSizeMultiplier'
+> {
   readonly chrome?: InputChrome;
   readonly density?: InputDensity;
   readonly hasError?: boolean;
 }
 
-export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function AppTextInput(
+export const AppTextInput = forwardRef<AppTextInputRef, AppTextInputProps>(function AppTextInput(
   {
     chrome = 'default',
     density = 'regular',
@@ -36,9 +47,11 @@ export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function Ap
         : styles.regularSingleLine;
 
   return (
-    <TextInput
+    <NativeTextInput
       {...props}
+      allowFontScaling
       cursorColor={theme.colors.primary}
+      maxFontSizeMultiplier={typographyScaleRoleMaxFontSizeMultiplier.input}
       multiline={multiline}
       onBlur={(event) => {
         setFocused(false);
@@ -63,6 +76,10 @@ export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function Ap
     />
   );
 });
+
+export function getCurrentlyFocusedTextInput() {
+  return NativeTextInput.State.currentlyFocusedInput();
+}
 
 const styles = StyleSheet.create({
   base: {

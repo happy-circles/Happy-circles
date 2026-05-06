@@ -2,10 +2,7 @@ import type { Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
-import {
-  isPendingTransactionItem,
-  transactionFocusId,
-} from '@/lib/transaction-presentation';
+import { isPendingTransactionItem, transactionFocusId } from '@/lib/transaction-presentation';
 
 export type ActivityDomainKey = 'transactions' | 'friendships';
 export type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'reminders';

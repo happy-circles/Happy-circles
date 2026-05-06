@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
-import { dashboardStyles as styles, PEOPLE_TILE_AVATAR_SIZE } from '@/features/home/dashboard-screen.styles';
+import {
+  dashboardStyles as styles,
+  PEOPLE_TILE_AVATAR_SIZE,
+} from '@/features/home/dashboard-screen.styles';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { notificationViewKeyForItem } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
@@ -24,6 +27,7 @@ import {
 } from '@/lib/transaction-presentation';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import type { TransactionTargetPanel } from './dashboard-helpers';
+import { AppText } from '@/components/app-text';
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 
@@ -174,13 +178,13 @@ export function ShortcutTile({
         <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
         {typeof badgeCount === 'number' && badgeCount > 0 ? (
           <View style={styles.requestBadge}>
-            <Text style={styles.requestBadgeText}>{badgeLabel(badgeCount)}</Text>
+            <AppText style={styles.requestBadgeText}>{badgeLabel(badgeCount)}</AppText>
           </View>
         ) : null}
       </View>
-      <Text numberOfLines={1} style={styles.peopleTileLabel}>
+      <AppText numberOfLines={1} style={styles.peopleTileLabel}>
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 
@@ -210,9 +214,9 @@ export function PersonTile({ person }: { readonly person: PersonCardDto }) {
             size={PEOPLE_TILE_AVATAR_SIZE}
           />
         </View>
-        <Text numberOfLines={1} style={styles.peopleTileLabel}>
+        <AppText numberOfLines={1} style={styles.peopleTileLabel}>
           {firstName(person.displayName)}
-        </Text>
+        </AppText>
       </Pressable>
     </Link>
   );

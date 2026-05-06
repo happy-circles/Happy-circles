@@ -11,13 +11,12 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  Text,
   View,
 } from 'react-native';
-import type { ScrollView, TextInput } from 'react-native';
+import type { ScrollView } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
-import { AppTextInput } from '@/components/app-text-input';
+import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
@@ -50,6 +49,7 @@ import {
   resolveProfileFocusRequest,
   type RowTone,
 } from './profile-helpers';
+import { AppText } from '@/components/app-text';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -124,12 +124,12 @@ function ProfileStatusRow({
         <Ionicons color={visual.color} name={icon} size={20} />
       </View>
       <View style={styles.textWrap}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+        <AppText style={styles.rowTitle}>{title}</AppText>
+        {subtitle ? <AppText style={styles.rowSubtitle}>{subtitle}</AppText> : null}
       </View>
       {trailing ??
         (status ? (
-          <Text style={[styles.statusText, { color: visual.color }]}>{status}</Text>
+          <AppText style={[styles.statusText, { color: visual.color }]}>{status}</AppText>
         ) : null)}
     </View>
   );
@@ -159,8 +159,8 @@ export function ProfileScreen() {
   const accountMeasuredRef = useRef(false);
   const methodsMeasuredRef = useRef(false);
   const deviceMeasuredRef = useRef(false);
-  const trustPasswordInputRef = useRef<TextInput | null>(null);
-  const attachPasswordInputRef = useRef<TextInput | null>(null);
+  const trustPasswordInputRef = useRef<AppTextInputRef | null>(null);
+  const attachPasswordInputRef = useRef<AppTextInputRef | null>(null);
   const pendingScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const delayedFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -723,8 +723,8 @@ export function ProfileScreen() {
           variant="avatar"
         />
         <View style={styles.accountCopy}>
-          <Text style={styles.accountValue}>{accountLabel}</Text>
-          <Text style={styles.accountMeta}>{accountEmail}</Text>
+          <AppText style={styles.accountValue}>{accountLabel}</AppText>
+          <AppText style={styles.accountMeta}>{accountEmail}</AppText>
         </View>
       </View>
 
@@ -733,13 +733,13 @@ export function ProfileScreen() {
       {!session.setupState.requiredComplete ? (
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Setup pendiente</Text>
+            <AppText style={styles.sectionTitle}>Setup pendiente</AppText>
           </View>
           <Link href={completeProfileHref} asChild>
             <Pressable
               style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
             >
-              <Text style={styles.inlineButtonText}>Abrir setup</Text>
+              <AppText style={styles.inlineButtonText}>Abrir setup</AppText>
             </Pressable>
           </Link>
         </View>
@@ -748,28 +748,28 @@ export function ProfileScreen() {
       {__DEV__ ? (
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>QA temporal</Text>
+            <AppText style={styles.sectionTitle}>QA temporal</AppText>
           </View>
           <View style={styles.qaButtonRow}>
             <Link href={buildSetupAccountHref('profile', { preview: 'true' })} asChild>
               <Pressable
                 style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
               >
-                <Text style={styles.inlineButtonText}>Onboarding</Text>
+                <AppText style={styles.inlineButtonText}>Onboarding</AppText>
               </Pressable>
             </Link>
             <Link href={qaInviteEntryHref} asChild>
               <Pressable
                 style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
               >
-                <Text style={styles.inlineButtonText}>Invitacion</Text>
+                <AppText style={styles.inlineButtonText}>Invitacion</AppText>
               </Pressable>
             </Link>
             <Link href={qaTokenCreateHref} asChild>
               <Pressable
                 style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
               >
-                <Text style={styles.inlineButtonText}>Crear con token</Text>
+                <AppText style={styles.inlineButtonText}>Crear con token</AppText>
               </Pressable>
             </Link>
           </View>
@@ -784,7 +784,7 @@ export function ProfileScreen() {
         style={[styles.sectionBlock, highlightTarget === 'account' ? styles.focusPanel : null]}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Cuenta</Text>
+          <AppText style={styles.sectionTitle}>Cuenta</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -809,9 +809,9 @@ export function ProfileScreen() {
                     busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
-                  <Text style={styles.inlineButtonText}>
+                  <AppText style={styles.inlineButtonText}>
                     {busyAction === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
-                  </Text>
+                  </AppText>
                 </Pressable>
               )
             }
@@ -879,9 +879,9 @@ export function ProfileScreen() {
                     busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
-                  <Text style={styles.inlineButtonText}>
+                  <AppText style={styles.inlineButtonText}>
                     {busyAction === 'contacts' ? 'Abriendo...' : contactsActionLabel}
-                  </Text>
+                  </AppText>
                 </Pressable>
               ) : undefined
             }
@@ -897,7 +897,7 @@ export function ProfileScreen() {
         style={[styles.sectionBlock, highlightTarget === 'methods' ? styles.focusPanel : null]}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Metodos de acceso</Text>
+          <AppText style={styles.sectionTitle}>Metodos de acceso</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -963,9 +963,9 @@ export function ProfileScreen() {
                   onPress={() => void runAction('link-google', async () => session.linkGoogle())}
                   style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
                 >
-                  <Text style={styles.inlineButtonText}>
+                  <AppText style={styles.inlineButtonText}>
                     {busyAction === 'link-google' ? 'Abriendo...' : 'Vincular'}
-                  </Text>
+                  </AppText>
                 </Pressable>
               ) : undefined
             }
@@ -988,9 +988,9 @@ export function ProfileScreen() {
                         pressed ? styles.rowPressed : null,
                       ]}
                     >
-                      <Text style={styles.inlineButtonText}>
+                      <AppText style={styles.inlineButtonText}>
                         {busyAction === 'link-apple' ? 'Abriendo...' : 'Vincular'}
-                      </Text>
+                      </AppText>
                     </Pressable>
                   ) : undefined
                 }
@@ -1017,9 +1017,9 @@ export function ProfileScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
                 >
-                  <Text style={styles.inlineButtonText}>
+                  <AppText style={styles.inlineButtonText}>
                     {session.profile?.phone_e164 ? 'Editar' : 'Completar'}
-                  </Text>
+                  </AppText>
                 </Pressable>
               </Link>
             }
@@ -1035,7 +1035,7 @@ export function ProfileScreen() {
         style={[styles.sectionBlock, highlightTarget === 'device' ? styles.focusPanel : null]}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Dispositivos</Text>
+          <AppText style={styles.sectionTitle}>Dispositivos</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -1050,10 +1050,10 @@ export function ProfileScreen() {
           {!session.isTrustedDevice ? (
             <View style={styles.actionCluster}>
               {session.canTrustCurrentDeviceWithoutPassword ? (
-                <Text style={styles.sectionBody}>
+                <AppText style={styles.sectionBody}>
                   Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
                   vez.
-                </Text>
+                </AppText>
               ) : null}
               {session.linkedMethods.hasEmailPassword &&
               !session.canTrustCurrentDeviceWithoutPassword ? (
@@ -1118,9 +1118,9 @@ export function ProfileScreen() {
                         pressed ? styles.rowPressed : null,
                       ]}
                     >
-                      <Text style={styles.inlineButtonDangerText}>
+                      <AppText style={styles.inlineButtonDangerText}>
                         {busyAction === `revoke-${device.device_id}` ? 'Revocando...' : 'Revocar'}
-                      </Text>
+                      </AppText>
                     </Pressable>
                   ) : undefined
                 }
@@ -1132,7 +1132,7 @@ export function ProfileScreen() {
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Legal y soporte</Text>
+          <AppText style={styles.sectionTitle}>Legal y soporte</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -1199,13 +1199,13 @@ export function ProfileScreen() {
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
+          <AppText style={styles.sectionTitle}>Eliminar cuenta</AppText>
         </View>
 
         <View style={styles.accountDeletionRow}>
-          <Text style={[styles.sectionBody, styles.accountDeletionBody]}>
+          <AppText style={[styles.sectionBody, styles.accountDeletionBody]}>
             Esta accion es irreversible.
-          </Text>
+          </AppText>
 
           <Pressable
             accessibilityRole="button"
@@ -1217,9 +1217,9 @@ export function ProfileScreen() {
               busyAction === 'request-account-deletion' ? styles.disabledButton : null,
             ]}
           >
-            <Text style={styles.inlineButtonDangerText}>
+            <AppText style={styles.inlineButtonDangerText}>
               {busyAction === 'request-account-deletion' ? 'Eliminando...' : 'Eliminar cuenta'}
-            </Text>
+            </AppText>
           </Pressable>
         </View>
       </View>

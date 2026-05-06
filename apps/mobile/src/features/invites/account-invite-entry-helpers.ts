@@ -1,7 +1,4 @@
-import {
-  MIN_ACCOUNT_INVITE_TOKEN_LENGTH,
-  extractAccountInviteToken,
-} from './account-invite-utils';
+import { MIN_ACCOUNT_INVITE_TOKEN_LENGTH, extractAccountInviteToken } from './account-invite-utils';
 
 export type SocialProvider = 'google' | 'apple';
 export type SignInEntryMode = 'sign-in' | 'recover';

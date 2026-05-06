@@ -1,7 +1,7 @@
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { useMemo, useState } from 'react';
 
@@ -16,6 +16,7 @@ import { useApproveSettlementMutation, useRejectSettlementMutation } from '@/lib
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 const CYCLE_COLOR = transactionCategoryColor('cycle');
 
@@ -86,7 +87,7 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
             <View style={styles.cardHeaderCopy}>
               <View style={styles.brandRow}>
                 <Ionicons color={CYCLE_COLOR} name="happy-outline" size={18} />
-                <Text style={styles.brandLabel}>Happy Circle</Text>
+                <AppText style={styles.brandLabel}>Happy Circle</AppText>
               </View>
               <StatusChip
                 compact
@@ -101,12 +102,14 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
             {/* Left: Metrics */}
             <View style={styles.metricsColumn}>
               <View style={styles.metricBlock}>
-                <Text style={styles.metricEyebrow}>Valor a resolver</Text>
-                <Text style={styles.metricAmount}>{formatCop(proposal.totalAmountMinor)}</Text>
+                <AppText style={styles.metricEyebrow}>Valor a resolver</AppText>
+                <AppText style={styles.metricAmount}>
+                  {formatCop(proposal.totalAmountMinor)}
+                </AppText>
               </View>
-              <Text style={styles.approvalSummary}>
+              <AppText style={styles.approvalSummary}>
                 {approvedCount}/{proposal.participantCount} aprobadas
-              </Text>
+              </AppText>
 
               <View style={styles.approvalBlock}>
                 <ApprovalDots decisions={orderedDecisions} />

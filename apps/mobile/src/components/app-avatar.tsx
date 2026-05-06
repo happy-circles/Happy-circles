@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { HappyCirclesCenterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
+import {
+  HappyCirclesCenterSvg,
+  resolveHappyCirclesPalette,
+} from '@/components/happy-circles-glyph';
 import { buildAvatarLabel, useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const SYSTEM_AVATAR_FACE_VIEW_BOX = '290 290 100 100';
 const SYSTEM_AVATAR_PALETTE = resolveHappyCirclesPalette('brand');
@@ -81,7 +85,7 @@ export function AppAvatar({
           style={{ borderRadius: radius, height: size, width: size }}
         />
       ) : (
-        <Text
+        <AppText
           style={[
             styles.avatarLabel,
             {
@@ -91,7 +95,7 @@ export function AppAvatar({
           ]}
         >
           {avatarLabel}
-        </Text>
+        </AppText>
       )}
     </View>
   );

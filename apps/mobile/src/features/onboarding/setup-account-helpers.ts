@@ -41,7 +41,8 @@ export function resolveSetupAccountRouteParams(input: {
   readonly returnTo?: string;
 } {
   return {
-    editPhoneMode: (Array.isArray(input.editPhone) ? input.editPhone[0] : input.editPhone) === 'true',
+    editPhoneMode:
+      (Array.isArray(input.editPhone) ? input.editPhone[0] : input.editPhone) === 'true',
     requestedStep: Array.isArray(input.step) ? input.step[0] : input.step,
     returnTo: Array.isArray(input.returnTo) ? input.returnTo[0] : input.returnTo,
   };

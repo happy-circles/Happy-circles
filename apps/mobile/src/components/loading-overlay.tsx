@@ -1,7 +1,8 @@
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface LoadingOverlayProps {
   readonly visible: boolean;
@@ -41,7 +42,7 @@ export function LoadingOverlay({
             variant={motionVariant(variant)}
           />
           <View style={styles.copy}>
-            <Text
+            <AppText
               style={[
                 styles.title,
                 variant === 'success' ? styles.titleSuccess : null,
@@ -49,16 +50,16 @@ export function LoadingOverlay({
               ]}
             >
               {title}
-            </Text>
+            </AppText>
             {message ? (
-              <Text
+              <AppText
                 style={[
                   styles.message,
                   variant === 'success' || variant === 'danger' ? styles.messageResult : null,
                 ]}
               >
                 {message}
-              </Text>
+              </AppText>
             ) : null}
           </View>
         </View>

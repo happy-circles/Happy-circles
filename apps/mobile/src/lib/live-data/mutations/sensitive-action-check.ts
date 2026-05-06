@@ -42,7 +42,9 @@ export async function guardSensitiveMutationAction(
       result.error === 'not_enrolled' ||
       result.error === 'passcode_not_set'
     ) {
-      throw new Error(`Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`);
+      throw new Error(
+        `Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`,
+      );
     }
 
     if (result.error === 'lockout') {

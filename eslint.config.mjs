@@ -63,6 +63,28 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/mobile/**/*.{ts,tsx}'],
+    ignores: [
+      'apps/mobile/src/components/app-text.tsx',
+      'apps/mobile/src/components/app-text-input.tsx',
+      'apps/mobile/src/components/otp-code-input.tsx',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-native',
+              importNames: ['Text', 'TextInput'],
+              message: 'Use AppText or AppTextInput so native font scaling stays bounded.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['apps/landing/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {

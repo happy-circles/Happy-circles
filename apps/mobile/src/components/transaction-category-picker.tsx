@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   type UserTransactionCategory,
   USER_TRANSACTION_CATEGORIES,
 } from '@/lib/transaction-categories';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const CATEGORY_VISUALS: Record<
   UserTransactionCategory,
@@ -102,7 +103,7 @@ export function TransactionCategoryPicker({
         >
           <Ionicons color={item.color} name={item.icon} size={22} />
         </View>
-        <Text
+        <AppText
           numberOfLines={variant === 'grid' ? 2 : 1}
           style={[
             styles.label,
@@ -111,7 +112,7 @@ export function TransactionCategoryPicker({
           ]}
         >
           {variant === 'carousel' ? item.compactLabel : item.label}
-        </Text>
+        </AppText>
       </Pressable>
     );
   });

@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { PropsWithChildren, ReactNode } from 'react';
 import type { AccessibilityRole, StyleProp, ViewStyle } from 'react-native';
 
 import { theme } from '@/lib/theme';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 type ActivityItemCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
 
@@ -84,9 +85,12 @@ export function ActivityItemCard({
           {leadingNode}
           <View style={[styles.copy, compact ? styles.copyCompact : null]}>
             <View style={styles.titleRow}>
-              <Text numberOfLines={1} style={[styles.title, compact ? styles.titleCompact : null]}>
+              <AppText
+                numberOfLines={1}
+                style={[styles.title, compact ? styles.titleCompact : null]}
+              >
                 {title}
-              </Text>
+              </AppText>
               {titleAccessoryNode}
             </View>
             {contextNode}

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import type { PersonCardDto } from '@happy-circles/application';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { toneVisual } from '@/lib/direction-ui';
@@ -10,6 +10,7 @@ import { theme } from '@/lib/theme';
 import { AppAvatar } from './app-avatar';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 const POSITIVE_VISUAL = toneVisual('positive');
 const NEGATIVE_VISUAL = toneVisual('negative');
@@ -91,7 +92,7 @@ export function PersonRow({ onAvatarPress, person }: PersonRowProps) {
             )}
             <View style={styles.textWrap}>
               <View style={styles.titleRow}>
-                <Text style={styles.name}>{person.displayName}</Text>
+                <AppText style={styles.name}>{person.displayName}</AppText>
                 {person.pendingCount > 0 ? (
                   <StatusChip
                     label={`${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`}
@@ -99,13 +100,15 @@ export function PersonRow({ onAvatarPress, person }: PersonRowProps) {
                   />
                 ) : null}
               </View>
-              <Text style={styles.meta}>{lastUpdateLabel}</Text>
+              <AppText style={styles.meta}>{lastUpdateLabel}</AppText>
             </View>
           </View>
           <View style={styles.trailing}>
-            <Text style={styles.amountLabel}>{amountLabel}</Text>
+            <AppText style={styles.amountLabel}>{amountLabel}</AppText>
             <View style={styles.amountRow}>
-              <Text style={[styles.amount, amountTone]}>{formatCop(person.netAmountMinor)}</Text>
+              <AppText style={[styles.amount, amountTone]}>
+                {formatCop(person.netAmountMinor)}
+              </AppText>
               <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
             </View>
           </View>

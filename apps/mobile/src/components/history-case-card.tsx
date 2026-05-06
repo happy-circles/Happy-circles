@@ -1,13 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  UIManager,
-  View,
-} from 'react-native';
+import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
 import { TransactionSummaryRow } from '@/components/transaction-summary-row';
 import { theme } from '@/lib/theme';
@@ -17,6 +9,7 @@ import {
   transactionCategoryIcon,
 } from '@/lib/transaction-categories';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle';
 
@@ -152,8 +145,10 @@ export function HistoryCaseCard({
         <View style={styles.expandedContent}>
           {showExpandedSummary ? (
             <View style={styles.expandedSummary}>
-              {detailTitle ? <Text style={styles.expandedTitle}>{detailTitle}</Text> : null}
-              {description ? <Text style={styles.expandedDescription}>{description}</Text> : null}
+              {detailTitle ? <AppText style={styles.expandedTitle}>{detailTitle}</AppText> : null}
+              {description ? (
+                <AppText style={styles.expandedDescription}>{description}</AppText>
+              ) : null}
             </View>
           ) : null}
           <View style={styles.steps}>
@@ -195,19 +190,21 @@ export function HistoryCaseCard({
                           />
                         </View>
                       ) : null}
-                      <Text style={styles.stepTitle}>{step.title}</Text>
+                      <AppText style={styles.stepTitle}>{step.title}</AppText>
                     </View>
                     {step.amountLabel ? (
-                      <Text style={[styles.stepAmount, toneStyles[step.tone]]}>
+                      <AppText style={[styles.stepAmount, toneStyles[step.tone]]}>
                         {step.amountLabel}
-                      </Text>
+                      </AppText>
                     ) : null}
                   </View>
-                  {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
+                  {step.detail ? <AppText style={styles.stepDetail}>{step.detail}</AppText> : null}
                   {step.impact && !step.amountLabel ? (
-                    <Text style={[styles.stepImpact, toneStyles[step.tone]]}>{step.impact}</Text>
+                    <AppText style={[styles.stepImpact, toneStyles[step.tone]]}>
+                      {step.impact}
+                    </AppText>
                   ) : null}
-                  {step.meta ? <Text style={styles.stepMeta}>{step.meta}</Text> : null}
+                  {step.meta ? <AppText style={styles.stepMeta}>{step.meta}</AppText> : null}
                 </View>
               </View>
             ))}

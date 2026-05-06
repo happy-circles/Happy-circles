@@ -34,7 +34,8 @@ export function getNotificationSupport(): NotificationSupport {
   if (isExpoGo()) {
     return {
       supported: false,
-      reason: 'En Expo Go esta integracion muestra limitaciones. Usa un development build para probar notificaciones sin warnings.',
+      reason:
+        'En Expo Go esta integracion muestra limitaciones. Usa un development build para probar notificaciones sin warnings.',
     };
   }
 
@@ -113,10 +114,7 @@ export async function requestLocalNotificationPermissionStatus(): Promise<Notifi
   }
 
   const current = await Notifications.getPermissionsAsync();
-  if (
-    current.granted ||
-    current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
-  ) {
+  if (current.granted || current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
     return 'granted';
   }
 

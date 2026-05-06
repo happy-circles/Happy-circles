@@ -36,16 +36,12 @@ describe('person detail helpers', () => {
   it('reads mutation statuses defensively', () => {
     expect(readResultStatus({ status: 'accepted' })).toBe('accepted');
     expect(readResultStatus(null)).toBeNull();
-    expect(readNestedStatus({ settlement: { status: 'executed' } }, 'settlement')).toBe(
-      'executed',
-    );
+    expect(readNestedStatus({ settlement: { status: 'executed' } }, 'settlement')).toBe('executed');
   });
 
   it('derives pending financial request content', () => {
     expect(
-      buildFinancialRequestPendingContent(
-        item({ subtitle: 'Ana | Cena viernes | hace 2 dias' }),
-      ),
+      buildFinancialRequestPendingContent(item({ subtitle: 'Ana | Cena viernes | hace 2 dias' })),
     ).toEqual({
       createdAtLabel: 'hace 2 dias',
       createdByLabel: 'Ana',

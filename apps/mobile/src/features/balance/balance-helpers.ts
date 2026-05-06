@@ -121,10 +121,7 @@ export function periodScopeLabel(period: BalanceAnalyticsPeriod): string {
   return 'desde el inicio';
 }
 
-export function comparisonCopy(
-  changeRatio: number | null,
-  previousLabel: string | null,
-): string {
+export function comparisonCopy(changeRatio: number | null, previousLabel: string | null): string {
   if (changeRatio === null || !previousLabel) {
     return 'Sin comparacion disponible.';
   }
@@ -214,7 +211,9 @@ function compactFirstNames(values: readonly string[]): string | null {
   const visibleNames = names.slice(0, 2);
   const hiddenCount = names.length - visibleNames.length;
 
-  return hiddenCount > 0 ? `${visibleNames.join(', ')} y ${hiddenCount} mas` : visibleNames.join(', ');
+  return hiddenCount > 0
+    ? `${visibleNames.join(', ')} y ${hiddenCount} mas`
+    : visibleNames.join(', ');
 }
 
 export function personFocusMeta(row: BalanceAnalyticsPersonRowDto): string {

@@ -32,10 +32,7 @@ export function extractAccountInviteToken(value: string | null | undefined): str
   return trimmed;
 }
 
-export function accountInviteStatusMessage(
-  status: string,
-  deliveryStatus: string,
-): string | null {
+export function accountInviteStatusMessage(status: string, deliveryStatus: string): string | null {
   if (deliveryStatus === 'revoked') {
     return 'Este link fue reemplazado por una invitacion mas reciente.';
   }

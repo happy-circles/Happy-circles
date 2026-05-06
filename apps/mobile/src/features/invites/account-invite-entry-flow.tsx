@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated, Keyboard, Pressable, Text, View } from 'react-native';
+import { Animated, Keyboard, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
@@ -71,6 +71,7 @@ import {
   type SignInEntryMode,
   type SocialProvider,
 } from './account-invite-entry-helpers';
+import { AppText } from '@/components/app-text';
 
 const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
@@ -1299,9 +1300,9 @@ export function AccountSignInEntry({
 
                 {isRecovery && recoveryLinkSent ? (
                   <View style={styles.recoveryCodeBlock}>
-                    <Text style={styles.recoveryCodeHelp}>
+                    <AppText style={styles.recoveryCodeHelp}>
                       Abre el enlace o pega el codigo de 8 digitos del correo.
-                    </Text>
+                    </AppText>
                     <OtpCodeInput
                       disabled={authBusy}
                       hasError={recoveryCode.length > 0 && !recoveryCodeValid}
@@ -1322,11 +1323,11 @@ export function AccountSignInEntry({
                         authBusy || recoveryResendSeconds > 0 ? styles.actionDisabled : null,
                       ]}
                     >
-                      <Text style={styles.recoveryResendText}>
+                      <AppText style={styles.recoveryResendText}>
                         {recoveryResendSeconds > 0
                           ? `Reenviar enlace en ${recoveryResendSeconds}s`
                           : 'Reenviar enlace'}
-                      </Text>
+                      </AppText>
                     </Pressable>
                   </View>
                 ) : null}
@@ -1364,7 +1365,7 @@ export function AccountSignInEntry({
                           authBusy ? styles.actionDisabled : null,
                         ]}
                       >
-                        <Text style={styles.forgotPasswordInlineText}>Olvide contrasena</Text>
+                        <AppText style={styles.forgotPasswordInlineText}>Olvide contrasena</AppText>
                       </Pressable>
                     ) : null}
                   </View>
@@ -1388,9 +1389,9 @@ export function AccountSignInEntry({
                         ]}
                       >
                         <Ionicons color={theme.colors.white} name="logo-apple" size={18} />
-                        <Text style={[styles.socialProviderText, styles.appleProviderText]}>
+                        <AppText style={[styles.socialProviderText, styles.appleProviderText]}>
                           {socialBusyProvider === 'apple' ? 'Apple...' : 'Apple'}
-                        </Text>
+                        </AppText>
                       </Pressable>
                     ) : null}
 
@@ -1406,9 +1407,9 @@ export function AccountSignInEntry({
                       ]}
                     >
                       <Ionicons color={theme.colors.text} name="logo-google" size={18} />
-                      <Text style={styles.socialProviderText}>
+                      <AppText style={styles.socialProviderText}>
                         {socialBusyProvider === 'google' ? 'Google...' : 'Google'}
-                      </Text>
+                      </AppText>
                     </Pressable>
                   </View>
                 </View>

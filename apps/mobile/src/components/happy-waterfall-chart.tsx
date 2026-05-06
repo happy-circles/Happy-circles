@@ -1,10 +1,11 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import type { BalanceWaterfallGroupDto } from '@happy-circles/application';
 
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 const CHART_HEIGHT = 240;
 const GROUP_WIDTH = 100;
@@ -60,7 +61,7 @@ export function HappyWaterfallChart({ groups }: HappyWaterfallChartProps) {
           const isEndpoint = group.key === 'starting_balance' || group.key === 'ending_balance';
           const startY = getY(previousCumulative);
           const endY = getY(group.cumulativeBalanceMinor);
-          
+
           // Next previous cumulative
           previousCumulative = group.cumulativeBalanceMinor;
 
@@ -70,17 +71,19 @@ export function HappyWaterfallChart({ groups }: HappyWaterfallChartProps) {
               {isEndpoint ? (
                 <View style={styles.endpointWrapper}>
                   <SurfaceCard padding="md" style={styles.endpointCard}>
-                    <Text style={styles.endpointLabel}>{group.label}</Text>
-                    <Text style={styles.endpointAmount}>{formatCop(group.cumulativeBalanceMinor)}</Text>
+                    <AppText style={styles.endpointLabel}>{group.label}</AppText>
+                    <AppText style={styles.endpointAmount}>
+                      {formatCop(group.cumulativeBalanceMinor)}
+                    </AppText>
                   </SurfaceCard>
                   {/* Connecting line entering the endpoint */}
                   {index > 0 && (
-                     <View
-                       style={[
-                         styles.dashedLineHorizontal,
-                         { top: endY, left: -GROUP_WIDTH / 2, width: GROUP_WIDTH / 2 },
-                       ]}
-                     />
+                    <View
+                      style={[
+                        styles.dashedLineHorizontal,
+                        { top: endY, left: -GROUP_WIDTH / 2, width: GROUP_WIDTH / 2 },
+                      ]}
+                    />
                   )}
                 </View>
               ) : (
@@ -126,7 +129,10 @@ export function HappyWaterfallChart({ groups }: HappyWaterfallChartProps) {
                           style={[
                             styles.bar,
                             styles.barOwedToMe,
-                            { top: getY(group.owedToMeMinor), height: zeroY - getY(group.owedToMeMinor) },
+                            {
+                              top: getY(group.owedToMeMinor),
+                              height: zeroY - getY(group.owedToMeMinor),
+                            },
                           ]}
                         />
                       </View>
@@ -137,7 +143,10 @@ export function HappyWaterfallChart({ groups }: HappyWaterfallChartProps) {
                           style={[
                             styles.bar,
                             styles.barResolved,
-                            { top: getY(group.resolvedMinor), height: zeroY - getY(group.resolvedMinor) },
+                            {
+                              top: getY(group.resolvedMinor),
+                              height: zeroY - getY(group.resolvedMinor),
+                            },
                           ]}
                         />
                       </View>
@@ -146,10 +155,10 @@ export function HappyWaterfallChart({ groups }: HappyWaterfallChartProps) {
 
                   {/* Group Label */}
                   <View style={styles.groupLabelWrapper}>
-                    <Text style={styles.groupLabel} numberOfLines={1}>
+                    <AppText style={styles.groupLabel} numberOfLines={1}>
                       {group.label}
-                    </Text>
-                    <Text style={styles.groupAmount}>{formatCop(group.netMinor)}</Text>
+                    </AppText>
+                    <AppText style={styles.groupAmount}>{formatCop(group.netMinor)}</AppText>
                   </View>
                 </>
               )}

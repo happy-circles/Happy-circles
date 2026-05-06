@@ -93,13 +93,15 @@ describe('session state helpers', () => {
     expect(deriveProfileCompletionState(profile({ phone_e164: null }), true)).toBe('incomplete');
     expect(deriveProfileCompletionState(profile({}), true)).toBe('complete');
     expect(deriveDeviceTrustState(trustedDevice({ trust_state: 'revoked' }))).toBe('revoked');
-    expect(resolveStatusAfterAccountLoad({
-      hasSession: true,
-      biometricsEnabled: true,
-      deviceTrustState: 'trusted',
-      initialLock: true,
-      preserveLocked: false,
-    })).toBe('signed_in_locked');
+    expect(
+      resolveStatusAfterAccountLoad({
+        hasSession: true,
+        biometricsEnabled: true,
+        deviceTrustState: 'trusted',
+        initialLock: true,
+        preserveLocked: false,
+      }),
+    ).toBe('signed_in_locked');
   });
 
   it('builds setup state from profile, email and permissions', () => {

@@ -30,7 +30,10 @@ export function getCounterpartyUserId(
   return null;
 }
 
-export function groupBy<K extends string, V>(items: readonly V[], getKey: (item: V) => K): Map<K, V[]> {
+export function groupBy<K extends string, V>(
+  items: readonly V[],
+  getKey: (item: V) => K,
+): Map<K, V[]> {
   const grouped = new Map<K, V[]>();
 
   for (const item of items) {
@@ -60,7 +63,9 @@ export function buildNameByUserId(
   return names;
 }
 
-export function buildProfileByUserId(profiles: readonly UserProfileRow[]): Map<string, UserProfileRow> {
+export function buildProfileByUserId(
+  profiles: readonly UserProfileRow[],
+): Map<string, UserProfileRow> {
   return new Map(profiles.map((profile) => [profile.id, profile]));
 }
 

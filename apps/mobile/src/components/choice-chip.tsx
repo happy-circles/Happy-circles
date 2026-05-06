@@ -1,13 +1,13 @@
 import {
   Pressable,
   StyleSheet,
-  Text,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface ChoiceChipProps {
   readonly label: string;
@@ -34,9 +34,9 @@ export function ChoiceChip({
         style,
       ]}
     >
-      <Text style={[styles.label, selected ? styles.selectedLabel : null, labelStyle]}>
+      <AppText style={[styles.label, selected ? styles.selectedLabel : null, labelStyle]}>
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }

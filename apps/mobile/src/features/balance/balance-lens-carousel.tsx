@@ -7,7 +7,7 @@ import type {
   NativeSyntheticEvent,
   ScrollView as ScrollViewType,
 } from 'react-native';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import type {
   BalanceAnalyticsCategoryRowDto,
@@ -50,6 +50,7 @@ import {
   transactionFilterHref,
   type BalanceFocus,
 } from './balance-helpers';
+import { AppText } from '@/components/app-text';
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -100,13 +101,13 @@ function FocusCardTitle({
 }) {
   return (
     <View style={styles.focusCardHeader}>
-      <Text numberOfLines={1} style={styles.focusCardTitle}>
+      <AppText numberOfLines={1} style={styles.focusCardTitle}>
         {children}
-      </Text>
+      </AppText>
       <View style={styles.focusCardContextPill}>
-        <Text numberOfLines={1} style={styles.focusCardContextText}>
+        <AppText numberOfLines={1} style={styles.focusCardContextText}>
           {contextLabel}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -160,7 +161,7 @@ function TrendChip({
         }
         size={15}
       />
-      <Text
+      <AppText
         numberOfLines={1}
         style={[
           styles.trendChipValue,
@@ -169,10 +170,10 @@ function TrendChip({
         ]}
       >
         {hasComparison ? valueLabel : 'Sin data'}
-      </Text>
-      <Text numberOfLines={1} style={styles.trendChipContext}>
+      </AppText>
+      <AppText numberOfLines={1} style={styles.trendChipContext}>
         {contextLabel}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -193,17 +194,17 @@ function BalanceCarouselMetricItem({
   return (
     <View style={styles.balanceMetricItem}>
       <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
-      <Text numberOfLines={1} style={[styles.balanceMetricLabel, { color: visual.accentColor }]}>
+      <AppText numberOfLines={1} style={[styles.balanceMetricLabel, { color: visual.accentColor }]}>
         {visual.label}
-      </Text>
-      <Text
+      </AppText>
+      <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.82}
         numberOfLines={1}
         style={[styles.balanceMetricAmount, { color: visual.accentColor }]}
       >
         {formatCop(amountMinor)}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -218,7 +219,7 @@ function EmptyCardState({
   return (
     <View style={styles.emptyCardState}>
       <Ionicons color={theme.colors.textMuted} name={icon} size={18} />
-      <Text style={styles.emptyCardText}>{label}</Text>
+      <AppText style={styles.emptyCardText}>{label}</AppText>
     </View>
   );
 }
@@ -243,7 +244,7 @@ function BalanceFocusCard({
     <SurfaceCard padding="lg" style={[styles.focusCard, styles.balanceFocusCard]}>
       <FocusCardTitle contextLabel={periodContextLabel}>Balance actual</FocusCardTitle>
       <View style={styles.balanceHomeBody}>
-        <Text
+        <AppText
           adjustsFontSizeToFit
           minimumFontScale={0.78}
           numberOfLines={1}
@@ -253,7 +254,7 @@ function BalanceFocusCard({
           ]}
         >
           {formatHomeBalanceCop(netBalanceMinor)}
-        </Text>
+        </AppText>
         <TrendChip amountMinor={periodChangeMinor} centered contextLabel={periodContextLabel} />
         <View style={styles.homeBalanceMetricsRow}>
           <BalanceCarouselMetricItem amountMinor={totalIOweMinor} tone="negative" />
@@ -296,13 +297,13 @@ function ImpactBars({
           <View key={row.key} style={styles.barRow}>
             <View style={styles.barRowHeader}>
               <View style={styles.barCopy}>
-                <Text numberOfLines={1} style={styles.barLabel}>
+                <AppText numberOfLines={1} style={styles.barLabel}>
                   {row.label}
-                </Text>
+                </AppText>
                 <View style={styles.barMetaLine}>
-                  <Text numberOfLines={1} style={[styles.cardMeta, styles.barMetaText]}>
+                  <AppText numberOfLines={1} style={[styles.cardMeta, styles.barMetaText]}>
                     {row.meta}
-                  </Text>
+                  </AppText>
                   {row.trendMinor !== undefined ? (
                     <View
                       style={[
@@ -328,7 +329,7 @@ function ImpactBars({
                         }
                         size={10}
                       />
-                      <Text
+                      <AppText
                         numberOfLines={1}
                         style={[
                           styles.miniTrendText,
@@ -337,12 +338,12 @@ function ImpactBars({
                         ]}
                       >
                         {signedFormatCompactCop(row.trendMinor)}
-                      </Text>
+                      </AppText>
                     </View>
                   ) : null}
                 </View>
               </View>
-              <Text
+              <AppText
                 numberOfLines={1}
                 style={[
                   styles.barAmount,
@@ -351,7 +352,7 @@ function ImpactBars({
                 ]}
               >
                 {formatCompactCop(row.amountMinor)}
-              </Text>
+              </AppText>
             </View>
             <View style={styles.barTrack}>
               <View
@@ -423,19 +424,19 @@ function RankingRow({
         <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
       </View>
       <View style={styles.rankingCopy}>
-        <Text numberOfLines={1} style={styles.detailRowTitle}>
+        <AppText numberOfLines={1} style={styles.detailRowTitle}>
           {label}
-        </Text>
+        </AppText>
         {description ? (
-          <Text numberOfLines={1} style={styles.detailRowDescription}>
+          <AppText numberOfLines={1} style={styles.detailRowDescription}>
             {description}
-          </Text>
+          </AppText>
         ) : null}
-        <Text numberOfLines={1} style={styles.cardMeta}>
+        <AppText numberOfLines={1} style={styles.cardMeta}>
           {meta}
-        </Text>
+        </AppText>
       </View>
-      <Text
+      <AppText
         numberOfLines={1}
         style={[
           styles.detailRowAmount,
@@ -444,7 +445,7 @@ function RankingRow({
         ]}
       >
         {valueLabel}
-      </Text>
+      </AppText>
     </>
   );
 
@@ -492,37 +493,41 @@ export function BalanceDetail({
         period={period}
       />
       <SurfaceCard padding="lg" style={styles.detailCard} variant="elevated">
-        <Text style={styles.cardEyebrow}>{currentPeriod.labels.current}</Text>
-        <Text style={styles.detailHeroAmount}>{formatCop(lensSummary.finalMinor)}</Text>
-        <Text style={styles.focusCaption}>
+        <AppText style={styles.cardEyebrow}>{currentPeriod.labels.current}</AppText>
+        <AppText style={styles.detailHeroAmount}>{formatCop(lensSummary.finalMinor)}</AppText>
+        <AppText style={styles.focusCaption}>
           Inicio {formatCop(lensSummary.initialMinor)} - Cambio{' '}
           {signedFormatCop(lensSummary.deltaMinor)}
-        </Text>
+        </AppText>
         <TrendChip changeRatio={lensSummary.changeRatio} contextLabel={periodScopeLabel(period)} />
-        <Text style={styles.detailInsight}>
+        <AppText style={styles.detailInsight}>
           {comparisonCopy(lensSummary.changeRatio, currentPeriod.labels.previous)}
-        </Text>
+        </AppText>
       </SurfaceCard>
       <SurfaceCard padding="md" variant="muted">
-        <Text style={styles.detailInsight}>{currentPeriod.insight}</Text>
+        <AppText style={styles.detailInsight}>{currentPeriod.insight}</AppText>
       </SurfaceCard>
       <View style={styles.detailGrid}>
         {topPerson ? (
           <SurfaceCard padding="md" style={styles.detailGridCard}>
-            <Text style={styles.cardEyebrow}>Persona clave</Text>
-            <Text numberOfLines={1} style={styles.detailRowTitle}>
+            <AppText style={styles.cardEyebrow}>Persona clave</AppText>
+            <AppText numberOfLines={1} style={styles.detailRowTitle}>
               {topPerson.label}
-            </Text>
-            <Text style={styles.cardMeta}>{formatCop(personLensAmount(topPerson, lens))}</Text>
+            </AppText>
+            <AppText style={styles.cardMeta}>
+              {formatCop(personLensAmount(topPerson, lens))}
+            </AppText>
           </SurfaceCard>
         ) : null}
         {topCategory ? (
           <SurfaceCard padding="md" style={styles.detailGridCard}>
-            <Text style={styles.cardEyebrow}>Categoria clave</Text>
-            <Text numberOfLines={1} style={styles.detailRowTitle}>
+            <AppText style={styles.cardEyebrow}>Categoria clave</AppText>
+            <AppText numberOfLines={1} style={styles.detailRowTitle}>
               {topCategory.label}
-            </Text>
-            <Text style={styles.cardMeta}>{formatCop(categoryLensAmount(topCategory, lens))}</Text>
+            </AppText>
+            <AppText style={styles.cardMeta}>
+              {formatCop(categoryLensAmount(topCategory, lens))}
+            </AppText>
           </SurfaceCard>
         ) : null}
       </View>
@@ -594,12 +599,14 @@ export function ProjectionDetail({
     <SectionBlock title="Detalle de proyeccion">
       <SurfaceCard padding="md" style={styles.projectionSummary} variant="muted">
         <View style={styles.inlineMetric}>
-          <Text style={styles.inlineMetricValue}>{overview.pendingCount}</Text>
-          <Text style={styles.inlineMetricLabel}>pendientes abiertos</Text>
+          <AppText style={styles.inlineMetricValue}>{overview.pendingCount}</AppText>
+          <AppText style={styles.inlineMetricLabel}>pendientes abiertos</AppText>
         </View>
         <View style={styles.inlineMetric}>
-          <Text style={styles.inlineMetricValue}>{formatCompactCop(overview.impactMinor)}</Text>
-          <Text style={styles.inlineMetricLabel}>impacto estimado</Text>
+          <AppText style={styles.inlineMetricValue}>
+            {formatCompactCop(overview.impactMinor)}
+          </AppText>
+          <AppText style={styles.inlineMetricLabel}>impacto estimado</AppText>
         </View>
       </SurfaceCard>
       <SurfaceCard padding="md">
@@ -647,7 +654,9 @@ export function PeopleDetail({
       <HappyWaterfallChart groups={currentPeriod.waterfallByPerson} />
       <SurfaceCard padding="md">
         {sortedPeople.length === 0 ? (
-          <Text style={styles.supportText}>Todavia no hay actividad visible en este periodo.</Text>
+          <AppText style={styles.supportText}>
+            Todavia no hay actividad visible en este periodo.
+          </AppText>
         ) : (
           sortedPeople.map((row) => (
             <RankingRow
@@ -699,9 +708,9 @@ export function CategoriesDetail({
       <HappyWaterfallChart groups={currentPeriod.waterfallByCategory} />
       <SurfaceCard padding="md">
         {sortedCategories.length === 0 ? (
-          <Text style={styles.supportText}>
+          <AppText style={styles.supportText}>
             Todavia no hay categorias con impacto en este periodo.
-          </Text>
+          </AppText>
         ) : (
           sortedCategories.map((row) => (
             <RankingRow
@@ -742,39 +751,41 @@ export function HappyCirclesDetail({
         <HappyCircleCard proposal={settlementPreview} variant="compact" />
       ) : (
         <SurfaceCard padding="md" variant="muted">
-          <Text style={styles.supportText}>No hay un Happy Circle activo en este momento.</Text>
+          <AppText style={styles.supportText}>
+            No hay un Happy Circle activo en este momento.
+          </AppText>
         </SurfaceCard>
       )}
       <View style={styles.detailGrid}>
         <SurfaceCard padding="md" style={styles.detailGridCard}>
-          <Text style={styles.cardEyebrow}>Monto resuelto</Text>
-          <Text style={styles.detailMetricAmount}>
+          <AppText style={styles.cardEyebrow}>Monto resuelto</AppText>
+          <AppText style={styles.detailMetricAmount}>
             {formatCop(currentPeriod.settlements.resolvedMinor)}
-          </Text>
-          <Text style={styles.cardMeta}>
+          </AppText>
+          <AppText style={styles.cardMeta}>
             {comparisonCopy(currentPeriod.settlements.changeRatio, currentPeriod.labels.previous)}
-          </Text>
+          </AppText>
         </SurfaceCard>
         <SurfaceCard padding="md" style={styles.detailGridCard}>
-          <Text style={styles.cardEyebrow}>Movimientos ahorrados</Text>
-          <Text style={styles.detailMetricAmount}>
+          <AppText style={styles.cardEyebrow}>Movimientos ahorrados</AppText>
+          <AppText style={styles.detailMetricAmount}>
             {currentPeriod.settlements.savedMovementsCount}
-          </Text>
-          <Text style={styles.cardMeta}>
+          </AppText>
+          <AppText style={styles.cardMeta}>
             {currentPeriod.settlements.movementCount} movimiento
             {currentPeriod.settlements.movementCount === 1 ? '' : 's'} ejecutado
             {currentPeriod.settlements.movementCount === 1 ? '' : 's'}
-          </Text>
+          </AppText>
         </SurfaceCard>
         <SurfaceCard padding="md" style={styles.detailGridCard}>
-          <Text style={styles.cardEyebrow}>Circulos participados</Text>
-          <Text style={styles.detailMetricAmount}>
+          <AppText style={styles.cardEyebrow}>Circulos participados</AppText>
+          <AppText style={styles.detailMetricAmount}>
             {currentPeriod.settlements.participatedCount}
-          </Text>
-          <Text style={styles.cardMeta}>
+          </AppText>
+          <AppText style={styles.cardMeta}>
             {currentPeriod.settlements.activeCount} activo
             {currentPeriod.settlements.activeCount === 1 ? '' : 's'} hoy
-          </Text>
+          </AppText>
         </SurfaceCard>
       </View>
     </SectionBlock>
@@ -874,27 +885,27 @@ function SettlementsFocusCard({
   return (
     <SurfaceCard padding="lg" style={styles.focusCard}>
       <FocusCardTitle contextLabel={periodContextLabel}>Happy Circles</FocusCardTitle>
-      <Text
+      <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.78}
         numberOfLines={1}
         style={styles.focusAmount}
       >
         {formatCop(resolvedMinor)}
-      </Text>
+      </AppText>
       <TrendChip changeRatio={changeRatio} contextLabel={periodContextLabel} />
       <View style={styles.compactMetricGrid}>
         <View style={styles.compactMetricTile}>
-          <Text style={styles.compactMetricValue}>{savedMovementsCount}</Text>
-          <Text style={styles.compactMetricLabel}>movimientos ahorrados</Text>
+          <AppText style={styles.compactMetricValue}>{savedMovementsCount}</AppText>
+          <AppText style={styles.compactMetricLabel}>movimientos ahorrados</AppText>
         </View>
         <View style={styles.compactMetricTile}>
-          <Text style={styles.compactMetricValue}>{activeCount}</Text>
-          <Text style={styles.compactMetricLabel}>activos</Text>
+          <AppText style={styles.compactMetricValue}>{activeCount}</AppText>
+          <AppText style={styles.compactMetricLabel}>activos</AppText>
         </View>
         <View style={styles.compactMetricTile}>
-          <Text style={styles.compactMetricValue}>{movementCount}</Text>
-          <Text style={styles.compactMetricLabel}>ejecutados</Text>
+          <AppText style={styles.compactMetricValue}>{movementCount}</AppText>
+          <AppText style={styles.compactMetricLabel}>ejecutados</AppText>
         </View>
       </View>
     </SurfaceCard>

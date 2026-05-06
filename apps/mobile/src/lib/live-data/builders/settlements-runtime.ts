@@ -18,7 +18,9 @@ import { computeChangeRatio, dateMs, formatRelativeLabel, isWithinRange } from '
 import { LIVE_DATA_CTA, LIVE_DATA_ROUTES } from '../presentation';
 import { formatCop } from '../../data';
 
-export function normalizeSettlementDetailDecision(decision: string | null): SettlementDetailDecision {
+export function normalizeSettlementDetailDecision(
+  decision: string | null,
+): SettlementDetailDecision {
   if (decision === 'approved') {
     return 'approved';
   }
@@ -180,7 +182,10 @@ export function settlementProposalTotalAmount(proposal: SettlementProposalRow): 
   );
 }
 
-export function settlementSavedMovementsCount(participantCount: number, movementCount: number): number {
+export function settlementSavedMovementsCount(
+  participantCount: number,
+  movementCount: number,
+): number {
   return Math.max(participantCount - movementCount, 0);
 }
 
@@ -310,7 +315,6 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
   });
 }
 
-
 export function buildSettlementDetail(
   proposal: SettlementProposalRow,
   participants: readonly SettlementParticipantRow[],
@@ -387,7 +391,6 @@ export function buildSettlementDetail(
     explainers,
   };
 }
-
 
 export function buildActiveSettlementPreview(input: {
   readonly proposals: readonly SettlementProposalRow[];

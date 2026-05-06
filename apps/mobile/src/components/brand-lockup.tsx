@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 
 import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 type LockupViewStyle = StyleProp<ViewStyle> | object | readonly unknown[];
 
@@ -47,12 +48,12 @@ export function BrandLockup({
         {logo ?? <HappyCirclesGlyph size={logoSize} />}
       </Animated.View>
       <Animated.View style={[styles.titleContainer, titleContainerStyle as never]}>
-        <Text
+        <AppText
           numberOfLines={1}
           style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }, titleStyle]}
         >
           {title}
-        </Text>
+        </AppText>
       </Animated.View>
     </Animated.View>
   );

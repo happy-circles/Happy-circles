@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
@@ -64,6 +64,7 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 
@@ -322,9 +323,9 @@ function FilterPill({
         pressed ? styles.filterPillPressed : null,
       ]}
     >
-      <Text style={[styles.filterPillText, selected ? styles.filterPillTextSelected : null]}>
+      <AppText style={[styles.filterPillText, selected ? styles.filterPillTextSelected : null]}>
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -400,7 +401,9 @@ export function TransactionsScreen() {
       return;
     }
 
-    const nextKeys = unviewedPendingTransactionItems.map((item) => notificationViewKeyForItem(item));
+    const nextKeys = unviewedPendingTransactionItems.map((item) =>
+      notificationViewKeyForItem(item),
+    );
     const nextKeySet = new Set(nextKeys);
     setOptimisticNotificationViewedKeys((current) => {
       const merged = new Set(current);
@@ -437,7 +440,7 @@ export function TransactionsScreen() {
       >
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <Text style={styles.supportText}>Leyendo el ledger real desde Supabase.</Text>
+          <AppText style={styles.supportText}>Leyendo el ledger real desde Supabase.</AppText>
         </View>
       </ScreenShell>
     );
@@ -452,7 +455,7 @@ export function TransactionsScreen() {
         subtitle="No pudimos cargar tus transacciones."
         title="Transacciones"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -497,9 +500,9 @@ export function TransactionsScreen() {
               name={transactionCategoryIcon(categoryFilter) as keyof typeof Ionicons.glyphMap}
               size={13}
             />
-            <Text style={styles.categoryFilterText}>
+            <AppText style={styles.categoryFilterText}>
               Categoria: {transactionCategoryLabel(categoryFilter)}
-            </Text>
+            </AppText>
           </View>
         ) : null}
       </View>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
@@ -16,6 +16,7 @@ import { FieldBlock } from './field-block';
 import { PendingSnippetCard } from './pending-snippet-card';
 import { PrimaryAction } from './primary-action';
 import { TransactionCategoryPicker } from './transaction-category-picker';
+import { AppText } from '@/components/app-text';
 
 export interface PendingFinancialRequestHistoryStep {
   readonly id: string;
@@ -96,7 +97,7 @@ function ResponseActionButton({
       ]}
     >
       <Ionicons color={iconColor} name={icon} size={15} />
-      <Text
+      <AppText
         numberOfLines={1}
         style={[
           styles.responseActionText,
@@ -105,7 +106,7 @@ function ResponseActionButton({
         ]}
       >
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -216,16 +217,16 @@ export function PendingFinancialRequestCard({
             <View style={styles.historyToggleCopy}>
               <Ionicons color={theme.colors.primary} name="git-branch-outline" size={15} />
               <View style={styles.historyToggleText}>
-                <Text style={styles.historyTitle}>Historia del pendiente</Text>
-                <Text numberOfLines={1} style={styles.historySummary}>
+                <AppText style={styles.historyTitle}>Historia del pendiente</AppText>
+                <AppText numberOfLines={1} style={styles.historySummary}>
                   {historyChangeLabel} - actual {formatCop(currentHistoryAmountMinor)}
-                </Text>
+                </AppText>
               </View>
             </View>
             <View style={styles.historyToggleAction}>
-              <Text style={styles.historyToggleActionText}>
+              <AppText style={styles.historyToggleActionText}>
                 {isHistoryExpanded ? 'Ocultar' : 'Ver historia'}
-              </Text>
+              </AppText>
               <Ionicons
                 color={theme.colors.textMuted}
                 name={isHistoryExpanded ? 'chevron-up' : 'chevron-forward'}
@@ -264,9 +265,9 @@ export function PendingFinancialRequestCard({
 
                     <View style={styles.historyStepBody}>
                       <View style={styles.historyStepTop}>
-                        <Text style={styles.historyStepTitle}>{step.title}</Text>
+                        <AppText style={styles.historyStepTitle}>{step.title}</AppText>
                         {stepAmountLabel ? (
-                          <Text
+                          <AppText
                             style={[
                               styles.historyAmount,
                               amountTone === 'positive' ? styles.historyAmountPositive : null,
@@ -275,11 +276,11 @@ export function PendingFinancialRequestCard({
                             ]}
                           >
                             {stepAmountLabel}
-                          </Text>
+                          </AppText>
                         ) : null}
                       </View>
-                      <Text style={styles.historyDescription}>{step.description}</Text>
-                      {stepMeta ? <Text style={styles.historyMeta}>{stepMeta}</Text> : null}
+                      <AppText style={styles.historyDescription}>{step.description}</AppText>
+                      {stepMeta ? <AppText style={styles.historyMeta}>{stepMeta}</AppText> : null}
                     </View>
                   </View>
                 );
@@ -330,7 +331,7 @@ export function PendingFinancialRequestCard({
                   value={amendmentAmount}
                 />
                 {amendmentAmountMinor > 0 ? (
-                  <Text style={styles.amountPreview}>{formatCop(amendmentAmountMinor)}</Text>
+                  <AppText style={styles.amountPreview}>{formatCop(amendmentAmountMinor)}</AppText>
                 ) : null}
               </FieldBlock>
 

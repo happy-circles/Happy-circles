@@ -10,13 +10,11 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  Text,
   View,
 } from 'react-native';
-import type { TextInput } from 'react-native';
 
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
-import { AppTextInput } from '@/components/app-text-input';
+import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import {
   IdentityFlowField,
   IdentityFlowForm,
@@ -57,6 +55,7 @@ import {
   validateSetupProfile,
   type SecurityTone,
 } from './setup-account-helpers';
+import { AppText } from '@/components/app-text';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -104,10 +103,12 @@ function SecurityStatusRow({
         <Ionicons color={visual.color} name={icon} size={20} />
       </View>
       <View style={styles.sectionCopy}>
-        <Text style={styles.readOnlyTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.readOnlySubtitle}>{subtitle}</Text> : null}
+        <AppText style={styles.readOnlyTitle}>{title}</AppText>
+        {subtitle ? <AppText style={styles.readOnlySubtitle}>{subtitle}</AppText> : null}
       </View>
-      {trailing ?? <Text style={[styles.securityStatus, { color: visual.color }]}>{status}</Text>}
+      {trailing ?? (
+        <AppText style={[styles.securityStatus, { color: visual.color }]}>{status}</AppText>
+      )}
     </View>
   );
 }
@@ -157,9 +158,9 @@ export function SetupAccountScreen() {
     readonly phoneNationalNumber?: string;
     readonly photo?: string;
   }>({});
-  const fullNameInputRef = useRef<TextInput | null>(null);
-  const phoneInputRef = useRef<TextInput | null>(null);
-  const trustPasswordInputRef = useRef<TextInput | null>(null);
+  const fullNameInputRef = useRef<AppTextInputRef | null>(null);
+  const phoneInputRef = useRef<AppTextInputRef | null>(null);
+  const trustPasswordInputRef = useRef<AppTextInputRef | null>(null);
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
@@ -596,7 +597,9 @@ export function SetupAccountScreen() {
           {message ? (
             <MessageBanner message={message} tone="neutral" />
           ) : profileErrors.photo ? (
-            <Text style={[styles.helperText, styles.helperTextDanger]}>{profileErrors.photo}</Text>
+            <AppText style={[styles.helperText, styles.helperTextDanger]}>
+              {profileErrors.photo}
+            </AppText>
           ) : null}
         </IdentityFlowMessageSlot>
       ) : null}
@@ -624,12 +627,12 @@ export function SetupAccountScreen() {
               />
             </View>
             <View style={styles.photoRequirementCopy}>
-              <Text style={styles.photoRequirementTitle}>Foto de perfil</Text>
-              <Text style={styles.photoRequirementSubtitle}>
+              <AppText style={styles.photoRequirementTitle}>Foto de perfil</AppText>
+              <AppText style={styles.photoRequirementSubtitle}>
                 {hasSavedPhoto
                   ? 'Lista para que tus circulos te reconozcan.'
                   : 'Opcional; puedes agregarla ahora o despues.'}
-              </Text>
+              </AppText>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -641,9 +644,9 @@ export function SetupAccountScreen() {
                 avatarMutation.isPending ? styles.disabledAction : null,
               ]}
             >
-              <Text style={styles.photoRequirementActionText}>
+              <AppText style={styles.photoRequirementActionText}>
                 {hasSavedPhoto ? 'Cambiar' : 'Agregar'}
-              </Text>
+              </AppText>
             </Pressable>
           </View>
         ) : null}
@@ -693,7 +696,7 @@ export function SetupAccountScreen() {
                       pressed ? styles.pressed : null,
                     ]}
                   >
-                    <Text style={styles.callingCodeText}>{selectedCountry.callingCode}</Text>
+                    <AppText style={styles.callingCodeText}>{selectedCountry.callingCode}</AppText>
                   </Pressable>
 
                   <IdentityFlowTextInput
@@ -726,8 +729,8 @@ export function SetupAccountScreen() {
                           index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
                         ]}
                       >
-                        <Text style={styles.countryLabel}>{country.label}</Text>
-                        <Text style={styles.countryCode}>{country.callingCode}</Text>
+                        <AppText style={styles.countryLabel}>{country.label}</AppText>
+                        <AppText style={styles.countryCode}>{country.callingCode}</AppText>
                       </Pressable>
                     ))}
                   </View>
@@ -740,7 +743,7 @@ export function SetupAccountScreen() {
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionCopy}>
-              <Text style={styles.sectionTitle}>Seguridad</Text>
+              <AppText style={styles.sectionTitle}>Seguridad</AppText>
             </View>
           </View>
 
@@ -766,18 +769,18 @@ export function SetupAccountScreen() {
                       securityBusyKey !== null ? styles.disabledAction : null,
                     ]}
                   >
-                    <Text style={styles.inlineButtonText}>
+                    <AppText style={styles.inlineButtonText}>
                       {securityBusyKey === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
-                    </Text>
+                    </AppText>
                   </Pressable>
                 )
               }
             />
             {!session.isEmailConfirmed ? (
               <View style={styles.securityAction}>
-                <Text style={styles.helperText}>
+                <AppText style={styles.helperText}>
                   Usa el codigo de 8 digitos si el enlace no abre la app.
-                </Text>
+                </AppText>
                 <OtpCodeInput
                   disabled={securityBusyKey !== null}
                   hasError={emailConfirmationCode.length > 0 && !emailConfirmationCodeValid}
@@ -836,10 +839,10 @@ export function SetupAccountScreen() {
             {!session.isTrustedDevice ? (
               <View style={styles.securityAction}>
                 {session.canTrustCurrentDeviceWithoutPassword ? (
-                  <Text style={styles.helperText}>
+                  <AppText style={styles.helperText}>
                     Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
                     vez.
-                  </Text>
+                  </AppText>
                 ) : null}
                 {session.linkedMethods.hasEmailPassword &&
                 !session.canTrustCurrentDeviceWithoutPassword ? (

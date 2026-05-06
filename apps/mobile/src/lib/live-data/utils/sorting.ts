@@ -68,7 +68,9 @@ export function sortHistoryItems<
   return [...items].sort(compareHistoryItems);
 }
 
-export function uniqueActivityItemsById<T extends { readonly id: string }>(items: readonly T[]): T[] {
+export function uniqueActivityItemsById<T extends { readonly id: string }>(
+  items: readonly T[],
+): T[] {
   const seenIds = new Set<string>();
   const uniqueItems: T[] = [];
 
@@ -131,7 +133,6 @@ export function uniqueTimelineItemsById(
   return uniqueItems;
 }
 
-
 export function inviteProfileItemTimestamp(item: ActivityItemDto): string {
   const createdAt = (item as { readonly createdAt?: unknown }).createdAt;
   if (typeof createdAt === 'string' && createdAt.length > 0) {
@@ -141,7 +142,9 @@ export function inviteProfileItemTimestamp(item: ActivityItemDto): string {
   return item.happenedAt ?? '';
 }
 
-export function sortInviteProfilePendingItems(items: readonly ActivityItemDto[]): ActivityItemDto[] {
+export function sortInviteProfilePendingItems(
+  items: readonly ActivityItemDto[],
+): ActivityItemDto[] {
   return [...items].sort(
     (left, right) =>
       Date.parse(inviteProfileItemTimestamp(right)) - Date.parse(inviteProfileItemTimestamp(left)),

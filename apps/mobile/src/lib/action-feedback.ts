@@ -120,7 +120,7 @@ function resolveBlockedAction(
   const missingDisplayName =
     context?.profile?.displayName === undefined
       ? false
-      : !((context.profile.displayName ?? '').trim().length);
+      : !(context.profile.displayName ?? '').trim().length;
   const missingEmail =
     normalized.includes('confirma tu correo') ||
     normalized.includes('correo sin confirmar') ||
@@ -133,7 +133,9 @@ function resolveBlockedAction(
 
   if (normalized.includes('completa tu perfil') || normalized.includes('confirma tu correo')) {
     return {
-      title: missingEmail ? 'Confirma tu correo para continuar' : 'Completa tu perfil para continuar',
+      title: missingEmail
+        ? 'Confirma tu correo para continuar'
+        : 'Completa tu perfil para continuar',
       message: missingEmail
         ? 'Reenvia el correo desde tu perfil y abre el enlace de confirmacion.'
         : 'Antes de mover dinero necesitamos nombre usable y celular unico en tu cuenta.',
@@ -149,7 +151,8 @@ function resolveBlockedAction(
   ) {
     return {
       title: 'Valida este dispositivo para continuar',
-      message: 'Esta accion requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
+      message:
+        'Esta accion requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
       ctaLabel: 'Abrir setup',
       route: buildSetupAccountHref('security'),
     };

@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export type MessageBannerTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -31,7 +32,7 @@ export function MessageBanner({ message, tone = 'primary' }: MessageBannerProps)
           tone === 'neutral' ? styles.neutralBar : null,
         ]}
       />
-      <Text
+      <AppText
         style={[
           styles.text,
           tone === 'primary' ? styles.primaryText : null,
@@ -42,7 +43,7 @@ export function MessageBanner({ message, tone = 'primary' }: MessageBannerProps)
         ]}
       >
         {message}
-      </Text>
+      </AppText>
     </View>
   );
 }

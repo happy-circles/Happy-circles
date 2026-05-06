@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
@@ -28,6 +28,7 @@ import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 export interface SettlementDetailScreenProps {
   readonly proposalId: string;
@@ -193,9 +194,9 @@ function FocusedConnectionNode({
           <Ionicons color={theme.colors.muted} name="remove-circle-outline" size={30} />
         )}
       </View>
-      <Text numberOfLines={1} style={styles.focusNodeLabel}>
+      <AppText numberOfLines={1} style={styles.focusNodeLabel}>
         {displayLabel}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -250,7 +251,7 @@ function FocusedCircleConnections({
           fill={outgoingMovement ? theme.colors.warning : theme.colors.surfaceSoft}
         />
       </Svg>
-      <Text
+      <AppText
         numberOfLines={1}
         style={[
           styles.focusArrowLabel,
@@ -259,8 +260,8 @@ function FocusedCircleConnections({
         ]}
       >
         Te paga
-      </Text>
-      <Text
+      </AppText>
+      <AppText
         numberOfLines={1}
         style={[
           styles.focusArrowLabel,
@@ -269,7 +270,7 @@ function FocusedCircleConnections({
         ]}
       >
         Le pagas
-      </Text>
+      </AppText>
       <View style={[styles.focusNodeAbsolute, styles.focusNodeIncoming]}>
         <FocusedConnectionNode
           participant={incomingParticipant}
@@ -286,24 +287,24 @@ function FocusedCircleConnections({
         />
       </View>
       <View style={[styles.focusExplanationPill, styles.focusExplanationIncoming]}>
-        <Text numberOfLines={1} style={styles.focusExplanationLabel}>
+        <AppText numberOfLines={1} style={styles.focusExplanationLabel}>
           {incomingParticipant
             ? `${incomingParticipant.label.split(/\s+/)[0]} te paga`
             : 'Nadie te paga'}
-        </Text>
-        <Text style={[styles.focusExplanationAmount, { color: theme.colors.success }]}>
+        </AppText>
+        <AppText style={[styles.focusExplanationAmount, { color: theme.colors.success }]}>
           {incomingAmount}
-        </Text>
+        </AppText>
       </View>
       <View style={[styles.focusExplanationPill, styles.focusExplanationOutgoing]}>
-        <Text numberOfLines={1} style={styles.focusExplanationLabel}>
+        <AppText numberOfLines={1} style={styles.focusExplanationLabel}>
           {outgoingParticipant
             ? `Pagas a ${outgoingParticipant.label.split(/\s+/)[0]}`
             : 'No pagas'}
-        </Text>
-        <Text style={[styles.focusExplanationAmount, { color: theme.colors.warning }]}>
+        </AppText>
+        <AppText style={[styles.focusExplanationAmount, { color: theme.colors.warning }]}>
           {outgoingAmount}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -463,7 +464,9 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         title="Happy Circle"
       >
         <HappyCirclesMotion size={108} variant="loading" />
-        <Text style={styles.supportText}>Estamos leyendo participantes, movimientos y estado.</Text>
+        <AppText style={styles.supportText}>
+          Estamos leyendo participantes, movimientos y estado.
+        </AppText>
       </ScreenShell>
     );
   }
@@ -477,7 +480,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         subtitle="No pudimos cargar esta propuesta."
         title="Happy Circle"
       >
-        <Text style={styles.supportText}>{snapshotQuery.error.message}</Text>
+        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
   }
@@ -536,19 +539,19 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           label={settlementStatusLabel(settlement.status)}
           tone={settlementStatusTone(settlement.status)}
         />
-        <Text style={styles.summaryTitle}>Que pasa con este Happy Circle</Text>
-        <Text style={styles.summaryBody}>{summaryText}</Text>
+        <AppText style={styles.summaryTitle}>Que pasa con este Happy Circle</AppText>
+        <AppText style={styles.summaryBody}>{summaryText}</AppText>
       </SurfaceCard>
 
       <SurfaceCard padding="lg" style={styles.circleGraphCard} variant="elevated">
         <View style={styles.circleGraphHeader}>
           <View style={styles.circleGraphTitleBlock}>
-            <Text style={styles.circleGraphTitle}>Estado del Circle</Text>
-            <Text style={styles.circleGraphSubtitle}>
+            <AppText style={styles.circleGraphTitle}>Estado del Circle</AppText>
+            <AppText style={styles.circleGraphSubtitle}>
               {graphFocused
                 ? 'Tus conexiones directas dentro del cierre.'
                 : 'Vista completa del Circle.'}
-            </Text>
+            </AppText>
           </View>
           <Pressable
             accessibilityLabel={

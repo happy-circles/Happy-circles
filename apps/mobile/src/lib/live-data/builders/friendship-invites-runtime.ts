@@ -60,7 +60,6 @@ export function buildLatestDeliveryByInviteId(
   return map;
 }
 
-
 export function inviteTerminalTone(status: string): PersonTimelineItemDto['tone'] {
   if (status === 'accepted') {
     return 'positive';
@@ -84,7 +83,10 @@ export function isSpecificInviteName(value: string | null | undefined): boolean 
   );
 }
 
-export function inviteNamesMatch(left: string | null | undefined, right: string | null | undefined) {
+export function inviteNamesMatch(
+  left: string | null | undefined,
+  right: string | null | undefined,
+) {
   return left?.trim().toLocaleLowerCase('es-CO') === right?.trim().toLocaleLowerCase('es-CO');
 }
 

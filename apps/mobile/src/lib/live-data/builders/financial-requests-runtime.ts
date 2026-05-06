@@ -32,7 +32,10 @@ export function buildPendingRequestImpactTitle(input: {
   return direction === 'owes_me' ? 'Entrada propuesta' : 'Salida propuesta';
 }
 
-export function formatPendingRequestTitle(request: FinancialRequestRow, currentUserId: string): string {
+export function formatPendingRequestTitle(
+  request: FinancialRequestRow,
+  currentUserId: string,
+): string {
   return buildPendingRequestImpactTitle({
     request,
     currentUserId,
@@ -394,7 +397,9 @@ export function buildRequestEventSubtitle(
   happenedAt: string,
   nowMs: number,
 ): string {
-  return [flowLabel, description ?? 'Sin descripcion', formatRelativeLabel(happenedAt, nowMs)].join(' | ');
+  return [flowLabel, description ?? 'Sin descripcion', formatRelativeLabel(happenedAt, nowMs)].join(
+    ' | ',
+  );
 }
 
 export function buildPersonTimeline(input: {
@@ -603,7 +608,9 @@ export function buildPendingFinancialRequestItems(input: {
         status:
           request.responder_user_id === input.currentUserId ? 'requires_you' : 'waiting_other_side',
         ctaLabel: LIVE_DATA_CTA.respond,
-        href: counterparty ? LIVE_DATA_ROUTES.person(counterparty.userId) : LIVE_DATA_ROUTES.activity,
+        href: counterparty
+          ? LIVE_DATA_ROUTES.person(counterparty.userId)
+          : LIVE_DATA_ROUTES.activity,
         amountMinor: request.amount_minor,
         category: normalizeTransactionCategory(request.category),
         counterpartyLabel: counterparty?.displayName,

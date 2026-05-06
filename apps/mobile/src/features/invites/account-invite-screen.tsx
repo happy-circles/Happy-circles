@@ -2,7 +2,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import {
   IdentityFlowField,
@@ -30,6 +30,7 @@ import {
 import { theme } from '@/lib/theme';
 import { accountInviteStyles as styles } from './account-invite-screen.styles';
 import { useSession } from '@/providers/session-provider';
+import { AppText } from '@/components/app-text';
 
 type IoniconName = ComponentProps<typeof IdentityFlowField>['icon'];
 
@@ -166,8 +167,8 @@ function ActivationDetailRow({
   return (
     <IdentityFlowField icon={icon} label={title} reserveError={false}>
       <View style={styles.detailValue}>
-        <Text style={styles.detailTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.detailSubtitle}>{subtitle}</Text> : null}
+        <AppText style={styles.detailTitle}>{title}</AppText>
+        {subtitle ? <AppText style={styles.detailSubtitle}>{subtitle}</AppText> : null}
       </View>
     </IdentityFlowField>
   );
@@ -368,7 +369,7 @@ export function AccountInviteScreen() {
               />
             ) : null}
 
-            <Text style={styles.body}>{inviteReasonLabel(preview.reason)}</Text>
+            <AppText style={styles.body}>{inviteReasonLabel(preview.reason)}</AppText>
 
             {session.status === 'signed_out' && !tokenUnavailable ? (
               <View style={styles.actionStack}>
@@ -434,11 +435,11 @@ export function AccountInviteScreen() {
             {session.status !== 'signed_out' &&
             canActivate &&
             (needsSetup || needsTrustedDevice) ? (
-              <Text style={styles.actionHint}>
+              <AppText style={styles.actionHint}>
                 {needsSetup
                   ? setupBlockerSubtitle
                   : 'Hace falta validar este telefono antes de activar la cuenta.'}
-              </Text>
+              </AppText>
             ) : null}
           </IdentityFlowForm>
         ) : null}

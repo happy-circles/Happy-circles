@@ -1,15 +1,7 @@
 import { CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
 import { AppAvatar } from '@/components/app-avatar';
@@ -26,15 +18,11 @@ import {
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
 import { formatCop } from '@/lib/data';
-import {
-  type FriendshipInviteDeliveryResult,
-  type PeopleTargetResolution,
-} from '@/lib/live-data';
+import { type FriendshipInviteDeliveryResult, type PeopleTargetResolution } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
-import {
-  type ContactCandidate,
-} from '@/features/invites/people-outreach-utils';
+import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
+import { AppText } from '@/components/app-text';
 
 function ContactRow({
   busy,
@@ -60,12 +48,12 @@ function ContactRow({
         size={44}
       />
       <View style={styles.contactCopy}>
-        <Text numberOfLines={1} style={styles.contactName}>
+        <AppText numberOfLines={1} style={styles.contactName}>
           {contact.alias}
-        </Text>
-        <Text numberOfLines={2} style={styles.contactPhone}>
+        </AppText>
+        <AppText numberOfLines={2} style={styles.contactPhone}>
           {contactMeta(contact.primaryPhone)}
-        </Text>
+        </AppText>
       </View>
       <Pressable
         disabled={disabled}
@@ -79,9 +67,9 @@ function ContactRow({
         ]}
       >
         <Ionicons color={theme.colors.white} name={busy ? 'sync-outline' : action.icon} size={14} />
-        <Text numberOfLines={1} style={styles.contactActionText}>
+        <AppText numberOfLines={1} style={styles.contactActionText}>
           {busy ? '...' : action.label}
-        </Text>
+        </AppText>
       </Pressable>
     </View>
   );
@@ -149,7 +137,7 @@ export function AddPersonContactsSheet({
 
     return (
       <View style={styles.contactSection}>
-        <Text style={styles.sectionLabel}>{title}</Text>
+        <AppText style={styles.sectionLabel}>{title}</AppText>
         <View style={styles.contactList}>
           {items.map(({ contact, resolution }) => (
             <ContactRow
@@ -175,7 +163,7 @@ export function AddPersonContactsSheet({
           <Pressable onPress={onClose} style={styles.sheetBackdrop} />
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Agregar personas</Text>
+              <AppText style={styles.sheetTitle}>Agregar personas</AppText>
               <Pressable onPress={onClose} style={styles.closeButton}>
                 <Ionicons color={theme.colors.text} name="close" size={22} />
               </Pressable>
@@ -183,8 +171,8 @@ export function AddPersonContactsSheet({
 
             <View style={styles.inPersonBlock}>
               <View style={styles.inPersonCopy}>
-                <Text style={styles.inPersonTitle}>Conectar en persona</Text>
-                <Text style={styles.inPersonText}>Usa QR cuando ya estan juntos.</Text>
+                <AppText style={styles.inPersonTitle}>Conectar en persona</AppText>
+                <AppText style={styles.inPersonText}>Usa QR cuando ya estan juntos.</AppText>
               </View>
               <View style={styles.inPersonActions}>
                 <Pressable
@@ -192,7 +180,7 @@ export function AddPersonContactsSheet({
                   style={({ pressed }) => [styles.qrActionButton, pressed ? styles.pressed : null]}
                 >
                   <Ionicons color={theme.colors.text} name="camera-outline" size={18} />
-                  <Text style={styles.qrActionText}>Escanear QR</Text>
+                  <AppText style={styles.qrActionText}>Escanear QR</AppText>
                 </Pressable>
                 <Pressable
                   disabled={busyKey === 'my-qr'}
@@ -205,24 +193,24 @@ export function AddPersonContactsSheet({
                   ]}
                 >
                   <Ionicons color={theme.colors.white} name="qr-code-outline" size={18} />
-                  <Text style={[styles.qrActionText, styles.qrActionTextPrimary]}>
+                  <AppText style={[styles.qrActionText, styles.qrActionTextPrimary]}>
                     {busyKey === 'my-qr' ? 'Creando...' : 'Mi QR'}
-                  </Text>
+                  </AppText>
                 </Pressable>
               </View>
             </View>
 
             {transactionContext ? (
               <View style={styles.contextBlock}>
-                <Text style={styles.contextLabel}>Contexto</Text>
-                <Text style={styles.contextBody}>
+                <AppText style={styles.contextLabel}>Contexto</AppText>
+                <AppText style={styles.contextBody}>
                   {transactionContext.direction === 'i_owe' ? 'Salida' : 'Entrada'} de{' '}
                   {formatCop(transactionContext.amountMinor)}
                   {transactionContext.description &&
                   transactionContext.description.trim().length > 0
                     ? ` por ${transactionContext.description.trim()}`
                     : ''}
-                </Text>
+                </AppText>
               </View>
             ) : null}
 
@@ -263,13 +251,13 @@ export function AddPersonContactsSheet({
                   ) : null}
 
                   {contactsLoading ? (
-                    <Text style={styles.helperText}>
+                    <AppText style={styles.helperText}>
                       {contactsLoadedCount > 0
                         ? `Cargando agenda en segundo plano (${contactsLoadedCount} contactos).`
                         : 'Leyendo tu agenda...'}
-                    </Text>
+                    </AppText>
                   ) : contactsLoadedCount > 0 && !contactsScanComplete ? (
-                    <Text style={styles.helperText}>Terminando de revisar la agenda...</Text>
+                    <AppText style={styles.helperText}>Terminando de revisar la agenda...</AppText>
                   ) : null}
 
                   {renderContactSection('En Happy Circles', inAppContacts)}
@@ -277,23 +265,23 @@ export function AddPersonContactsSheet({
 
                   {displayedContactsCount === 0 && !contactsLoading ? (
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyTitle}>
+                      <AppText style={styles.emptyTitle}>
                         {searchValue.trim().length > 0 ? 'Sin resultados' : 'Sin contactos utiles'}
-                      </Text>
-                      <Text style={styles.emptyText}>
+                      </AppText>
+                      <AppText style={styles.emptyText}>
                         {searchValue.trim().length > 0
                           ? 'Prueba con otro nombre o celular.'
                           : 'No encontramos contactos con numero en la agenda disponible.'}
-                      </Text>
+                      </AppText>
                     </View>
                   ) : null}
                 </>
               ) : (
                 <View style={styles.permissionBox}>
-                  <Text style={styles.emptyTitle}>Conecta tu agenda</Text>
-                  <Text style={styles.emptyText}>
+                  <AppText style={styles.emptyTitle}>Conecta tu agenda</AppText>
+                  <AppText style={styles.emptyText}>
                     Asi vemos quien ya esta en Happy Circles y quien necesita invitacion.
-                  </Text>
+                  </AppText>
                   {contactsPermissionStatus !== 'unavailable' ? (
                     <PrimaryAction
                       compact
@@ -316,10 +304,10 @@ export function AddPersonContactsSheet({
               <View style={styles.scannerCard}>
                 <View style={styles.modalHeader}>
                   <View style={styles.modalHeaderCopy}>
-                    <Text style={styles.optionTitle}>Escanear QR</Text>
-                    <Text style={styles.emptyText}>
+                    <AppText style={styles.optionTitle}>Escanear QR</AppText>
+                    <AppText style={styles.emptyText}>
                       Centra el QR de Happy Circles en la camara.
-                    </Text>
+                    </AppText>
                   </View>
                   <Pressable onPress={() => setScannerOpen(false)} style={styles.closeButton}>
                     <Ionicons color={theme.colors.text} name="close" size={22} />
@@ -343,8 +331,8 @@ export function AddPersonContactsSheet({
               <View style={styles.myQrCard}>
                 <View style={styles.modalHeader}>
                   <View style={styles.modalHeaderCopy}>
-                    <Text style={styles.optionTitle}>Mi QR</Text>
-                    <Text style={styles.emptyText}>Para conectar en persona.</Text>
+                    <AppText style={styles.optionTitle}>Mi QR</AppText>
+                    <AppText style={styles.emptyText}>Para conectar en persona.</AppText>
                   </View>
                   <Pressable onPress={() => setMyQrVisible(false)} style={styles.closeButton}>
                     <Ionicons color={theme.colors.text} name="close" size={22} />
@@ -360,12 +348,12 @@ export function AddPersonContactsSheet({
                     size={52}
                   />
                   <View style={styles.contactCopy}>
-                    <Text numberOfLines={1} style={styles.contactName}>
+                    <AppText numberOfLines={1} style={styles.contactName}>
                       {currentUserLabel}
-                    </Text>
-                    <Text style={styles.contactPhone}>
+                    </AppText>
+                    <AppText style={styles.contactPhone}>
                       {myQrDelivery ? formatQrExpiry(myQrDelivery.expiresAt) : 'Generando QR...'}
-                    </Text>
+                    </AppText>
                   </View>
                 </View>
 
@@ -382,9 +370,9 @@ export function AddPersonContactsSheet({
                   ) : (
                     <View style={styles.qrLoading}>
                       <Ionicons color={theme.colors.textMuted} name="sync-outline" size={28} />
-                      <Text style={styles.helperText}>
+                      <AppText style={styles.helperText}>
                         {busyKey === 'my-qr' ? 'Creando QR temporal...' : 'Toca renovar QR.'}
-                      </Text>
+                      </AppText>
                     </View>
                   )}
                 </View>
@@ -423,12 +411,12 @@ export function AddPersonContactsSheet({
             style={styles.sheetBackdrop}
           />
           <View style={styles.optionCard}>
-            <Text style={styles.optionTitle}>Elige el numero</Text>
-            <Text style={styles.emptyText}>
+            <AppText style={styles.optionTitle}>Elige el numero</AppText>
+            <AppText style={styles.emptyText}>
               {pendingContactSelection
                 ? `${pendingContactSelection.alias} tiene varios numeros.`
                 : ''}
-            </Text>
+            </AppText>
             <View style={styles.optionList}>
               {pendingContactOptions.map(({ contact, resolution }) => {
                 const phoneOption = contact.primaryPhone;
@@ -438,8 +426,8 @@ export function AddPersonContactsSheet({
                 return (
                   <View key={phoneOption.id} style={styles.optionRow}>
                     <View style={styles.contactCopy}>
-                      <Text style={styles.contactName}>{contactMeta(phoneOption)}</Text>
-                      <Text style={styles.contactPhone}>
+                      <AppText style={styles.contactName}>{contactMeta(phoneOption)}</AppText>
+                      <AppText style={styles.contactPhone}>
                         {resolution?.status === 'active_user'
                           ? 'Ya esta en Happy Circles'
                           : resolution?.status === 'already_related'
@@ -447,7 +435,7 @@ export function AddPersonContactsSheet({
                             : resolution?.status === 'pending_friendship'
                               ? 'Pendiente'
                               : 'Puede recibir invitacion'}
-                      </Text>
+                      </AppText>
                     </View>
                     <Pressable
                       disabled={disabled}
@@ -473,7 +461,7 @@ export function AddPersonContactsSheet({
                       ]}
                     >
                       <Ionicons color={theme.colors.white} name={action.icon} size={14} />
-                      <Text style={styles.contactActionText}>{action.label}</Text>
+                      <AppText style={styles.contactActionText}>{action.label}</AppText>
                     </Pressable>
                   </View>
                 );

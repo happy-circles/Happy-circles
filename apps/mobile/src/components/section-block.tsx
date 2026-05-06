@@ -1,7 +1,8 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface SectionBlockProps extends PropsWithChildren {
   readonly title: string;
@@ -14,8 +15,8 @@ export function SectionBlock({ title, subtitle, action, children }: SectionBlock
     <View style={styles.section}>
       <View style={styles.header}>
         <View style={styles.textWrap}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <AppText style={styles.title}>{title}</AppText>
+          {subtitle ? <AppText style={styles.subtitle}>{subtitle}</AppText> : null}
         </View>
         {action}
       </View>

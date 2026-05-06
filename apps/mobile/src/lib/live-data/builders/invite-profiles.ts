@@ -1,4 +1,8 @@
-import type { ActivityItemDto, PersonDetailDto, PersonTimelineItemDto } from '@happy-circles/application';
+import type {
+  ActivityItemDto,
+  PersonDetailDto,
+  PersonTimelineItemDto,
+} from '@happy-circles/application';
 import type { Database } from '@happy-circles/shared';
 import type {
   AccountInviteListItem,
@@ -201,9 +205,7 @@ export function inviteProfileHref(
   inviteId: string,
   panel: 'pending' | 'history',
 ): string | null {
-  return profileUserId
-    ? LIVE_DATA_ROUTES.inviteProfile(profileUserId, panel, inviteId)
-    : null;
+  return profileUserId ? LIVE_DATA_ROUTES.inviteProfile(profileUserId, panel, inviteId) : null;
 }
 
 export function intendedInviteProfileFields(profile: InviteProfilePresentation): {
@@ -274,14 +276,17 @@ export function isSpecificInviteName(value: string | null | undefined): boolean 
   const normalized = value?.trim().toLocaleLowerCase('es-CO');
   return Boolean(
     normalized &&
-      normalized !== 'persona' &&
-      normalized !== 'contacto invitado' &&
-      normalized !== 'tu contacto' &&
-      normalized !== 'tu',
+    normalized !== 'persona' &&
+    normalized !== 'contacto invitado' &&
+    normalized !== 'tu contacto' &&
+    normalized !== 'tu',
   );
 }
 
-export function inviteNamesMatch(left: string | null | undefined, right: string | null | undefined) {
+export function inviteNamesMatch(
+  left: string | null | undefined,
+  right: string | null | undefined,
+) {
   return left?.trim().toLocaleLowerCase('es-CO') === right?.trim().toLocaleLowerCase('es-CO');
 }
 
@@ -352,7 +357,6 @@ export function uniqueTimelineItemsById(
   return uniqueItems;
 }
 
-
 export type VisibleInviteProfileItem = FriendshipInviteListItem | AccountInviteListItem;
 
 export function inviteProfileItemTimestamp(item: ActivityItemDto): string {
@@ -364,7 +368,9 @@ export function inviteProfileItemTimestamp(item: ActivityItemDto): string {
   return item.happenedAt ?? '';
 }
 
-export function sortInviteProfilePendingItems(items: readonly ActivityItemDto[]): ActivityItemDto[] {
+export function sortInviteProfilePendingItems(
+  items: readonly ActivityItemDto[],
+): ActivityItemDto[] {
   return [...items].sort(
     (left, right) =>
       Date.parse(inviteProfileItemTimestamp(right)) - Date.parse(inviteProfileItemTimestamp(left)),

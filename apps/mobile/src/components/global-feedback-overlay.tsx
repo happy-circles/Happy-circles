@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
-import {
-  type GlobalFeedbackPayload,
-  subscribeGlobalFeedback,
-} from '@/lib/global-feedback';
+import { type GlobalFeedbackPayload, subscribeGlobalFeedback } from '@/lib/global-feedback';
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 const VISIBLE_MS = 1550;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -82,8 +80,8 @@ export function GlobalFeedbackOverlay() {
           variant={feedback.tone === 'success' || !feedback.tone ? 'success' : 'idle'}
         />
         <View style={styles.copy}>
-          <Text style={styles.title}>{feedback.title}</Text>
-          {feedback.message ? <Text style={styles.message}>{feedback.message}</Text> : null}
+          <AppText style={styles.title}>{feedback.title}</AppText>
+          {feedback.message ? <AppText style={styles.message}>{feedback.message}</AppText> : null}
         </View>
       </Animated.View>
     </View>

@@ -1,7 +1,8 @@
 import type { PropsWithChildren } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { AppText } from '@/components/app-text';
 
 export interface FieldBlockProps extends PropsWithChildren {
   readonly label: string;
@@ -13,11 +14,13 @@ export function FieldBlock({ label, hint, error, children }: FieldBlockProps) {
   return (
     <View style={styles.wrapper}>
       <View style={styles.header}>
-        <Text style={[styles.label, error ? styles.labelError : null]}>{label}</Text>
-        {hint ? <Text style={[styles.hint, error ? styles.hintError : null]}>{hint}</Text> : null}
+        <AppText style={[styles.label, error ? styles.labelError : null]}>{label}</AppText>
+        {hint ? (
+          <AppText style={[styles.hint, error ? styles.hintError : null]}>{hint}</AppText>
+        ) : null}
       </View>
       {children}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <AppText style={styles.error}>{error}</AppText> : null}
     </View>
   );
 }

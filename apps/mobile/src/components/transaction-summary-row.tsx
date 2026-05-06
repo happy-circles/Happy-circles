@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { StatusChip } from '@/components/status-chip';
 import { theme } from '@/lib/theme';
@@ -8,6 +8,7 @@ import {
   transactionCategoryColor,
   transactionCategoryIcon,
 } from '@/lib/transaction-categories';
+import { AppText } from '@/components/app-text';
 
 export type TransactionSummaryStatusTone =
   | 'primary'
@@ -71,24 +72,24 @@ export function TransactionSummaryRow({
 
       <View style={styles.copy}>
         <View style={styles.titleRow}>
-          <Text numberOfLines={1} style={styles.title}>
+          <AppText numberOfLines={1} style={styles.title}>
             {title}
-          </Text>
+          </AppText>
           {statusLabel ? (
             <StatusChip compact iconOnly label={statusLabel} tone={statusTone} />
           ) : null}
         </View>
         {meta ? (
-          <Text numberOfLines={1} style={styles.meta}>
+          <AppText numberOfLines={1} style={styles.meta}>
             {meta}
-          </Text>
+          </AppText>
         ) : null}
       </View>
 
       <View style={styles.side}>
         <View style={styles.amountRow}>
           {amountLabel ? (
-            <Text
+            <AppText
               numberOfLines={1}
               style={[
                 styles.amount,
@@ -97,7 +98,7 @@ export function TransactionSummaryRow({
               ]}
             >
               {amountLabel}
-            </Text>
+            </AppText>
           ) : null}
           {chevron ? (
             <Ionicons

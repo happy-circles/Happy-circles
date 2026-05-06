@@ -1,10 +1,11 @@
 import type { Href } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
 import { PrimaryAction } from './primary-action';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 export interface EmptyStateProps {
   readonly title: string;
@@ -16,9 +17,9 @@ export interface EmptyStateProps {
 export function EmptyState({ title, description, actionLabel, actionHref }: EmptyStateProps) {
   return (
     <SurfaceCard style={styles.card} variant="muted" padding="lg">
-      <Text style={styles.kicker}>Sin contenido</Text>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+      <AppText style={styles.kicker}>Sin contenido</AppText>
+      <AppText style={styles.title}>{title}</AppText>
+      <AppText style={styles.description}>{description}</AppText>
       {actionLabel && actionHref ? (
         <View style={styles.actionSlot}>
           <PrimaryAction label={actionLabel} href={actionHref} />

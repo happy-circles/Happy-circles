@@ -1,6 +1,11 @@
 import { queryClient } from '../query-client';
 import { supabase } from '../supabase';
-import { createSupportId, isJwtAuthError, readFunctionErrorDetails, reportAndCreateSupportError } from '../support-errors';
+import {
+  createSupportId,
+  isJwtAuthError,
+  readFunctionErrorDetails,
+  reportAndCreateSupportError,
+} from '../support-errors';
 import { APP_SNAPSHOT_QUERY_KEY, LIVE_SNAPSHOT_TIMEOUT_MS } from './constants';
 
 export function createSnapshotAbortSignal(parentSignal?: AbortSignal) {

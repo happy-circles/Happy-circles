@@ -1,10 +1,11 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
 import { theme } from '@/lib/theme';
 
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
+import { AppText } from '@/components/app-text';
 
 export interface MoneyHeroProps {
   readonly label: string;
@@ -33,21 +34,30 @@ export function MoneyHero({
   return (
     <SurfaceCard style={styles.card} variant="elevated" padding="lg">
       <View style={styles.header}>
-        <Text style={styles.label}>{label}</Text>
+        <AppText style={styles.label}>{label}</AppText>
         {badgeLabel ? (
-          <StatusChip label={badgeLabel} tone={isNegative ? 'warning' : isPositive ? 'success' : 'primary'} />
+          <StatusChip
+            label={badgeLabel}
+            tone={isNegative ? 'warning' : isPositive ? 'success' : 'primary'}
+          />
         ) : null}
       </View>
-      <Text style={[styles.amount, isNegative ? styles.negative : null, isPositive ? styles.positive : null]}>
+      <AppText
+        style={[
+          styles.amount,
+          isNegative ? styles.negative : null,
+          isPositive ? styles.positive : null,
+        ]}
+      >
         {formatCop(amountMinor)}
-      </Text>
-      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+      </AppText>
+      {caption ? <AppText style={styles.caption}>{caption}</AppText> : null}
       {secondaryMetrics?.length ? (
         <View style={styles.metricsRow}>
           {secondaryMetrics.map((metric) => (
             <SurfaceCard key={metric.label} style={styles.metricCard} variant="muted" padding="sm">
-              <Text style={styles.metricLabel}>{metric.label}</Text>
-              <Text
+              <AppText style={styles.metricLabel}>{metric.label}</AppText>
+              <AppText
                 style={[
                   styles.metricAmount,
                   metric.tone === 'positive' ? styles.positive : null,
@@ -55,7 +65,7 @@ export function MoneyHero({
                 ]}
               >
                 {formatCop(metric.amountMinor)}
-              </Text>
+              </AppText>
             </SurfaceCard>
           ))}
         </View>
