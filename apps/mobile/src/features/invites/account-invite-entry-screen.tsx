@@ -46,37 +46,34 @@ import {
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
-
-type SocialProvider = 'google' | 'apple';
-type SignInEntryMode = 'sign-in' | 'recover';
-type AuthEntryMode = 'remembered' | 'other';
-type JoinEntrySurface = 'auth' | 'token';
-type RememberedReauthReason = 'biometric-failed' | 'session-expired';
+import {
+  AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
+  AUTH_CONTENT_EXIT_MS,
+  AUTH_MODE_ROUTE_DELAY_MS,
+  AUTH_ROUTE_TRANSITION_HOLD_MS,
+  AUTH_SAME_POSITION_REVEAL_DELAY_MS,
+  AUTH_SUCCESS_NAVIGATION_DELAY_MS,
+  PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE,
+  PASSWORD_RESET_RESEND_SECONDS,
+  PASSWORD_RESET_SENT_MESSAGE,
+  biometricMessage,
+  isRecoveryCodeValid,
+  resolveAccountInviteEntryParams,
+  resolveAuthLogoCopy,
+  resolveSecondaryAuthAction,
+  resolveTokenFieldError,
+  resolveTokenLogoSubtitle,
+  validateEmailForAuth,
+  validatePasswordForAuth,
+  type AuthEntryMode,
+  type JoinEntrySurface,
+  type RememberedReauthReason,
+  type SignInEntryMode,
+  type SocialProvider,
+} from './account-invite-entry-helpers';
 
 const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
-const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
-const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
-const AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
-const AUTH_CONTENT_EXIT_MS = 190;
-const AUTH_MODE_ROUTE_DELAY_MS = 520;
-const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 180;
-const PASSWORD_RESET_SENT_MESSAGE =
-  'Si el correo existe, enviamos un enlace para restablecer la clave.';
-const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Codigo verificado.';
-const PASSWORD_RESET_RESEND_SECONDS = 60;
-
-function biometricMessage(error: string | null, label: string): string {
-  if (error === 'user_cancel') {
-    return `Cancelaste ${label}. Puedes entrar con correo y contrasena.`;
-  }
-
-  if (error === 'not_available') {
-    return 'Este dispositivo no tiene biometria disponible. Entra con correo y contrasena.';
-  }
-
-  return `No pudimos validar ${label}. Entra con correo y contrasena.`;
-}
 
 function AuthEntryIdentity({
   avatarLabel,
@@ -164,16 +161,12 @@ function AccountSignInEntry({
 
   const authRequestBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
   const authBusy =
-    authRequestBusy ||
-    authSurfaceTransitioning ||
-    authResultState === 'success' ||
-    authSuccess;
-  const authVisualState: BrandVerificationState =
-    authSurfaceTransitioning
-      ? 'loading'
-      : (authResultState ?? (authRequestBusy ? 'loading' : 'idle'));
+    authRequestBusy || authSurfaceTransitioning || authResultState === 'success' || authSuccess;
+  const authVisualState: BrandVerificationState = authSurfaceTransitioning
+    ? 'loading'
+    : (authResultState ?? (authRequestBusy ? 'loading' : 'idle'));
   const isRecovery = authMode === 'recover';
-  const recoveryCodeValid = /^\d{8}$/.test(recoveryCode);
+  const recoveryCodeValid = isRecoveryCodeValid(recoveryCode);
   const isOtherAccountMode = showAuthOptions && authEntryMode === 'other';
   const isRememberedReauthMode =
     showAuthOptions &&
@@ -651,19 +644,23 @@ function AccountSignInEntry({
     triggerIdentitySelectionHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    transitionAuthSurface(() => {
-      setAuthMode('recover');
-      setAuthErrors({});
-      setAuthSuccess(false);
-      setAuthResultState(null);
-      setRememberedReauthReason(null);
-      setRecoveryLinkSent(false);
-      setRecoveryResendSeconds(0);
-      setRecoveryCode('');
-      setMessage(null);
-      setAuthOptionsMounted(true);
-      setShowAuthOptions(true);
-    }, false, 'auth');
+    transitionAuthSurface(
+      () => {
+        setAuthMode('recover');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setRecoveryCode('');
+        setMessage(null);
+        setAuthOptionsMounted(true);
+        setShowAuthOptions(true);
+      },
+      false,
+      'auth',
+    );
   }
 
   function showSignInMode() {
@@ -674,19 +671,23 @@ function AccountSignInEntry({
     triggerIdentitySelectionHaptic();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
-    transitionAuthSurface(() => {
-      setAuthMode('sign-in');
-      setAuthErrors({});
-      setAuthSuccess(false);
-      setAuthResultState(null);
-      setRememberedReauthReason(null);
-      setRecoveryLinkSent(false);
-      setRecoveryResendSeconds(0);
-      setRecoveryCode('');
-      setMessage(null);
-      setAuthOptionsMounted(true);
-      setShowAuthOptions(true);
-    }, false, 'auth');
+    transitionAuthSurface(
+      () => {
+        setAuthMode('sign-in');
+        setAuthErrors({});
+        setAuthSuccess(false);
+        setAuthResultState(null);
+        setRememberedReauthReason(null);
+        setRecoveryLinkSent(false);
+        setRecoveryResendSeconds(0);
+        setRecoveryCode('');
+        setMessage(null);
+        setAuthOptionsMounted(true);
+        setShowAuthOptions(true);
+      },
+      false,
+      'auth',
+    );
   }
 
   function handleEmailChange(value: string) {
@@ -724,21 +725,14 @@ function AccountSignInEntry({
 
   function validateEmailField() {
     const resolvedEmail = locksRememberedEmail ? (account?.email ?? email) : email;
-    const trimmedEmail = resolvedEmail.trim();
-    const nextEmailError =
-      trimmedEmail.length === 0
-        ? 'Escribe tu correo.'
-        : !trimmedEmail.includes('@')
-          ? 'Escribe un correo valido.'
-          : undefined;
+    const nextEmailError = validateEmailForAuth(resolvedEmail);
 
     setAuthErrors((current) => ({ ...current, email: nextEmailError }));
     return !nextEmailError;
   }
 
   function validatePasswordField() {
-    const nextPasswordError =
-      !isRecovery && password.length === 0 ? 'Escribe tu contrasena.' : undefined;
+    const nextPasswordError = validatePasswordForAuth({ isRecovery, password });
 
     setAuthErrors((current) => ({ ...current, password: nextPasswordError }));
     return !nextPasswordError;
@@ -1097,24 +1091,17 @@ function AccountSignInEntry({
       </Animated.View>
     );
 
-  const secondaryAuthAction =
-    account && !isRecovery
-      ? {
-          icon: isOtherAccountMode ? 'key-outline' : 'person-circle-outline',
-          label: isOtherAccountMode ? 'Crear cuenta' : 'Usar otra cuenta',
-          onPress: isOtherAccountMode ? exitToInviteEntry : showOtherAccountMode,
-        }
-      : isRecovery
-        ? {
-            icon: 'person-circle-outline',
-            label: 'Iniciar sesion',
-            onPress: showSignInMode,
-          }
-        : {
-            icon: 'key-outline',
-            label: 'Volver a invitacion',
-            onPress: exitToInviteEntry,
-          };
+  const secondaryAuthAction = resolveSecondaryAuthAction({
+    hasRememberedAccount: Boolean(account),
+    isOtherAccountMode,
+    isRecovery,
+  });
+  const secondaryAuthActionPress =
+    secondaryAuthAction.intent === 'show_other_account'
+      ? showOtherAccountMode
+      : secondaryAuthAction.intent === 'show_sign_in'
+        ? showSignInMode
+        : exitToInviteEntry;
 
   const authPrimaryAction = (
     <IdentityFlowPrimaryAction
@@ -1154,27 +1141,18 @@ function AccountSignInEntry({
       disabled={authBusy}
       icon={secondaryAuthAction.icon as keyof typeof Ionicons.glyphMap}
       label={secondaryAuthAction.label}
-      onPress={authBusy ? undefined : secondaryAuthAction.onPress}
+      onPress={authBusy ? undefined : secondaryAuthActionPress}
     />
   );
-  const authLogoTitle = isRecovery
-    ? recoveryLinkSent
-      ? 'Revisa tu correo'
-      : 'Recupera tu contrasena'
-    : !showAuthOptions && account
-      ? `Hola, ${account.displayName}`
-      : 'Ingresa a Happy Circles';
-  const authLogoSubtitle = isRecovery
-    ? recoveryLinkSent
-      ? 'Si existe la cuenta, el enlace va en camino.'
-      : 'Te enviaremos un enlace a tu correo.'
-    : !showAuthOptions && account
-      ? 'Toca para continuar.'
-      : isOtherAccountMode
-        ? 'Usa otra cuenta para continuar.'
-        : 'Usa tu correo y contrasena.';
+  const authLogo = resolveAuthLogoCopy({
+    accountDisplayName: account?.displayName,
+    isOtherAccountMode,
+    isRecovery,
+    recoveryLinkSent,
+    showAuthOptions,
+  });
   const canTapSavedAccountCopy = Boolean(!showAuthOptions && account && !isRecovery);
-  const authLogoCopy = <IdentityFlowLogoCopy subtitle={authLogoSubtitle} title={authLogoTitle} />;
+  const authLogoCopy = <IdentityFlowLogoCopy subtitle={authLogo.subtitle} title={authLogo.title} />;
   const authIdentityPosition = showAuthOptions ? 'top' : 'center';
   const authContentTransitionKey =
     !showAuthOptions && account && !isRecovery
@@ -1182,20 +1160,17 @@ function AccountSignInEntry({
       : isRecovery
         ? 'auth:recover-form'
         : 'auth:sign-in-form';
-  const tokenFieldError =
-    tokenTouched || tokenMessage || blockingMessage
-      ? (blockingMessage ??
-        tokenMessage ??
-        (normalizedToken.length > 0 && normalizedToken.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH
-          ? 'Pega el token completo para continuar.'
-          : null))
-      : null;
-  const tokenLogoSubtitle =
-    preview && !blockingMessage
-      ? `${preview.inviterDisplayName} te invito.`
-      : previewQuery.isFetching
-        ? 'Validando tu invitacion.'
-        : 'Pega tu codigo de invitacion para continuar.';
+  const tokenFieldError = resolveTokenFieldError({
+    blockingMessage,
+    normalizedToken,
+    tokenMessage,
+    tokenTouched,
+  });
+  const tokenLogoSubtitle = resolveTokenLogoSubtitle({
+    blockingMessage,
+    inviterDisplayName: preview?.inviterDisplayName,
+    isFetching: previewQuery.isFetching,
+  });
   const tokenFooterAction = (
     <IdentityFlowSecondaryAction
       disabled={authBusy}
@@ -1253,7 +1228,7 @@ function AccountSignInEntry({
   );
   const isTokenSurface = entrySurface === 'token';
   const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;
-  const activeIdentityPosition = isTokenSurface ? 'center' : authIdentityPosition;
+  const activeIdentityPosition = isTokenSurface ? 'top' : authIdentityPosition;
   const activeFooterAction = isTokenSurface ? tokenFooterAction : authFooterAction;
   const activeContentTransitionKey = isTokenSurface
     ? 'invite-entry:token-form'
@@ -1456,23 +1431,25 @@ export function AccountInviteEntryScreen() {
   const rawModeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const rawPreviewParam = Array.isArray(params.preview) ? params.preview[0] : params.preview;
   const rawTokenParam = Array.isArray(params.token) ? params.token[0] : params.token;
-  const initialToken = useMemo(() => extractAccountInviteToken(rawTokenParam), [rawTokenParam]);
-  const isPreviewMode = __DEV__ && rawPreviewParam === 'true';
-  const isRecoverMode = rawModeParam === 'recover' || rawModeParam === 'forgot-password';
-  const isTokenEntryMode = rawModeParam === 'token' || rawModeParam === 'invite';
-  const isSignInMode = rawModeParam === 'sign-in' || rawModeParam === 'login' || isRecoverMode;
-  const initialSurface: JoinEntrySurface =
-    !isTokenEntryMode && (isSignInMode || (session.rememberedAccount && !isPreviewMode))
-      ? 'auth'
-      : 'token';
+  const entryParams = useMemo(
+    () =>
+      resolveAccountInviteEntryParams({
+        hasRememberedAccount: Boolean(session.rememberedAccount),
+        isDev: __DEV__,
+        rawModeParam,
+        rawPreviewParam,
+        rawTokenParam,
+      }),
+    [rawModeParam, rawPreviewParam, rawTokenParam, session.rememberedAccount],
+  );
 
   return (
     <AccountSignInEntry
-      autoUseRememberedAccount={!isTokenEntryMode && !isSignInMode}
-      initialMode={isRecoverMode ? 'recover' : 'sign-in'}
-      initialSurface={initialSurface}
-      initialToken={initialToken}
-      isPreviewMode={isPreviewMode}
+      autoUseRememberedAccount={entryParams.autoUseRememberedAccount}
+      initialMode={entryParams.initialMode}
+      initialSurface={entryParams.initialSurface}
+      initialToken={entryParams.initialToken}
+      isPreviewMode={entryParams.isPreviewMode}
     />
   );
 }

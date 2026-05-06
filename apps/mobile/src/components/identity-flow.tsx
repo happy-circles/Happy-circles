@@ -27,7 +27,6 @@ import type {
   ScrollView,
   StyleProp,
   TextInput as TextInputHandle,
-  TextStyle,
   ViewStyle,
 } from 'react-native';
 
@@ -42,6 +41,11 @@ import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell, type ScreenShellProps } from '@/components/screen-shell';
 import { registerIdentityFlowScrollView } from '@/lib/identity-flow-scroll';
 import { theme } from '@/lib/theme';
+import {
+  resolveIdentityFlowLayout,
+  type IdentityFlowCenterLayout,
+  type IdentityFlowIdentityPosition,
+} from './identity-flow-helpers';
 
 export const IDENTITY_FLOW_CONTENT_MAX_WIDTH = 460;
 export const IDENTITY_FLOW_STAGE_SIZE = 208;
@@ -66,8 +70,7 @@ const IDENTITY_FLOW_KEYBOARD_MIN_SHIFT = 104;
 
 export type IdentityFlowFieldStatus = 'danger' | 'idle' | 'success' | 'warning';
 export type IdentityFlowCenterFaceSize = 'large' | 'small';
-export type IdentityFlowCenterLayout = 'balanced' | 'compact';
-export type IdentityFlowIdentityPosition = 'auto' | 'center' | 'top';
+export type { IdentityFlowCenterLayout, IdentityFlowIdentityPosition };
 
 type MeasurableFocusedInput = {
   measureInWindow?: (
@@ -152,24 +155,29 @@ export function IdentityFlowScreen({
   const keyboardEventRef = useRef<KeyboardEvent | null>(null);
   const resolvedFooter =
     footer ?? (actions ? <View style={styles.footerActions}>{actions}</View> : undefined);
-  const resolvedIdentityPosition = identityPosition === 'auto' ? 'center' : identityPosition;
-  const isCenterIdentity = resolvedIdentityPosition === 'center';
-  const shouldReserveMessageSlot = message !== undefined || resolvedIdentityPosition === 'center';
-  const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
-  const contentMotion = useRef(new Animated.Value(contentVisible ? 1 : 0)).current;
   const lockedBodyHeightRef = useRef(0);
   const [bodyHeight, setBodyHeight] = useState(0);
   const [hasMeasuredBody, setHasMeasuredBody] = useState(false);
   const layoutReady = hasMeasuredBody && bodyHeight > 0;
-  const topIdentityY = IDENTITY_FLOW_TOP_OFFSET;
-  const centerRestRatio = identityCenterLayout === 'compact' ? 0.32 : 0.44;
-  const preferredCenterIdentityY = bodyHeight / 2 - IDENTITY_FLOW_STAGE_SIZE / 2;
-  const readableCenterIdentityY = bodyHeight * centerRestRatio - IDENTITY_FLOW_STAGE_SIZE / 2;
-  const centerIdentityY = layoutReady
-    ? Math.max(topIdentityY, Math.min(preferredCenterIdentityY, readableCenterIdentityY))
-    : topIdentityY;
-  const topContentY = topIdentityY + IDENTITY_FLOW_STAGE_SIZE + theme.spacing.sm;
-  const centerContentY = centerIdentityY + IDENTITY_FLOW_STAGE_SIZE + theme.spacing.sm;
+  const layoutMetrics = resolveIdentityFlowLayout({
+    bodyHeight,
+    centerLayout: identityCenterLayout,
+    hasMessage: message !== undefined,
+    identityPosition,
+    layoutReady,
+    stageSize: IDENTITY_FLOW_STAGE_SIZE,
+    topOffset: IDENTITY_FLOW_TOP_OFFSET,
+    verticalGap: theme.spacing.sm,
+  });
+  const resolvedIdentityPosition = layoutMetrics.resolvedIdentityPosition;
+  const isCenterIdentity = layoutMetrics.isCenterIdentity;
+  const shouldReserveMessageSlot = layoutMetrics.shouldReserveMessageSlot;
+  const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
+  const contentMotion = useRef(new Animated.Value(contentVisible ? 1 : 0)).current;
+  const topIdentityY = layoutMetrics.topIdentityY;
+  const centerIdentityY = layoutMetrics.centerIdentityY;
+  const topContentY = layoutMetrics.topContentY;
+  const centerContentY = layoutMetrics.centerContentY;
   const identityTranslateY = identityMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [centerIdentityY, topIdentityY],
@@ -633,19 +641,23 @@ export function IdentityFlowField({
 
 export const IdentityFlowTextInput = forwardRef<
   TextInputHandle,
-  AppTextInputProps & { readonly style?: StyleProp<TextStyle> }
->(function IdentityFlowTextInput({ style, ...props }, ref) {
+  AppTextInputProps
+>(function IdentityFlowTextInput(
+  { chrome = 'plain', density = 'identity', onFocus, ...props },
+  ref,
+) {
   const scheduleKeyboardAdjustment = useContext(IdentityFlowKeyboardAvoidanceContext);
 
   return (
     <AppTextInput
       {...props}
+      chrome={chrome}
+      density={density}
       onFocus={(event) => {
-        props.onFocus?.(event);
+        onFocus?.(event);
         scheduleKeyboardAdjustment?.();
       }}
       ref={ref}
-      style={[styles.textInput, style]}
     />
   );
 });
@@ -919,15 +931,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: IDENTITY_FLOW_FIELD_HEIGHT,
     overflow: 'visible',
-  },
-  textInput: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    height: IDENTITY_FLOW_FIELD_HEIGHT,
-    minHeight: IDENTITY_FLOW_FIELD_HEIGHT,
-    paddingBottom: 0,
-    paddingTop: 0,
-    textAlignVertical: 'center',
   },
   fieldError: {
     color: theme.colors.danger,

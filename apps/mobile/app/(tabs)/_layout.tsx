@@ -1,12 +1,19 @@
+import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Redirect, Tabs } from 'expo-router';
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 export default function TabsLayout() {
   const { status } = useSession();
+  const insets = useSafeAreaInsets();
+  const fabStyle = useMemo(
+    () => [styles.fab, { bottom: 28 + Math.max(0, insets.bottom) }],
+    [insets.bottom],
+  );
 
   if (status === 'loading') {
     return null;
@@ -33,7 +40,7 @@ export default function TabsLayout() {
       </Tabs>
 
       <Link href="/register" asChild>
-        <Pressable style={styles.fab}>
+        <Pressable style={fabStyle}>
           <Ionicons color={theme.colors.white} name="add" size={22} />
           <Text style={styles.fabLabel}>Registrar</Text>
         </Pressable>
@@ -50,7 +57,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    bottom: 28,
     flexDirection: 'row',
     gap: theme.spacing.xs,
     justifyContent: 'center',

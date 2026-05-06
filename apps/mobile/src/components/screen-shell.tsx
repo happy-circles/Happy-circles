@@ -1,7 +1,7 @@
 import type { PropsWithChildren, ReactNode, RefObject } from 'react';
 import type { ScrollView, StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   BrandedRefreshScrollView,
@@ -25,14 +25,14 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly footerDivider?: boolean;
   readonly headerVisible?: boolean;
   readonly overlay?: ReactNode;
-  readonly pinHeaderDuringRefresh?: boolean;
-  readonly refreshPinnedHeaderTitle?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
   readonly scrollEnabled?: boolean;
   readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
 }
+
+const SCREEN_SHELL_FOOTER_SCROLL_CLEARANCE = 140;
 
 export function ScreenShell({
   title,
@@ -50,8 +50,6 @@ export function ScreenShell({
   footerDivider = true,
   headerVisible = true,
   overlay,
-  pinHeaderDuringRefresh = false,
-  refreshPinnedHeaderTitle,
   refresh,
   scrollEnabled = true,
   scrollViewRef,
@@ -59,6 +57,8 @@ export function ScreenShell({
   contentContainerStyle,
   contentWidthStyle,
 }: ScreenShellProps) {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(0, insets.bottom);
   const shouldUseScroll = scrollEnabled || Boolean(refresh);
   const resolvedTitleStyle =
     titleSize === 'largeTitle'
@@ -111,32 +111,6 @@ export function ScreenShell({
     contentMode === 'full' ? styles.contentWidthFull : null,
     contentWidthStyle,
   ];
-  const shouldPinHeader = shouldUseScroll && pinHeaderDuringRefresh && Boolean(refresh);
-  const pinnedHeaderNode =
-    shouldPinHeader && refreshPinnedHeaderTitle && headerVisible ? (
-      <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
-        <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
-          {headerLeading ? (
-            <View pointerEvents="none" style={styles.pinnedHeaderPlaceholder}>
-              {headerLeading}
-            </View>
-          ) : null}
-          <View style={styles.headerTitleNode}>{refreshPinnedHeaderTitle}</View>
-          {headerSlot ? (
-            <View pointerEvents="none" style={styles.pinnedHeaderPlaceholder}>
-              {headerSlot}
-            </View>
-          ) : null}
-        </View>
-      </View>
-    ) : null;
-  const fixedHeader = shouldPinHeader ? (
-    <View style={styles.fixedRefreshHeader}>
-      <View style={[contentWidthStyles, styles.contentWidthNoGrow]}>
-        {pinnedHeaderNode ?? headerNode}
-      </View>
-    </View>
-  ) : undefined;
   const scrollBody = (
     <View style={contentWidthStyles}>
       {headerNode}
@@ -149,7 +123,13 @@ export function ScreenShell({
     !shouldUseScroll ? styles.contentFixed : null,
     contentMode === 'full' ? styles.contentFull : null,
     footer ? styles.contentWithFooter : null,
+    footer ? { paddingBottom: SCREEN_SHELL_FOOTER_SCROLL_CLEARANCE + bottomInset } : null,
     contentContainerStyle,
+  ];
+  const footerStyle = [
+    styles.footer,
+    { paddingBottom: theme.spacing.lg + bottomInset },
+    !footerDivider ? styles.footerNoDivider : null,
   ];
 
   return (
@@ -160,7 +140,6 @@ export function ScreenShell({
           style={styles.scrollView}
           contentContainerStyle={contentStyle}
           fillViewport
-          fixedHeader={fixedHeader}
           keyboardShouldPersistTaps="handled"
           refresh={refresh}
           showsVerticalScrollIndicator={false}
@@ -171,7 +150,7 @@ export function ScreenShell({
         <View style={contentStyle}>{scrollBody}</View>
       )}
       {footer ? (
-        <View style={[styles.footer, !footerDivider ? styles.footerNoDivider : null]}>
+        <View style={footerStyle}>
           <View style={styles.contentWidth}>{footer}</View>
         </View>
       ) : null}
@@ -203,7 +182,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
   contentWithFooter: {
-    paddingBottom: 140,
+    paddingBottom: SCREEN_SHELL_FOOTER_SCROLL_CLEARANCE,
   },
   contentWidth: {
     alignSelf: 'center',
@@ -214,13 +193,6 @@ const styles = StyleSheet.create({
   },
   contentWidthFixed: {
     flex: 1,
-  },
-  contentWidthNoGrow: {
-    flexGrow: 0,
-  },
-  fixedRefreshHeader: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
   },
   contentWidthFull: {
     maxWidth: '100%',
@@ -262,9 +234,6 @@ const styles = StyleSheet.create({
   },
   heroHeaderCentered: {
     justifyContent: 'center',
-  },
-  pinnedHeaderPlaceholder: {
-    opacity: 0,
   },
   headerTitleNode: {
     alignItems: 'center',

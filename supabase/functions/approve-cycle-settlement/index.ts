@@ -1,3 +1,4 @@
+import { triggerGraphCycleWorker } from '../_shared/cycle-worker.ts';
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
 
 Deno.serve((request) =>
@@ -12,6 +13,13 @@ Deno.serve((request) =>
 
     if (error) {
       throw error;
+    }
+
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      const status = (data as Record<string, unknown>).status;
+      if (status === 'executed' || status === 'stale') {
+        triggerGraphCycleWorker(3);
+      }
     }
 
     return data;

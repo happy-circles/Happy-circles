@@ -38,7 +38,6 @@ import {
   historyTimelineStepDetailLabel,
   historyTimelineStepAmountLabel,
   toHistoryFeedItem,
-  type HistoryCaseItem,
 } from '@/lib/history-cases';
 import {
   useAcceptFinancialRequestMutation,
@@ -65,11 +64,22 @@ import {
   transactionStatusTone,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
-
-type PersonSegmentKey = 'pending' | 'history';
-type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
-const PERSON_SEGMENT_KEYS: readonly PersonSegmentKey[] = ['pending', 'history'];
-const RESULT_OVERLAY_DURATION_MS = 2200;
+import {
+  PERSON_SEGMENT_KEYS,
+  RESULT_OVERLAY_DURATION_MS,
+  buildFinancialRequestPendingContent,
+  buildFocusCandidates,
+  buildPersonRegisterHref,
+  historyStepMetaLabel,
+  matchesFocusedTransaction,
+  pendingSnippetTone,
+  pendingStatusLabel,
+  readNestedStatus,
+  readResultStatus,
+  splitSubtitleSegments,
+  type PendingActionKey,
+  type PersonSegmentKey,
+} from './person-detail-helpers';
 
 export interface PersonDetailScreenProps {
   readonly focusItemId?: string;
@@ -90,114 +100,6 @@ interface ActionOverlayState {
 interface AmendmentErrors {
   readonly amount?: string;
   readonly description?: string;
-}
-
-function readResultStatus(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const status = (value as Record<string, unknown>)['status'];
-  return typeof status === 'string' ? status : null;
-}
-
-function readNestedStatus(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  return readResultStatus((value as Record<string, unknown>)[key]);
-}
-
-function splitSubtitleSegments(value: string): string[] {
-  return value
-    .split('|')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-}
-
-function buildFinancialRequestPendingContent(item: ActivityItemDto): {
-  readonly createdByLabel: string;
-  readonly detail: string;
-  readonly createdAtLabel: string;
-} {
-  const parts = splitSubtitleSegments(item.subtitle);
-  const [createdByLabel, detail, createdAtLabel] = parts;
-
-  return {
-    createdByLabel: createdByLabel ?? 'Persona',
-    detail: detail ?? item.subtitle,
-    createdAtLabel: createdAtLabel ?? '',
-  };
-}
-
-function historyStepMetaLabel(step: HistoryCaseItem): string | null {
-  return step.happenedAtLabel ?? null;
-}
-
-function pendingSnippetTone(
-  item: ActivityItemDto,
-): 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle' {
-  if (item.kind === 'settlement_proposal' && item.status === 'approved') {
-    return 'cycle';
-  }
-
-  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
-    return 'warning';
-  }
-
-  if (item.status === 'approved') {
-    return 'primary';
-  }
-
-  if (item.status === 'rejected') {
-    return 'danger';
-  }
-
-  return 'neutral';
-}
-
-function pendingStatusLabel(status: string): string {
-  if (status === 'pending_approvals') {
-    return 'Pendiente';
-  }
-
-  if (status === 'approved') {
-    return 'Aprobado';
-  }
-
-  if (status === 'waiting_other_side') {
-    return 'En espera';
-  }
-
-  return status;
-}
-
-function buildFocusCandidates(value: string | undefined): Set<string> {
-  const candidates = new Set<string>();
-  if (!value) {
-    return candidates;
-  }
-
-  candidates.add(value);
-  try {
-    candidates.add(decodeURIComponent(value));
-  } catch {
-    // The raw value is still usable if decoding fails.
-  }
-
-  return candidates;
-}
-
-function matchesFocusedTransaction(
-  item: Pick<ActivityItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
-  candidates: ReadonlySet<string>,
-): boolean {
-  return (
-    candidates.has(item.id) ||
-    (item.originRequestId ? candidates.has(item.originRequestId) : false) ||
-    (item.originSettlementProposalId ? candidates.has(item.originSettlementProposalId) : false)
-  );
 }
 
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
@@ -727,7 +629,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         contentContainerStyle={styles.sheetScrollContent}
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
-        refreshIndicatorStyle={styles.refreshIndicator}
         showsVerticalScrollIndicator={false}
       >
         {segment === 'pending' ? (
@@ -921,28 +822,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <View style={styles.quickActionRowFlat}>
               <DirectionPill
                 direction="i_owe"
-                onPress={() =>
-                  pushRoute(router, {
-                    pathname: '/register',
-                    params: {
-                      personId: person.userId,
-                      direction: 'i_owe',
-                    },
-                  })
-                }
+                onPress={() => pushRoute(router, buildPersonRegisterHref(person.userId, 'i_owe'))}
                 style={styles.quickActionPill}
               />
 
               <DirectionPill
                 direction="owes_me"
                 onPress={() =>
-                  pushRoute(router, {
-                    pathname: '/register',
-                    params: {
-                      personId: person.userId,
-                      direction: 'owes_me',
-                    },
-                  })
+                  pushRoute(router, buildPersonRegisterHref(person.userId, 'owes_me'))
                 }
                 style={styles.quickActionPill}
               />
@@ -1035,9 +922,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.sm,
     width: '100%',
-  },
-  refreshIndicator: {
-    top: theme.spacing.md,
   },
   fixedTop: {
     gap: theme.spacing.md,

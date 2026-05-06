@@ -16,6 +16,21 @@ import {
 
 export type FriendshipOrAccountResult = PeopleOutreachResult['result'];
 
+export const CONTACTS_PAGE_SIZE = 250;
+
+const CONTACT_FIELDS = [
+  Contacts.Fields.Name,
+  Contacts.Fields.FirstName,
+  Contacts.Fields.MiddleName,
+  Contacts.Fields.LastName,
+  Contacts.Fields.PhoneNumbers,
+] as const;
+
+const SORTED_COUNTRY_OPTIONS = [...COUNTRY_OPTIONS].sort(
+  (left, right) =>
+    normalizePhoneDigits(right.callingCode).length - normalizePhoneDigits(left.callingCode).length,
+);
+
 export type ContactPhoneOption = {
   readonly id: string;
   readonly label: string | null;
@@ -35,6 +50,12 @@ export type PendingContactSelection = {
   readonly contactId: string;
   readonly alias: string;
   readonly phoneOptions: readonly ContactPhoneOption[];
+};
+
+export type ContactsPageResult = {
+  readonly contacts: readonly ContactCandidate[];
+  readonly nextPageOffset: number;
+  readonly hasNextPage: boolean;
 };
 
 export function buildAppInviteLink(deliveryToken: string): string {
@@ -119,13 +140,7 @@ function findCountryOptionByPhoneNumber(rawNumber: string) {
   }
 
   const digits = normalizePhoneDigits(trimmed);
-  const sortedOptions = [...COUNTRY_OPTIONS].sort(
-    (left, right) =>
-      normalizePhoneDigits(right.callingCode).length -
-      normalizePhoneDigits(left.callingCode).length,
-  );
-
-  for (const option of sortedOptions) {
+  for (const option of SORTED_COUNTRY_OPTIONS) {
     if (digits.startsWith(normalizePhoneDigits(option.callingCode))) {
       return option;
     }
@@ -188,10 +203,11 @@ export function isAccountInviteDeliveryResult(
   );
 }
 
-function buildContactPhoneOptions(
+export function buildContactPhoneOptions(
   contact: Contacts.Contact | Contacts.ExistingContact,
 ): ContactPhoneOption[] {
   const phoneNumbers = contact.phoneNumbers ?? [];
+  const seenPhones = new Set<string>();
 
   return phoneNumbers.flatMap((phoneNumber, index) => {
     const rawNumber = phoneNumber.number?.trim();
@@ -210,9 +226,11 @@ function buildContactPhoneOptions(
       ? `+${digits}`
       : buildPhoneE164(country.callingCode, nationalNumber);
 
-    if (normalizePhoneDigits(phoneE164).length < 8) {
+    if (normalizePhoneDigits(phoneE164).length < 8 || seenPhones.has(phoneE164)) {
       return [];
     }
+
+    seenPhones.add(phoneE164);
 
     return [
       {
@@ -228,35 +246,76 @@ function buildContactPhoneOptions(
   });
 }
 
-export async function readContactsFromDevice(): Promise<readonly ContactCandidate[]> {
+function buildContactCandidate(
+  contact: Contacts.Contact | Contacts.ExistingContact,
+): ContactCandidate | null {
+  const alias = resolveContactName(contact);
+  const phoneOptions = buildContactPhoneOptions(contact);
+  if (phoneOptions.length === 0) {
+    return null;
+  }
+
+  const contactId =
+    'id' in contact && typeof contact.id === 'string' && contact.id.trim().length > 0
+      ? contact.id
+      : phoneOptions[0].phoneE164;
+
+  return {
+    contactId,
+    alias,
+    phoneOptions,
+    primaryPhone: phoneOptions[0],
+    searchKey:
+      `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase(
+        'es-CO',
+      ),
+  };
+}
+
+export async function readContactsPageFromDevice(input: {
+  readonly pageOffset: number;
+  readonly pageSize?: number;
+}): Promise<ContactsPageResult> {
+  const pageSize = input.pageSize ?? CONTACTS_PAGE_SIZE;
   const response = await Contacts.getContactsAsync({
-    fields: [
-      Contacts.Fields.Name,
-      Contacts.Fields.FirstName,
-      Contacts.Fields.MiddleName,
-      Contacts.Fields.LastName,
-      Contacts.Fields.PhoneNumbers,
-    ],
+    fields: [...CONTACT_FIELDS],
+    pageOffset: input.pageOffset,
+    pageSize,
+    sort: Contacts.SortTypes.FirstName,
   });
 
   const records: ContactCandidate[] = [];
   for (const contact of response.data) {
-    const alias = resolveContactName(contact);
-    const phoneOptions = buildContactPhoneOptions(contact);
-    if (phoneOptions.length === 0) {
+    const candidate = buildContactCandidate(contact);
+    if (!candidate) {
       continue;
     }
 
-    records.push({
-      contactId: contact.id,
-      alias,
-      phoneOptions,
-      primaryPhone: phoneOptions[0],
-      searchKey:
-        `${alias} ${phoneOptions.map((option) => option.phoneE164).join(' ')}`.toLocaleLowerCase(
-          'es-CO',
-        ),
-    });
+    records.push(candidate);
+  }
+
+  const nextPageOffset =
+    response.data.length > 0
+      ? input.pageOffset + response.data.length
+      : input.pageOffset + pageSize;
+
+  return {
+    contacts: records,
+    nextPageOffset,
+    hasNextPage: Boolean(response.hasNextPage),
+  };
+}
+
+export async function readContactsFromDevice(): Promise<readonly ContactCandidate[]> {
+  const records: ContactCandidate[] = [];
+  let pageOffset = 0;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const page = await readContactsPageFromDevice({ pageOffset });
+    records.push(...page.contacts);
+    pageOffset = page.nextPageOffset;
+    hasNextPage = page.hasNextPage;
   }
 
   return records.sort((left, right) => left.alias.localeCompare(right.alias, 'es-CO'));

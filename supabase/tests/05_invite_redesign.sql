@@ -66,7 +66,10 @@ select
   demo_users.id,
   demo_users.email,
   demo_users.display_name,
-  demo_users.id::text || '/avatar.jpg',
+  case
+    when demo_users.id = '00000000-0000-0000-0000-0000000000a7'::uuid then null
+    else demo_users.id::text || '/avatar.jpg'
+  end,
   'CO',
   '+57',
   right(demo_users.phone_e164, 10),
@@ -158,6 +161,10 @@ begin
 
   if not public.friendship_identity_ready(v_user_elena) then
     raise exception 'expected Elena to satisfy current identity gate';
+  end if;
+
+  if not public.friendship_identity_ready(v_user_gina) then
+    raise exception 'expected Gina to satisfy current identity gate without avatar';
   end if;
 
   v_internal := public.create_internal_friendship_invite(

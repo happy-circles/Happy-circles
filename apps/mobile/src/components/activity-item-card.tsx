@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   cardCompact: {
     borderRadius: theme.radius.medium,
-    minHeight: 76,
+    minHeight: 68,
   },
   pendingCard: {
     backgroundColor: '#fff9ed',
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   bodyCompact: {
-    minHeight: 48,
+    minHeight: 44,
   },
   leading: {
     alignItems: 'center',
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   },
   sideCompact: {
     gap: 3,
-    minWidth: 92,
+    minWidth: 82,
   },
   unreadCornerDot: {
     backgroundColor: '#2f80ed',

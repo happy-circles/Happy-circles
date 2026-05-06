@@ -49,7 +49,31 @@ function statusIconName(label: string, tone: StatusChipTone): keyof typeof Ionic
     return 'happy-outline';
   }
 
-  return 'ellipse';
+  if (normalized.includes('acceso') || normalized.includes('clave')) {
+    return 'key-outline';
+  }
+
+  if (normalized.includes('aviso') || normalized.includes('notificacion')) {
+    return 'notifications-outline';
+  }
+
+  if (normalized.includes('conexion') || normalized.includes('invitacion')) {
+    return 'people-outline';
+  }
+
+  if (normalized.includes('seguridad') || normalized.includes('prioritario')) {
+    return 'shield-checkmark-outline';
+  }
+
+  if (normalized.includes('enviad')) {
+    return 'send-outline';
+  }
+
+  if (normalized.includes('creacion')) {
+    return 'person-add-outline';
+  }
+
+  return 'information-circle-outline';
 }
 
 export function StatusChip({

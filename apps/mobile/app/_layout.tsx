@@ -8,12 +8,14 @@ import {
   useRouter,
   useSegments,
 } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import {
   AccessibilityInfo,
   Animated,
   Easing,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -26,7 +28,6 @@ import type { Json } from '@happy-circles/shared';
 import { AppAvatar } from '@/components/app-avatar';
 import {
   BRAND_VERIFICATION_EASING,
-  BRAND_VERIFICATION_RESULT_MS,
   BrandVerificationMark,
   type BrandVerificationState,
 } from '@/components/brand-verification-lockup';
@@ -52,6 +53,7 @@ import {
   subscribeHomeEntryHandoff,
   subscribeHomeEntryReady,
 } from '@/lib/home-entry-handoff';
+import { requestLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
 import { subscribeSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { PrimaryAction } from '@/components/primary-action';
 import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
@@ -72,16 +74,20 @@ import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
 
+SplashScreen.setOptions({ duration: 140, fade: true });
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const LAUNCH_INTRO_MIN_MS = 760;
 const LAUNCH_LAND_MS = 620;
 const LAUNCH_ROUTE_SETTLE_MS = 120;
 const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
 const LAUNCH_FACE_ID_DELAY_MS = 25;
 const LAUNCH_TARGET_WAIT_MS = 300;
-const LAUNCH_HOME_TARGET_WAIT_MS = 1400;
+const LAUNCH_HOME_TARGET_WAIT_MS = 2600;
 const LAUNCH_SESSION_MAX_WAIT_MS = 3200;
-const LAUNCH_TARGET_STABLE_SAMPLES = 3;
-const LAUNCH_TARGET_STABLE_THRESHOLD = 0.75;
+const LAUNCH_TARGET_STABLE_SAMPLES = 4;
+const LAUNCH_TARGET_STABLE_THRESHOLD = 1.25;
 const LAUNCH_LOGO_SIZE = IDENTITY_FLOW_STAGE_SIZE;
 const LAUNCH_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const LAUNCH_AVATAR_EDIT_PENCIL_SIZE = 32;
@@ -89,12 +95,12 @@ const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
 const HOME_ENTRY_SPIN_MS = 360;
 const HOME_ENTRY_SOURCE_CENTER_MS = 260;
 const HOME_ENTRY_SOURCE_CENTER_THRESHOLD = 18;
-const HOME_ENTRY_SUCCESS_MS = 160;
-const HOME_ENTRY_ROUTE_SETTLE_MS = 80;
+const HOME_ENTRY_SUCCESS_MS = 680;
+const HOME_ENTRY_ROUTE_SETTLE_MS = 120;
 const HOME_ENTRY_LAND_MS = 560;
 const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
 const HOME_ENTRY_FADE_MS = 120;
-const HOME_ENTRY_READY_WAIT_MS = 1800;
+const HOME_ENTRY_READY_WAIT_MS = 8000;
 const SETUP_ENTRY_SPIN_MS = 420;
 const SETUP_ENTRY_SUCCESS_MS = 220;
 const SETUP_ENTRY_ROUTE_SETTLE_MS = 120;
@@ -470,7 +476,7 @@ function LaunchIntroOverlay({
       duration: 620,
       easing: LAUNCH_EASING,
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start();
 
     return undefined;
@@ -545,7 +551,7 @@ function LaunchIntroOverlay({
             duration: reducedMotion ? 90 : 140,
             easing: Easing.out(Easing.quad),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start(() => {
             if (!active) {
               return;
@@ -575,7 +581,8 @@ function LaunchIntroOverlay({
         await waitForHomeEntryReadyAfter(homeReadyVersionAtStartRef.current);
       }
 
-      async function waitForLandingTarget() {
+      async function waitForLandingTarget(minimumStableAt = 0) {
+        requestLaunchTargetRemeasure();
         const startedAt = Date.now();
         const waitMs =
           latestTargetPreferenceRef.current === 'homeHeader'
@@ -587,7 +594,7 @@ function LaunchIntroOverlay({
         while (active && Date.now() - startedAt < waitMs) {
           const currentTarget = latestTargetRef.current;
 
-          if (currentTarget) {
+          if (currentTarget && currentTarget.stableAt >= minimumStableAt) {
             if (isSameStableLaunchTarget(previousTarget, currentTarget)) {
               stableSamples += 1;
             } else {
@@ -604,7 +611,8 @@ function LaunchIntroOverlay({
           await waitForNextFrame();
         }
 
-        return latestTargetRef.current;
+        const fallbackTarget = latestTargetRef.current;
+        return fallbackTarget && fallbackTarget.stableAt >= minimumStableAt ? fallbackTarget : null;
       }
 
       if (reducedMotion) {
@@ -619,7 +627,9 @@ function LaunchIntroOverlay({
           return;
         }
 
-        const nextLandingTarget = await waitForLandingTarget();
+        const nextLandingTarget = await waitForLandingTarget(
+          latestTargetPreferenceRef.current === 'homeHeader' ? Date.now() : 0,
+        );
         if (!active) {
           return;
         }
@@ -638,7 +648,7 @@ function LaunchIntroOverlay({
           duration: LAUNCH_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(({ finished }) => {
           if (finished) {
             clearTimeout(completionTimer);
@@ -646,14 +656,6 @@ function LaunchIntroOverlay({
             completeIntro();
           }
         });
-        return;
-      }
-
-      setLockupState('success');
-      await wait(BRAND_VERIFICATION_RESULT_MS);
-      setLockupState('idle');
-
-      if (!active) {
         return;
       }
 
@@ -668,14 +670,24 @@ function LaunchIntroOverlay({
         return;
       }
 
-      const nextLandingTarget = await waitForLandingTarget();
+      const nextLandingTarget = await waitForLandingTarget(
+        latestTargetPreferenceRef.current === 'homeHeader' ? Date.now() : 0,
+      );
       if (!active) {
         return;
       }
 
       setLandingTarget(nextLandingTarget);
       setLandingTargetLocked(true);
-      setLockupState(nextLandingTarget?.visualState ?? 'idle');
+      await waitForNextFrame();
+
+      if (!active) {
+        return;
+      }
+
+      setLockupState('success');
+      await wait(HOME_ENTRY_SUCCESS_MS);
+      setLockupState('idle');
       await waitForNextFrame();
 
       if (!active) {
@@ -688,7 +700,7 @@ function LaunchIntroOverlay({
         duration: landDuration,
         easing: LAUNCH_EASING,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start(({ finished }) => {
         if (finished) {
           clearTimeout(completionTimer);
@@ -886,6 +898,7 @@ function HomeEntryHandoffOverlay({
   const [visible, setVisible] = useState(false);
   const [requestId, setRequestId] = useState(0);
   const [requestReadyVersionAtStart, setRequestReadyVersionAtStart] = useState(0);
+  const [requestStartedAt, setRequestStartedAt] = useState(0);
   const [sourceTarget, setSourceTarget] = useState<LaunchIntroTargetSnapshot | null>(null);
   const [landingTarget, setLandingTarget] = useState<LaunchIntroTargetSnapshot | null>(null);
   const [landingTargetLocked, setLandingTargetLocked] = useState(false);
@@ -928,6 +941,7 @@ function HomeEntryHandoffOverlay({
         setVisible(true);
         onVisibleChange(true);
         setRequestReadyVersionAtStart(request.readyVersionAtStart);
+        setRequestStartedAt(request.startedAt);
         setRequestId(request.id);
 
         const sourceCenterX = nextSourceTarget
@@ -946,7 +960,7 @@ function HomeEntryHandoffOverlay({
             duration: reducedMotion ? 80 : 180,
             easing: Easing.out(Easing.quad),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start(({ finished }) => {
             if (finished) {
               request.completeSourceCentering();
@@ -957,7 +971,7 @@ function HomeEntryHandoffOverlay({
             duration: HOME_ENTRY_SOURCE_CENTER_MS,
             easing: Easing.out(Easing.cubic),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start(({ finished }) => {
             if (finished) {
               request.completeSourceCentering();
@@ -1015,7 +1029,7 @@ function HomeEntryHandoffOverlay({
           duration: HOME_ENTRY_FADE_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(() => {
           clearTimeout(fadeFallbackTimer);
           completionTimers.delete(fadeFallbackTimer);
@@ -1036,7 +1050,8 @@ function HomeEntryHandoffOverlay({
       return timer;
     }
 
-    async function waitForHomeTarget() {
+    async function waitForHomeTarget(minimumStableAt: number) {
+      requestLaunchTargetRemeasure();
       const startedAt = Date.now();
       let previousTarget: LaunchIntroTargetSnapshot | null = null;
       let stableSamples = 0;
@@ -1044,7 +1059,7 @@ function HomeEntryHandoffOverlay({
       while (active && Date.now() - startedAt < LAUNCH_HOME_TARGET_WAIT_MS) {
         const currentTarget = latestHomeTargetRef.current;
 
-        if (currentTarget) {
+        if (currentTarget && currentTarget.stableAt >= minimumStableAt) {
           if (isSameStableLaunchTarget(previousTarget, currentTarget)) {
             stableSamples += 1;
           } else {
@@ -1061,7 +1076,8 @@ function HomeEntryHandoffOverlay({
         await waitForNextFrame();
       }
 
-      return latestHomeTargetRef.current;
+      const fallbackTarget = latestHomeTargetRef.current;
+      return fallbackTarget && fallbackTarget.stableAt >= minimumStableAt ? fallbackTarget : null;
     }
 
     async function runHandoff() {
@@ -1073,7 +1089,7 @@ function HomeEntryHandoffOverlay({
         }
 
         await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
-        const nextTarget = await waitForHomeTarget();
+        const nextTarget = await waitForHomeTarget(Math.max(requestStartedAt, Date.now()));
         if (!active) {
           return;
         }
@@ -1092,7 +1108,7 @@ function HomeEntryHandoffOverlay({
           duration: HOME_ENTRY_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(({ finished }) => {
           if (finished) {
             clearTimeout(completionTimer);
@@ -1109,9 +1125,6 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      setLockupState('success');
-      await wait(HOME_ENTRY_SUCCESS_MS);
-      setLockupState('idle');
       await wait(HOME_ENTRY_ROUTE_SETTLE_MS);
 
       if (!active) {
@@ -1119,7 +1132,7 @@ function HomeEntryHandoffOverlay({
       }
 
       await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
-      const nextTarget = await waitForHomeTarget();
+      const nextTarget = await waitForHomeTarget(Math.max(requestStartedAt, Date.now()));
       if (!active) {
         return;
       }
@@ -1132,13 +1145,22 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
+      setLockupState('success');
+      await wait(HOME_ENTRY_SUCCESS_MS);
+      setLockupState('idle');
+      await waitForNextFrame();
+
+      if (!active) {
+        return;
+      }
+
       const duration = nextTarget ? HOME_ENTRY_LAND_MS : HOME_ENTRY_REDUCED_MOTION_EXIT_MS + 220;
       const completionTimer = scheduleCompletionFallback(duration);
       Animated.timing(landMotion, {
         duration,
         easing: LAUNCH_EASING,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start(({ finished }) => {
         if (finished) {
           clearTimeout(completionTimer);
@@ -1163,6 +1185,7 @@ function HomeEntryHandoffOverlay({
     reducedMotion,
     requestId,
     requestReadyVersionAtStart,
+    requestStartedAt,
     visible,
   ]);
 
@@ -1376,7 +1399,7 @@ function SetupEntryHandoffOverlay({
             duration: reducedMotion ? 80 : 180,
             easing: Easing.out(Easing.quad),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start();
         }
       }),
@@ -1417,7 +1440,7 @@ function SetupEntryHandoffOverlay({
           duration: SETUP_ENTRY_FADE_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(() => {
           if (active) {
             setVisible(false);
@@ -1492,7 +1515,7 @@ function SetupEntryHandoffOverlay({
           duration: SETUP_ENTRY_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(({ finished }) => {
           if (finished) {
             clearTimeout(completionTimer);
@@ -1537,7 +1560,7 @@ function SetupEntryHandoffOverlay({
         duration,
         easing: LAUNCH_EASING,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }).start(({ finished }) => {
         if (finished) {
           clearTimeout(completionTimer);
@@ -1852,6 +1875,14 @@ function RootNavigator() {
   const [launchIntroVisible, setLaunchIntroVisible] = useState(true);
   const [homeEntryHandoffVisible, setHomeEntryHandoffVisible] = useState(false);
   const [setupEntryHandoffVisible, setSetupEntryHandoffVisible] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <LaunchIntroVisibilityProvider

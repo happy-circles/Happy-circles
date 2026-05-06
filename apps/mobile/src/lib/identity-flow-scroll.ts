@@ -4,7 +4,7 @@ import type { ScrollView } from 'react-native';
 let nextRegistrationId = 0;
 let activeRegistrationId = 0;
 let activeScrollViewRef: RefObject<ScrollView | null> | null = null;
-const IDENTITY_FLOW_SCROLL_SETTLE_FRAMES = 2;
+const IDENTITY_FLOW_SCROLL_SETTLE_FRAMES = 5;
 
 function waitForNextFrame() {
   return new Promise<void>((resolve) => {

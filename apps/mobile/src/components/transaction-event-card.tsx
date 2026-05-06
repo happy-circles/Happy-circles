@@ -181,7 +181,7 @@ export function TransactionEventCard({
         imageUrl={actorAvatarUrl}
         label={actorLabel}
         rounded={false}
-        size={compact ? 38 : 44}
+        size={compact ? 34 : 44}
         variant={actorAvatarVariant}
       />
       {categoryPlacement === 'avatar' ? (
@@ -384,8 +384,8 @@ const styles = StyleSheet.create({
     width: 48,
   },
   avatarWrapCompact: {
-    height: 40,
-    width: 40,
+    height: 36,
+    width: 36,
   },
   categoryBadge: {
     alignItems: 'center',
@@ -400,8 +400,8 @@ const styles = StyleSheet.create({
   },
   categoryBadgeCompact: {
     borderWidth: 1.5,
-    height: 18,
-    width: 18,
+    height: 16,
+    width: 16,
   },
   context: {
     color: theme.colors.text,
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   amountLineCompact: {
-    gap: 4,
+    gap: 3,
   },
   amountStack: {
     alignItems: 'center',
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   amountCompact: {
-    fontSize: 16,
+    fontSize: 15,
     lineHeight: 18,
   },
   amountStruckThrough: {

@@ -6,12 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
+import { ActivityItemCard } from '@/components/activity-item-card';
+import { AppAvatar } from '@/components/app-avatar';
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
-import { PrimaryAction } from '@/components/primary-action';
 import { SwipePager } from '@/components/swipe-pager';
-import { TransactionEventCard } from '@/components/transaction-event-card';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
 import {
@@ -32,48 +32,47 @@ import {
 } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
-import { transactionCategoryLabel } from '@/lib/transaction-categories';
 import {
-  transactionAccentColor,
+  transactionCategoryBackgroundColor,
+  transactionCategoryIcon,
+  transactionCategoryLabel,
+} from '@/lib/transaction-categories';
+import {
   transactionAmountIsVoided,
   transactionAmountLabel,
   transactionContextLabel,
-  transactionDirectionLabel,
-  transactionFocusId,
-  transactionMetaLabel,
-  transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
   isCycleTransactionItem,
-  isPendingTransactionItem,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
-
-type ActivityDomainKey = 'transactions' | 'friendships';
-type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'reminders';
-type RouterHref = Parameters<ReturnType<typeof useRouter>['push']>[0];
-
-interface NotificationTarget {
-  readonly href: RouterHref;
-  readonly homeIntent?: {
-    readonly kind: 'open_invite_requests';
-    readonly tab: 'received' | 'sent';
-  };
-}
-
-interface PendingCardPresentation {
-  readonly eyebrow: string;
-}
+import {
+  initialCategoryFromDomain,
+  matchesNotificationCategory,
+  notificationCategoryForItem,
+  parseActivityDomainParam,
+  parseNotificationCategoryParam,
+  pendingDetailHref,
+  type NotificationCategoryKey,
+  type NotificationTarget,
+} from './activity-helpers';
 
 interface PendingSnippetContent {
   readonly detail?: string;
   readonly meta?: string;
 }
 
-interface FinancialRequestPendingContent {
-  readonly createdByLabel: string;
-  readonly detail: string;
-  readonly createdAtLabel: string;
+interface NotificationActionCardContent {
+  readonly accentColor: string;
+  readonly amountColor?: string;
+  readonly amountLabel?: string | null;
+  readonly amountStruckThrough?: boolean;
+  readonly iconBackgroundColor?: string;
+  readonly iconColor?: string;
+  readonly iconName?: keyof typeof Ionicons.glyphMap;
+  readonly leading: 'avatar' | 'icon';
+  readonly meta?: string | null;
+  readonly title: string;
 }
 
 interface NotificationCategoryMeta {
@@ -169,68 +168,6 @@ function avatarColorForLabel(label: string): string {
   );
 }
 
-function parseActivityDomainParam(value: string | string[] | undefined): ActivityDomainKey | null {
-  const normalized = Array.isArray(value) ? value[0] : value;
-
-  if (normalized === 'friendships' || normalized === 'transactions') {
-    return normalized;
-  }
-
-  return null;
-}
-
-function parseNotificationCategoryParam(
-  value: string | string[] | undefined,
-): NotificationCategoryKey | null {
-  const normalized = Array.isArray(value) ? value[0] : value;
-
-  if (
-    normalized === 'all' ||
-    normalized === 'transactions' ||
-    normalized === 'friends' ||
-    normalized === 'reminders'
-  ) {
-    return normalized;
-  }
-
-  return null;
-}
-
-function initialCategoryFromDomain(domain: ActivityDomainKey | null): NotificationCategoryKey {
-  if (domain === 'friendships') {
-    return 'friends';
-  }
-
-  if (domain === 'transactions') {
-    return 'transactions';
-  }
-
-  return 'all';
-}
-
-function notificationCategoryForItem(
-  item: ActivityItemDto,
-): Exclude<NotificationCategoryKey, 'all'> {
-  const kind = String(item.kind);
-
-  if (kind === 'friendship_invite' || kind === 'account_invite') {
-    return 'friends';
-  }
-
-  if (kind === 'system' || kind === 'system_note' || kind === 'reminder') {
-    return 'reminders';
-  }
-
-  return 'transactions';
-}
-
-function matchesNotificationCategory(
-  item: ActivityItemDto,
-  category: NotificationCategoryKey,
-): boolean {
-  return category === 'all' || notificationCategoryForItem(item) === category;
-}
-
 function notificationCategoryMeta(item: ActivityItemDto): NotificationCategoryMeta {
   const category = notificationCategoryForItem(item);
   return (
@@ -320,19 +257,6 @@ function personByLabel(
   );
 }
 
-function personIdFromHref(href: string | undefined): string | null {
-  const match = href?.match(/^\/person\/([^/?#]+)/);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
 function shouldShowRespondingInviteActor(item: ActivityItemDto): boolean {
   const actorRole = readStringField(item, 'actorRole');
   const actionState = readStringField(item, 'actionState');
@@ -417,28 +341,6 @@ function notificationActorForItem(
   };
 }
 
-function notificationTitleForDisplay(title: string, actorLabel: string): string {
-  const trimmedTitle = title.trim();
-  const trimmedActor = actorLabel.trim();
-
-  if (!trimmedActor) {
-    return trimmedTitle;
-  }
-
-  if (
-    !trimmedTitle.toLocaleLowerCase('es-CO').startsWith(trimmedActor.toLocaleLowerCase('es-CO'))
-  ) {
-    return trimmedTitle;
-  }
-
-  const withoutActor = trimmedTitle.slice(trimmedActor.length).trim();
-  if (!withoutActor) {
-    return trimmedTitle;
-  }
-
-  return `${withoutActor.charAt(0).toLocaleUpperCase('es-CO')}${withoutActor.slice(1)}`;
-}
-
 function NotificationCategoryTab({
   count,
   meta,
@@ -489,104 +391,6 @@ function NotificationSection({
   );
 }
 
-function buildPendingCardPresentation(item: ActivityItemDto): PendingCardPresentation {
-  const setupStatusLabel = setupReminderStatusLabel(item);
-
-  if (setupStatusLabel) {
-    return {
-      eyebrow: setupStatusLabel,
-    };
-  }
-
-  if (item.kind === 'financial_request' && item.status === 'requires_you') {
-    return {
-      eyebrow: 'Requiere tu respuesta',
-    };
-  }
-
-  if (item.kind === 'financial_request' && item.status === 'waiting_other_side') {
-    return {
-      eyebrow: 'Esperando respuesta',
-    };
-  }
-
-  if (item.kind === 'settlement_proposal' && item.status === 'pending_approvals') {
-    return {
-      eyebrow: 'Happy Circle',
-    };
-  }
-
-  if (item.kind === 'settlement_proposal' && item.status === 'waiting_other_side') {
-    return {
-      eyebrow: 'Esperando aprobaciones',
-    };
-  }
-
-  if (item.kind === 'settlement_proposal' && item.status === 'approved') {
-    return {
-      eyebrow: 'Happy Circle listo',
-    };
-  }
-
-  if (item.kind === 'friendship_invite' && item.status === 'requires_you_response') {
-    return {
-      eyebrow: 'Nueva invitacion',
-    };
-  }
-
-  if (item.kind === 'friendship_invite' && item.status === 'requires_you_review') {
-    return {
-      eyebrow: 'Por verificar',
-    };
-  }
-
-  if (item.kind === 'friendship_invite' && item.status === 'pending_claim') {
-    return {
-      eyebrow: 'Enviada afuera',
-    };
-  }
-
-  if (item.kind === 'friendship_invite' && item.status === 'waiting_sender_review') {
-    return {
-      eyebrow: 'Esperando validacion',
-    };
-  }
-
-  if (item.kind === 'friendship_invite' && item.status === 'waiting_other_side') {
-    return {
-      eyebrow: 'Esperando respuesta',
-    };
-  }
-
-  if (item.kind === 'account_invite' && item.status === 'requires_you_review') {
-    return {
-      eyebrow: 'Por verificar',
-    };
-  }
-
-  if (item.kind === 'account_invite' && item.status === 'pending_activation') {
-    if (readStringField(item, 'activatedUserId')) {
-      return {
-        eyebrow: 'Cuenta en creacion',
-      };
-    }
-
-    return {
-      eyebrow: 'Acceso enviado',
-    };
-  }
-
-  if (item.kind === 'account_invite' && item.status === 'waiting_sender_review') {
-    return {
-      eyebrow: 'Esperando validacion',
-    };
-  }
-
-  return {
-    eyebrow: 'Seguimiento',
-  };
-}
-
 function splitSubtitleSegments(value: string): string[] {
   return value
     .split('|')
@@ -631,104 +435,132 @@ function buildPendingSnippetContent(item: ActivityItemDto): PendingSnippetConten
   };
 }
 
-function buildInviteNotificationMeta(item: ActivityItemDto, fallback: string): string {
-  const profileEmailLabel = readStringField(item, 'profileEmailLabel');
+function joinNotificationMeta(parts: readonly (string | null | undefined)[]): string | null {
+  const visibleParts = parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
 
-  return [profileEmailLabel, fallback].filter(Boolean).join(' | ') || fallback;
+  return visibleParts.length > 0 ? visibleParts.join(' - ') : null;
 }
 
-function inviteNotificationStatusTone(status: string): 'primary' | 'warning' | 'neutral' {
-  if (status === 'requires_you_response' || status === 'requires_you_review') {
-    return 'warning';
+function financialRequestNotificationTitle(item: ActivityItemDto): string {
+  if (item.status === 'requires_you') {
+    return 'Responde esta solicitud';
   }
 
-  if (status === 'waiting_sender_review' || status === 'waiting_other_side') {
-    return 'primary';
+  if (item.status === 'waiting_other_side') {
+    return 'Solicitud enviada';
   }
 
-  return 'neutral';
+  if (item.status === 'accepted') {
+    return 'Solicitud aceptada';
+  }
+
+  if (item.status === 'rejected') {
+    return 'Solicitud rechazada';
+  }
+
+  return 'Revisa esta solicitud';
 }
 
-function pendingNotificationStatusTone(item: ActivityItemDto): 'primary' | 'warning' | 'neutral' {
-  if (SETUP_REMINDER_WARNING_IDS.has(item.id)) {
-    return 'warning';
+function settlementNotificationTitle(item: ActivityItemDto): string {
+  if (item.status === 'pending_approvals') {
+    return 'Aprueba este Happy Circle';
   }
 
-  if (setupReminderStatusLabel(item)) {
-    return 'primary';
+  if (item.status === 'waiting_other_side') {
+    return 'Esperando aprobaciones';
   }
 
-  return inviteNotificationStatusTone(item.status);
+  if (item.status === 'approved') {
+    return 'Completa este Happy Circle';
+  }
+
+  if (item.status === 'executed' || item.status === 'posted') {
+    return 'Happy Circle completado';
+  }
+
+  if (item.status === 'rejected') {
+    return 'Happy Circle no completado';
+  }
+
+  if (item.status === 'stale') {
+    return 'Happy Circle reemplazado';
+  }
+
+  return 'Revisa este Happy Circle';
 }
 
-function pendingDetailHref(
-  item: ActivityItemDto,
-  people: readonly PersonCardDto[],
-): NotificationTarget | null {
-  if (item.kind === 'settlement_proposal') {
-    return { href: `/settlements/${item.id}` as RouterHref };
+function transactionNotificationTitle(item: ActivityItemDto): string {
+  if (isCycleTransactionItem(item)) {
+    return settlementNotificationTitle(item);
   }
 
-  if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
-    return {
-      href: '/home' as RouterHref,
-      homeIntent: {
-        kind: 'open_invite_requests',
-        tab: inviteRequestTabForNotification(item),
-      },
-    };
+  if (item.status === 'requires_you' || item.status === 'pending') {
+    return 'Revisa esta solicitud';
   }
 
-  if (notificationCategoryForItem(item) !== 'transactions') {
-    return item.href ? { href: item.href as RouterHref } : null;
+  if (item.status === 'waiting_other_side') {
+    return 'Esperando respuesta';
   }
 
-  const hrefPersonId = personIdFromHref(item.href);
-  const matchedPerson =
-    (hrefPersonId ? people.find((person) => person.userId === hrefPersonId) : null) ??
-    personByLabel(people, item.counterpartyLabel);
-  const personId = matchedPerson?.userId ?? hrefPersonId;
-
-  if (!personId) {
-    return null;
+  if (item.status === 'posted') {
+    return item.tone === 'positive' ? 'Pago recibido' : 'Pago registrado';
   }
 
-  const panel = isPendingTransactionItem(item) ? 'pending' : 'history';
-  return {
-    href: `/person/${personId}?panel=${panel}&focus=${encodeURIComponent(
-      transactionFocusId(item),
-    )}` as RouterHref,
-  };
+  if (item.status === 'accepted') {
+    return 'Solicitud aceptada';
+  }
+
+  if (item.status === 'amended') {
+    return 'Revisa el nuevo monto';
+  }
+
+  if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
+    return 'Solicitud cerrada';
+  }
+
+  return 'Revisa esta transaccion';
 }
 
-function inviteRequestTabForNotification(item: ActivityItemDto): 'received' | 'sent' {
-  const actorRole = readStringField(item, 'actorRole');
+function inviteNotificationTitle(item: ActivityItemDto): string {
+  if (item.kind === 'friendship_invite') {
+    if (item.status === 'requires_you_response') {
+      return 'Acepta la invitacion';
+    }
 
-  if (
-    item.status === 'pending_claim' ||
-    item.status === 'pending_activation' ||
-    item.status === 'waiting_other_side' ||
-    (item.kind === 'friendship_invite' &&
-      item.status === 'waiting_sender_review' &&
-      actorRole === 'sender')
-  ) {
-    return 'sent';
+    if (item.status === 'requires_you_review') {
+      return 'Revisa esta invitacion';
+    }
+
+    if (item.status === 'pending_claim') {
+      return 'Invitacion enviada';
+    }
+
+    if (item.status === 'waiting_sender_review') {
+      return 'Esperando validacion';
+    }
+
+    if (item.status === 'waiting_other_side') {
+      return 'Esperando respuesta';
+    }
   }
 
-  return 'received';
-}
+  if (item.kind === 'account_invite') {
+    if (item.status === 'requires_you_review') {
+      return 'Revisa este acceso';
+    }
 
-function buildFinancialRequestPendingContent(
-  item: ActivityItemDto,
-): FinancialRequestPendingContent {
-  const parts = splitSubtitleSegments(item.subtitle);
-  const [createdByLabel, detail, createdAtLabel] = parts;
+    if (item.status === 'pending_activation') {
+      return readStringField(item, 'activatedUserId') ? 'Cuenta en creacion' : 'Acceso enviado';
+    }
 
-  return {
-    createdByLabel: createdByLabel ?? 'Persona',
-    detail: detail ?? item.subtitle,
-    createdAtLabel: createdAtLabel ?? '',
-  };
+    if (item.status === 'waiting_sender_review') {
+      return 'Esperando validacion';
+    }
+  }
+
+  return 'Revisa esta actualizacion';
 }
 
 export function ActivityScreen() {
@@ -900,123 +732,216 @@ export function ActivityScreen() {
     returnToRoute(router, target.href);
   }
 
-  function renderPendingCard(item: ActivityItemDto, unread: boolean) {
+  function renderNotificationActionCard(
+    item: ActivityItemDto,
+    actor: NotificationActor,
+    content: NotificationActionCardContent,
+    detailHref: NotificationTarget | null,
+  ) {
+    const card = (
+      <ActivityItemCard
+        accentColor={content.accentColor}
+        compact
+        key={item.id}
+        leadingNode={
+          content.leading === 'avatar' ? (
+            <AppAvatar
+              fallbackBackgroundColor={avatarColorForLabel(actor.label)}
+              fallbackTextColor={theme.colors.white}
+              imageUrl={actor.avatarUrl}
+              label={actor.label}
+              rounded={false}
+              size={42}
+            />
+          ) : (
+            <View
+              style={[
+                styles.notificationActionIconBubble,
+                { backgroundColor: content.iconBackgroundColor ?? theme.colors.surfaceSoft },
+              ]}
+            >
+              <Ionicons
+                color={content.iconColor ?? theme.colors.textMuted}
+                name={content.iconName ?? 'information-circle-outline'}
+                size={24}
+              />
+            </View>
+          )
+        }
+        metaNode={
+          content.meta ? (
+            <Text numberOfLines={1} style={styles.notificationActionMeta}>
+              {content.meta}
+            </Text>
+          ) : null
+        }
+        sideNode={
+          content.amountLabel || detailHref ? (
+            <View style={styles.notificationActionSide}>
+              {content.amountLabel ? (
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.notificationActionAmount,
+                    content.amountColor ? { color: content.amountColor } : null,
+                    content.amountStruckThrough ? styles.notificationActionAmountVoided : null,
+                  ]}
+                >
+                  {content.amountLabel}
+                </Text>
+              ) : null}
+              {detailHref ? (
+                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+              ) : null}
+            </View>
+          ) : null
+        }
+        title={content.title}
+      />
+    );
+
+    if (!detailHref) {
+      return card;
+    }
+
+    return (
+      <Pressable
+        key={item.id}
+        onPress={() => openNotificationTarget(detailHref)}
+        style={({ pressed }) => [pressed ? styles.tabButtonPressed : null]}
+      >
+        {card}
+      </Pressable>
+    );
+  }
+
+  function renderSetupReminderCard(item: ActivityItemDto) {
+    const category = notificationCategoryMeta(item);
+    const detailHref = pendingDetailHref(item, people);
+    const iconColor = SETUP_REMINDER_WARNING_IDS.has(item.id)
+      ? theme.colors.warning
+      : category.color;
+    const iconBackgroundColor = SETUP_REMINDER_WARNING_IDS.has(item.id)
+      ? theme.colors.warningSoft
+      : category.backgroundColor;
+    const iconName = setupReminderBadgeIcon(item, category.icon);
+    const card = (
+      <ActivityItemCard
+        accentColor={iconColor}
+        compact
+        key={item.id}
+        leadingNode={
+          <View
+            style={[styles.notificationActionIconBubble, { backgroundColor: iconBackgroundColor }]}
+          >
+            <Ionicons color={iconColor} name={iconName} size={24} />
+          </View>
+        }
+        sideNode={
+          detailHref ? (
+            <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+          ) : null
+        }
+        title={item.title}
+      />
+    );
+
+    if (!detailHref) {
+      return card;
+    }
+
+    return (
+      <Pressable
+        key={item.id}
+        onPress={() => openNotificationTarget(detailHref)}
+        style={({ pressed }) => [pressed ? styles.tabButtonPressed : null]}
+      >
+        {card}
+      </Pressable>
+    );
+  }
+
+  function renderPendingCard(item: ActivityItemDto) {
     const category = notificationCategoryMeta(item);
     const actor = notificationActorForItem(item, people);
     const detailHref = pendingDetailHref(item, people);
 
-    if (item.kind === 'financial_request') {
-      const financialRequestContent = buildFinancialRequestPendingContent(item);
-      const creatorLabel =
-        financialRequestContent.createdByLabel === 'Tu'
-          ? 'Creado por ti'
-          : `Creado por ${financialRequestContent.createdByLabel}`;
-      const transactionMeta = [
-        creatorLabel,
-        financialRequestContent.createdAtLabel
-          ? `${financialRequestContent.createdAtLabel} · ${transactionCategoryLabel(item.category)}`
-          : transactionCategoryLabel(item.category),
-      ]
-        .filter(Boolean)
-        .join(' | ');
-
-      return (
-        <TransactionEventCard
-          accentColor={transactionAccentColor(item)}
-          actorAvatarUrl={actor.avatarUrl}
-          actorFallbackColor={avatarColorForLabel(actor.label)}
-          actorLabel={actor.label}
-          amountColor={transactionToneColor(item)}
-          amountLabel={transactionAmountLabel(item) ?? formatCop(item.amountMinor ?? 0)}
-          amountStruckThrough={transactionAmountIsVoided(item)}
-          category={transactionVisualCategory(item)}
-          categoryPlacement="meta"
-          compact
-          compactMetaLayout="stacked"
-          context={financialRequestContent.detail}
-          directionLabel={transactionDirectionLabel(item)}
-          key={item.id}
-          meta={transactionMeta}
-          onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-          statusLabel={null}
-          statusTone={transactionStatusTone(item)}
-          unread={unread}
-        >
-          {detailHref ? (
-            <PrimaryAction
-              compact
-              icon="person-circle-outline"
-              label="Ver en perfil"
-              onPress={() => openNotificationTarget(detailHref)}
-              variant="secondary"
-            />
-          ) : null}
-        </TransactionEventCard>
-      );
+    if (notificationCategoryForItem(item) === 'reminders' && setupReminderStatusLabel(item)) {
+      return renderSetupReminderCard(item);
     }
 
-    const cardPresentation = buildPendingCardPresentation(item);
-    const snippetContent = buildPendingSnippetContent(item);
+    if (item.kind === 'financial_request') {
+      const visualCategory = transactionVisualCategory(item);
+      const iconColor = transactionToneColor(item);
+      return renderNotificationActionCard(
+        item,
+        actor,
+        {
+          accentColor: iconColor,
+          amountColor: iconColor,
+          amountLabel: transactionAmountLabel(item) ?? formatCop(item.amountMinor ?? 0),
+          amountStruckThrough: transactionAmountIsVoided(item),
+          iconBackgroundColor: transactionCategoryBackgroundColor(visualCategory),
+          iconColor,
+          iconName: transactionCategoryIcon(visualCategory) as keyof typeof Ionicons.glyphMap,
+          leading: 'icon',
+          meta: joinNotificationMeta([actor.label, transactionCategoryLabel(visualCategory)]),
+          title: financialRequestNotificationTitle(item),
+        },
+        detailHref,
+      );
+    }
 
     if (notificationCategoryForItem(item) === 'transactions') {
       const isSystemTransaction = isCycleTransactionItem(item);
+      const visualCategory = transactionVisualCategory(item);
+      const iconColor = transactionToneColor(item);
       const transactionActorLabel = isSystemTransaction ? 'Happy Circle' : actor.label;
 
-      return (
-        <TransactionEventCard
-          accentColor={transactionAccentColor(item)}
-          actorAvatarUrl={isSystemTransaction ? null : actor.avatarUrl}
-          actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-          actorFallbackColor={
-            isSystemTransaction ? transactionToneColor(item) : avatarColorForLabel(actor.label)
-          }
-          actorLabel={transactionActorLabel}
-          amountColor={transactionToneColor(item)}
-          amountLabel={transactionAmountLabel(item)}
-          amountStruckThrough={transactionAmountIsVoided(item)}
-          category={transactionVisualCategory(item)}
-          categoryPlacement="meta"
-          compact
-          compactMetaLayout="stacked"
-          context={transactionContextLabel(item, transactionActorLabel)}
-          directionLabel={transactionDirectionLabel(item)}
-          key={item.id}
-          meta={transactionMetaLabel(item)}
-          onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-          statusLabel={null}
-          statusTone={transactionStatusTone(item)}
-          unread={unread}
-        />
+      return renderNotificationActionCard(
+        item,
+        actor,
+        {
+          accentColor: iconColor,
+          amountColor: iconColor,
+          amountLabel: transactionAmountLabel(item),
+          amountStruckThrough: transactionAmountIsVoided(item),
+          iconBackgroundColor: transactionCategoryBackgroundColor(visualCategory),
+          iconColor,
+          iconName: transactionCategoryIcon(visualCategory) as keyof typeof Ionicons.glyphMap,
+          leading: 'icon',
+          meta: joinNotificationMeta([
+            transactionActorLabel,
+            transactionCategoryLabel(visualCategory),
+          ]),
+          title: transactionNotificationTitle(item),
+        },
+        detailHref,
       );
     }
 
-    const isReminderNotification = notificationCategoryForItem(item) === 'reminders';
+    const snippetContent = buildPendingSnippetContent(item);
+    const profileEmailLabel = readStringField(item, 'profileEmailLabel');
+    const actorMetaLabel =
+      actor.label !== 'Persona' && actor.label !== 'Happy Circles' ? actor.label : null;
+    const canUseActorAvatar = Boolean(actor.avatarUrl || actorMetaLabel);
 
-    return (
-      <TransactionEventCard
-        accentColor={category.color}
-        actorAvatarUrl={actor.avatarUrl}
-        actorAvatarVariant={isReminderNotification ? 'system' : 'person'}
-        actorFallbackColor={avatarColorForLabel(actor.label)}
-        actorLabel={actor.label}
-        amountColor={category.color}
-        badgeBackgroundColor={category.backgroundColor}
-        badgeColor={category.color}
-        badgeIcon={setupReminderBadgeIcon(item, category.icon)}
-        categoryPlacement="meta"
-        compact
-        compactMetaLayout="stacked"
-        context={notificationTitleForDisplay(item.title, actor.label)}
-        key={item.id}
-        meta={buildInviteNotificationMeta(
-          item,
-          snippetContent.detail ?? snippetContent.meta ?? cardPresentation.eyebrow,
-        )}
-        onPress={detailHref ? () => openNotificationTarget(detailHref) : undefined}
-        statusLabel={cardPresentation.eyebrow}
-        statusTone={pendingNotificationStatusTone(item)}
-        unread={unread}
-      />
+    return renderNotificationActionCard(
+      item,
+      actor,
+      {
+        accentColor: category.color,
+        iconBackgroundColor: category.backgroundColor,
+        iconColor: category.color,
+        iconName: item.kind === 'account_invite' ? 'key-outline' : category.icon,
+        leading: canUseActorAvatar ? 'avatar' : 'icon',
+        meta: joinNotificationMeta([
+          actorMetaLabel,
+          profileEmailLabel ?? snippetContent.meta ?? snippetContent.detail,
+        ]),
+        title: inviteNotificationTitle(item),
+      },
+      detailHref,
     );
   }
 
@@ -1038,7 +963,6 @@ export function ActivityScreen() {
         contentContainerStyle={styles.sheetScrollContent}
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
-        refreshIndicatorStyle={styles.sheetRefreshIndicator}
         showsVerticalScrollIndicator={false}
       >
         {!hasNotifications ? (
@@ -1060,12 +984,12 @@ export function ActivityScreen() {
           <>
             {categoryPendingItems.length > 0 ? (
               <NotificationSection title="Pendientes">
-                {categoryPendingItems.map((item) => renderPendingCard(item, true))}
+                {categoryPendingItems.map((item) => renderPendingCard(item))}
               </NotificationSection>
             ) : null}
             {categoryReviewedItems.length > 0 ? (
               <NotificationSection title="Revisadas">
-                {categoryReviewedItems.map((item) => renderPendingCard(item, false))}
+                {categoryReviewedItems.map((item) => renderPendingCard(item))}
               </NotificationSection>
             ) : null}
           </>
@@ -1275,9 +1199,6 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xs,
     paddingTop: theme.spacing.xs,
   },
-  sheetRefreshIndicator: {
-    top: theme.spacing.xs,
-  },
   notificationSection: {
     gap: theme.spacing.sm,
   },
@@ -1289,6 +1210,35 @@ const styles = StyleSheet.create({
   },
   notificationSectionContent: {
     gap: theme.spacing.sm,
+  },
+  notificationActionIconBubble: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  notificationActionMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  notificationActionSide: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+  },
+  notificationActionAmount: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  notificationActionAmountVoided: {
+    opacity: 0.72,
+    textDecorationLine: 'line-through',
   },
   supportText: {
     color: theme.colors.textMuted,

@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
+      '@': resolve(__dirname, 'apps/mobile/src'),
       '@happy-circles/shared': resolve(__dirname, 'packages/shared/src/index.ts'),
       '@happy-circles/domain': resolve(__dirname, 'packages/domain/src/index.ts'),
       '@happy-circles/application': resolve(__dirname, 'packages/application/src/index.ts'),

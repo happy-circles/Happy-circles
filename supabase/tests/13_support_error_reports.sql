@@ -104,3 +104,6 @@ begin
     raise exception 'support report metadata did not keep allowlisted action';
   end if;
 end $$;
+
+select '1..1';
+select 'ok 1 - support error reports sanitize metadata and stay service-role only';

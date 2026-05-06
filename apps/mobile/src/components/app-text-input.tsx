@@ -3,23 +3,43 @@ import { Platform, StyleSheet, TextInput, type TextInputProps } from 'react-nati
 
 import { theme } from '@/lib/theme';
 
-type InputChrome = 'default' | 'glass';
+type InputChrome = 'default' | 'glass' | 'plain';
+type InputDensity = 'compact' | 'identity' | 'regular';
 
 export interface AppTextInputProps extends TextInputProps {
   readonly chrome?: InputChrome;
+  readonly density?: InputDensity;
   readonly hasError?: boolean;
 }
 
 export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function AppTextInput(
-  { chrome = 'default', hasError = false, onBlur, onFocus, selectionColor, style, ...props },
+  {
+    chrome = 'default',
+    density = 'regular',
+    hasError = false,
+    multiline = false,
+    onBlur,
+    onFocus,
+    selectionColor,
+    style,
+    ...props
+  },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+  const showsChrome = chrome !== 'plain';
+  const singleLineStyle =
+    density === 'compact'
+      ? styles.compactSingleLine
+      : density === 'identity'
+        ? styles.identitySingleLine
+        : styles.regularSingleLine;
 
   return (
     <TextInput
       {...props}
       cursorColor={theme.colors.primary}
+      multiline={multiline}
       onBlur={(event) => {
         setFocused(false);
         onBlur?.(event);
@@ -31,10 +51,13 @@ export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function Ap
       ref={ref}
       selectionColor={selectionColor ?? theme.colors.primary}
       style={[
-        chrome === 'glass' ? styles.glass : styles.default,
-        focused ? styles.focused : null,
-        hasError ? styles.error : null,
-        focused && hasError ? styles.focusedError : null,
+        styles.base,
+        styles[density],
+        multiline ? styles.multiline : singleLineStyle,
+        styles[chrome],
+        showsChrome && focused ? styles.focused : null,
+        showsChrome && hasError ? styles.error : null,
+        showsChrome && focused && hasError ? styles.focusedError : null,
         style,
       ]}
     />
@@ -42,27 +65,63 @@ export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function Ap
 });
 
 const styles = StyleSheet.create({
+  base: {
+    color: theme.colors.text,
+    includeFontPadding: false,
+  },
+  regular: {
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+    paddingHorizontal: theme.spacing.md,
+  },
+  compact: {
+    fontSize: theme.typography.callout,
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.md,
+  },
+  identity: {
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+    paddingHorizontal: theme.spacing.md,
+  },
+  regularSingleLine: {
+    height: 52,
+    minHeight: 52,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+  },
+  compactSingleLine: {
+    height: 48,
+    minHeight: 48,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+  },
+  identitySingleLine: {
+    height: 56,
+    minHeight: 56,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
+  },
+  multiline: {
+    minHeight: 96,
+    paddingVertical: theme.spacing.sm,
+    textAlignVertical: 'top',
+  },
   default: {
     backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
   },
   glass: {
     backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderColor: 'rgba(15, 23, 40, 0.08)',
     borderRadius: theme.radius.medium,
     borderWidth: 1,
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    minHeight: 54,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+  },
+  plain: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   focused: {
     backgroundColor: theme.colors.surface,

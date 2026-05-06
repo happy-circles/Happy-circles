@@ -93,17 +93,28 @@ describe('app smoke checks', () => {
       'profile',
       'profile-screen.tsx',
     );
+    const profileHelpers = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'profile',
+      'profile-helpers.ts',
+    );
     const notifications = readRepoFile('apps', 'mobile', 'src', 'lib', 'notifications.ts');
     const appLayout = readRepoFile('apps', 'mobile', 'app', '_layout.tsx');
 
-    expect(setupReminder).toContain("title: 'Ajuste pendiente'");
-    expect(setupReminder).toContain("return 'Contactos pendientes.';");
-    expect(setupReminder).toContain("return 'Recordatorios pendientes.';");
+    expect(setupReminder).toContain("title: 'Confia este telefono'");
+    expect(setupReminder).toContain("title: 'Activa tus contactos'");
+    expect(setupReminder).toContain("title: 'Activa tus notificaciones'");
     expect(setupReminder).toContain("'/people?addPerson=1'");
     expect(setupReminder).toContain("'/profile?focus=notifications'");
     expect(setupReminder).not.toContain('cuando quieras terminar la configuracion');
-    expect(setupPromptCard).toContain('Contactos y recordatorios pendientes.');
-    expect(profileScreen).toContain("resolvedFocusTarget === 'notifications'");
+    expect(setupPromptCard).toContain(
+      'Hay ${actionCount} ajustes pendientes para completar seguridad, acceso y avisos.',
+    );
+    expect(profileHelpers).toContain("resolvedFocusTarget === 'notifications'");
+    expect(profileScreen).toContain('resolveProfileFocusRequest');
     expect(profileScreen).toContain("highlightTarget === 'account'");
     expect(notifications).toContain('getLastNotificationResponseAsync');
     expect(appLayout).toContain('getLastNotificationRoute');
@@ -120,7 +131,8 @@ describe('app smoke checks', () => {
       'activity-screen.tsx',
     );
 
-    expect(activityScreen).toContain('label="Ver en perfil"');
+    expect(activityScreen).toContain('openNotificationTarget(detailHref)');
+    expect(activityScreen).toContain('pendingDetailHref(item, people)');
     expect(activityScreen).not.toContain('Ver Happy Circle');
     expect(activityScreen).not.toContain('useAcceptFinancialRequestMutation');
     expect(activityScreen).not.toContain('useRejectFinancialRequestMutation');

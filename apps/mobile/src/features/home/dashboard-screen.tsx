@@ -1,34 +1,51 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { MessageBanner } from '@/components/message-banner';
 import { NotificationBellButton } from '@/components/notification-bell-button';
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { SetupPromptCard } from '@/components/setup-prompt-card';
 import { SurfaceCard } from '@/components/surface-card';
 import { SwipePager } from '@/components/swipe-pager';
 import { TransactionEventCard } from '@/components/transaction-event-card';
-import { BalanceLensCarousel, type BalanceFocus } from '@/features/balance/balance-overview-screen';
+import { BalanceLensCarousel } from '@/features/balance/balance-overview-screen';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
-import { resolveAvatarUrl } from '@/lib/avatar';
 import {
-  HEADER_BRAND_GAP,
-  HEADER_BRAND_TITLE_SIZE as BASE_HEADER_BRAND_TITLE_SIZE,
-  HEADER_BRAND_TITLE_WIDTH as BASE_HEADER_BRAND_TITLE_WIDTH,
-} from '@/components/brand-lockup';
+  INVITE_REQUEST_TABS,
+  balanceFocusHref,
+  displayNameForInvite,
+  inviteAccentBackgroundColor,
+  inviteAccentColor,
+  inviteCardIcon,
+  inviteRequestEmptyDescription,
+  inviteRequestEmptyTitle,
+  inviteRequestMeta,
+  isActiveQrInvite,
+  isReceivedInvite,
+  isSentInvite,
+  isVisibleInviteHistory,
+  shouldShowRespondingInviteProfile,
+  sortInviteHistoryItems,
+  sortInviteRequestItems,
+  type InviteRequestAction,
+  type InviteRequestItem,
+  type InviteRequestsTab,
+  type TransactionTargetPanel,
+} from '@/features/home/dashboard-helpers';
+import { resolveAvatarUrl } from '@/lib/avatar';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { useHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import { pushRoute } from '@/lib/navigation';
 import {
-  type AccountInviteListItem,
-  type FriendshipInviteListItem,
+  markNotificationItemsViewed,
   notificationViewKeyForItem,
   useAppSnapshot,
   useCancelAccountInviteMutation,
@@ -38,10 +55,6 @@ import {
   useReviewExternalFriendshipInviteMutation,
 } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
-import {
-  getSeenPendingTransactionIds,
-  markPendingTransactionIdsSeen,
-} from '@/lib/pending-transaction-views';
 import { dismissSetupPrompt, getSetupPromptDismissed } from '@/lib/setup-reminder';
 import { buildHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
 import {
@@ -77,19 +90,7 @@ const HOME_HEADER_ACTION_SIZE = 48;
 const HOME_HEADER_AVATAR_SIZE = 40;
 const HOME_HEADER_BRAND_LOGO_SIZE = 60;
 const HOME_HEADER_BRAND_TITLE_SIZE = 22;
-const HOME_HEADER_BRAND_TITLE_WIDTH =
-  HOME_HEADER_BRAND_TITLE_SIZE * (BASE_HEADER_BRAND_TITLE_WIDTH / BASE_HEADER_BRAND_TITLE_SIZE);
-const HOME_HEADER_BRAND_LOCKUP_WIDTH =
-  HOME_HEADER_BRAND_LOGO_SIZE + HEADER_BRAND_GAP + HOME_HEADER_BRAND_TITLE_WIDTH;
-const HOME_REFRESH_PILL_HORIZONTAL_PADDING = theme.spacing.sm;
-const HOME_REFRESH_PILL_VERTICAL_PADDING = 5;
-const HOME_REFRESH_PILL_BORDER_WIDTH = 1;
 const HOME_REGISTER_FAB_CLEARANCE = 76;
-type InviteRequestsTab = 'received' | 'sent' | 'history';
-type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel';
-type InviteRequestItem = FriendshipInviteListItem | AccountInviteListItem;
-type TransactionTargetPanel = 'pending' | 'history';
-const INVITE_REQUEST_TABS: readonly InviteRequestsTab[] = ['received', 'sent', 'history'];
 
 function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'displayName'>): string {
   const source = `${person.userId}:${person.displayName}`;
@@ -129,46 +130,6 @@ function setupNotificationKey(id: string): string {
     kind: 'system_note',
     status: 'pending',
   });
-}
-
-function formatRelativeLabel(value: string): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return 'recientemente';
-  }
-
-  const diffMs = Date.now() - timestamp;
-  const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-
-  if (diffMs < minute) {
-    return 'hace un momento';
-  }
-
-  if (diffMs < hour) {
-    return `hace ${Math.max(1, Math.round(diffMs / minute))} min`;
-  }
-
-  if (diffMs < day) {
-    return `hace ${Math.max(1, Math.round(diffMs / hour))} h`;
-  }
-
-  if (diffMs < 7 * day) {
-    return `hace ${Math.max(1, Math.round(diffMs / day))} d`;
-  }
-
-  return new Intl.DateTimeFormat('es-CO', {
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(timestamp));
-}
-
-function splitSubtitle(value: string): string[] {
-  return value
-    .split('|')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
 }
 
 function compactTransactionSign(item: ActivityItemDto): '+' | '-' | 'cycle' | 'neutral' {
@@ -252,446 +213,6 @@ function transactionPersonHref(
   )}` as Href;
 }
 
-function balanceFocusHref(focus: BalanceFocus): Href {
-  if (focus === 'balance') {
-    return '/balance' as Href;
-  }
-
-  if (focus === 'people') {
-    return '/people' as Href;
-  }
-
-  if (focus === 'categories') {
-    return '/categories' as Href;
-  }
-
-  return `/balance?segment=${focus}` as Href;
-}
-
-function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
-  return [...items].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-}
-
-function inviteHistoryTimestamp(item: InviteRequestItem): string {
-  if (typeof item.happenedAt === 'string' && item.happenedAt.length > 0) {
-    return item.happenedAt;
-  }
-
-  if (item.kind === 'friendship_invite' && item.resolvedAt) {
-    return item.resolvedAt;
-  }
-
-  if (item.kind === 'account_invite') {
-    return item.resolvedAt ?? item.activatedAt ?? item.createdAt;
-  }
-
-  return item.createdAt;
-}
-
-function sortInviteHistoryItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {
-  return [...items].sort(
-    (left, right) =>
-      Date.parse(inviteHistoryTimestamp(right)) - Date.parse(inviteHistoryTimestamp(left)),
-  );
-}
-
-function isReceivedInvite(item: InviteRequestItem): boolean {
-  if (item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review') {
-    return true;
-  }
-
-  if (item.kind === 'friendship_invite' && item.actionState === 'waiting_sender_review') {
-    return item.actorRole === 'claimant';
-  }
-
-  if (item.kind === 'account_invite' && item.actionState === 'waiting_sender_review') {
-    return item.actorRole === 'activated';
-  }
-
-  return false;
-}
-
-function isSentInvite(item: InviteRequestItem): boolean {
-  if (item.kind === 'friendship_invite') {
-    return (
-      item.actorRole === 'sender' &&
-      (item.actionState === 'pending_claim' || item.actionState === 'waiting_other_side')
-    );
-  }
-
-  return item.actorRole === 'inviter' && item.actionState === 'pending_activation';
-}
-
-function isActiveQrInvite(item: InviteRequestItem): boolean {
-  return (
-    item.originChannel === 'qr' &&
-    (item.actionState === 'pending_claim' || item.actionState === 'pending_activation')
-  );
-}
-
-function inviteHasLinkedPerson(item: InviteRequestItem): boolean {
-  if (item.kind === 'friendship_invite') {
-    return Boolean(
-      item.profileUserId ||
-      item.claimantSnapshot ||
-      normalizedInviteName(item.respondingProfileDisplayName) ||
-      normalizedInviteName(item.counterpartyLabel),
-    );
-  }
-
-  return Boolean(
-    item.activatedUserId ||
-    item.profileUserId ||
-    normalizedInviteName(item.activatedUserDisplayName) ||
-    normalizedInviteName(item.respondingProfileDisplayName) ||
-    normalizedInviteName(item.counterpartyLabel),
-  );
-}
-
-function isVisibleInviteHistory(item: InviteRequestItem): boolean {
-  if (item.actionState !== 'history' || item.originChannel !== 'qr') {
-    return true;
-  }
-
-  return inviteHasLinkedPerson(item);
-}
-
-function inviteCardIcon(item: InviteRequestItem): keyof typeof Ionicons.glyphMap {
-  if (item.originChannel === 'qr') {
-    return 'qr-code-outline';
-  }
-
-  if (item.kind === 'account_invite') {
-    return 'key-outline';
-  }
-
-  if (item.originChannel === 'internal') {
-    return 'send-outline';
-  }
-
-  if (item.originChannel === 'remote') {
-    return 'link-outline';
-  }
-
-  return 'person-add-outline';
-}
-
-function inviteAccentColor(item: InviteRequestItem): string {
-  if (isActiveQrInvite(item)) {
-    return theme.colors.primary;
-  }
-
-  if (item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review') {
-    return theme.colors.warning;
-  }
-
-  if (item.actionState === 'history') {
-    if (item.status === 'accepted') {
-      return theme.colors.success;
-    }
-
-    if (item.status === 'rejected' || item.status === 'canceled') {
-      return theme.colors.danger;
-    }
-
-    if (item.status === 'expired') {
-      return theme.colors.warning;
-    }
-  }
-
-  return theme.colors.primary;
-}
-
-function inviteAccentBackgroundColor(item: InviteRequestItem): string {
-  const accentColor = inviteAccentColor(item);
-
-  if (accentColor === theme.colors.success) {
-    return theme.colors.successSoft;
-  }
-
-  if (accentColor === theme.colors.warning) {
-    return theme.colors.warningSoft;
-  }
-
-  if (accentColor === theme.colors.danger) {
-    return theme.colors.dangerSoft;
-  }
-
-  return theme.colors.primaryGhost;
-}
-
-function isRelativeInviteLabel(value: string): boolean {
-  const normalized = value.trim().toLocaleLowerCase('es-CO');
-
-  return (
-    normalized === 'reciente' ||
-    normalized === 'recientemente' ||
-    normalized === 'hoy' ||
-    normalized === 'ayer' ||
-    normalized === 'hace un momento' ||
-    /^hace \d+ (min|h|d)$/.test(normalized) ||
-    /^\d{1,2} [a-z.]+$/.test(normalized)
-  );
-}
-
-function normalizedInviteName(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const normalized = trimmed.toLocaleLowerCase('es-CO');
-  if (
-    isRelativeInviteLabel(trimmed) ||
-    normalized === 'persona' ||
-    normalized === 'tu' ||
-    normalized === 'usuario' ||
-    normalized === 'sistema' ||
-    normalized === 'contacto invitado' ||
-    normalized === 'tu contacto' ||
-    normalized === 'solicitud enviada' ||
-    normalized === 'invitacion' ||
-    normalized === 'invitacion cancelada' ||
-    normalized === 'invitacion de acceso' ||
-    normalized === 'qr temporal activo' ||
-    normalized === 'conexion creada' ||
-    normalized === 'esta invitacion vencio' ||
-    normalized === 'la invitacion vencio' ||
-    normalized === 'este acceso vencio'
-  ) {
-    return null;
-  }
-
-  return trimmed;
-}
-
-function firstInviteName(...values: Array<string | null | undefined>): string | null {
-  for (const value of values) {
-    const normalized = normalizedInviteName(value);
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return null;
-}
-
-function inviteNameFromReference(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed.includes('@') || /^\+?\d[\d\s().-]+$/.test(trimmed)) {
-    return null;
-  }
-
-  const cleaned = trimmed
-    .replace(/^Pensada para\s+/i, '')
-    .replace(/^Contacto\s+/i, '')
-    .trim();
-
-  if (
-    cleaned.includes('@') ||
-    isRelativeInviteLabel(cleaned) ||
-    /^\+?\d[\d\s().-]+$/.test(cleaned) ||
-    /^(vence|por verificar|solicitud pendiente|responde esta solicitud|ya )\b/i.test(cleaned)
-  ) {
-    return null;
-  }
-
-  return normalizedInviteName(cleaned);
-}
-
-function shouldShowRespondingInviteProfile(item: InviteRequestItem): boolean {
-  if (item.kind === 'friendship_invite') {
-    return (
-      item.actorRole === 'sender' &&
-      item.flow === 'external' &&
-      item.actionState !== 'pending_claim'
-    );
-  }
-
-  return item.actorRole === 'inviter' && Boolean(item.activatedUserId);
-}
-
-function fallbackInviteMechanismLabel(item: InviteRequestItem): string | null {
-  if (item.actionState !== 'history' || item.originChannel !== 'qr') {
-    return null;
-  }
-
-  if (item.status === 'canceled') {
-    return 'QR cancelado';
-  }
-
-  if (item.status === 'expired') {
-    return 'QR vencido';
-  }
-
-  if (item.status === 'rejected') {
-    return 'QR rechazado';
-  }
-
-  return null;
-}
-
-function displayNameForInvite(item: InviteRequestItem): string {
-  const subtitleNames = splitSubtitle(item.subtitle).map(inviteNameFromReference);
-
-  if (isActiveQrInvite(item)) {
-    return 'QR activo';
-  }
-
-  if (shouldShowRespondingInviteProfile(item)) {
-    const respondingName = firstInviteName(
-      item.respondingProfileDisplayName,
-      item.kind === 'friendship_invite' ? item.claimantSnapshot?.displayName : null,
-      item.counterpartyLabel,
-      ...subtitleNames,
-    );
-    if (respondingName) {
-      return respondingName;
-    }
-  }
-
-  if (item.kind === 'account_invite') {
-    const accountName =
-      item.actorRole === 'inviter'
-        ? firstInviteName(
-            item.activatedUserDisplayName,
-            item.respondingProfileDisplayName,
-            item.intendedRecipientAlias,
-            item.intendedProfileDisplayName,
-            item.counterpartyLabel,
-            item.profileDisplayName,
-            ...subtitleNames,
-          )
-        : firstInviteName(
-            item.counterpartyLabel,
-            item.profileDisplayName,
-            item.activatedUserDisplayName,
-            item.intendedRecipientAlias,
-            ...subtitleNames,
-          );
-
-    if (accountName) {
-      return accountName;
-    }
-  }
-
-  const patterns = [
-    /^(.+) quiere conectar contigo$/i,
-    /^Esperando a (.+)$/i,
-    /^Verifica a (.+)$/i,
-    /^(.+) reclamo la invitacion para .+$/i,
-    /^Invitacion lista para (.+)$/i,
-    /^QR temporal para (.+)$/i,
-    /^Esperando validacion de (.+)$/i,
-    /^(.+) acepto tu invitacion$/i,
-    /^Confirmaste a (.+)$/i,
-    /^Amistad conectada con (.+)$/i,
-    /^Aceptaste la invitacion de (.+)$/i,
-    /^(.+) rechazo tu invitacion$/i,
-    /^Rechazaste a (.+)$/i,
-    /^Rechazaste la invitacion de (.+)$/i,
-    /^Acceso privado para (.+)$/i,
-    /^(.+) activo el acceso privado$/i,
-    /^(.+) confirmo tu acceso$/i,
-    /^(.+) rechazo este acceso$/i,
-    /^El acceso para (.+) vencio$/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = item.title.match(pattern);
-    if (match?.[1]) {
-      const matchedName = normalizedInviteName(match[1]);
-      if (matchedName) {
-        return matchedName;
-      }
-    }
-  }
-
-  const friendshipName =
-    item.actorRole === 'sender'
-      ? firstInviteName(
-          item.intendedRecipientAlias,
-          item.intendedProfileDisplayName,
-          item.counterpartyLabel,
-          item.profileDisplayName,
-          ...subtitleNames,
-        )
-      : firstInviteName(
-          item.counterpartyLabel,
-          item.profileDisplayName,
-          item.intendedRecipientAlias,
-          ...subtitleNames,
-        );
-
-  if (friendshipName) {
-    return friendshipName;
-  }
-
-  return (
-    fallbackInviteMechanismLabel(item) ??
-    normalizedInviteName(item.title) ??
-    statusLabelForInvite(item)
-  );
-}
-
-function inviteRequestMeta(item: InviteRequestItem): string {
-  const timestamp = item.happenedAtLabel ?? formatRelativeLabel(inviteHistoryTimestamp(item));
-
-  if (isActiveQrInvite(item)) {
-    return `Enviada ${timestamp}`;
-  }
-
-  return `${statusLabelForInvite(item)} ${timestamp}`;
-}
-
-function statusLabelForInvite(item: InviteRequestItem): string {
-  if (item.actionState === 'history') {
-    if (item.status === 'accepted') {
-      return 'Aceptada';
-    }
-
-    if (item.status === 'rejected') {
-      return 'Rechazada';
-    }
-
-    if (item.status === 'expired') {
-      return 'Expirada';
-    }
-
-    if (item.status === 'canceled') {
-      return 'Cancelada';
-    }
-
-    return 'Historico';
-  }
-
-  if (item.actionState === 'requires_you_response') {
-    return 'Por responder';
-  }
-
-  if (item.actionState === 'requires_you_review') {
-    return 'Por verificar';
-  }
-
-  if (item.actionState === 'pending_claim') {
-    return 'Pendiente de abrir';
-  }
-
-  if (item.actionState === 'pending_activation') {
-    return 'Pendiente de activar';
-  }
-
-  if (item.actionState === 'waiting_sender_review') {
-    return 'Esperando validacion';
-  }
-
-  if (item.actionState === 'waiting_other_side') {
-    return 'Esperando respuesta';
-  }
-
-  return 'En seguimiento';
-}
-
 function ShortcutTile({
   href,
   icon,
@@ -760,29 +281,18 @@ function PersonTile({ person }: { readonly person: PersonCardDto }) {
   );
 }
 
-function HomeRefreshPinnedBrand({ active }: { readonly active: boolean }) {
-  return (
-    <View style={styles.homeRefreshPinnedBrand}>
-      {active ? (
-        <View style={styles.homeRefreshPill}>
-          <HappyCirclesMotion size={HOME_HEADER_BRAND_LOGO_SIZE} variant="refresh" />
-          <Text style={styles.homeRefreshPillText}>Sincronizando</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 function TransactionPreviewCard({
   highlightPending = false,
   isPending = false,
   item,
+  onPress,
   people,
   unread = false,
 }: {
   readonly highlightPending?: boolean;
   readonly isPending?: boolean;
   readonly item: ActivityItemDto;
+  readonly onPress?: () => void;
   readonly people: readonly PersonCardDto[];
   readonly unread?: boolean;
 }) {
@@ -817,8 +327,9 @@ function TransactionPreviewCard({
       compact
       compactMetaLayout="inline"
       context=""
-      href={href}
+      href={onPress ? undefined : href}
       meta={meta}
+      onPress={onPress}
       pending={highlightPending}
       pendingHighlightColor={transactionToneColor(item)}
       statusLabel={transactionStatusLabel(item)}
@@ -1030,30 +541,6 @@ function InviteRequestRow({
   );
 }
 
-function inviteRequestEmptyTitle(tab: InviteRequestsTab): string {
-  if (tab === 'received') {
-    return 'Sin solicitudes recibidas';
-  }
-
-  if (tab === 'sent') {
-    return 'Sin solicitudes enviadas';
-  }
-
-  return 'Sin historial';
-}
-
-function inviteRequestEmptyDescription(tab: InviteRequestsTab): string {
-  if (tab === 'received') {
-    return 'Cuando alguien quiera conectar contigo, aparecera aqui.';
-  }
-
-  if (tab === 'history') {
-    return 'Las solicitudes resueltas y vencidas apareceran aqui.';
-  }
-
-  return 'Las invitaciones que envies quedaran en esta pestana.';
-}
-
 function InviteRequestsSheet({
   activeTab,
   busyKey,
@@ -1169,18 +656,9 @@ function InviteRequestsSheet({
 export function DashboardScreen() {
   const router = useRouter();
   const session = useSession();
+  const insets = useSafeAreaInsets();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
-  const [homeRefreshActive, setHomeRefreshActive] = useState(false);
-  const homeRefresh = useMemo(
-    () => ({
-      ...refresh,
-      indicatorVisible: false,
-      indicatorLogoVisible: false,
-      onPullStateChange: setHomeRefreshActive,
-    }),
-    [refresh],
-  );
   const homeIntent = useHomeNavigationIntent();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
@@ -1200,8 +678,9 @@ export function DashboardScreen() {
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [busyInviteKey, setBusyInviteKey] = useState<string | null>(null);
   const [setupPromptDismissed, setSetupPromptDismissed] = useState<boolean | null>(null);
-  const [seenPendingTransactionIds, setSeenPendingTransactionIds] =
-    useState<ReadonlySet<string> | null>(null);
+  const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const friendshipPendingItems = snapshotQuery.data?.friendshipPendingItems ?? [];
   const friendshipHistoryItems = snapshotQuery.data?.friendshipHistoryItems ?? [];
   const accountInvitePendingItems = snapshotQuery.data?.accountInvitePendingItems ?? [];
@@ -1226,9 +705,15 @@ export function DashboardScreen() {
   const historySection = snapshotQuery.data?.activitySections.find(
     (section) => section.key === 'history',
   );
-  const pendingTransactionItems = (pendingSection?.items ?? [])
-    .filter(isPendingTransactionItem)
-    .slice(0, 2);
+  const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
+  const notificationViewedKeys = useMemo(() => {
+    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
+    for (const key of optimisticNotificationViewedKeys) {
+      keys.add(key);
+    }
+
+    return keys;
+  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
   const recentTransactionItems = buildHistoryCases(
     (historySection?.items ?? []).filter(isConsolidatedTransactionItem).filter(isHistoryCaseItem),
   )
@@ -1236,9 +721,7 @@ export function DashboardScreen() {
     .slice(0, RECENT_TRANSACTION_LIMIT);
   const transactionPreviewItems = [
     ...pendingTransactionItems.map((item) => ({
-      highlightPending: Boolean(
-        seenPendingTransactionIds && !seenPendingTransactionIds.has(item.id),
-      ),
+      highlightPending: !notificationViewedKeys.has(notificationViewKeyForItem(item)),
       isPending: true,
       item,
       unread: true,
@@ -1289,15 +772,22 @@ export function DashboardScreen() {
     appleAuthPending ? setupNotificationKey('local-apple-auth-reminder') : null,
   ].filter((key): key is string => Boolean(key));
   const pendingSetupCount = pendingSetupNotificationKeys.length;
-  const viewedNotificationKeys = snapshotQuery.data?.notificationViewedKeys;
   const unreadSetupCount = pendingSetupNotificationKeys.filter(
-    (key) => !(viewedNotificationKeys?.has(key) ?? false),
+    (key) => !notificationViewedKeys.has(key),
   ).length;
+  const pendingNotificationCount =
+    pendingSection?.items.filter(
+      (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+    ).length ??
+    snapshotQuery.data?.notificationUnreadCount ??
+    0;
   const showPendingSetupCard = setupPromptDismissed === false && pendingSetupCount > 0;
-  const notificationCount = snapshotQuery.data
-    ? snapshotQuery.data.notificationUnreadCount + unreadSetupCount
-    : 0;
+  const notificationCount = snapshotQuery.data ? pendingNotificationCount + unreadSetupCount : 0;
   const homeEntryReady = Boolean(dashboard) || Boolean(snapshotQuery.error);
+  const homeContentContainerStyle = useMemo(
+    () => ({ paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom) }),
+    [insets.bottom],
+  );
 
   useEffect(() => {
     if (!homeIntent || homeIntent.kind !== 'open_invite_requests') {
@@ -1330,35 +820,35 @@ export function DashboardScreen() {
   }, [session.userId]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    setSeenPendingTransactionIds(null);
-    void getSeenPendingTransactionIds(session.userId).then((nextIds) => {
-      if (isMounted) {
-        setSeenPendingTransactionIds(nextIds);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
+    setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
 
-  useEffect(() => {
-    if (!seenPendingTransactionIds) {
-      return;
+  function markPendingTransactionViewed(item: ActivityItemDto) {
+    const key = notificationViewKeyForItem(item);
+    setOptimisticNotificationViewedKeys((current) => {
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+
+    void markNotificationItemsViewed(session.userId, [item]).catch(() => {
+      setOptimisticNotificationViewedKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    });
+  }
+
+  function openTransactionPreviewItem(item: ActivityItemDto, isPending: boolean) {
+    if (isPending) {
+      markPendingTransactionViewed(item);
     }
 
-    const nextSeenIds = pendingTransactionItems
-      .map((item) => item.id)
-      .filter((itemId) => !seenPendingTransactionIds.has(itemId));
-
-    if (nextSeenIds.length === 0) {
-      return;
-    }
-
-    void markPendingTransactionIdsSeen(session.userId, nextSeenIds);
-  }, [pendingTransactionItems, seenPendingTransactionIds, session.userId]);
+    const person = transactionPersonForItem(dashboard?.activePeople ?? [], item);
+    const panel: TransactionTargetPanel = isPending ? 'pending' : 'history';
+    pushRoute(router, transactionPersonHref(person, item, panel));
+  }
 
   async function handleContactsPermission() {
     if (session.setupState.contactsPermissionStatus === 'denied') {
@@ -1523,41 +1013,40 @@ export function DashboardScreen() {
     }
   }
 
-  useEffect(() => {
-    if (!homeEntryReady) {
-      return undefined;
-    }
-
-    let secondFrame: ReturnType<typeof requestAnimationFrame> | null = null;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => {
-        markHomeEntryReady();
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame !== null) {
-        cancelAnimationFrame(secondFrame);
+  useFocusEffect(
+    useCallback(() => {
+      if (!homeEntryReady) {
+        return undefined;
       }
-    };
-  }, [homeEntryReady]);
+
+      let secondFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+      const firstFrame = requestAnimationFrame(() => {
+        secondFrame = requestAnimationFrame(() => {
+          markHomeEntryReady();
+        });
+      });
+
+      return () => {
+        cancelAnimationFrame(firstFrame);
+        if (secondFrame !== null) {
+          cancelAnimationFrame(secondFrame);
+        }
+      };
+    }, [homeEntryReady]),
+  );
 
   if (snapshotQuery.error && !dashboard) {
     return (
       <ScreenShell
+        contentContainerStyle={homeContentContainerStyle}
         headerTitle={
           <HeaderBrandTitle
             logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-            logoVisible={!homeRefreshActive}
-            refreshActive={homeRefreshActive}
             titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
           />
         }
         headerVariant="plain"
-        pinHeaderDuringRefresh
-        refresh={homeRefresh}
-        refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
+        refresh={refresh}
         title="Happy Circles"
         titleAlign="center"
       >
@@ -1569,6 +1058,7 @@ export function DashboardScreen() {
   if (snapshotQuery.isLoading || !dashboard) {
     return (
       <ScreenShell
+        contentContainerStyle={homeContentContainerStyle}
         headerTitle={
           <HeaderBrandTitle
             launchTargetDisabled
@@ -1606,18 +1096,15 @@ export function DashboardScreen() {
   if (snapshotQuery.error) {
     return (
       <ScreenShell
+        contentContainerStyle={homeContentContainerStyle}
         headerTitle={
           <HeaderBrandTitle
             logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-            logoVisible={!homeRefreshActive}
-            refreshActive={homeRefreshActive}
             titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
           />
         }
         headerVariant="plain"
-        pinHeaderDuringRefresh
-        refresh={homeRefresh}
-        refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
+        refresh={refresh}
         title="Happy Circles"
         titleAlign="center"
       >
@@ -1628,6 +1115,7 @@ export function DashboardScreen() {
 
   return (
     <ScreenShell
+      contentContainerStyle={homeContentContainerStyle}
       headerLeading={
         <Link href="/profile" asChild>
           <Pressable
@@ -1647,17 +1135,13 @@ export function DashboardScreen() {
       headerTitle={
         <HeaderBrandTitle
           logoSize={HOME_HEADER_BRAND_LOGO_SIZE}
-          logoVisible={!homeRefreshActive}
-          refreshActive={homeRefreshActive}
           titleSize={HOME_HEADER_BRAND_TITLE_SIZE}
         />
       }
       headerSlot={<NotificationBellButton count={notificationCount} href="/activity" />}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
-      pinHeaderDuringRefresh
-      refresh={homeRefresh}
-      refreshPinnedHeaderTitle={<HomeRefreshPinnedBrand active={homeRefreshActive} />}
+      refresh={refresh}
       title="Happy Circles"
       titleAlign="center"
     >
@@ -1755,6 +1239,7 @@ export function DashboardScreen() {
                 isPending={isPending}
                 item={item}
                 key={item.id}
+                onPress={() => openTransactionPreviewItem(item, isPending)}
                 people={dashboard.activePeople}
                 unread={unread}
               />
@@ -1787,31 +1272,6 @@ export function DashboardScreen() {
 const styles = StyleSheet.create({
   homeContent: {
     gap: theme.spacing.xl,
-  },
-  homeRefreshPinnedBrand: {
-    height: HOME_HEADER_BRAND_LOGO_SIZE,
-    position: 'relative',
-    width: HOME_HEADER_BRAND_LOCKUP_WIDTH,
-  },
-  homeRefreshPill: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.pill,
-    borderWidth: HOME_REFRESH_PILL_BORDER_WIDTH,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    left: -(HOME_REFRESH_PILL_HORIZONTAL_PADDING + HOME_REFRESH_PILL_BORDER_WIDTH),
-    paddingHorizontal: HOME_REFRESH_PILL_HORIZONTAL_PADDING,
-    paddingVertical: HOME_REFRESH_PILL_VERTICAL_PADDING,
-    position: 'absolute',
-    top: -(HOME_REFRESH_PILL_VERTICAL_PADDING + HOME_REFRESH_PILL_BORDER_WIDTH),
-    ...theme.shadow.card,
-  },
-  homeRefreshPillText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
   },
   supportText: {
     color: theme.colors.textMuted,
@@ -1949,7 +1409,6 @@ const styles = StyleSheet.create({
   },
   transactionList: {
     gap: theme.spacing.sm,
-    paddingBottom: HOME_REGISTER_FAB_CLEARANCE,
   },
   sheetScrim: {
     backgroundColor: theme.colors.overlay,

@@ -65,7 +65,7 @@ function normalizeError(error: unknown): SafeError {
       status: 400,
       code: 'identity_incomplete',
       message:
-        'Completa tu perfil, agrega foto, celular y confirma tu correo antes de enviar solicitudes.',
+        'Completa tu nombre, celular y confirma tu correo antes de enviar solicitudes.',
     };
   }
 

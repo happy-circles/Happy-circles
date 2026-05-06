@@ -45,8 +45,8 @@ function buildReminderItem({
 export function buildDeviceTrustReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-device-trust-reminder',
-    title: 'Dispositivo confiable',
-    subtitle: 'Autoriza este telefono para cambios sensibles y revisiones de cuenta.',
+    title: 'Confia este telefono',
+    subtitle: 'Seguridad',
     detail: 'Abrir seguridad del perfil.',
     href: '/profile?section=device&focus=trust-password',
   });
@@ -55,8 +55,8 @@ export function buildDeviceTrustReminderItem(): ActivityItemDto {
 export function buildBiometricsReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-biometrics-reminder',
-    title: 'Biometria',
-    subtitle: 'Usala para abrir la app y confirmar acciones protegidas.',
+    title: 'Activa Face ID o huella',
+    subtitle: 'Seguridad',
     detail: 'Abrir seguridad del perfil.',
     href: '/profile?section=account&focus=biometrics',
   });
@@ -65,8 +65,8 @@ export function buildBiometricsReminderItem(): ActivityItemDto {
 export function buildPasswordAuthReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-password-auth-reminder',
-    title: 'Clave de respaldo',
-    subtitle: 'Crea una clave para entrar y validar este dispositivo si hace falta.',
+    title: 'Crea tu clave de respaldo',
+    subtitle: 'Acceso',
     detail: 'Abrir metodos de acceso.',
     href: '/profile?section=methods&focus=attach-password',
   });
@@ -75,8 +75,8 @@ export function buildPasswordAuthReminderItem(): ActivityItemDto {
 export function buildGoogleAuthReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-google-auth-reminder',
-    title: 'Google',
-    subtitle: 'Vincula Google como metodo alterno para recuperar el acceso.',
+    title: 'Vincula tu cuenta Google',
+    subtitle: 'Acceso',
     detail: 'Abrir metodos de acceso.',
     href: '/profile?section=methods',
   });
@@ -85,8 +85,8 @@ export function buildGoogleAuthReminderItem(): ActivityItemDto {
 export function buildAppleAuthReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-apple-auth-reminder',
-    title: 'Apple',
-    subtitle: 'Vincula Apple como metodo alterno para entrar a tu cuenta.',
+    title: 'Vincula tu cuenta Apple',
+    subtitle: 'Acceso',
     detail: 'Abrir metodos de acceso.',
     href: '/profile?section=methods',
   });
@@ -95,8 +95,8 @@ export function buildAppleAuthReminderItem(): ActivityItemDto {
 export function buildContactsReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-contacts-reminder',
-    title: 'Contactos',
-    subtitle: 'Permite contactos para encontrar personas conocidas mas rapido.',
+    title: 'Activa tus contactos',
+    subtitle: 'Amigos',
     detail: 'Abrir Personas.',
     href: '/people?addPerson=1',
   });
@@ -105,8 +105,8 @@ export function buildContactsReminderItem(): ActivityItemDto {
 export function buildNotificationsReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-notifications-reminder',
-    title: 'Recordatorios',
-    subtitle: 'Activa avisos de solicitudes, recordatorios y cierres pendientes.',
+    title: 'Activa tus notificaciones',
+    subtitle: 'Avisos',
     detail: 'Abrir Recordatorios.',
     href: '/profile?focus=notifications',
   });

@@ -1,97 +1,21 @@
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import * as Haptics from 'expo-haptics';
-import type {
-  GestureResponderEvent,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollViewProps,
-  StyleProp,
-  ViewStyle,
-} from 'react-native';
-import { Animated, Easing, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { forwardRef } from 'react';
+import type { ScrollViewProps } from 'react-native';
+import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 
-const PULL_TRIGGER_DISTANCE = 84;
-const PULL_MAX_DISTANCE = 124;
-const PULL_RELEASE_DISTANCE = 64;
-const PULL_VISIBLE_DISTANCE = 18;
-const PULL_CLOSE_DURATION_MS = 210;
-const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
+const REFRESH_PROGRESS_OFFSET = theme.spacing.xl + theme.spacing.md;
 
 export interface BrandedRefreshProps {
-  readonly contentOffsetEnabled?: boolean;
-  readonly indicatorVisible?: boolean;
-  readonly indicatorLogoVisible?: boolean;
   readonly label?: string;
   readonly onRefresh: () => void | Promise<void>;
-  readonly onPullStateChange?: (active: boolean) => void;
   readonly refreshing: boolean;
-}
-
-interface BrandedRefreshIndicatorProps {
-  readonly label?: string;
-  readonly logoVisible?: boolean;
-  readonly pullDistance?: Animated.Value;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly visible: boolean;
 }
 
 export interface BrandedRefreshScrollViewProps
   extends Omit<ScrollViewProps, 'refreshControl'> {
   readonly fillViewport?: boolean;
-  readonly fixedHeader?: ReactNode;
   readonly refresh?: BrandedRefreshProps;
-  readonly refreshIndicatorStyle?: StyleProp<ViewStyle>;
-}
-
-export function BrandedRefreshIndicator({
-  label = 'Sincronizando',
-  logoVisible = true,
-  pullDistance,
-  style,
-  visible,
-}: BrandedRefreshIndicatorProps) {
-  const animatedStyle = pullDistance
-    ? {
-        opacity: pullDistance.interpolate({
-          inputRange: [0, 20, PULL_RELEASE_DISTANCE],
-          outputRange: [0, 0.92, 1],
-          extrapolate: 'clamp',
-        }),
-        transform: [
-          {
-            translateY: pullDistance.interpolate({
-              inputRange: [0, PULL_TRIGGER_DISTANCE],
-              outputRange: [-14, 0],
-              extrapolate: 'clamp',
-            }),
-          },
-          {
-            scale: pullDistance.interpolate({
-              inputRange: [0, PULL_TRIGGER_DISTANCE],
-              outputRange: [0.9, 1],
-              extrapolate: 'clamp',
-            }),
-          },
-        ],
-      }
-    : null;
-
-  if (!visible) {
-    return null;
-  }
-
-  return (
-    <Animated.View pointerEvents="none" style={[styles.indicatorWrap, animatedStyle, style]}>
-      <View style={styles.indicator}>
-        {logoVisible ? <HappyCirclesMotion size={64} variant="refresh" /> : null}
-        <Text style={styles.indicatorText}>{label}</Text>
-      </View>
-    </Animated.View>
-  );
 }
 
 export const BrandedRefreshScrollView = forwardRef<
@@ -102,19 +26,10 @@ export const BrandedRefreshScrollView = forwardRef<
     alwaysBounceVertical,
     bounces,
     children,
-    contentContainerStyle,
     fillViewport = false,
-    fixedHeader,
     keyboardDismissMode,
     onScroll,
-    onScrollEndDrag,
-    onTouchCancel,
-    onTouchEnd,
-    onTouchMove,
-    onTouchStart,
-    overScrollMode,
     refresh,
-    refreshIndicatorStyle,
     scrollEventThrottle,
     showsVerticalScrollIndicator,
     style,
@@ -122,340 +37,48 @@ export const BrandedRefreshScrollView = forwardRef<
   },
   ref,
 ) {
-  const pullDistance = useRef(new Animated.Value(0)).current;
-  const scrollYRef = useRef(0);
-  const startYRef = useRef<number | null>(null);
-  const startScrollYRef = useRef(0);
-  const latestPullRef = useRef(0);
-  const releaseHandledRef = useRef(false);
-  const thresholdHapticFiredRef = useRef(false);
-  const refreshingRef = useRef(Boolean(refresh?.refreshing));
-  const onPullStateChangeRef = useRef(refresh?.onPullStateChange);
-  const pullingRef = useRef(false);
-  const settlingRef = useRef(false);
-  const closeFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pulling, setPullingState] = useState(false);
-  const [settling, setSettlingState] = useState(false);
-
-  const setPulling = useCallback((nextPulling: boolean) => {
-    pullingRef.current = nextPulling;
-    setPullingState(nextPulling);
-  }, []);
-
-  const setSettling = useCallback((nextSettling: boolean) => {
-    settlingRef.current = nextSettling;
-    setSettlingState(nextSettling);
-  }, []);
-
   const refreshEnabled = Boolean(refresh);
-  const visible = pulling || settling || Boolean(refresh?.refreshing);
-  const pullStateVisible = pulling || Boolean(refresh?.refreshing);
-  const shouldShowIndicator = visible && refresh?.indicatorVisible !== false;
-  const shouldOffsetContent = refreshEnabled && refresh?.contentOffsetEnabled === true;
 
-  const triggerThresholdHaptic = useCallback(() => {
-    void Haptics.selectionAsync().catch(() => undefined);
-  }, []);
-
-  const triggerRefreshHaptic = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-  }, []);
-
-  const clearCloseFallback = useCallback(() => {
-    if (closeFallbackTimeoutRef.current) {
-      clearTimeout(closeFallbackTimeoutRef.current);
-      closeFallbackTimeoutRef.current = null;
-    }
-  }, []);
-
-  const forceClosePull = useCallback(() => {
-    if (refreshingRef.current) {
+  function handleRefresh() {
+    if (!refresh || refresh.refreshing) {
       return;
     }
 
-    latestPullRef.current = 0;
-    pullDistance.stopAnimation();
-    pullDistance.setValue(0);
-    setPulling(false);
-    setSettling(false);
-    clearCloseFallback();
-  }, [clearCloseFallback, pullDistance, setPulling, setSettling]);
-
-  const closePull = useCallback(() => {
-    const shouldSettle =
-      latestPullRef.current >= PULL_VISIBLE_DISTANCE ||
-      pullingRef.current ||
-      settlingRef.current ||
-      refreshingRef.current;
-
-    clearCloseFallback();
-    latestPullRef.current = 0;
-    thresholdHapticFiredRef.current = false;
-    if (!refreshingRef.current) {
-      setPulling(false);
-    }
-    setSettling(shouldSettle);
-    Animated.timing(pullDistance, {
-      duration: PULL_CLOSE_DURATION_MS,
-      easing: Easing.out(Easing.cubic),
-      toValue: 0,
-      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-    }).start(({ finished }) => {
-      if (finished && !refreshingRef.current) {
-        clearCloseFallback();
-        setPulling(false);
-        setSettling(false);
-      }
-    });
-
-    if (shouldSettle) {
-      closeFallbackTimeoutRef.current = setTimeout(forceClosePull, PULL_CLOSE_DURATION_MS + 140);
-    }
-  }, [clearCloseFallback, forceClosePull, pullDistance, setPulling, setSettling]);
-
-  const openPull = useCallback(
-    (distance: number) => {
-      clearCloseFallback();
-      latestPullRef.current = distance;
-      setSettling(false);
-      if (distance >= PULL_TRIGGER_DISTANCE && !thresholdHapticFiredRef.current) {
-        thresholdHapticFiredRef.current = true;
-        triggerThresholdHaptic();
-      } else if (distance < PULL_TRIGGER_DISTANCE - 18) {
-        thresholdHapticFiredRef.current = false;
-      }
-
-      if (distance >= PULL_VISIBLE_DISTANCE) {
-        setPulling(true);
-      } else if (!refreshingRef.current) {
-        setPulling(false);
-      }
-      pullDistance.setValue(distance);
-    },
-    [clearCloseFallback, pullDistance, setPulling, setSettling, triggerThresholdHaptic],
-  );
-
-  useEffect(() => {
-    refreshingRef.current = Boolean(refresh?.refreshing);
-
-    if (refresh?.refreshing) {
-      clearCloseFallback();
-      latestPullRef.current = PULL_RELEASE_DISTANCE;
-      setPulling(true);
-      setSettling(false);
-      Animated.spring(pullDistance, {
-        damping: 16,
-        mass: 0.8,
-        stiffness: 170,
-        toValue: PULL_RELEASE_DISTANCE,
-        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-      }).start();
-      return;
-    }
-
-    if (startYRef.current === null) {
-      closePull();
-    }
-  }, [clearCloseFallback, closePull, pullDistance, refresh?.refreshing, setPulling, setSettling]);
-
-  useEffect(() => {
-    if (refreshEnabled) {
-      return;
-    }
-
-    const previousOnPullStateChange = onPullStateChangeRef.current;
-    startYRef.current = null;
-    startScrollYRef.current = 0;
-    releaseHandledRef.current = false;
-    refreshingRef.current = false;
-    forceClosePull();
-    previousOnPullStateChange?.(false);
-    onPullStateChangeRef.current = undefined;
-  }, [forceClosePull, refreshEnabled]);
-
-  useEffect(() => () => clearCloseFallback(), [clearCloseFallback]);
-
-  useEffect(() => {
-    const previousOnPullStateChange = onPullStateChangeRef.current;
-    const nextOnPullStateChange = refresh?.onPullStateChange;
-    if (
-      previousOnPullStateChange &&
-      previousOnPullStateChange !== nextOnPullStateChange &&
-      pullStateVisible
-    ) {
-      previousOnPullStateChange(false);
-    }
-    onPullStateChangeRef.current = nextOnPullStateChange;
-    nextOnPullStateChange?.(pullStateVisible);
-  }, [pullStateVisible, refresh?.onPullStateChange]);
-
-  useEffect(
-    () => () => {
-      onPullStateChangeRef.current?.(false);
-    },
-    [],
-  );
-
-  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const nextY = event.nativeEvent.contentOffset.y;
-    scrollYRef.current = nextY;
-    const isActivePullGesture = startYRef.current !== null && !releaseHandledRef.current;
-
-    if (refresh && !refresh.refreshing && nextY < 0 && isActivePullGesture) {
-      openPull(Math.min(PULL_MAX_DISTANCE, Math.abs(nextY) * 0.9));
-    } else if (
-      refresh &&
-      !refresh.refreshing &&
-      nextY >= 0 &&
-      latestPullRef.current > 0 &&
-      !isActivePullGesture
-    ) {
-      closePull();
-    }
-
-    onScroll?.(event);
+    void Promise.resolve(refresh.onRefresh()).catch(() => undefined);
   }
 
-  function handleTouchStart(event: GestureResponderEvent) {
-    startYRef.current = event.nativeEvent.pageY;
-    startScrollYRef.current = scrollYRef.current;
-    releaseHandledRef.current = false;
-    thresholdHapticFiredRef.current = false;
-    onTouchStart?.(event);
-  }
-
-  function handleTouchMove(event: GestureResponderEvent) {
-    if (refresh && !refresh.refreshing && startYRef.current !== null) {
-      const deltaY = event.nativeEvent.pageY - startYRef.current;
-      const startedAtTop = startScrollYRef.current <= 2;
-
-      if (startedAtTop && deltaY > 0) {
-        openPull(Math.min(PULL_MAX_DISTANCE, deltaY * 0.72));
-      } else if (latestPullRef.current > 0) {
-        closePull();
-      }
-    }
-
-    onTouchMove?.(event);
-  }
-
-  function finishPull(shouldTriggerRefresh: boolean) {
-    if (releaseHandledRef.current) {
-      return;
-    }
-
-    releaseHandledRef.current = true;
-
-    const nextShouldRefresh =
-      shouldTriggerRefresh &&
-      Boolean(refresh) &&
-      !refresh?.refreshing &&
-      latestPullRef.current >= PULL_TRIGGER_DISTANCE;
-
-    startYRef.current = null;
-    startScrollYRef.current = 0;
-
-    if (nextShouldRefresh && refresh) {
-      clearCloseFallback();
-      latestPullRef.current = PULL_RELEASE_DISTANCE;
-      setPulling(true);
-      setSettling(false);
-      triggerRefreshHaptic();
-      Animated.spring(pullDistance, {
-        damping: 16,
-        mass: 0.8,
-        stiffness: 170,
-        toValue: PULL_RELEASE_DISTANCE,
-        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-      }).start();
-      void Promise.resolve()
-        .then(() => refresh.onRefresh())
-        .catch(() => undefined)
-        .finally(() => {
-          if (!refreshingRef.current) {
-            closePull();
-          }
-        });
-    } else if (!refresh?.refreshing) {
-      closePull();
-    }
-  }
-
-  function handleTouchEnd(event: GestureResponderEvent) {
-    finishPull(true);
-    onTouchEnd?.(event);
-  }
-
-  function handleTouchCancel(event: GestureResponderEvent) {
-    finishPull(false);
-    onTouchCancel?.(event);
-  }
-
-  function handleScrollEndDrag(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    finishPull(true);
-    onScrollEndDrag?.(event);
-  }
-
-  const offsetContentStyle = shouldOffsetContent
-    ? {
-        transform: [
-          {
-            translateY: pullDistance.interpolate({
-              inputRange: [0, PULL_RELEASE_DISTANCE, PULL_MAX_DISTANCE],
-              outputRange: [0, PULL_RELEASE_DISTANCE, PULL_MAX_DISTANCE],
-              extrapolate: 'clamp',
-            }),
-          },
-        ],
-      }
-    : null;
-
-  const scrollChildren = shouldOffsetContent ? (
-    <Animated.View
-      style={[fillViewport ? styles.offsetContentFill : null, offsetContentStyle]}
-    >
-      {children}
-    </Animated.View>
-  ) : (
-    children
-  );
+  const nativeRefreshControl = refresh ? (
+    <RefreshControl
+      colors={[theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]}
+      enabled
+      onRefresh={handleRefresh}
+      progressBackgroundColor={theme.colors.surface}
+      progressViewOffset={REFRESH_PROGRESS_OFFSET}
+      refreshing={refresh.refreshing}
+      tintColor={theme.colors.primary}
+      title={Platform.OS === 'ios' ? (refresh.label ?? 'Sincronizando') : undefined}
+      titleColor={theme.colors.textMuted}
+    />
+  ) : undefined;
 
   return (
     <View style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}>
       <ScrollView
         {...props}
-        alwaysBounceVertical={refreshEnabled ? !shouldOffsetContent : alwaysBounceVertical}
-        bounces={refreshEnabled ? !shouldOffsetContent : bounces}
-        contentContainerStyle={contentContainerStyle}
+        alwaysBounceVertical={refreshEnabled ? true : alwaysBounceVertical}
+        bounces={refreshEnabled ? true : bounces}
         keyboardDismissMode={
           keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
         }
-        onScroll={refreshEnabled ? handleScroll : onScroll}
-        onScrollEndDrag={refreshEnabled ? handleScrollEndDrag : onScrollEndDrag}
-        onTouchCancel={refreshEnabled ? handleTouchCancel : onTouchCancel}
-        onTouchEnd={refreshEnabled ? handleTouchEnd : onTouchEnd}
-        onTouchMove={refreshEnabled ? handleTouchMove : onTouchMove}
-        onTouchStart={refreshEnabled ? handleTouchStart : onTouchStart}
-        overScrollMode={refreshEnabled ? 'never' : overScrollMode}
+        onScroll={onScroll}
         ref={ref}
+        refreshControl={nativeRefreshControl}
         scrollEventThrottle={scrollEventThrottle ?? (refreshEnabled || onScroll ? 16 : undefined)}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
         style={[styles.innerScroll, fillViewport ? styles.innerScrollFill : null]}
       >
-        {scrollChildren}
+        {children}
       </ScrollView>
-      {fixedHeader ? (
-        <View pointerEvents="none" style={styles.fixedHeaderOverlay}>
-          {fixedHeader}
-        </View>
-      ) : null}
-      <BrandedRefreshIndicator
-        label={refresh?.label}
-        logoVisible={refresh?.indicatorLogoVisible}
-        pullDistance={pullDistance}
-        style={refreshIndicatorStyle}
-        visible={shouldShowIndicator}
-      />
     </View>
   );
 });
@@ -474,40 +97,5 @@ const styles = StyleSheet.create({
   },
   innerScrollFill: {
     flex: 1,
-  },
-  offsetContentFill: {
-    flexGrow: 1,
-  },
-  fixedHeaderOverlay: {
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 20,
-  },
-  indicatorWrap: {
-    alignItems: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: theme.spacing.md,
-    zIndex: 30,
-  },
-  indicator: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    ...theme.shadow.card,
-  },
-  indicatorText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
   },
 });

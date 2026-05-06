@@ -1,0 +1,31 @@
+import type { ActivityItemDto } from '@happy-circles/application';
+
+import { notificationViewRowForItem } from '../builders/notifications';
+import { assertSupabaseClient, invalidateAppSnapshot } from '../client';
+
+export async function markNotificationItemsViewed(
+  userId: string | null,
+  items: readonly ActivityItemDto[],
+): Promise<void> {
+  if (!userId || items.length === 0) {
+    return;
+  }
+
+  const client = assertSupabaseClient();
+  const rowsByKey = new Map(
+    items.map((item) => {
+      const row = notificationViewRowForItem(userId, item);
+      return [row.notification_key, row] as const;
+    }),
+  );
+  const rows = Array.from(rowsByKey.values());
+  const { error } = await client.from('notification_views').upsert(rows, {
+    onConflict: 'user_id,notification_key',
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await invalidateAppSnapshot();
+}

@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type {
+  ActivityItemDto,
   BalanceAnalyticsCategoryRowDto,
   BalanceAnalyticsPeriod,
 } from '@happy-circles/application';
@@ -14,6 +14,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
+import { TransactionEventCard } from '@/components/transaction-event-card';
 import { formatCop } from '@/lib/data';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
@@ -21,7 +22,20 @@ import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
   transactionCategoryIcon,
+  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
+import {
+  isConsolidatedTransactionItem,
+  isCycleTransactionItem,
+  transactionAmountIsVoided,
+  transactionAmountLabel,
+  transactionContextLabel,
+  transactionCreatedByMetaLabel,
+  transactionStatusLabel,
+  transactionStatusTone,
+  transactionToneColor,
+  transactionVisualCategory,
+} from '@/lib/transaction-presentation';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
@@ -47,26 +61,58 @@ function movementCountLabel(count: number): string {
   return `${count} movimiento${count === 1 ? '' : 's'}`;
 }
 
-function peoplePreviewLabel(row: BalanceAnalyticsCategoryRowDto): string {
-  if (row.personLabels.length === 0) {
+function firstName(value: string): string {
+  const [name] = value.trim().split(/\s+/);
+
+  return name && name.length > 0 ? name : value;
+}
+
+function compactFirstNames(values: readonly string[]): string {
+  const names = Array.from(
+    new Set(
+      values
+        .map(firstName)
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ),
+  );
+
+  if (names.length === 0) {
     return 'Sin personas visibles';
   }
 
-  const visiblePeople = row.personLabels.slice(0, 2).join(', ');
-  const hiddenCount = row.personLabels.length - 2;
+  const visibleNames = names.slice(0, 2);
+  const hiddenCount = names.length - visibleNames.length;
 
-  return hiddenCount > 0 ? `${visiblePeople} y ${hiddenCount} mas` : visiblePeople;
+  return hiddenCount > 0
+    ? `${visibleNames.join(', ')} y ${hiddenCount} mas`
+    : visibleNames.join(', ');
 }
 
-function categoryHref(category: string, period: BalanceAnalyticsPeriod): Href {
-  return `/category/${category}?period=${period}` as Href;
+function signedFormatCop(amountMinor: number): string {
+  if (amountMinor > 0) {
+    return `+${formatCop(amountMinor)}`;
+  }
+
+  return formatCop(amountMinor);
+}
+
+function peoplePreviewLabel(row: BalanceAnalyticsCategoryRowDto): string {
+  return compactFirstNames(row.personLabels);
+}
+
+function matchesCategory(
+  item: ActivityItemDto,
+  category: BalanceAnalyticsCategoryRowDto['category'],
+): boolean {
+  return transactionVisualCategory(item) === category;
 }
 
 function CategoryRow({
-  period,
+  onPress,
   row,
 }: {
-  readonly period: BalanceAnalyticsPeriod;
+  readonly onPress: () => void;
   readonly row: BalanceAnalyticsCategoryRowDto;
 }) {
   const icon = transactionCategoryIcon(row.category) as keyof typeof Ionicons.glyphMap;
@@ -74,42 +120,136 @@ function CategoryRow({
   const backgroundColor = transactionCategoryBackgroundColor(row.category);
 
   return (
-    <Link href={categoryHref(row.category, period)} asChild>
-      <Pressable style={({ pressed }) => [pressed ? styles.pressed : null]}>
-        <SurfaceCard
-          padding="md"
-          style={[
-            styles.categoryCard,
-            row.netMinor > 0 ? styles.cardPositive : null,
-            row.netMinor < 0 ? styles.cardNegative : null,
-          ]}
-        >
-          <View style={styles.leading}>
-            <View style={[styles.categoryIcon, { backgroundColor }]}>
-              <Ionicons color={color} name={icon} size={20} />
-            </View>
-            <View style={styles.categoryCopy}>
-              <Text numberOfLines={1} style={styles.categoryTitle}>
-                {row.label}
-              </Text>
-              <Text numberOfLines={1} style={styles.categoryMeta}>
-                {peoplePreviewLabel(row)}
-              </Text>
-            </View>
+    <Pressable onPress={onPress} style={({ pressed }) => [pressed ? styles.pressed : null]}>
+      <SurfaceCard
+        padding="md"
+        style={[
+          styles.categoryCard,
+          row.netMinor > 0 ? styles.cardPositive : null,
+          row.netMinor < 0 ? styles.cardNegative : null,
+        ]}
+      >
+        <View style={styles.leading}>
+          <View style={[styles.categoryIcon, { backgroundColor }]}>
+            <Ionicons color={color} name={icon} size={20} />
           </View>
+          <View style={styles.categoryCopy}>
+            <Text numberOfLines={1} style={styles.categoryTitle}>
+              {row.label}
+            </Text>
+            <Text numberOfLines={1} style={styles.categoryMeta}>
+              {peoplePreviewLabel(row)}
+            </Text>
+          </View>
+        </View>
 
-          <View style={styles.trailing}>
-            <Text style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</Text>
-            <View style={styles.amountRow}>
-              <Text numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
-                {formatCop(row.netMinor)}
-              </Text>
-              <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
-            </View>
+        <View style={styles.trailing}>
+          <Text style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</Text>
+          <View style={styles.amountRow}>
+            <Text numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
+              {formatCop(row.netMinor)}
+            </Text>
+            <Ionicons color={theme.colors.textMuted} name="funnel-outline" size={15} />
           </View>
-        </SurfaceCard>
+        </View>
+      </SurfaceCard>
+    </Pressable>
+  );
+}
+
+function CategoriesSummaryCard({
+  categoryCount,
+  movementCount,
+  totalMinor,
+  deltaMinor,
+  label,
+}: {
+  readonly categoryCount: number;
+  readonly movementCount: number;
+  readonly totalMinor: number;
+  readonly deltaMinor: number;
+  readonly label: string;
+}) {
+  return (
+    <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
+      <Text style={styles.summaryEyebrow}>{label}</Text>
+      <Text
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}
+        numberOfLines={1}
+        style={[styles.summaryAmount, amountToneStyle(totalMinor)]}
+      >
+        {formatCop(totalMinor)}
+      </Text>
+      <Text style={styles.summaryMeta}>
+        Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoria
+        {categoryCount === 1 ? '' : 's'} | {movementCountLabel(movementCount)}
+      </Text>
+    </SurfaceCard>
+  );
+}
+
+function ActiveCategoryPill({
+  row,
+  fallbackCategory,
+  onClear,
+}: {
+  readonly row: BalanceAnalyticsCategoryRowDto | null;
+  readonly fallbackCategory: BalanceAnalyticsCategoryRowDto['category'];
+  readonly onClear: () => void;
+}) {
+  const category = row?.category ?? fallbackCategory;
+  const label = row?.label ?? transactionCategoryLabel(category);
+  const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
+  const color = transactionCategoryColor(category);
+  const backgroundColor = transactionCategoryBackgroundColor(category);
+
+  return (
+    <View style={styles.activeFilterWrap}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onClear}
+        style={({ pressed }) => [
+          styles.activeFilterPill,
+          { backgroundColor, borderColor: color },
+          pressed ? styles.pressed : null,
+        ]}
+      >
+        <Ionicons color={color} name={icon} size={16} />
+        <Text numberOfLines={1} style={[styles.activeFilterText, { color }]}>
+          {label}
+        </Text>
+        <Ionicons color={color} name="close" size={15} />
       </Pressable>
-    </Link>
+    </View>
+  );
+}
+
+function CategoryTransactionCard({ item }: { readonly item: ActivityItemDto }) {
+  const category = transactionVisualCategory(item);
+  const isSystemTransaction = isCycleTransactionItem(item);
+  const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
+  const toneColor = transactionToneColor(item);
+
+  return (
+    <TransactionEventCard
+      accentColor={toneColor}
+      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
+      actorFallbackColor={transactionCategoryColor(category)}
+      actorLabel={actorLabel}
+      amountColor={toneColor}
+      amountLabel={transactionAmountLabel(item)}
+      amountStruckThrough={transactionAmountIsVoided(item)}
+      category={category}
+      categoryPlacement="none"
+      compact
+      compactMetaLayout="inline"
+      context={transactionContextLabel(item, actorLabel)}
+      href={(item.href ?? '/transactions') as Href}
+      meta={transactionCreatedByMetaLabel(item, actorLabel)}
+      statusLabel={transactionStatusLabel(item)}
+      statusTone={transactionStatusTone(item)}
+    />
   );
 }
 
@@ -118,6 +258,9 @@ export function CategoriesIndexScreen() {
   const refresh = useSnapshotRefresh(snapshotQuery);
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
   const [period, setPeriod] = useState<BalanceAnalyticsPeriod>(analytics?.defaultPeriod ?? 'month');
+  const [selectedCategory, setSelectedCategory] = useState<
+    BalanceAnalyticsCategoryRowDto['category'] | null
+  >(null);
 
   useEffect(() => {
     if (analytics?.defaultPeriod) {
@@ -145,6 +288,7 @@ export function CategoriesIndexScreen() {
   }
 
   const currentPeriod = analytics.periods[period];
+  const summary = currentPeriod.summaries.balance;
   const categories = [...currentPeriod.categories].sort((left, right) => {
     const amountDiff = Math.abs(right.netMinor) - Math.abs(left.netMinor);
     if (amountDiff !== 0) {
@@ -153,9 +297,30 @@ export function CategoriesIndexScreen() {
 
     return right.movementCount - left.movementCount;
   });
+  const selectedCategoryRow =
+    selectedCategory === null
+      ? null
+      : (categories.find((row) => row.category === selectedCategory) ?? null);
+  const historyItems =
+    selectedCategory === null
+      ? []
+      : (
+          snapshotQuery.data?.activitySections.find((section) => section.key === 'history')
+            ?.items ?? []
+        )
+          .filter(isConsolidatedTransactionItem)
+          .filter((item) => matchesCategory(item, selectedCategory));
 
   return (
     <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Categorias">
+      <CategoriesSummaryCard
+        categoryCount={categories.length}
+        deltaMinor={summary.deltaMinor}
+        label={currentPeriod.labels.current}
+        movementCount={summary.movementCount}
+        totalMinor={summary.finalMinor}
+      />
+
       <SegmentedControl
         label="Periodo"
         onChange={setPeriod}
@@ -163,7 +328,28 @@ export function CategoriesIndexScreen() {
         value={period}
       />
 
-      {categories.length === 0 ? (
+      {selectedCategory ? (
+        <>
+          <ActiveCategoryPill
+            fallbackCategory={selectedCategory}
+            onClear={() => setSelectedCategory(null)}
+            row={selectedCategoryRow}
+          />
+
+          {historyItems.length === 0 ? (
+            <EmptyState
+              description="No hay transacciones cerradas para esta categoria."
+              title="Sin historial"
+            />
+          ) : (
+            <View style={styles.list}>
+              {historyItems.map((item) => (
+                <CategoryTransactionCard item={item} key={item.id} />
+              ))}
+            </View>
+          )}
+        </>
+      ) : categories.length === 0 ? (
         <EmptyState
           description="Cuando registres movimientos, podras ver el balance por categoria."
           title="Sin categorias todavia"
@@ -171,7 +357,11 @@ export function CategoriesIndexScreen() {
       ) : (
         <View style={styles.list}>
           {categories.map((row) => (
-            <CategoryRow key={row.key} period={period} row={row} />
+            <CategoryRow
+              key={row.key}
+              onPress={() => setSelectedCategory(row.category)}
+              row={row}
+            />
           ))}
         </View>
       )}
@@ -188,6 +378,46 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+  },
+  summaryCard: {
+    gap: theme.spacing.xs,
+  },
+  summaryEyebrow: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  summaryAmount: {
+    color: theme.colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    lineHeight: 40,
+  },
+  summaryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
+  activeFilterWrap: {
+    alignItems: 'flex-start',
+  },
+  activeFilterPill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    maxWidth: '100%',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 7,
+  },
+  activeFilterText: {
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 18,
   },
   list: {
     gap: theme.spacing.sm,

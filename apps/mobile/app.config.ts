@@ -32,7 +32,7 @@ const config: ExpoConfig = {
   owner: 'happy-circles',
   scheme: 'happycircles',
   version: appVersion,
-  icon: './assets/icon.png',
+  icon: './assets/app-icon.png',
   orientation: 'portrait',
   splash: {
     image: './assets/splash.png',
@@ -43,6 +43,15 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-dev-client',
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-icon.png',
+        imageWidth: 208,
+        resizeMode: 'contain',
+        backgroundColor: '#f7f8fb',
+      },
+    ],
     'expo-asset',
     'expo-sqlite',
     'expo-secure-store',
@@ -77,6 +86,7 @@ const config: ExpoConfig = {
     usesAppleSignIn: true,
     associatedDomains: [`applinks:${appWebHost}`],
     infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
         'Happy Circles usa la camara para escanear invitaciones QR y actualizar tu foto de perfil.',
       NSContactsUsageDescription:

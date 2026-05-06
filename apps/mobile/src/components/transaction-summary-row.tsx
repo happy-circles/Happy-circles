@@ -28,6 +28,7 @@ export interface TransactionSummaryRowProps {
   readonly statusLabel?: string | null;
   readonly statusTone?: TransactionSummaryStatusTone;
   readonly surface?: boolean;
+  readonly showCategoryIcon?: boolean;
   readonly title: string;
   readonly unread?: boolean;
 }
@@ -43,6 +44,7 @@ export function TransactionSummaryRow({
   statusLabel,
   statusTone = 'neutral',
   surface = false,
+  showCategoryIcon = true,
   title,
   unread = false,
 }: TransactionSummaryRowProps) {
@@ -56,14 +58,16 @@ export function TransactionSummaryRow({
         surface && highlighted ? styles.surfaceRowHighlighted : null,
       ]}
     >
-      <View
-        style={[
-          styles.categoryIcon,
-          { backgroundColor: transactionCategoryBackgroundColor(category) },
-        ]}
-      >
-        <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={15} />
-      </View>
+      {showCategoryIcon ? (
+        <View
+          style={[
+            styles.categoryIcon,
+            { backgroundColor: transactionCategoryBackgroundColor(category) },
+          ]}
+        >
+          <Ionicons color={transactionCategoryColor(category)} name={categoryIcon} size={15} />
+        </View>
+      ) : null}
 
       <View style={styles.copy}>
         <View style={styles.titleRow}>
@@ -115,7 +119,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
-    minHeight: 54,
+    minHeight: 50,
     position: 'relative',
   },
   surfaceRow: {
@@ -175,8 +179,8 @@ const styles = StyleSheet.create({
   side: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    maxWidth: 112,
-    minWidth: 78,
+    maxWidth: 104,
+    minWidth: 72,
   },
   amountRow: {
     alignItems: 'center',

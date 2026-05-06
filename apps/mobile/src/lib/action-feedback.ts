@@ -129,14 +129,14 @@ function resolveBlockedAction(
     ? 'email'
     : !context?.profile?.phoneE164 || missingDisplayName
       ? 'profile'
-      : 'photo';
+      : 'profile';
 
   if (normalized.includes('completa tu perfil') || normalized.includes('confirma tu correo')) {
     return {
       title: missingEmail ? 'Confirma tu correo para continuar' : 'Completa tu perfil para continuar',
       message: missingEmail
         ? 'Reenvia el correo desde tu perfil y abre el enlace de confirmacion.'
-        : 'Antes de mover dinero necesitamos nombre usable, foto y celular unico en tu cuenta.',
+        : 'Antes de mover dinero necesitamos nombre usable y celular unico en tu cuenta.',
       ctaLabel: missingEmail ? 'Abrir perfil' : 'Completar ahora',
       route: buildSetupAccountHref(nextRequiredStep),
     };

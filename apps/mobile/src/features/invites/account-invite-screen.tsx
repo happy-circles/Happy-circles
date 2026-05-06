@@ -81,10 +81,6 @@ function setupRequirementLabel(step: SetupStep) {
     return 'confirmar tu correo';
   }
 
-  if (step === 'photo') {
-    return 'agregar una foto';
-  }
-
   if (step === 'security') {
     return 'validar este telefono';
   }
@@ -114,10 +110,6 @@ function profileRequirementLabel(profile: ReturnType<typeof useSession>['profile
 function setupActionLabel(step: SetupStep) {
   if (step === 'email') {
     return 'Confirmar correo';
-  }
-
-  if (step === 'photo') {
-    return 'Agregar foto';
   }
 
   if (step === 'security') {

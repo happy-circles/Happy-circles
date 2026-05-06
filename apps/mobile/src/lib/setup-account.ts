@@ -3,7 +3,7 @@ import type { Database } from '@happy-circles/shared';
 
 type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
 
-export type SetupStep = 'email' | 'profile' | 'photo' | 'security';
+export type SetupStep = 'email' | 'profile' | 'security';
 
 export function isLowQualityDisplayName(displayName: string | null | undefined): boolean {
   const normalized = displayName?.trim() ?? '';
@@ -40,10 +40,6 @@ export function derivePendingRequiredSetupSteps(
     pendingSteps.push('profile');
   }
 
-  if (!hasProfilePhoto(profile)) {
-    pendingSteps.push('photo');
-  }
-
   return pendingSteps;
 }
 
@@ -57,10 +53,7 @@ export function resolveSetupStep(input: {
     return 'email';
   }
 
-  if (
-    (requestedStep === 'profile' || requestedStep === 'photo') &&
-    input.pendingRequiredSteps.includes(requestedStep)
-  ) {
+  if (requestedStep === 'profile' && input.pendingRequiredSteps.includes(requestedStep)) {
     return requestedStep;
   }
 

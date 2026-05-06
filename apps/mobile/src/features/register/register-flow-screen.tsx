@@ -51,24 +51,23 @@ import {
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
+import {
+  AMOUNT_SUGGESTIONS,
+  buildDraftPreview,
+  formatAmountInput,
+  personRelevanceScore,
+  resolveRegisterRouteParams,
+  sanitizeAmountInput,
+  type Direction,
+  type RegisterPerson,
+} from './register-flow-helpers';
 
-type Direction = 'i_owe' | 'owes_me';
-
-const DEFAULT_DIRECTION: Direction = 'i_owe';
-
-const AMOUNT_SUGGESTIONS = [20000, 50000, 100000] as const;
 const KEYBOARD_SCROLL_GAP = 16;
 const INPUT_FOCUS_SCROLL_DELAY_MS = 120;
 const MIN_KEYBOARD_SCROLL_HEIGHT = 140;
 
 type RegisterFocusTarget = 'amount' | 'person' | 'description';
 type FieldMetrics = { readonly height: number; readonly y: number };
-
-interface RegisterPerson {
-  readonly userId: string;
-  readonly displayName: string;
-  readonly avatarUrl?: string | null;
-}
 
 interface RegisterFormErrors {
   readonly personId?: string;
@@ -79,90 +78,6 @@ interface RegisterFormErrors {
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
-}
-
-function activityRecencyScore(value: string): number {
-  const normalized = value.trim().toLocaleLowerCase('es-CO');
-
-  if (normalized.length === 0 || normalized === 'sin movimientos todavia') {
-    return 0;
-  }
-
-  if (normalized.includes('hoy')) {
-    return 120;
-  }
-
-  if (normalized.includes('ayer')) {
-    return 90;
-  }
-
-  const hoursMatch = normalized.match(/(\d+)\s+hora/);
-  if (hoursMatch) {
-    const hours = Number.parseInt(hoursMatch[1] ?? '0', 10);
-    return Math.max(0, 100 - hours);
-  }
-
-  const minutesMatch = normalized.match(/(\d+)\s+min/);
-  if (minutesMatch) {
-    return 140;
-  }
-
-  if (normalized.includes('semana')) {
-    return 20;
-  }
-
-  return 45;
-}
-
-function personRelevanceScore(
-  person: RegisterPerson & {
-    readonly pendingCount: number;
-    readonly netAmountMinor: number;
-    readonly lastActivityLabel: string;
-  },
-): number {
-  const pendingWeight = person.pendingCount * 1000;
-  const recencyWeight = activityRecencyScore(person.lastActivityLabel) * 10;
-  const balanceWeight = Math.min(person.netAmountMinor / 1000, 200);
-
-  return pendingWeight + recencyWeight + balanceWeight;
-}
-
-function buildDraftPreview(input: {
-  readonly amountMinor: number;
-  readonly counterpartyName: string;
-  readonly direction: Direction;
-}): { readonly summary: string; readonly tone: Direction } {
-  const amountLabel = formatCop(input.amountMinor);
-
-  if (input.direction === 'owes_me') {
-    return {
-      summary: `${input.counterpartyName} te debe ${amountLabel}.`,
-      tone: input.direction,
-    };
-  }
-
-  return {
-    summary: `Debes ${amountLabel} a ${input.counterpartyName}.`,
-    tone: input.direction,
-  };
-}
-
-function sanitizeAmountInput(value: string): string {
-  return value.replace(/\D/g, '');
-}
-
-function formatAmountInput(value: string): string {
-  if (value.trim().length === 0) {
-    return '';
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return '';
-  }
-
-  return parsed.toLocaleString('es-CO');
 }
 
 function QuickPersonChip({
@@ -201,10 +116,10 @@ export function RegisterFlowScreen() {
   const refresh = useSnapshotRefresh(snapshotQuery);
   const createRequest = useCreateRequestMutation();
 
-  const contextualPersonId = typeof params.personId === 'string' ? params.personId : '';
-  const contextualDirection: Direction | null =
-    params.direction === 'i_owe' || params.direction === 'owes_me' ? params.direction : null;
-  const initialDirection = contextualDirection ?? DEFAULT_DIRECTION;
+  const { contextualPersonId, initialDirection } = resolveRegisterRouteParams({
+    direction: params.direction,
+    personId: params.personId,
+  });
 
   const [query, setQuery] = useState('');
   const [personSearchExpanded, setPersonSearchExpanded] = useState(false);
@@ -614,7 +529,6 @@ export function RegisterFlowScreen() {
               keyboardShouldPersistTaps="handled"
               ref={registerScrollRef}
               refresh={refreshConfig}
-              refreshIndicatorStyle={styles.sheetRefreshIndicator}
               showsVerticalScrollIndicator={false}
             >
               {snapshotQuery.isLoading ? (
@@ -778,12 +692,12 @@ export function RegisterFlowScreen() {
                           <AppTextInput
                             autoCapitalize="words"
                             clearButtonMode="while-editing"
+                            density="compact"
                             onFocus={() => scrollFormToField('person')}
                             onChangeText={setQuery}
                             placeholder="Buscar otra persona"
                             placeholderTextColor={theme.colors.muted}
                             ref={searchInputRef}
-                            style={styles.searchInput}
                             value={query}
                           />
                           {normalizedQuery.length > 0 ? (
@@ -879,6 +793,7 @@ export function RegisterFlowScreen() {
                         ) : null}
                       </View>
                       <AppTextInput
+                        density="compact"
                         hasError={Boolean(errors.description)}
                         onFocus={() => scrollFormToField('description')}
                         onChangeText={(value) => {
@@ -889,7 +804,6 @@ export function RegisterFlowScreen() {
                         placeholderTextColor={theme.colors.muted}
                         ref={descriptionInputRef}
                         returnKeyType="done"
-                        style={styles.noteInput}
                         value={description}
                       />
                     </View>
@@ -1026,9 +940,6 @@ const styles = StyleSheet.create({
   sheetScrollContent: {
     gap: theme.spacing.sm,
     paddingBottom: theme.spacing.xxl,
-  },
-  sheetRefreshIndicator: {
-    top: theme.spacing.xs,
   },
   loadingState: {
     gap: theme.spacing.sm,
@@ -1198,15 +1109,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     maxWidth: 98,
   },
-  noteInput: {
-    fontSize: theme.typography.callout,
-    height: 48,
-    lineHeight: 18,
-    minHeight: 48,
-    paddingBottom: 0,
-    paddingTop: 0,
-    textAlignVertical: 'center',
-  },
   footer: {
     gap: theme.spacing.xs,
     paddingTop: 6,
@@ -1242,9 +1144,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '700',
-  },
-  searchInput: {
-    minHeight: 44,
   },
   personOption: {
     alignItems: 'center',

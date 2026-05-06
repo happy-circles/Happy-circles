@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 
+import {
+  avatarPathIsRemoteUrl,
+  normalizeStoredAvatarPath,
+} from './avatar-url';
 import { supabase } from './supabase';
 
 export const AVATAR_BUCKET = 'avatars';
@@ -18,14 +22,6 @@ interface ResolvedAvatarUrlState {
 
 const signedAvatarUrlCache = new Map<string, CachedSignedAvatarUrl>();
 const signedAvatarUrlRequests = new Map<string, Promise<CachedSignedAvatarUrl | null>>();
-
-function normalizeAvatarPath(path: string | null | undefined): string {
-  return (path?.trim() ?? '').replace(/^\/+/, '');
-}
-
-function isRemoteUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value);
-}
 
 function cachedSignedAvatarUrl(path: string): CachedSignedAvatarUrl | null {
   const cached = signedAvatarUrlCache.get(path);
@@ -47,28 +43,11 @@ export function buildAvatarLabel(value: string | null | undefined): string {
   return firstCharacter ? firstCharacter.toUpperCase() : '?';
 }
 
-export function resolveAvatarUrl(
-  path: string | null | undefined,
-  version?: string | null,
-): string | null {
-  const normalizedPath = normalizeAvatarPath(path);
-  if (!normalizedPath) {
-    return null;
-  }
-
-  const appendVersion = (value: string): string =>
-    version ? `${value}${value.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}` : value;
-
-  if (isRemoteUrl(normalizedPath)) {
-    return appendVersion(normalizedPath);
-  }
-
-  return normalizedPath;
-}
+export { resolveAvatarUrl } from './avatar-url';
 
 async function createSignedAvatarUrl(path: string): Promise<CachedSignedAvatarUrl | null> {
-  const normalizedPath = normalizeAvatarPath(path);
-  if (!normalizedPath || isRemoteUrl(normalizedPath) || !supabase) {
+  const normalizedPath = normalizeStoredAvatarPath(path);
+  if (!normalizedPath || avatarPathIsRemoteUrl(normalizedPath) || !supabase) {
     return null;
   }
 
@@ -110,12 +89,12 @@ async function createSignedAvatarUrl(path: string): Promise<CachedSignedAvatarUr
 
 export function useResolvedAvatarUrl(path: string | null | undefined): string | null {
   const [resolvedUrl, setResolvedUrl] = useState<ResolvedAvatarUrlState>(() => {
-    const normalizedPath = normalizeAvatarPath(path);
+    const normalizedPath = normalizeStoredAvatarPath(path);
     if (!normalizedPath) {
       return { path: '', url: null };
     }
 
-    if (isRemoteUrl(normalizedPath)) {
+    if (avatarPathIsRemoteUrl(normalizedPath)) {
       return { path: normalizedPath, url: normalizedPath };
     }
 
@@ -126,7 +105,7 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
   });
 
   useEffect(() => {
-    const normalizedPath = normalizeAvatarPath(path);
+    const normalizedPath = normalizeStoredAvatarPath(path);
     let cancelled = false;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -135,7 +114,7 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
       return undefined;
     }
 
-    if (isRemoteUrl(normalizedPath)) {
+    if (avatarPathIsRemoteUrl(normalizedPath)) {
       setResolvedUrl({ path: normalizedPath, url: normalizedPath });
       return undefined;
     }
@@ -184,6 +163,6 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
     };
   }, [path]);
 
-  const normalizedPath = normalizeAvatarPath(path);
+  const normalizedPath = normalizeStoredAvatarPath(path);
   return resolvedUrl.path === normalizedPath ? resolvedUrl.url : null;
 }

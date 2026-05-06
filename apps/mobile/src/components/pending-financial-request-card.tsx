@@ -327,7 +327,6 @@ export function PendingFinancialRequestCard({
                   onChangeText={onChangeAmendmentAmount}
                   placeholder="45000"
                   placeholderTextColor={theme.colors.muted}
-                  style={styles.input}
                   value={amendmentAmount}
                 />
                 {amendmentAmountMinor > 0 ? (
@@ -346,7 +345,6 @@ export function PendingFinancialRequestCard({
                   onChangeText={onChangeAmendmentDescription}
                   placeholder="Explica el nuevo monto"
                   placeholderTextColor={theme.colors.muted}
-                  style={[styles.input, styles.textarea]}
                   value={amendmentDescription}
                 />
               </FieldBlock>
@@ -438,12 +436,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     marginTop: theme.spacing.xs,
     padding: theme.spacing.md,
-  },
-  input: {},
-  textarea: {
-    minHeight: 96,
-    paddingTop: theme.spacing.sm,
-    textAlignVertical: 'top',
   },
   amountPreview: {
     color: theme.colors.textMuted,

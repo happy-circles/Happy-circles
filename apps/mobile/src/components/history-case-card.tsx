@@ -76,6 +76,15 @@ function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
   onToggle();
 }
 
+function shouldSurfaceHistoryStatus(
+  statusTone: NonNullable<HistoryCaseCardProps['statusTone']>,
+  isExpanded: boolean,
+): boolean {
+  return (
+    isExpanded || statusTone === 'warning' || statusTone === 'danger' || statusTone === 'primary'
+  );
+}
+
 export function HistoryCaseCard({
   eyebrow,
   category,
@@ -98,6 +107,9 @@ export function HistoryCaseCard({
   const primaryLabel = eyebrow ?? (isCycleSnippet ? 'Happy Circle' : title);
   const detailTitle = primaryLabel !== title ? title : null;
   const showExpandedSummary = isExpanded && Boolean(detailTitle || description);
+  const surfaceStatusLabel = shouldSurfaceHistoryStatus(statusTone, isExpanded)
+    ? statusLabel
+    : null;
 
   return (
     <SurfaceCard
@@ -129,7 +141,8 @@ export function HistoryCaseCard({
           category={category}
           chevron={isExpanded ? 'up' : 'forward'}
           meta={meta}
-          statusLabel={statusLabel}
+          showCategoryIcon={false}
+          statusLabel={surfaceStatusLabel}
           statusTone={statusTone}
           title={primaryLabel}
         />
@@ -230,8 +243,8 @@ function toneColor(tone: HistoryCaseTone): string {
 const styles = StyleSheet.create({
   card: {
     borderRadius: theme.radius.small,
-    gap: theme.spacing.sm,
-    minHeight: 76,
+    gap: theme.spacing.xs,
+    minHeight: 68,
   },
   cardExpanded: {
     borderColor: 'rgba(26, 39, 68, 0.14)',

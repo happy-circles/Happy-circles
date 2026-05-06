@@ -10,9 +10,14 @@ import {
   useState,
 } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { StyleSheet, View } from 'react-native';
+import { PixelRatio, StyleSheet, View } from 'react-native';
 
-const LAUNCH_TARGET_MEASURE_FRAMES = 90;
+import { subscribeLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
+
+const LAUNCH_TARGET_MEASURE_FRAMES = 120;
+const LAUNCH_TARGET_STABLE_SAMPLES = 4;
+const LAUNCH_TARGET_STABLE_THRESHOLD = 1.25;
+const LAUNCH_TARGET_REMEASURE_FRAMES = 12;
 
 export type LaunchIntroTargetKind = 'avatar' | 'brand' | 'mark';
 export type LaunchIntroTargetVisualKind = 'headerBrand' | 'identityAvatar' | 'identityMark';
@@ -32,6 +37,7 @@ export interface LaunchIntroTargetSnapshot {
   readonly kind: LaunchIntroTargetKind;
   readonly outerRotationDegrees?: number;
   readonly priority: number;
+  readonly stableAt: number;
   readonly stageSize: number;
   readonly updatedAt: number;
   readonly visualState?: LaunchIntroTargetVisualState;
@@ -39,6 +45,35 @@ export interface LaunchIntroTargetSnapshot {
   readonly width: number;
   readonly x: number;
   readonly y: number;
+}
+
+interface LaunchTargetMeasurement {
+  readonly height: number;
+  readonly stageSize: number;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+function roundMeasurementValue(value: number) {
+  return PixelRatio.roundToNearestPixel(value);
+}
+
+function isSameMeasurement(
+  left: LaunchTargetMeasurement | null,
+  right: LaunchTargetMeasurement | null,
+) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    Math.abs(left.x - right.x) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+    Math.abs(left.y - right.y) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+    Math.abs(left.width - right.width) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+    Math.abs(left.height - right.height) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+    Math.abs(left.stageSize - right.stageSize) <= LAUNCH_TARGET_STABLE_THRESHOLD
+  );
 }
 
 interface LaunchIntroContextValue {
@@ -82,10 +117,10 @@ export function LaunchIntroVisibilityProvider({
         previous.avatarFallbackTextColor === target.avatarFallbackTextColor &&
         previous.outerRotationDegrees === target.outerRotationDegrees &&
         previous.visualState === target.visualState &&
-        Math.abs(previous.x - target.x) < 0.5 &&
-        Math.abs(previous.y - target.y) < 0.5 &&
-        Math.abs(previous.width - target.width) < 0.5 &&
-        Math.abs(previous.height - target.height) < 0.5
+        Math.abs(previous.x - target.x) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+        Math.abs(previous.y - target.y) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+        Math.abs(previous.width - target.width) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
+        Math.abs(previous.height - target.height) <= LAUNCH_TARGET_STABLE_THRESHOLD
       ) {
         return current;
       }
@@ -191,6 +226,10 @@ export function LaunchIntroTargetView({
   const { registerTarget, visible } = useContext(LaunchIntroContext);
   const targetRef = useRef<View | null>(null);
   const unregisterRef = useRef<(() => void) | null>(null);
+  const latestMeasurementRef = useRef<LaunchTargetMeasurement | null>(null);
+  const registeredMeasurementRef = useRef<LaunchTargetMeasurement | null>(null);
+  const stableSamplesRef = useRef(0);
+  const remeasureFrameRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const resolvedVisualKind =
     visualKind ??
     (kind === 'brand' ? 'headerBrand' : kind === 'avatar' ? 'identityAvatar' : 'identityMark');
@@ -198,10 +237,26 @@ export function LaunchIntroTargetView({
   const clearRegistration = useCallback(() => {
     unregisterRef.current?.();
     unregisterRef.current = null;
+    registeredMeasurementRef.current = null;
+  }, []);
+
+  const resetMeasurementStability = useCallback(() => {
+    latestMeasurementRef.current = null;
+    stableSamplesRef.current = 0;
+  }, []);
+
+  const cancelPendingRemeasure = useCallback(() => {
+    if (remeasureFrameRef.current === null) {
+      return;
+    }
+
+    cancelAnimationFrame(remeasureFrameRef.current);
+    remeasureFrameRef.current = null;
   }, []);
 
   const measureTarget = useCallback(() => {
     if (disabled) {
+      resetMeasurementStability();
       clearRegistration();
       return;
     }
@@ -209,9 +264,36 @@ export function LaunchIntroTargetView({
     requestAnimationFrame(() => {
       targetRef.current?.measureInWindow((x, y, width, height) => {
         if (disabled || width <= 0 || height <= 0) {
+          resetMeasurementStability();
+          clearRegistration();
           return;
         }
 
+        const nextMeasurement = {
+          height: roundMeasurementValue(height),
+          stageSize: roundMeasurementValue(stageSize ?? Math.max(1, Math.min(width, height))),
+          width: roundMeasurementValue(width),
+          x: roundMeasurementValue(x),
+          y: roundMeasurementValue(y),
+        };
+        const previousMeasurement = latestMeasurementRef.current;
+        stableSamplesRef.current = isSameMeasurement(previousMeasurement, nextMeasurement)
+          ? stableSamplesRef.current + 1
+          : 1;
+        latestMeasurementRef.current = nextMeasurement;
+
+        if (stableSamplesRef.current < LAUNCH_TARGET_STABLE_SAMPLES) {
+          if (
+            registeredMeasurementRef.current &&
+            !isSameMeasurement(registeredMeasurementRef.current, nextMeasurement)
+          ) {
+            clearRegistration();
+          }
+          return;
+        }
+
+        registeredMeasurementRef.current = nextMeasurement;
+        const measuredAt = Date.now();
         unregisterRef.current = registerTarget({
           avatarEditable,
           avatarFallbackBackgroundColor,
@@ -220,18 +302,19 @@ export function LaunchIntroTargetView({
           avatarSize,
           avatarUrl,
           centerFaceSize,
-          height,
+          height: nextMeasurement.height,
           id,
           kind,
           outerRotationDegrees,
           priority,
-          stageSize: stageSize ?? Math.max(1, Math.min(width, height)),
-          updatedAt: Date.now(),
+          stableAt: measuredAt,
+          stageSize: nextMeasurement.stageSize,
+          updatedAt: measuredAt,
           visualState,
           visualKind: resolvedVisualKind,
-          width,
-          x,
-          y,
+          width: nextMeasurement.width,
+          x: nextMeasurement.x,
+          y: nextMeasurement.y,
         });
       });
     });
@@ -250,10 +333,40 @@ export function LaunchIntroTargetView({
     outerRotationDegrees,
     priority,
     registerTarget,
+    resetMeasurementStability,
     resolvedVisualKind,
     stageSize,
     visualState,
   ]);
+
+  const measureForStability = useCallback(() => {
+    cancelPendingRemeasure();
+    resetMeasurementStability();
+
+    let frameCount = 0;
+    function measureNextFrame() {
+      frameCount += 1;
+      measureTarget();
+
+      if (frameCount < LAUNCH_TARGET_REMEASURE_FRAMES) {
+        remeasureFrameRef.current = requestAnimationFrame(measureNextFrame);
+        return;
+      }
+
+      remeasureFrameRef.current = null;
+    }
+
+    measureNextFrame();
+  }, [cancelPendingRemeasure, measureTarget, resetMeasurementStability]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeLaunchTargetRemeasure(measureForStability);
+
+    return () => {
+      unsubscribe();
+      cancelPendingRemeasure();
+    };
+  }, [cancelPendingRemeasure, measureForStability]);
 
   useEffect(() => {
     measureTarget();

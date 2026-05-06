@@ -22,7 +22,6 @@ import {
   passwordResetRequestSchema,
   passwordResetSchema,
   registrationSchema,
-  type Database,
 } from '@happy-circles/shared';
 
 import {
@@ -40,13 +39,8 @@ import {
 import {
   getContactsPermissionStatus,
   requestContactsPermissionStatus,
-  type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
-import {
-  derivePendingRequiredSetupSteps,
-  isLowQualityDisplayName,
-  type SetupStep,
-} from '@/lib/setup-account';
+import { isLowQualityDisplayName } from '@/lib/setup-account';
 import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
@@ -54,7 +48,6 @@ import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import {
   getLocalNotificationPermissionStatus,
   requestLocalNotificationPermissionStatus,
-  type NotificationPermissionStatus,
 } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import {
@@ -63,484 +56,78 @@ import {
   reportClientErrorSafe,
   withSupportCode,
 } from '@/lib/support-errors';
+import {
+  extractAuthCallbackCode,
+  extractAuthCallbackTokens,
+  isPasswordRecoveryCallbackUrl,
+} from './session/auth-callbacks';
+import { buildAppleFullName, generateSecureNonce } from './session/apple-auth';
+import {
+  deriveAccountAccessState,
+  deriveDeviceTrustState,
+  deriveProfileCompletionState,
+  isAuthUserEmailConfirmed,
+  isSessionEmailConfirmed,
+  resolveStatusAfterAccountLoad,
+} from './session/account-state';
+import {
+  formatSupabaseAuthErrorMessage,
+  formatValidationMessage,
+  readErrorMessage,
+} from './session/auth-errors';
+import {
+  BIOMETRICS_KEY,
+  EMPTY_LINKED_METHODS,
+  EMPTY_SETUP_STATE,
+  LOCK_AFTER_MS,
+  NOTIFICATIONS_KEY,
+  REMEMBERED_ACCOUNT_KEY,
+  STEP_UP_WINDOW_MS,
+} from './session/constants';
+import { deriveLinkedMethods, normalizeIdentityProvider } from './session/linked-methods';
+import {
+  persistRememberedAccountSnapshot,
+  readRememberedAccountSnapshot,
+} from './session/remembered-account';
+import {
+  createRecentPasswordAuth,
+  isRecentPasswordAuthValid,
+  type RecentPasswordAuth,
+} from './session/recent-password-auth';
+import { buildSetupState } from './session/setup-state';
+import { formatStepUpErrorMessage, wait } from './session/step-up';
+import type {
+  AccountAccessState,
+  AccountRegistrationPreviewResult,
+  AttachEmailPasswordInput,
+  AuthIdentity,
+  AuthMode,
+  BiometricToggleResult,
+  CompleteProfileInput,
+  DeviceTrustState,
+  EmailOtpVerificationInput,
+  EmailPasswordCredentials,
+  IdentityProvider,
+  LinkedMethods,
+  PasswordResetInput,
+  ProfileCompletionState,
+  RefreshAccountStateOptions,
+  RegistrationInput,
+  RememberedAccountSnapshot,
+  SessionContextValue,
+  SessionStatus,
+  SetupPermissionStatus,
+  SetupState,
+  TrustCurrentDeviceInput,
+  TrustedDeviceRow,
+  UserProfileRow,
+} from './session/types';
+
+export type { SessionContextValue } from './session/types';
 
 WebBrowser.maybeCompleteAuthSession();
 
-type SessionStatus =
-  | 'loading'
-  | 'signed_out'
-  | 'signed_in_untrusted'
-  | 'signed_in_unlocked'
-  | 'signed_in_locked';
-type AuthMode = 'supabase';
-type AccountAccessState = 'loading' | 'needs_invite' | 'needs_activation' | 'active';
-type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
-type DeviceTrustState = 'loading' | 'unknown' | 'pending' | 'trusted' | 'revoked';
-type IdentityProvider = 'email' | 'google' | 'apple' | 'phone' | 'unknown';
-type SetupPermissionStatus = 'loading' | ContactsPermissionStatus | NotificationPermissionStatus;
-
-type UserProfileRow = Database['public']['Tables']['user_profiles']['Row'];
-type TrustedDeviceRow = Database['public']['Tables']['trusted_devices']['Row'];
-
-interface BiometricToggleResult {
-  readonly ok: boolean;
-  readonly message: string;
-}
-
-interface AuthCallbackTokens {
-  readonly accessToken: string;
-  readonly refreshToken: string;
-}
-
-interface AuthIdentity {
-  readonly provider?: string | null;
-}
-
-interface LinkedMethods {
-  readonly hasEmailPassword: boolean;
-  readonly hasGoogle: boolean;
-  readonly hasApple: boolean;
-  readonly hasPhone: boolean;
-  readonly providers: readonly string[];
-}
-
-interface EmailPasswordCredentials {
-  readonly email: string;
-  readonly password: string;
-}
-
-interface RegistrationInput extends EmailPasswordCredentials {
-  readonly confirmPassword: string;
-  readonly phoneCountryIso2: string;
-  readonly phoneCountryCallingCode: string;
-  readonly phoneNationalNumber: string;
-}
-
-interface AccountRegistrationPreviewResult {
-  readonly deliveryStatus?: string | null;
-  readonly emailAlreadyRegistered?: boolean;
-  readonly phoneAlreadyRegistered?: boolean;
-  readonly reason?: string | null;
-  readonly status?: string | null;
-}
-
-interface CompleteProfileInput {
-  readonly fullName: string;
-  readonly phoneCountryIso2: string;
-  readonly phoneCountryCallingCode: string;
-  readonly phoneNationalNumber: string;
-}
-
-interface AttachEmailPasswordInput {
-  readonly password: string;
-  readonly confirmPassword: string;
-}
-
-interface PasswordResetInput {
-  readonly password: string;
-  readonly confirmPassword: string;
-}
-
-interface EmailOtpVerificationInput {
-  readonly email: string;
-  readonly code: string;
-}
-
-interface TrustCurrentDeviceInput {
-  readonly password?: string;
-}
-
-interface RefreshAccountStateOptions {
-  readonly preserveLocked?: boolean;
-  readonly preserveTrustedDeviceDuringLoad?: boolean;
-}
-
-interface RememberedAccountSnapshot {
-  readonly userId: string;
-  readonly displayName: string;
-  readonly email: string | null;
-  readonly avatarPath: string | null;
-  readonly accountAccessState: Exclude<AccountAccessState, 'loading'>;
-  readonly lastUsedAt: string;
-}
-
-interface SetupState {
-  readonly requiredComplete: boolean;
-  readonly pendingRequiredSteps: readonly SetupStep[];
-  readonly emailConfirmed: boolean;
-  readonly securityPending: boolean;
-  readonly biometricsEligible: boolean;
-  readonly contactsPermissionStatus: SetupPermissionStatus;
-  readonly notificationsPermissionStatus: SetupPermissionStatus;
-}
-
-interface SessionContextValue {
-  readonly authMode: AuthMode;
-  readonly status: SessionStatus;
-  readonly userId: string | null;
-  readonly email: string | null;
-  readonly isEmailConfirmed: boolean;
-  readonly authProvider: IdentityProvider | null;
-  readonly profile: UserProfileRow | null;
-  readonly accountAccessState: AccountAccessState;
-  readonly rememberedAccount: RememberedAccountSnapshot | null;
-  readonly linkedMethods: LinkedMethods;
-  readonly profileCompletionState: ProfileCompletionState;
-  readonly setupState: SetupState;
-  readonly deviceTrustState: DeviceTrustState;
-  readonly trustedDevices: readonly TrustedDeviceRow[];
-  readonly currentDeviceId: string | null;
-  readonly stepUpFreshUntil: number | null;
-  readonly biometricsEnabled: boolean;
-  readonly notificationsEnabled: boolean;
-  readonly biometricLabel: string;
-  readonly biometricAvailable: boolean;
-  readonly appleSignInAvailable: boolean;
-  readonly isSignedIn: boolean;
-  readonly isPasswordRecoverySession: boolean;
-  readonly isLocked: boolean;
-  readonly isTrustedDevice: boolean;
-  readonly requiresProfileCompletion: boolean;
-  readonly requiresInvite: boolean;
-  readonly requiresAccountActivation: boolean;
-  requestPasswordReset(email: string): Promise<string>;
-  resendEmailConfirmation(email?: string): Promise<string>;
-  verifyEmailOtp(input: EmailOtpVerificationInput): Promise<string>;
-  verifyPasswordRecoveryOtp(input: EmailOtpVerificationInput): Promise<string>;
-  updatePassword(input: PasswordResetInput): Promise<string>;
-  signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
-  registerAccount(input: RegistrationInput): Promise<string>;
-  signInWithGoogle(): Promise<string>;
-  signInWithApple(): Promise<string>;
-  completeProfile(input: CompleteProfileInput): Promise<string>;
-  linkGoogle(): Promise<string>;
-  linkApple(): Promise<string>;
-  attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
-  trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
-  revokeTrustedDevice(deviceId: string): Promise<string>;
-  readonly refreshAccountState: (options?: RefreshAccountStateOptions) => Promise<void>;
-  signOut(): Promise<void>;
-  unlock(): Promise<BiometricAuthResult>;
-  lock(): void;
-  stepUpAuth(force?: boolean): Promise<BiometricAuthResult>;
-  setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
-  setNotificationsEnabled(enabled: boolean): Promise<void>;
-  requestContactsPermission(): Promise<string>;
-  requestNotificationsPermission(): Promise<string>;
-  clearRememberedAccount(): Promise<void>;
-}
-
-const BIOMETRICS_KEY = 'happy_circles.biometrics_enabled';
-const NOTIFICATIONS_KEY = 'happy_circles.notifications_enabled';
-const REMEMBERED_ACCOUNT_KEY = 'happy_circles.remembered_account';
-const LOCK_AFTER_MS = 5 * 60 * 1000;
-const STEP_UP_WINDOW_MS = 5 * 60 * 1000;
-const EMPTY_LINKED_METHODS: LinkedMethods = {
-  hasEmailPassword: false,
-  hasGoogle: false,
-  hasApple: false,
-  hasPhone: false,
-  providers: [],
-};
-const EMPTY_SETUP_STATE: SetupState = {
-  requiredComplete: false,
-  pendingRequiredSteps: [],
-  emailConfirmed: false,
-  securityPending: false,
-  biometricsEligible: false,
-  contactsPermissionStatus: 'loading',
-  notificationsPermissionStatus: 'loading',
-};
-
 const SessionContext = createContext<SessionContextValue | null>(null);
-
-function deriveAccountAccessState(profile: UserProfileRow | null): AccountAccessState {
-  if (!profile) {
-    return 'loading';
-  }
-
-  if (profile.account_access_state === 'needs_invite') {
-    return 'needs_invite';
-  }
-
-  if (profile.account_access_state === 'needs_activation') {
-    return 'needs_activation';
-  }
-
-  return 'active';
-}
-
-function isRememberedAccountSnapshot(value: unknown): value is RememberedAccountSnapshot {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-
-  const snapshot = value as Record<string, unknown>;
-  return (
-    typeof snapshot.userId === 'string' &&
-    snapshot.userId.length > 0 &&
-    typeof snapshot.displayName === 'string' &&
-    snapshot.displayName.length > 0 &&
-    (snapshot.email === null || typeof snapshot.email === 'string') &&
-    (snapshot.avatarPath === null || typeof snapshot.avatarPath === 'string') &&
-    (snapshot.accountAccessState === 'needs_invite' ||
-      snapshot.accountAccessState === 'needs_activation' ||
-      snapshot.accountAccessState === 'active') &&
-    typeof snapshot.lastUsedAt === 'string' &&
-    snapshot.lastUsedAt.length > 0
-  );
-}
-
-async function readRememberedAccountSnapshot(): Promise<RememberedAccountSnapshot | null> {
-  const stored = await getStoredItem(REMEMBERED_ACCOUNT_KEY);
-  if (!stored) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as unknown;
-    if (!isRememberedAccountSnapshot(parsed)) {
-      await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
-    return null;
-  }
-}
-
-async function persistRememberedAccountSnapshot(
-  profile: UserProfileRow | null,
-): Promise<RememberedAccountSnapshot | null> {
-  if (!profile) {
-    await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
-    return null;
-  }
-
-  const derivedAccessState = deriveAccountAccessState(profile);
-  const snapshot: RememberedAccountSnapshot = {
-    userId: profile.id,
-    displayName: profile.display_name,
-    email: profile.email,
-    avatarPath: profile.avatar_path,
-    accountAccessState: derivedAccessState === 'loading' ? 'needs_invite' : derivedAccessState,
-    lastUsedAt: new Date().toISOString(),
-  };
-
-  await setStoredItem(REMEMBERED_ACCOUNT_KEY, JSON.stringify(snapshot));
-  return snapshot;
-}
-
-function extractAuthCallbackTokens(url: string): AuthCallbackTokens | null {
-  const hashIndex = url.indexOf('#');
-  if (hashIndex === -1) {
-    return null;
-  }
-
-  const params = new URLSearchParams(url.slice(hashIndex + 1));
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-
-  if (!accessToken || !refreshToken) {
-    return null;
-  }
-
-  return {
-    accessToken,
-    refreshToken,
-  };
-}
-
-function extractAuthCallbackCode(url: string): string | null {
-  const queryIndex = url.indexOf('?');
-  if (queryIndex === -1) {
-    return null;
-  }
-
-  const query = url.slice(queryIndex + 1).split('#')[0];
-  const params = new URLSearchParams(query);
-  const code = params.get('code');
-
-  return code && code.length > 0 ? code : null;
-}
-
-function extractUrlSearchParams(url: string): URLSearchParams {
-  const queryIndex = url.indexOf('?');
-  const hashIndex = url.indexOf('#');
-  const params = new URLSearchParams();
-
-  if (queryIndex !== -1) {
-    const queryEnd = hashIndex !== -1 && hashIndex > queryIndex ? hashIndex : url.length;
-    new URLSearchParams(url.slice(queryIndex + 1, queryEnd)).forEach((value, key) => {
-      params.set(key, value);
-    });
-  }
-
-  if (hashIndex !== -1) {
-    new URLSearchParams(url.slice(hashIndex + 1)).forEach((value, key) => {
-      params.set(key, value);
-    });
-  }
-
-  return params;
-}
-
-function isPasswordRecoveryCallbackUrl(url: string): boolean {
-  const params = extractUrlSearchParams(url);
-
-  if (params.get('type') === 'recovery') {
-    return true;
-  }
-
-  try {
-    const parsedUrl = new URL(url);
-    return parsedUrl.pathname.startsWith('/reset-password');
-  } catch {
-    return url.includes('/reset-password') || url.includes('://reset-password');
-  }
-}
-
-function generateSecureNonce(length = 32): string {
-  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-  const randomValues = new Uint8Array(length);
-
-  if (globalThis.crypto?.getRandomValues) {
-    globalThis.crypto.getRandomValues(randomValues);
-  } else {
-    for (let index = 0; index < randomValues.length; index += 1) {
-      randomValues[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join('');
-}
-
-function formatValidationMessage(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'issues' in error &&
-    Array.isArray((error as { readonly issues?: unknown }).issues)
-  ) {
-    const firstIssue = (error as { readonly issues: Array<{ readonly message?: string }> })
-      .issues[0];
-    return firstIssue?.message ?? 'Revisa los datos e intenta otra vez.';
-  }
-
-  if (error instanceof Error) {
-    const normalized = error.message.trim().toLocaleLowerCase('en-US');
-
-    if (
-      normalized.includes('securestore') &&
-      normalized.includes('invalid') &&
-      normalized.includes('key')
-    ) {
-      return 'No se pudo guardar la sesion local. Cierra y abre Expo, actualiza esta version e inicia sesion otra vez.';
-    }
-
-    return error.message;
-  }
-
-  return 'No se pudo completar la accion.';
-}
-
-function readErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { readonly message?: unknown }).message;
-    if (typeof message === 'string') {
-      return message;
-    }
-  }
-
-  return 'No se pudo completar la accion.';
-}
-
-function formatSupabaseAuthErrorMessage(message: string): string {
-  const normalized = message.trim().toLocaleLowerCase('en-US');
-
-  if (
-    normalized.includes('email rate limit exceeded') ||
-    normalized.includes('over_email_send_rate_limit') ||
-    normalized.includes('too many requests') ||
-    normalized.includes('rate limit') ||
-    normalized.includes('for security purposes')
-  ) {
-    return 'Supabase bloqueo temporalmente el envio de correos por exceso de intentos. Espera antes de volver a probar o revisa los limites de Auth y tu proveedor SMTP.';
-  }
-
-  if (
-    normalized.includes('error sending recovery email') ||
-    normalized.includes('error sending confirmation email')
-  ) {
-    return 'Supabase no pudo enviar el correo. Revisa en Supabase que Email use el SMTP de Resend, que el remitente pertenezca a un dominio verificado y que las URLs permitidas incluyan https://app.happy-circles.com/reset-password y https://app.happy-circles.com/setup-account.';
-  }
-
-  if (
-    normalized.includes('invalid login credentials') ||
-    normalized.includes('invalid credentials')
-  ) {
-    return 'Correo o clave incorrectos.';
-  }
-
-  if (normalized.includes('email not confirmed')) {
-    return 'Confirma tu correo para continuar.';
-  }
-
-  if (
-    normalized.includes('invalid otp') ||
-    normalized.includes('otp expired') ||
-    normalized.includes('token has expired') ||
-    normalized.includes('token is invalid')
-  ) {
-    return 'Codigo invalido o vencido. Revisa el correo mas reciente o pide uno nuevo.';
-  }
-
-  if (normalized.includes('invalid') && normalized.includes('email')) {
-    return 'Correo invalido.';
-  }
-
-  if (
-    normalized.includes('user already registered') ||
-    normalized.includes('user_already_exists') ||
-    normalized.includes('already registered') ||
-    (normalized.includes('already exists') && normalized.includes('email'))
-  ) {
-    return 'Ese correo ya existe.';
-  }
-
-  if (
-    normalized.includes('password') &&
-    (normalized.includes('weak') ||
-      normalized.includes('minimum') ||
-      normalized.includes('at least') ||
-      normalized.includes('characters'))
-  ) {
-    return 'Clave no valida. Usa 8 a 72 caracteres.';
-  }
-
-  if (
-    normalized.includes('duplicate key value violates unique constraint') &&
-    normalized.includes('user_profiles_phone_e164_unique_idx')
-  ) {
-    return 'Ese celular ya esta vinculado.';
-  }
-
-  if (normalized.includes('database error saving new user')) {
-    return 'No pudimos crear la cuenta con esta invitacion. Revisa que el link siga disponible y que el celular no este vinculado.';
-  }
-
-  return message;
-}
 
 async function hashInviteTokenForRegistration(deliveryToken: string): Promise<string> {
   const digest = await Crypto.digestStringAsync(
@@ -549,206 +136,6 @@ async function hashInviteTokenForRegistration(deliveryToken: string): Promise<st
   );
 
   return digest.toLocaleLowerCase('en-US');
-}
-
-function buildAppleFullName(
-  fullName: AppleAuthentication.AppleAuthenticationFullName | null | undefined,
-): string | null {
-  if (!fullName) {
-    return null;
-  }
-
-  const normalized = [
-    fullName.givenName?.trim(),
-    fullName.middleName?.trim(),
-    fullName.familyName?.trim(),
-  ].filter((part): part is string => Boolean(part));
-
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  return normalized.join(' ');
-}
-
-function normalizeIdentityProvider(value: string | null | undefined): IdentityProvider {
-  const normalized = value?.trim().toLocaleLowerCase('en-US');
-
-  if (normalized === 'email') {
-    return 'email';
-  }
-
-  if (normalized === 'google') {
-    return 'google';
-  }
-
-  if (normalized === 'apple') {
-    return 'apple';
-  }
-
-  if (normalized === 'phone') {
-    return 'phone';
-  }
-
-  return normalized ? 'unknown' : 'unknown';
-}
-
-function isAuthUserEmailConfirmed(
-  user: {
-    readonly confirmed_at?: string | null;
-    readonly email?: string | null;
-    readonly email_confirmed_at?: string | null;
-  } | null,
-): boolean {
-  if (!user?.email) {
-    return false;
-  }
-
-  return Boolean(user.email_confirmed_at ?? user.confirmed_at);
-}
-
-function isSessionEmailConfirmed(session: Session | null): boolean {
-  return isAuthUserEmailConfirmed(session?.user ?? null);
-}
-
-function deriveProfileCompletionState(
-  profile: UserProfileRow | null,
-  emailConfirmed: boolean,
-): ProfileCompletionState {
-  if (!profile) {
-    return 'loading';
-  }
-
-  if (derivePendingRequiredSetupSteps(profile, emailConfirmed).length > 0) {
-    return 'incomplete';
-  }
-
-  return 'complete';
-}
-
-function deriveDeviceTrustState(row: TrustedDeviceRow | null): DeviceTrustState {
-  if (!row) {
-    return 'unknown';
-  }
-
-  if (row.trust_state === 'trusted') {
-    return 'trusted';
-  }
-
-  if (row.trust_state === 'revoked') {
-    return 'revoked';
-  }
-
-  return 'pending';
-}
-
-function deriveLinkedMethods(input: {
-  readonly session: Session | null;
-  readonly profile: UserProfileRow | null;
-  readonly identities: readonly AuthIdentity[];
-}): LinkedMethods {
-  const providerSet = new Set<string>();
-  const user = input.session?.user as
-    | {
-        readonly app_metadata?: {
-          readonly provider?: string | null;
-          readonly providers?: readonly string[] | null;
-        };
-        readonly identities?: readonly AuthIdentity[] | null;
-      }
-    | undefined;
-
-  for (const identity of input.identities) {
-    const provider = identity.provider?.trim().toLocaleLowerCase('en-US');
-    if (provider) {
-      providerSet.add(provider);
-    }
-  }
-
-  for (const identity of user?.identities ?? []) {
-    const provider = identity.provider?.trim().toLocaleLowerCase('en-US');
-    if (provider) {
-      providerSet.add(provider);
-    }
-  }
-
-  for (const provider of user?.app_metadata?.providers ?? []) {
-    const normalized = provider?.trim().toLocaleLowerCase('en-US');
-    if (normalized) {
-      providerSet.add(normalized);
-    }
-  }
-
-  const primaryProvider = user?.app_metadata?.provider?.trim().toLocaleLowerCase('en-US');
-  if (primaryProvider) {
-    providerSet.add(primaryProvider);
-  }
-
-  const providers = [...providerSet];
-
-  return {
-    hasEmailPassword: providers.includes('email'),
-    hasGoogle: providers.includes('google'),
-    hasApple: providers.includes('apple'),
-    hasPhone: Boolean(input.profile?.phone_e164),
-    providers,
-  };
-}
-
-function resolveStatusAfterAccountLoad(input: {
-  readonly hasSession: boolean;
-  readonly biometricsEnabled: boolean;
-  readonly deviceTrustState: DeviceTrustState;
-  readonly initialLock: boolean;
-  readonly preserveLocked: boolean;
-}): SessionStatus {
-  if (!input.hasSession) {
-    return 'signed_out';
-  }
-
-  if (input.deviceTrustState !== 'trusted') {
-    return 'signed_in_untrusted';
-  }
-
-  if (input.biometricsEnabled && (input.initialLock || input.preserveLocked)) {
-    return 'signed_in_locked';
-  }
-
-  return 'signed_in_unlocked';
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function formatStepUpErrorMessage(
-  actionLabel: string,
-  biometricLabel: string,
-  error: string | null,
-): string {
-  if (error === 'device_untrusted') {
-    return 'Este dispositivo aun no es confiable. Validalo primero desde Perfil.';
-  }
-
-  if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
-    return `Este dispositivo no puede usar ${biometricLabel} para ${actionLabel}.`;
-  }
-
-  if (error === 'lockout') {
-    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
-  }
-
-  if (error === 'user_cancel') {
-    return `Cancelaste ${biometricLabel}.`;
-  }
-
-  if (error === 'authentication_failed') {
-    return `No se pudo validar ${biometricLabel} para ${actionLabel}.`;
-  }
-
-  return `No se pudo validar tu identidad para ${actionLabel}.`;
 }
 
 async function resolveUserIdentities(currentSession: Session): Promise<readonly AuthIdentity[]> {
@@ -794,6 +181,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<IdentityProvider | null>(null);
   const [stepUpFreshUntil, setStepUpFreshUntil] = useState<number | null>(null);
+  const [recentPasswordAuth, setRecentPasswordAuth] = useState<RecentPasswordAuth | null>(null);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
   const [contactsPermissionStatus, setContactsPermissionStatus] =
@@ -840,6 +228,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setCurrentDeviceId(null);
     setAuthProvider(null);
     setStepUpFreshUntil(null);
+    setRecentPasswordAuth(null);
     welcomeEmailAttemptedUserIdsRef.current.clear();
   }, [setPasswordRecoverySessionUserId]);
 
@@ -1306,6 +695,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
     };
   }, [biometricsEnabled, refreshNativePermissionStatuses, setSessionStatus, status]);
 
+  useEffect(() => {
+    if (!recentPasswordAuth) {
+      return;
+    }
+
+    const timeoutMs = Math.max(0, recentPasswordAuth.expiresAt - Date.now());
+    const timer = setTimeout(() => {
+      setRecentPasswordAuth((current) => (current === recentPasswordAuth ? null : current));
+    }, timeoutMs);
+
+    return () => clearTimeout(timer);
+  }, [recentPasswordAuth]);
+
   const performGoogleOAuthFlow = useCallback(
     async (mode: 'sign-in' | 'link'): Promise<string> => {
       if (!supabase) {
@@ -1518,13 +920,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return 'Supabase no esta configurado en esta app.';
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password: parsed.password,
       });
 
       if (error) {
         return formatSupabaseAuthErrorMessage(error.message);
+      }
+
+      if (data.user?.id) {
+        setRecentPasswordAuth(createRecentPasswordAuth(data.user.id));
       }
 
       return 'Sesion iniciada.';
@@ -1624,6 +1030,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       if (data.session) {
+        setRecentPasswordAuth(createRecentPasswordAuth(data.session.user.id));
         return 'Cuenta creada. Ahora termina tu setup.';
       }
 
@@ -2181,30 +1588,38 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       const expectedUserId = sessionRef.current.user.id;
+      const hasRecentPasswordAuth = isRecentPasswordAuthValid({
+        recentPasswordAuth,
+        userId: expectedUserId,
+      });
 
       if (linkedMethods.hasEmailPassword) {
-        if (!sessionRef.current.user.email) {
-          return 'No encontramos un correo para verificar esta cuenta.';
-        }
+        if (!hasRecentPasswordAuth) {
+          if (!sessionRef.current.user.email) {
+            return 'No encontramos un correo para verificar esta cuenta.';
+          }
 
-        if (!input?.password) {
-          return 'Escribe tu clave actual para confiar este dispositivo.';
-        }
+          if (!input?.password) {
+            return 'Escribe tu clave actual para confiar este dispositivo.';
+          }
 
-        const { error, data } = await supabase.auth.signInWithPassword({
-          email: sessionRef.current.user.email,
-          password: input.password,
-        });
+          const { error, data } = await supabase.auth.signInWithPassword({
+            email: sessionRef.current.user.email,
+            password: input.password,
+          });
 
-        if (error) {
-          return formatSupabaseAuthErrorMessage(error.message);
-        }
+          if (error) {
+            return formatSupabaseAuthErrorMessage(error.message);
+          }
 
-        if (data.user?.id !== expectedUserId) {
-          await supabase.auth.signOut();
-          clearSignedInState();
-          setSessionStatus('signed_out');
-          return 'La validacion abrio otra cuenta. Cerramos la sesion por seguridad.';
+          if (data.user?.id !== expectedUserId) {
+            await supabase.auth.signOut();
+            clearSignedInState();
+            setSessionStatus('signed_out');
+            return 'La validacion abrio otra cuenta. Cerramos la sesion por seguridad.';
+          }
+
+          setRecentPasswordAuth(createRecentPasswordAuth(expectedUserId));
         }
       } else if (linkedMethods.hasGoogle) {
         const result = await performGoogleOAuthFlow('sign-in');
@@ -2251,6 +1666,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return updateResult.error.message;
       }
 
+      setRecentPasswordAuth(null);
       await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       return 'Este dispositivo ahora es confiable.';
     },
@@ -2261,6 +1677,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       linkedMethods,
       performAppleAuth,
       performGoogleOAuthFlow,
+      recentPasswordAuth,
       refreshAccountState,
       setSessionStatus,
     ],
@@ -2309,26 +1726,27 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setRememberedAccount(null);
   }, []);
 
+  const canTrustCurrentDeviceWithoutPassword = useMemo(
+    () =>
+      deviceTrustState !== 'trusted' &&
+      linkedMethods.hasEmailPassword &&
+      isRecentPasswordAuthValid({
+        recentPasswordAuth,
+        userId: session?.user.id,
+      }),
+    [deviceTrustState, linkedMethods.hasEmailPassword, recentPasswordAuth, session?.user.id],
+  );
+
   const setupState = useMemo<SetupState>(() => {
-    if (!profile) {
-      return {
-        ...EMPTY_SETUP_STATE,
-        contactsPermissionStatus,
-        notificationsPermissionStatus,
-      };
-    }
-
-    const pendingRequiredSteps = derivePendingRequiredSetupSteps(profile, isEmailConfirmed);
-
-    return {
-      requiredComplete: pendingRequiredSteps.length === 0,
-      pendingRequiredSteps,
-      emailConfirmed: isEmailConfirmed,
-      securityPending: deviceTrustState !== 'trusted',
-      biometricsEligible: biometricAvailable && deviceTrustState === 'trusted',
+    return buildSetupState({
+      profile,
+      isEmailConfirmed,
+      deviceTrustState,
+      biometricAvailable,
       contactsPermissionStatus,
       notificationsPermissionStatus,
-    };
+      emptyState: EMPTY_SETUP_STATE,
+    });
   }, [
     biometricAvailable,
     contactsPermissionStatus,
@@ -2432,6 +1850,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         : false,
       isLocked: status === 'signed_in_locked',
       isTrustedDevice: deviceTrustState === 'trusted',
+      canTrustCurrentDeviceWithoutPassword,
       requiresProfileCompletion: !setupState.requiredComplete,
       requiresInvite: accountAccessState === 'needs_invite',
       requiresAccountActivation: accountAccessState === 'needs_activation',
@@ -2469,6 +1888,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       biometricAvailable,
       biometricLabel,
       biometricsEnabled,
+      canTrustCurrentDeviceWithoutPassword,
       completeProfile,
       contactsPermissionStatus,
       currentDeviceId,

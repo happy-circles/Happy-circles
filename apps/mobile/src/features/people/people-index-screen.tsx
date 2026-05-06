@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AppTextInput } from '@/components/app-text-input';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
@@ -101,14 +102,14 @@ export function PeopleIndexScreen() {
       {people.length > 0 ? (
         <View style={styles.searchWrap}>
           <Ionicons color={theme.colors.textMuted} name="search-outline" size={18} />
-          <TextInput
+          <AppTextInput
             autoCapitalize="words"
             clearButtonMode="while-editing"
-            cursorColor={theme.colors.primary}
+            chrome="plain"
+            density="compact"
             onChangeText={setPersonQuery}
             placeholder="Buscar persona"
             placeholderTextColor={theme.colors.muted}
-            selectionColor={theme.colors.primary}
             style={styles.searchInput}
             value={personQuery}
           />
@@ -192,15 +193,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
   searchInput: {
-    color: theme.colors.text,
     flex: 1,
-    fontSize: theme.typography.body,
-    lineHeight: 20,
-    minHeight: 50,
     minWidth: 0,
     paddingHorizontal: 0,
-    paddingVertical: 0,
-    textAlignVertical: 'center',
   },
   list: {
     gap: theme.spacing.sm,

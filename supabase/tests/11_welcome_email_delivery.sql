@@ -73,7 +73,7 @@ values (
   'Welcome User',
   'active',
   '+573001111111',
-  'avatars/welcome.jpg'
+  null
 ),
 (
   '00000000-0000-0000-0000-000000001102',
@@ -105,7 +105,7 @@ begin
   from public.claim_welcome_email_delivery(v_user_id);
 
   if not found or v_claim.email <> 'welcome@example.com' then
-    raise exception 'expected complete user to claim welcome email delivery';
+    raise exception 'expected complete user without avatar to claim welcome email delivery';
   end if;
 
   if not exists (

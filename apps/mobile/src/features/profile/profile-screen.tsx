@@ -22,6 +22,7 @@ import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/compone
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { presentLimitedContactsAccessPicker } from '@/lib/contacts-permissions';
 import {
   triggerIdentityImpactHaptic,
   triggerIdentitySelectionHaptic,
@@ -38,30 +39,23 @@ import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
+import {
+  formatContactsPermissionStateLabel,
+  formatContactsPermissionSubtitle,
+  formatDeviceStateLabel,
+  formatDeviceTitle,
+  formatStepUpFailure,
+  resolveContactsPermissionActionLabel,
+  resolveContactsPermissionTone,
+  resolveProfileFocusRequest,
+  type RowTone,
+} from './profile-helpers';
 
-type RowTone = 'danger' | 'muted' | 'primary' | 'success';
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
 const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
 const TERMS_URL = 'https://app.happy-circles.com/terms';
 const SUPPORT_URL = 'https://app.happy-circles.com/support';
-
-function formatDeviceTitle(deviceId: string, currentDeviceId: string | null, platform: string) {
-  const base = platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android' : 'Web';
-  return deviceId === currentDeviceId ? `${base} actual` : base;
-}
-
-function formatDeviceStateLabel(trustState: string) {
-  if (trustState === 'trusted') {
-    return 'Confiable';
-  }
-
-  if (trustState === 'revoked') {
-    return 'Revocado';
-  }
-
-  return 'Pendiente';
-}
 
 function triggerSelectionHaptic() {
   triggerIdentitySelectionHaptic();
@@ -77,30 +71,6 @@ function triggerSuccessHaptic() {
 
 function triggerWarningHaptic() {
   triggerIdentityWarningHaptic();
-}
-
-function formatStepUpFailure(error: string | null, biometricLabel: string) {
-  if (error === 'device_untrusted') {
-    return 'Valida este dispositivo antes de eliminar tu cuenta.';
-  }
-
-  if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
-    return `Este dispositivo no puede usar ${biometricLabel} para eliminar la cuenta.`;
-  }
-
-  if (error === 'lockout') {
-    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
-  }
-
-  if (error === 'user_cancel') {
-    return `Cancelaste ${biometricLabel}.`;
-  }
-
-  if (error === 'authentication_failed') {
-    return `No se pudo validar ${biometricLabel} para eliminar la cuenta.`;
-  }
-
-  return 'No se pudo validar tu identidad para eliminar la cuenta.';
 }
 
 function resolveRowTone(tone: RowTone) {
@@ -211,8 +181,14 @@ export function ProfileScreen() {
     : pendingCount > 0
       ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} hoy`
       : 'Sin pendientes';
+  const contactsPermissionStatus = session.setupState.contactsPermissionStatus;
+  const contactsActionLabel = resolveContactsPermissionActionLabel(contactsPermissionStatus);
   const phoneLabel = session.profile?.phone_e164 ?? 'Falta completar';
   const primaryReauthLabel = useMemo(() => {
+    if (session.canTrustCurrentDeviceWithoutPassword) {
+      return 'Confiar este dispositivo';
+    }
+
     if (session.linkedMethods.hasEmailPassword) {
       return 'Validar con clave';
     }
@@ -227,6 +203,7 @@ export function ProfileScreen() {
 
     return 'Validar dispositivo';
   }, [
+    session.canTrustCurrentDeviceWithoutPassword,
     session.linkedMethods.hasApple,
     session.linkedMethods.hasEmailPassword,
     session.linkedMethods.hasGoogle,
@@ -272,13 +249,16 @@ export function ProfileScreen() {
 
   const focusProfileSection = useCallback(
     (focusTarget: string | null, sectionTarget: string | null) => {
-      const resolvedFocusTarget =
-        focusTarget === 'trust-password' &&
-        (!session.linkedMethods.hasEmailPassword || session.isTrustedDevice)
-          ? 'device-help'
-          : focusTarget === 'attach-password' && session.linkedMethods.hasEmailPassword
-            ? 'methods'
-            : focusTarget;
+      const focusRequest = resolveProfileFocusRequest({
+        canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
+        focusTarget,
+        hasEmailPassword: session.linkedMethods.hasEmailPassword,
+        isTrustedDevice: session.isTrustedDevice,
+        sectionTarget,
+      });
+      if (!focusRequest) {
+        return false;
+      }
 
       const scrollToAccount = () => {
         scrollViewRef.current?.scrollTo({
@@ -307,7 +287,7 @@ export function ProfileScreen() {
         queueHighlightReset();
       };
 
-      if (resolvedFocusTarget === 'attach-password') {
+      if (focusRequest.inputTarget === 'attach-password') {
         if (!methodsMeasuredRef.current || !attachPasswordInputRef.current) {
           return false;
         }
@@ -320,7 +300,7 @@ export function ProfileScreen() {
         return true;
       }
 
-      if (resolvedFocusTarget === 'trust-password') {
+      if (focusRequest.inputTarget === 'trust-password') {
         if (!deviceMeasuredRef.current || !trustPasswordInputRef.current) {
           return false;
         }
@@ -333,11 +313,7 @@ export function ProfileScreen() {
         return true;
       }
 
-      if (
-        resolvedFocusTarget === 'trust-device' ||
-        resolvedFocusTarget === 'device-help' ||
-        sectionTarget === 'device'
-      ) {
+      if (focusRequest.highlightTarget === 'device') {
         if (!deviceMeasuredRef.current) {
           return false;
         }
@@ -346,11 +322,7 @@ export function ProfileScreen() {
         return true;
       }
 
-      if (
-        resolvedFocusTarget === 'notifications' ||
-        sectionTarget === 'notifications' ||
-        sectionTarget === 'account'
-      ) {
+      if (focusRequest.highlightTarget === 'account') {
         if (!accountMeasuredRef.current) {
           return false;
         }
@@ -359,7 +331,7 @@ export function ProfileScreen() {
         return true;
       }
 
-      if (resolvedFocusTarget === 'methods' || sectionTarget === 'methods') {
+      if (focusRequest.highlightTarget === 'methods') {
         if (!methodsMeasuredRef.current) {
           return false;
         }
@@ -370,7 +342,12 @@ export function ProfileScreen() {
 
       return false;
     },
-    [queueHighlightReset, session.isTrustedDevice, session.linkedMethods.hasEmailPassword],
+    [
+      queueHighlightReset,
+      session.canTrustCurrentDeviceWithoutPassword,
+      session.isTrustedDevice,
+      session.linkedMethods.hasEmailPassword,
+    ],
   );
 
   useEffect(() => {
@@ -482,6 +459,59 @@ export function ProfileScreen() {
     await session.setNotificationsEnabled(false);
     await cancelScheduledReminders();
     setMessage('Recordatorios desactivados.');
+  }
+
+  async function handleContactsPermission() {
+    if (busyAction) {
+      return;
+    }
+
+    triggerSelectionHaptic();
+
+    if (contactsPermissionStatus === 'denied') {
+      triggerWarningHaptic();
+      openAppSettings(
+        'Permiso de contactos bloqueado',
+        'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+      );
+      return;
+    }
+
+    setBusyAction('contacts');
+    setMessage(null);
+
+    try {
+      if (contactsPermissionStatus === 'limited') {
+        await presentLimitedContactsAccessPicker();
+      }
+
+      const result = await session.requestContactsPermission();
+      const resultMessage =
+        contactsPermissionStatus === 'limited' && result.includes('compartio')
+          ? 'Contactos actualizados. El acceso sigue limitado.'
+          : result;
+      setMessage(resultMessage);
+
+      if (result === 'Contactos activados.' || result.includes('compartio')) {
+        triggerSuccessHaptic();
+      } else {
+        triggerWarningHaptic();
+      }
+
+      if (result.includes('Ajustes')) {
+        openAppSettings(
+          'Permiso de contactos bloqueado',
+          'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
+        );
+      }
+    } catch (error) {
+      triggerWarningHaptic();
+      setMessage(
+        error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.',
+      );
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   async function handleResendEmailConfirmation() {
@@ -825,6 +855,37 @@ export function ProfileScreen() {
               />
             }
           />
+
+          <View style={styles.separator} />
+
+          <ProfileStatusRow
+            icon="people"
+            status={
+              contactsActionLabel
+                ? undefined
+                : formatContactsPermissionStateLabel(contactsPermissionStatus)
+            }
+            subtitle={formatContactsPermissionSubtitle(contactsPermissionStatus)}
+            title="Contactos"
+            tone={resolveContactsPermissionTone(contactsPermissionStatus)}
+            trailing={
+              contactsActionLabel ? (
+                <Pressable
+                  disabled={busyAction !== null}
+                  onPress={() => void handleContactsPermission()}
+                  style={({ pressed }) => [
+                    styles.inlineButton,
+                    pressed && busyAction === null ? styles.rowPressed : null,
+                    busyAction !== null ? styles.disabledButton : null,
+                  ]}
+                >
+                  <Text style={styles.inlineButtonText}>
+                    {busyAction === 'contacts' ? 'Abriendo...' : contactsActionLabel}
+                  </Text>
+                </Pressable>
+              ) : undefined
+            }
+          />
         </View>
       </View>
 
@@ -988,7 +1049,14 @@ export function ProfileScreen() {
 
           {!session.isTrustedDevice ? (
             <View style={styles.actionCluster}>
-              {session.linkedMethods.hasEmailPassword ? (
+              {session.canTrustCurrentDeviceWithoutPassword ? (
+                <Text style={styles.sectionBody}>
+                  Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
+                  vez.
+                </Text>
+              ) : null}
+              {session.linkedMethods.hasEmailPassword &&
+              !session.canTrustCurrentDeviceWithoutPassword ? (
                 <AppTextInput
                   autoCapitalize="none"
                   onChangeText={setTrustPassword}
@@ -1010,9 +1078,11 @@ export function ProfileScreen() {
                       ? undefined
                       : () =>
                           void runAction('trust-device', async () =>
-                            session.trustCurrentDevice({
-                              password: trustPassword,
-                            }),
+                            session.trustCurrentDevice(
+                              session.canTrustCurrentDeviceWithoutPassword
+                                ? undefined
+                                : { password: trustPassword },
+                            ),
                           )
                   }
                 />

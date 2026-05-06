@@ -1,7 +1,7 @@
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useMemo, useState } from 'react';
 
@@ -138,7 +138,23 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
             icon="close"
             label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
             loading={busyAction === 'reject'}
-            onPress={() => void handleAction('reject')}
+            onPress={() =>
+              Alert.alert(
+                '¿Seguro quieres rechazar este Happy Circle?',
+                'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                [
+                  {
+                    text: 'Volver',
+                    style: 'cancel',
+                  },
+                  {
+                    text: 'Rechazar Circle',
+                    style: 'destructive',
+                    onPress: () => void handleAction('reject'),
+                  },
+                ],
+              )
+            }
             variant="ghost"
           />
         </View>

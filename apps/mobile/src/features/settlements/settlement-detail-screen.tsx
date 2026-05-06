@@ -20,7 +20,6 @@ import { formatCop } from '@/lib/data';
 import {
   useAppSnapshot,
   useApproveSettlementMutation,
-  useExecuteSettlementMutation,
   useRejectSettlementMutation,
   type SettlementDetailMovementDto,
   type SettlementDetailParticipantDto,
@@ -348,10 +347,9 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const refresh = useSnapshotRefresh(snapshotQuery);
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
-  const executeSettlement = useExecuteSettlementMutation();
 
   const [banner, setBanner] = useState<BannerState | null>(null);
-  const [busyAction, setBusyAction] = useState<'approve' | 'reject' | 'execute' | null>(null);
+  const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
   const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [graphFocused, setGraphFocused] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
@@ -399,7 +397,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     });
   }
 
-  async function handleAction(action: 'approve' | 'reject' | 'execute') {
+  async function handleAction(action: 'approve' | 'reject') {
     setBusyAction(action);
     setBanner(null);
     setActionOverlay(null);
@@ -414,37 +412,21 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             tone: 'warning',
           });
         } else {
+          const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
           await showActionOverlay({
             message:
-              nextStatus === 'approved'
-                ? 'Todos aceptaron. El Happy Circle quedo listo.'
+              nextStatus === 'executed'
+                ? nextAutoCycleStatus === 'queued'
+                  ? 'La transaccion quedo confirmada. Estamos buscando el siguiente en segundo plano.'
+                  : 'La transaccion quedo confirmada.'
                 : 'Tu aprobacion quedo registrada.',
-            title: 'Decision guardada',
+            title: nextStatus === 'executed' ? 'Happy Circle completado' : 'Decision guardada',
             variant: 'success',
           });
         }
       } else if (action === 'reject') {
         await rejectSettlement.mutateAsync(proposalId);
         showSnackbar('Happy Circle no aprobado.', 'neutral');
-      } else {
-        const response = await executeSettlement.mutateAsync(proposalId);
-        const nextStatus = readResultStatus(response);
-        const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
-        if (nextStatus === 'stale') {
-          setBanner({
-            message: 'Este Circle fue reemplazado antes de completarlo.',
-            tone: 'warning',
-          });
-        } else {
-          await showActionOverlay({
-            message:
-              nextAutoCycleStatus === 'queued'
-                ? 'Estamos buscando el siguiente en segundo plano.'
-                : 'La transaccion quedo confirmada.',
-            title: 'Happy Circle completado',
-            variant: 'success',
-          });
-        }
       }
     } catch (error) {
       const nextMessage =
@@ -517,20 +499,22 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     );
   }
 
-  const canApproveOrReject = settlement.status === 'pending_approvals';
-  const canExecute = settlement.status === 'approved';
+  const myDecision =
+    settlement.participantDecisions.find((participant) => participant.userId === session.userId)
+      ?.decision ?? null;
+  const canDecide = settlement.status === 'pending_approvals' && myDecision === 'pending';
   const approvalsPending = settlement.participantDecisions.filter(
     (participant) => participant.decision === 'pending',
   ).length;
   const summaryText =
     settlement.status === 'pending_approvals'
       ? approvalsPending > 0
-        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para poder completarlo.`
-        : 'Ya no faltan respuestas. Solo queda completar el Circle.'
+        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para completarlo automaticamente.`
+        : 'Ya no faltan respuestas. Estamos completando el Circle.'
       : settlement.status === 'approved'
-        ? 'Todos aprobaron este Happy Circle. Puedes completarlo ahora.'
+        ? 'Todos aprobaron este Happy Circle. Estamos verificando el cierre automatico.'
         : settlement.status === 'executed'
-          ? 'Completaste un Circle!'
+          ? 'Happy Circle completado.'
           : settlement.status === 'rejected'
             ? 'Este Circle no se completo.'
             : 'Este Circle fue reemplazado por cambios nuevos.';
@@ -542,7 +526,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
       }
       refresh={refresh}
-      subtitle="Lo esencial antes de aprobar o completar."
+      subtitle="Lo esencial antes de aprobar."
       title="Happy Circle"
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
@@ -593,75 +577,42 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         />
       </SurfaceCard>
 
-      {canApproveOrReject || canExecute ? (
+      {canDecide ? (
         <View style={styles.actions}>
-          {canApproveOrReject ? (
-            <>
-              <View style={styles.actionSlot}>
-                <PrimaryAction
-                  label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
-                  loading={busyAction === 'approve'}
-                  onPress={busyAction ? undefined : () => void handleAction('approve')}
-                />
-              </View>
-              <View style={styles.actionSlot}>
-                <PrimaryAction
-                  label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
-                  loading={busyAction === 'reject'}
-                  onPress={
-                    busyAction
-                      ? undefined
-                      : () =>
-                          Alert.alert(
-                            'No aprobar Circle',
-                            'Tu respuesta dejara claro que no apruebas este Happy Circle.',
-                            [
-                              {
-                                text: 'Cancelar',
-                                style: 'cancel',
-                              },
-                              {
-                                text: 'No aprobar',
-                                style: 'destructive',
-                                onPress: () => void handleAction('reject'),
-                              },
-                            ],
-                          )
-                  }
-                  variant="secondary"
-                />
-              </View>
-            </>
-          ) : null}
-
-          {canExecute ? (
-            <View style={styles.actionSlot}>
-              <PrimaryAction
-                label={busyAction === 'execute' ? 'Completando...' : 'Completar Circle'}
-                loading={busyAction === 'execute'}
-                onPress={
-                  busyAction
-                    ? undefined
-                    : () =>
-                        Alert.alert(
-                          'Completar Circle',
-                          'Aplicaremos este Happy Circle al historial y ya no podras deshacerlo desde aqui.',
-                          [
-                            {
-                              text: 'Cancelar',
-                              style: 'cancel',
-                            },
-                            {
-                              text: 'Completar',
-                              style: 'destructive',
-                              onPress: () => void handleAction('execute'),
-                            },
-                          ],
-                        )
-                }
-              />
-            </View>
-          ) : null}
+          <View style={styles.actionSlot}>
+            <PrimaryAction
+              label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
+              loading={busyAction === 'approve'}
+              onPress={busyAction ? undefined : () => void handleAction('approve')}
+            />
+          </View>
+          <View style={styles.actionSlot}>
+            <PrimaryAction
+              label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
+              loading={busyAction === 'reject'}
+              onPress={
+                busyAction
+                  ? undefined
+                  : () =>
+                      Alert.alert(
+                        '¿Seguro quieres rechazar este Happy Circle?',
+                        'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                        [
+                          {
+                            text: 'Volver',
+                            style: 'cancel',
+                          },
+                          {
+                            text: 'Rechazar Circle',
+                            style: 'destructive',
+                            onPress: () => void handleAction('reject'),
+                          },
+                        ],
+                      )
+              }
+              variant="secondary"
+            />
+          </View>
         </View>
       ) : null}
       <LoadingOverlay

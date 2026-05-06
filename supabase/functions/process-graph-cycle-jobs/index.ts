@@ -91,6 +91,14 @@ Deno.serve((request) => {
         ? body.workerId.trim()
         : `edge-worker-${crypto.randomUUID()}`;
     const results: unknown[] = [];
+    const { error: requeueError } = await client.rpc('requeue_stale_graph_cycle_jobs', {
+      p_limit: 50,
+      p_timeout_seconds: 300,
+    });
+
+    if (requeueError) {
+      throw requeueError;
+    }
 
     for (let index = 0; index < limit; index += 1) {
       const { data: claimedData, error: claimError } = await client.rpc('claim_graph_cycle_job', {
@@ -126,6 +134,7 @@ Deno.serve((request) => {
             'complete_graph_cycle_job',
             {
               p_job_id: job.id,
+              p_worker_id: workerId,
               p_result_json: result,
             },
           );
@@ -155,6 +164,7 @@ Deno.serve((request) => {
             'complete_graph_cycle_job',
             {
               p_job_id: job.id,
+              p_worker_id: workerId,
               p_result_json: result,
             },
           );
@@ -200,6 +210,7 @@ Deno.serve((request) => {
           'complete_graph_cycle_job',
           {
             p_job_id: job.id,
+            p_worker_id: workerId,
             p_result_json: result,
           },
         );
@@ -213,6 +224,7 @@ Deno.serve((request) => {
         const message = error instanceof Error ? error.message : String(error);
         const { data: failed, error: failError } = await client.rpc('fail_graph_cycle_job', {
           p_job_id: job.id,
+          p_worker_id: workerId,
           p_error: message,
         });
 

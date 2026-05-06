@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,13 +15,33 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import {
+  CONTACT_TARGET_RESOLUTION_LIMIT,
+  actionMetaForResolution,
+  buildContactSectionItems,
+  compareEnrichedContacts,
+  contactAvatarColor,
+  contactMeta,
+  formatQrExpiry,
+  getUnresolvedContactPhoneE164List,
+  isFreshQrDelivery,
+  shouldShowInApp,
+  uniqueContactPhoneE164List,
+  type AddPersonTransactionContext,
+  type EnrichedContact,
+} from '@/features/home/contacts-sheet-helpers';
+import {
+  loadPeopleTargetResolutionCache,
+  pruneExpiredPeopleTargetResolutionCache,
+  savePeopleTargetResolutionsToCache,
+} from '@/features/home/people-target-resolution-cache';
 import { showBlockedActionAlert } from '@/lib/action-feedback';
 import {
   canReadContactsPermissionStatus,
@@ -42,196 +62,18 @@ import {
 } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
+import { useSession } from '@/providers/session-provider';
 import {
   buildAccountInviteShareMessage,
   buildAppInviteLink,
   buildFriendshipInviteLink,
-  type ContactCandidate,
-  type ContactPhoneOption,
+  CONTACTS_PAGE_SIZE,
   extractInviteToken,
-  formatPhonePreview,
   isAccountInviteDeliveryResult,
+  type ContactCandidate,
   type PendingContactSelection,
-  readContactsFromDevice,
+  readContactsPageFromDevice,
 } from '@/features/invites/people-outreach-utils';
-
-const CONTACT_AVATAR_COLORS = ['#e11d48', '#ea580c', '#059669', '#0891b2', '#2563eb', '#9333ea'];
-const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
-
-type EnrichedContact = {
-  readonly contact: ContactCandidate;
-  readonly resolution: PeopleTargetResolution | null;
-};
-
-type AddPersonTransactionContext = {
-  readonly amountMinor: number;
-  readonly description: string | null;
-  readonly direction: 'i_owe' | 'owes_me';
-};
-
-function contactAvatarColor(contact: ContactCandidate): string {
-  const source = `${contact.contactId}:${contact.alias}`;
-  let hash = 0;
-
-  for (let index = 0; index < source.length; index += 1) {
-    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
-  }
-
-  return CONTACT_AVATAR_COLORS[hash % CONTACT_AVATAR_COLORS.length] ?? theme.colors.primary;
-}
-
-function actionMetaForResolution(
-  resolution: PeopleTargetResolution | null,
-  hasMultiplePhones: boolean,
-): {
-  readonly label: string;
-  readonly icon: keyof typeof Ionicons.glyphMap;
-  readonly tone: 'primary' | 'invite' | 'muted';
-  readonly disabled: boolean;
-} {
-  if (hasMultiplePhones) {
-    return {
-      disabled: false,
-      icon: 'list-outline',
-      label: 'Elegir',
-      tone: 'primary',
-    };
-  }
-
-  if (!resolution) {
-    return {
-      disabled: true,
-      icon: 'sync-outline',
-      label: '...',
-      tone: 'muted',
-    };
-  }
-
-  if (resolution.status === 'active_user') {
-    return {
-      disabled: false,
-      icon: 'person-add-outline',
-      label: 'Agregar',
-      tone: 'primary',
-    };
-  }
-
-  if (resolution.status === 'no_account') {
-    return {
-      disabled: false,
-      icon: 'paper-plane-outline',
-      label: 'Invitar',
-      tone: 'invite',
-    };
-  }
-
-  if (resolution.status === 'pending_activation') {
-    return {
-      disabled: false,
-      icon: 'paper-plane-outline',
-      label: 'Reenviar',
-      tone: 'invite',
-    };
-  }
-
-  if (resolution.status === 'pending_friendship') {
-    return {
-      disabled: true,
-      icon: 'time-outline',
-      label: 'Pendiente',
-      tone: 'muted',
-    };
-  }
-
-  return {
-    disabled: true,
-    icon: 'checkmark-outline',
-    label: 'Agregado',
-    tone: 'muted',
-  };
-}
-
-function shouldShowInApp(resolution: PeopleTargetResolution | null): boolean {
-  return (
-    resolution?.status === 'active_user' ||
-    resolution?.status === 'already_related' ||
-    resolution?.status === 'pending_friendship'
-  );
-}
-
-function rankContactResolution(resolution: PeopleTargetResolution | null): number {
-  if (resolution?.status === 'active_user') {
-    return 0;
-  }
-
-  if (resolution?.status === 'pending_friendship') {
-    return 1;
-  }
-
-  if (resolution?.status === 'already_related') {
-    return 2;
-  }
-
-  if (resolution?.status === 'pending_activation') {
-    return 3;
-  }
-
-  if (resolution?.status === 'no_account') {
-    return 4;
-  }
-
-  return 5;
-}
-
-function compareEnrichedContacts(left: EnrichedContact, right: EnrichedContact): number {
-  const rankDelta = rankContactResolution(left.resolution) - rankContactResolution(right.resolution);
-  if (rankDelta !== 0) {
-    return rankDelta;
-  }
-
-  const aliasDelta = left.contact.alias.localeCompare(right.contact.alias, 'es-CO');
-  if (aliasDelta !== 0) {
-    return aliasDelta;
-  }
-
-  return left.contact.primaryPhone.phoneE164.localeCompare(right.contact.primaryPhone.phoneE164);
-}
-
-function contactMeta(phoneOption: ContactPhoneOption): string {
-  const number = formatPhonePreview(phoneOption.phoneE164);
-  if (phoneOption.label) {
-    return `${phoneOption.label} ${number}`;
-  }
-
-  return number;
-}
-
-function formatQrExpiry(value: string): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return 'QR temporal';
-  }
-
-  return `Vence ${new Intl.DateTimeFormat('es-CO', {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(timestamp))}`;
-}
-
-function isFreshQrDelivery(
-  delivery: FriendshipInviteDeliveryResult | null,
-): delivery is FriendshipInviteDeliveryResult {
-  if (!delivery) {
-    return false;
-  }
-
-  const timestamp = Date.parse(delivery.expiresAt);
-  if (Number.isNaN(timestamp)) {
-    return true;
-  }
-
-  return timestamp - Date.now() > 60_000;
-}
 
 function ContactRow({
   busy,
@@ -300,6 +142,7 @@ export function AddPersonContactsSheet({
   readonly visible: boolean;
 }) {
   const router = useRouter();
+  const session = useSession();
   const createExternalFriendshipInvite = useCreateExternalFriendshipInviteMutation();
   const createPeopleOutreach = useCreatePeopleOutreachMutation();
   const resolvePeopleTargets = useResolvePeopleTargetsMutation();
@@ -319,48 +162,28 @@ export function AddPersonContactsSheet({
   const [myQrMessage, setMyQrMessage] = useState<string | null>(null);
   const [pendingContactSelection, setPendingContactSelection] =
     useState<PendingContactSelection | null>(null);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsScanComplete, setContactsScanComplete] = useState(false);
+  const [contactsLoadedCount, setContactsLoadedCount] = useState(0);
+  const scanRunIdRef = useRef(0);
+  const targetCacheRef = useRef<Record<string, PeopleTargetResolution>>({});
+  const pendingResolutionQueueRef = useRef<string[]>([]);
+  const pendingResolutionSetRef = useRef(new Set<string>());
+  const inFlightResolutionSetRef = useRef(new Set<string>());
+  const visibleResolutionPhonesRef = useRef(new Set<string>());
+  const resolutionPumpRunningRef = useRef(false);
+  const resolvePeopleTargetsMutateRef = useRef(resolvePeopleTargets.mutateAsync);
 
   const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
 
-  const filteredContacts = useMemo(() => {
-    const normalizedSearch = searchValue.trim().toLocaleLowerCase('es-CO');
-    if (normalizedSearch.length === 0) {
-      return contacts;
-    }
-
-    return contacts.filter((contact) => contact.searchKey.includes(normalizedSearch));
-  }, [contacts, searchValue]);
-
-  const contactResolutionWindow = useMemo(
-    () => filteredContacts.slice(0, CONTACT_TARGET_RESOLUTION_LIMIT),
-    [filteredContacts],
+  const contactSections = useMemo(
+    () => buildContactSectionItems({ contacts, searchValue, targetCache }),
+    [contacts, searchValue, targetCache],
   );
-
-  const sortedContacts = useMemo<readonly EnrichedContact[]>(
-    () =>
-      filteredContacts
-        .map((contact) => ({
-          contact,
-          resolution: targetCache[contact.primaryPhone.phoneE164] ?? null,
-        }))
-        .sort(compareEnrichedContacts),
-    [filteredContacts, targetCache],
-  );
-
-  const displayedContacts = useMemo(
-    () => sortedContacts.slice(0, searchValue.trim().length > 0 ? 60 : 36),
-    [searchValue, sortedContacts],
-  );
-
-  const inAppContacts = useMemo(
-    () => displayedContacts.filter((item) => shouldShowInApp(item.resolution)),
-    [displayedContacts],
-  );
-
-  const inviteContacts = useMemo(
-    () => displayedContacts.filter((item) => !shouldShowInApp(item.resolution)),
-    [displayedContacts],
-  );
+  const contactResolutionWindow = contactSections.visibleResolutionContacts;
+  const inAppContacts = contactSections.inAppContacts;
+  const inviteContacts = contactSections.inviteContacts;
+  const displayedContactsCount = inAppContacts.length + inviteContacts.length;
   const myQrLink = isFreshQrDelivery(myQrDelivery)
     ? buildFriendshipInviteLink(myQrDelivery.deliveryToken)
     : null;
@@ -385,47 +208,283 @@ export function AddPersonContactsSheet({
   );
 
   const mergeTargetResolutions = useCallback((resolutions: readonly PeopleTargetResolution[]) => {
-    setTargetCache((current) => {
-      if (resolutions.length === 0) {
-        return current;
-      }
+    if (resolutions.length === 0) {
+      return;
+    }
 
-      const next = { ...current };
-      for (const resolution of resolutions) {
-        next[resolution.phoneE164] = resolution;
-      }
-      return next;
-    });
+    const next = { ...targetCacheRef.current };
+    for (const resolution of resolutions) {
+      next[resolution.phoneE164] = resolution;
+    }
+
+    targetCacheRef.current = next;
+    setTargetCache(next);
   }, []);
 
+  const persistTargetResolutions = useCallback(
+    (resolutions: readonly PeopleTargetResolution[]) => {
+      if (!session.userId || resolutions.length === 0) {
+        return;
+      }
+
+      void savePeopleTargetResolutionsToCache(session.userId, resolutions).catch(() => undefined);
+    },
+    [session.userId],
+  );
+
+  const mergeAndPersistTargetResolutions = useCallback(
+    (resolutions: readonly PeopleTargetResolution[]) => {
+      mergeTargetResolutions(resolutions);
+      persistTargetResolutions(resolutions);
+    },
+    [mergeTargetResolutions, persistTargetResolutions],
+  );
+
+  useEffect(() => {
+    resolvePeopleTargetsMutateRef.current = resolvePeopleTargets.mutateAsync;
+  }, [resolvePeopleTargets.mutateAsync]);
+
+  const pumpResolutionQueue = useCallback(async () => {
+    if (resolutionPumpRunningRef.current) {
+      return;
+    }
+
+    resolutionPumpRunningRef.current = true;
+    const activeRunId = scanRunIdRef.current;
+
+    try {
+      while (scanRunIdRef.current === activeRunId && pendingResolutionQueueRef.current.length > 0) {
+        const batch: string[] = [];
+        while (
+          batch.length < CONTACT_TARGET_RESOLUTION_LIMIT &&
+          pendingResolutionQueueRef.current.length > 0
+        ) {
+          const phoneE164 = pendingResolutionQueueRef.current.shift();
+          if (!phoneE164) {
+            continue;
+          }
+
+          pendingResolutionSetRef.current.delete(phoneE164);
+          if (
+            targetCacheRef.current[phoneE164] ||
+            inFlightResolutionSetRef.current.has(phoneE164)
+          ) {
+            continue;
+          }
+
+          batch.push(phoneE164);
+        }
+
+        if (batch.length === 0) {
+          continue;
+        }
+
+        for (const phoneE164 of batch) {
+          inFlightResolutionSetRef.current.add(phoneE164);
+        }
+
+        try {
+          const resolutions = await resolvePeopleTargetsMutateRef.current(batch);
+          if (scanRunIdRef.current === activeRunId) {
+            mergeAndPersistTargetResolutions(resolutions);
+          }
+        } catch (error) {
+          const affectsVisibleContact = batch.some((phoneE164) =>
+            visibleResolutionPhonesRef.current.has(phoneE164),
+          );
+          if (affectsVisibleContact && scanRunIdRef.current === activeRunId) {
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : 'No se pudo revisar esta parte de tu agenda.',
+            );
+          }
+        } finally {
+          if (scanRunIdRef.current === activeRunId) {
+            for (const phoneE164 of batch) {
+              inFlightResolutionSetRef.current.delete(phoneE164);
+            }
+          }
+        }
+      }
+    } finally {
+      resolutionPumpRunningRef.current = false;
+      if (pendingResolutionQueueRef.current.length > 0) {
+        void pumpResolutionQueue();
+      }
+    }
+  }, [mergeAndPersistTargetResolutions]);
+
+  const enqueueResolutionPhones = useCallback(
+    (phoneE164List: readonly string[], priority: 'visible' | 'background') => {
+      const missingPhones = getUnresolvedContactPhoneE164List({
+        inFlightPhoneE164Set: inFlightResolutionSetRef.current,
+        pendingPhoneE164Set: pendingResolutionSetRef.current,
+        phoneE164List,
+        targetCache: targetCacheRef.current,
+      });
+
+      if (missingPhones.length === 0) {
+        return;
+      }
+
+      for (const phoneE164 of missingPhones) {
+        pendingResolutionSetRef.current.add(phoneE164);
+      }
+
+      if (priority === 'visible') {
+        pendingResolutionQueueRef.current = [
+          ...missingPhones,
+          ...pendingResolutionQueueRef.current,
+        ];
+      } else {
+        pendingResolutionQueueRef.current.push(...missingPhones);
+      }
+
+      void pumpResolutionQueue();
+    },
+    [pumpResolutionQueue],
+  );
+
+  async function loadCachedTargetResolutionsForPhones(
+    runId: number,
+    phoneE164List: readonly string[],
+  ) {
+    if (!session.userId || phoneE164List.length === 0) {
+      return;
+    }
+
+    try {
+      const cachedResolutions = await loadPeopleTargetResolutionCache(
+        session.userId,
+        phoneE164List,
+      );
+      if (scanRunIdRef.current !== runId) {
+        return;
+      }
+
+      mergeTargetResolutions(Object.values(cachedResolutions));
+    } catch {
+      // Persistent cache is an optimization. Contact loading should continue without it.
+    }
+  }
+
+  function resetContactScan(runId: number) {
+    scanRunIdRef.current = runId;
+    pendingResolutionQueueRef.current = [];
+    pendingResolutionSetRef.current.clear();
+    inFlightResolutionSetRef.current.clear();
+    visibleResolutionPhonesRef.current.clear();
+    targetCacheRef.current = {};
+    setContacts([]);
+    setTargetCache({});
+    setContactsLoadedCount(0);
+    setContactsLoading(false);
+    setContactsScanComplete(false);
+  }
+
   const loadContacts = useCallback(async () => {
+    const runId = scanRunIdRef.current + 1;
+    resetContactScan(runId);
+
     if (Platform.OS === 'web') {
       setContactsPermissionStatus('unavailable');
       setContacts([]);
+      setContactsScanComplete(true);
       return;
     }
 
     setBusyKey('load-contacts');
+    setContactsLoading(true);
     try {
       const nextStatus = await getContactsPermissionStatus();
+      if (scanRunIdRef.current !== runId) {
+        return;
+      }
+
       setContactsPermissionStatus(nextStatus);
 
       if (!canReadContactsPermissionStatus(nextStatus)) {
         setContacts([]);
+        setContactsScanComplete(true);
         return;
       }
 
-      const nextContacts = await readContactsFromDevice();
-      setContacts(nextContacts);
+      void pruneExpiredPeopleTargetResolutionCache(session.userId).catch(() => undefined);
+
+      let pageOffset = 0;
+      let hasNextPage = true;
+      let loadedCount = 0;
+      let isFirstPage = true;
+
+      while (hasNextPage && scanRunIdRef.current === runId) {
+        const page = await readContactsPageFromDevice({
+          pageOffset,
+          pageSize: CONTACTS_PAGE_SIZE,
+        });
+        if (scanRunIdRef.current !== runId) {
+          return;
+        }
+
+        if (page.contacts.length > 0) {
+          setContacts((current) => {
+            const existingContactIds = new Set(current.map((contact) => contact.contactId));
+            const nextContacts = [...current];
+            for (const contact of page.contacts) {
+              if (!existingContactIds.has(contact.contactId)) {
+                existingContactIds.add(contact.contactId);
+                nextContacts.push(contact);
+              }
+            }
+
+            return nextContacts;
+          });
+
+          loadedCount += page.contacts.length;
+          setContactsLoadedCount(loadedCount);
+
+          const pagePhones = uniqueContactPhoneE164List(page.contacts);
+          await loadCachedTargetResolutionsForPhones(runId, pagePhones);
+          if (scanRunIdRef.current !== runId) {
+            return;
+          }
+
+          enqueueResolutionPhones(pagePhones, 'background');
+        }
+
+        if (isFirstPage) {
+          setBusyKey((current) => (current === 'load-contacts' ? null : current));
+          isFirstPage = false;
+        }
+
+        pageOffset = page.nextPageOffset;
+        hasNextPage = page.hasNextPage;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      if (scanRunIdRef.current === runId) {
+        setContactsScanComplete(true);
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
+      if (scanRunIdRef.current === runId) {
+        setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
+      }
     } finally {
-      setBusyKey((current) => (current === 'load-contacts' ? null : current));
+      if (scanRunIdRef.current === runId) {
+        setContactsLoading(false);
+        setBusyKey((current) => (current === 'load-contacts' ? null : current));
+      }
     }
-  }, []);
+  }, [enqueueResolutionPhones, mergeTargetResolutions, session.userId]);
 
   useEffect(() => {
     if (!visible) {
+      scanRunIdRef.current += 1;
+      pendingResolutionQueueRef.current = [];
+      pendingResolutionSetRef.current.clear();
+      inFlightResolutionSetRef.current.clear();
+      visibleResolutionPhonesRef.current.clear();
+      setContactsLoading(false);
       setScannerOpen(false);
       setScannerLocked(false);
       setScannerMessage(null);
@@ -442,37 +501,14 @@ export function AddPersonContactsSheet({
 
   useEffect(() => {
     if (!visible || !canReadContacts || contactResolutionWindow.length === 0) {
+      visibleResolutionPhonesRef.current = new Set();
       return;
     }
 
-    const missingPhones = [
-      ...new Set(
-        contactResolutionWindow
-          .map((contact) => contact.primaryPhone.phoneE164)
-          .filter((phoneE164) => !targetCache[phoneE164]),
-      ),
-    ];
-
-    if (missingPhones.length === 0) {
-      return;
-    }
-
-    void resolvePeopleTargets
-      .mutateAsync(missingPhones)
-      .then(mergeTargetResolutions)
-      .catch((error) => {
-        setMessage(
-          error instanceof Error ? error.message : 'No se pudo revisar esta parte de tu agenda.',
-        );
-      });
-  }, [
-    canReadContacts,
-    contactResolutionWindow,
-    mergeTargetResolutions,
-    resolvePeopleTargets,
-    targetCache,
-    visible,
-  ]);
+    const visiblePhones = uniqueContactPhoneE164List(contactResolutionWindow);
+    visibleResolutionPhonesRef.current = new Set(visiblePhones);
+    enqueueResolutionPhones(visiblePhones, 'visible');
+  }, [canReadContacts, contactResolutionWindow, enqueueResolutionPhones, visible]);
 
   async function requestContactsAccess() {
     if (busyKey) {
@@ -499,13 +535,12 @@ export function AddPersonContactsSheet({
         return;
       }
 
-      const nextContacts = await readContactsFromDevice();
-      setContacts(nextContacts);
       setMessage(
         nextStatus === 'limited'
-          ? `Tu telefono compartio ${nextContacts.length} contactos con numero.`
-          : 'Tu agenda ya quedo lista.',
+          ? 'Tu telefono compartio contactos limitados. Los estamos cargando.'
+          : 'Tu agenda se esta cargando.',
       );
+      void loadContacts();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.',
@@ -545,9 +580,8 @@ export function AddPersonContactsSheet({
         return;
       }
 
-      const nextContacts = await readContactsFromDevice();
-      setContacts(nextContacts);
-      setMessage(`Ahora vemos ${nextContacts.length} contactos con numero.`);
+      setMessage('Actualizando la agenda compartida.');
+      void loadContacts();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo ampliar el acceso a tus contactos.',
@@ -558,15 +592,36 @@ export function AddPersonContactsSheet({
   }
 
   async function ensurePhoneStatuses(phoneE164List: readonly string[]) {
-    const missingPhones = [
-      ...new Set(phoneE164List.filter((phoneE164) => !targetCache[phoneE164])),
-    ];
+    const cachedResolutions = await loadPeopleTargetResolutionCache(session.userId, phoneE164List);
+    mergeTargetResolutions(Object.values(cachedResolutions));
+
+    const missingPhones = getUnresolvedContactPhoneE164List({
+      inFlightPhoneE164Set: inFlightResolutionSetRef.current,
+      pendingPhoneE164Set: pendingResolutionSetRef.current,
+      phoneE164List,
+      targetCache: targetCacheRef.current,
+    });
     if (missingPhones.length === 0) {
       return;
     }
 
-    const resolutions = await resolvePeopleTargets.mutateAsync(missingPhones);
-    mergeTargetResolutions(resolutions);
+    for (const phoneE164 of missingPhones) {
+      visibleResolutionPhonesRef.current.add(phoneE164);
+    }
+    enqueueResolutionPhones(missingPhones, 'visible');
+
+    const waitUntil = Date.now() + 6_000;
+    while (
+      Date.now() < waitUntil &&
+      missingPhones.some(
+        (phoneE164) =>
+          !targetCacheRef.current[phoneE164] &&
+          (pendingResolutionSetRef.current.has(phoneE164) ||
+            inFlightResolutionSetRef.current.has(phoneE164)),
+      )
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
   }
 
   async function shareAccountInviteLink(alias: string, delivery: AccountInviteDeliveryResult) {
@@ -596,37 +651,37 @@ export function AddPersonContactsSheet({
     alias: string,
     response: PeopleOutreachResult,
   ) {
+    let resolution: PeopleTargetResolution;
+
     if (response.kind === 'already_related') {
-      mergeTargetResolutions([
-        {
-          accountInviteId: null,
-          accountInviteStatus: null,
-          avatarPath: null,
-          displayName: response.displayName ?? alias,
-          friendshipInviteId: null,
-          matchedUserId: response.matchedUserId,
-          phoneE164,
-          relationshipId: response.relationshipId ?? null,
-          status: 'already_related',
-        },
-      ]);
+      resolution = {
+        accountInviteId: null,
+        accountInviteStatus: null,
+        avatarPath: null,
+        displayName: response.displayName ?? alias,
+        friendshipInviteId: null,
+        matchedUserId: response.matchedUserId,
+        phoneE164,
+        relationshipId: response.relationshipId ?? null,
+        status: 'already_related',
+      };
+      mergeAndPersistTargetResolutions([resolution]);
       return;
     }
 
     if (response.kind === 'friendship') {
-      mergeTargetResolutions([
-        {
-          accountInviteId: null,
-          accountInviteStatus: null,
-          avatarPath: null,
-          displayName: response.displayName ?? alias,
-          friendshipInviteId: response.inviteId ?? null,
-          matchedUserId: response.matchedUserId,
-          phoneE164,
-          relationshipId: response.relationshipId ?? null,
-          status: 'pending_friendship',
-        },
-      ]);
+      resolution = {
+        accountInviteId: null,
+        accountInviteStatus: null,
+        avatarPath: null,
+        displayName: response.displayName ?? alias,
+        friendshipInviteId: response.inviteId ?? null,
+        matchedUserId: response.matchedUserId,
+        phoneE164,
+        relationshipId: response.relationshipId ?? null,
+        status: 'pending_friendship',
+      };
+      mergeAndPersistTargetResolutions([resolution]);
       return;
     }
 
@@ -635,19 +690,18 @@ export function AddPersonContactsSheet({
         ? response.result.inviteId
         : (response.inviteId ?? null);
 
-    mergeTargetResolutions([
-      {
-        accountInviteId,
-        accountInviteStatus: 'pending_activation',
-        avatarPath: null,
-        displayName: response.displayName ?? alias,
-        friendshipInviteId: null,
-        matchedUserId: response.matchedUserId,
-        phoneE164,
-        relationshipId: null,
-        status: 'pending_activation',
-      },
-    ]);
+    resolution = {
+      accountInviteId,
+      accountInviteStatus: 'pending_activation',
+      avatarPath: null,
+      displayName: response.displayName ?? alias,
+      friendshipInviteId: null,
+      matchedUserId: response.matchedUserId,
+      phoneE164,
+      relationshipId: null,
+      status: 'pending_activation',
+    };
+    mergeAndPersistTargetResolutions([resolution]);
   }
 
   async function handleCreateOutreach(input: {
@@ -910,7 +964,8 @@ export function AddPersonContactsSheet({
                 <Text style={styles.contextBody}>
                   {transactionContext.direction === 'i_owe' ? 'Salida' : 'Entrada'} de{' '}
                   {formatCop(transactionContext.amountMinor)}
-                  {transactionContext.description && transactionContext.description.trim().length > 0
+                  {transactionContext.description &&
+                  transactionContext.description.trim().length > 0
                     ? ` por ${transactionContext.description.trim()}`
                     : ''}
                 </Text>
@@ -919,14 +974,14 @@ export function AddPersonContactsSheet({
 
             <View style={styles.searchWrap}>
               <Ionicons color={theme.colors.textMuted} name="search-outline" size={18} />
-              <TextInput
+              <AppTextInput
                 autoCapitalize="words"
                 autoCorrect={false}
-                cursorColor={theme.colors.primary}
+                chrome="plain"
+                density="compact"
                 onChangeText={setSearchValue}
                 placeholder="Buscar en contactos"
                 placeholderTextColor={theme.colors.muted}
-                selectionColor={theme.colors.primary}
                 style={styles.searchInput}
                 value={searchValue}
               />
@@ -953,14 +1008,20 @@ export function AddPersonContactsSheet({
                     />
                   ) : null}
 
-                  {busyKey === 'load-contacts' ? (
-                    <Text style={styles.helperText}>Leyendo tu agenda...</Text>
+                  {contactsLoading ? (
+                    <Text style={styles.helperText}>
+                      {contactsLoadedCount > 0
+                        ? `Cargando agenda en segundo plano (${contactsLoadedCount} contactos).`
+                        : 'Leyendo tu agenda...'}
+                    </Text>
+                  ) : contactsLoadedCount > 0 && !contactsScanComplete ? (
+                    <Text style={styles.helperText}>Terminando de revisar la agenda...</Text>
                   ) : null}
 
                   {renderContactSection('En Happy Circles', inAppContacts)}
                   {renderContactSection('Invitar a Happy Circles', inviteContacts)}
 
-                  {displayedContacts.length === 0 && busyKey !== 'load-contacts' ? (
+                  {displayedContactsCount === 0 && !contactsLoading ? (
                     <View style={styles.emptyState}>
                       <Text style={styles.emptyTitle}>
                         {searchValue.trim().length > 0 ? 'Sin resultados' : 'Sin contactos utiles'}
@@ -1300,15 +1361,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
   searchInput: {
-    color: theme.colors.text,
     flex: 1,
-    fontSize: theme.typography.body,
-    lineHeight: 20,
-    minHeight: 50,
     minWidth: 0,
     paddingHorizontal: 0,
-    paddingVertical: 0,
-    textAlignVertical: 'center',
   },
   sheetContent: {
     gap: theme.spacing.md,

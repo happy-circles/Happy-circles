@@ -51,25 +51,14 @@ import { returnToRoute } from '@/lib/navigation';
 import { hasProfilePhoto, isLowQualityDisplayName } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+import {
+  resolveSetupAccountRouteParams,
+  resolveTrustActionLabel,
+  validateSetupProfile,
+  type SecurityTone,
+} from './setup-account-helpers';
 
-type SecurityTone = 'danger' | 'muted' | 'success';
 type IoniconName = keyof typeof Ionicons.glyphMap;
-
-function resolveTrustActionLabel(session: ReturnType<typeof useSession>) {
-  if (session.linkedMethods.hasEmailPassword) {
-    return 'Validar con clave';
-  }
-
-  if (session.linkedMethods.hasGoogle) {
-    return 'Validar con Google';
-  }
-
-  if (session.linkedMethods.hasApple) {
-    return 'Validar con Apple';
-  }
-
-  return 'Validar dispositivo';
-}
 
 function resolveSecurityTone(tone: SecurityTone) {
   if (tone === 'success') {
@@ -134,10 +123,7 @@ export function SetupAccountScreen() {
   const avatarMutation = useUpdateProfileAvatarMutation();
   const activateInvite = useActivateAccountFromInviteMutation();
   const profile = session.profile;
-  const editPhoneMode =
-    (Array.isArray(params.editPhone) ? params.editPhone[0] : params.editPhone) === 'true';
-  const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
-  const requestedStep = Array.isArray(params.step) ? params.step[0] : params.step;
+  const { editPhoneMode, requestedStep, returnTo } = resolveSetupAccountRouteParams(params);
 
   const initialCountry = useMemo(
     () =>
@@ -185,7 +171,12 @@ export function SetupAccountScreen() {
   const accountEmail = session.email ?? profile?.email ?? '';
   const accountEmailLabel = accountEmail || 'Sin correo';
   const emailConfirmationCodeValid = /^\d{8}$/.test(emailConfirmationCode);
-  const trustActionLabel = resolveTrustActionLabel(session);
+  const trustActionLabel = resolveTrustActionLabel({
+    canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
+    hasApple: session.linkedMethods.hasApple,
+    hasEmailPassword: session.linkedMethods.hasEmailPassword,
+    hasGoogle: session.linkedMethods.hasGoogle,
+  });
   const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
@@ -205,6 +196,7 @@ export function SetupAccountScreen() {
     if (
       session.isTrustedDevice ||
       !session.linkedMethods.hasEmailPassword ||
+      session.canTrustCurrentDeviceWithoutPassword ||
       session.setupState.requiredComplete
     ) {
       return;
@@ -213,6 +205,7 @@ export function SetupAccountScreen() {
     trustPasswordInputRef.current?.focus();
   }, [
     session.isTrustedDevice,
+    session.canTrustCurrentDeviceWithoutPassword,
     session.linkedMethods.hasEmailPassword,
     session.setupState.requiredComplete,
   ]);
@@ -303,34 +296,26 @@ export function SetupAccountScreen() {
   }
 
   function validateSetup() {
-    const nextErrors = {
-      fullName: fullNameIsUsable ? undefined : 'Escribe tu nombre, no el correo.',
-      phoneNationalNumber:
-        !needsPhoneInput || phoneNationalNumber.trim().length >= 7
-          ? undefined
-          : 'Ingresa un celular valido.',
-      photo: editPhoneMode || hasSavedPhoto ? undefined : 'Agrega una foto antes de seguir.',
-    };
+    const validation = validateSetupProfile({
+      fullNameIsUsable,
+      needsPhoneInput,
+      phoneNationalNumber,
+    });
+    const nextErrors = validation.errors;
 
     setProfileErrors(nextErrors);
 
-    if (nextErrors.fullName) {
+    if (validation.firstInvalidField === 'fullName') {
       triggerWarningHaptic();
       setMessage('Te falta completar tu nombre.');
       fullNameInputRef.current?.focus();
       return false;
     }
 
-    if (nextErrors.phoneNationalNumber) {
+    if (validation.firstInvalidField === 'phoneNationalNumber') {
       triggerWarningHaptic();
       setMessage('Te falta completar tu celular.');
       phoneInputRef.current?.focus();
-      return false;
-    }
-
-    if (nextErrors.photo) {
-      triggerWarningHaptic();
-      setMessage('Agrega una foto de perfil para terminar el setup.');
       return false;
     }
 
@@ -573,9 +558,9 @@ export function SetupAccountScreen() {
     triggerImpactHaptic();
 
     const result = await runSecurityAction('trust-device', async () =>
-      session.trustCurrentDevice({
-        password: trustPassword,
-      }),
+      session.trustCurrentDevice(
+        session.canTrustCurrentDeviceWithoutPassword ? undefined : { password: trustPassword },
+      ),
     );
 
     if (result === 'Este dispositivo ahora es confiable.') {
@@ -633,7 +618,7 @@ export function SetupAccountScreen() {
               ]}
             >
               <Ionicons
-                color={hasSavedPhoto ? theme.colors.success : theme.colors.danger}
+                color={hasSavedPhoto ? theme.colors.success : theme.colors.textMuted}
                 name={hasSavedPhoto ? 'checkmark' : 'camera'}
                 size={18}
               />
@@ -643,7 +628,7 @@ export function SetupAccountScreen() {
               <Text style={styles.photoRequirementSubtitle}>
                 {hasSavedPhoto
                   ? 'Lista para que tus circulos te reconozcan.'
-                  : 'Obligatoria para terminar el onboarding.'}
+                  : 'Opcional; puedes agregarla ahora o despues.'}
               </Text>
             </View>
             <Pressable
@@ -839,14 +824,25 @@ export function SetupAccountScreen() {
               icon="phone-portrait"
               status={session.isTrustedDevice ? 'Listo' : 'Pendiente'}
               subtitle={
-                session.isTrustedDevice ? 'Acciones sensibles habilitadas' : 'Valida este telefono'
+                session.isTrustedDevice
+                  ? 'Acciones sensibles habilitadas'
+                  : session.canTrustCurrentDeviceWithoutPassword
+                    ? 'Confirma con un toque'
+                    : 'Valida este telefono'
               }
               title="Dispositivo confiable"
               tone={session.isTrustedDevice ? 'success' : 'danger'}
             />
             {!session.isTrustedDevice ? (
               <View style={styles.securityAction}>
-                {session.linkedMethods.hasEmailPassword ? (
+                {session.canTrustCurrentDeviceWithoutPassword ? (
+                  <Text style={styles.helperText}>
+                    Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
+                    vez.
+                  </Text>
+                ) : null}
+                {session.linkedMethods.hasEmailPassword &&
+                !session.canTrustCurrentDeviceWithoutPassword ? (
                   <AppTextInput
                     autoCapitalize="none"
                     onChangeText={setTrustPassword}
@@ -854,7 +850,6 @@ export function SetupAccountScreen() {
                     placeholderTextColor={theme.colors.muted}
                     ref={trustPasswordInputRef}
                     secureTextEntry
-                    style={styles.input}
                     value={trustPassword}
                   />
                 ) : null}
@@ -931,8 +926,8 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   photoRequirementMissing: {
-    backgroundColor: theme.colors.dangerSoft,
-    borderColor: 'rgba(232, 96, 74, 0.24)',
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
   },
   photoRequirementReady: {
     backgroundColor: theme.colors.successSoft,
@@ -1113,7 +1108,6 @@ const styles = StyleSheet.create({
   helperTextDanger: {
     color: theme.colors.danger,
   },
-  input: {},
   separator: {
     backgroundColor: theme.colors.hairline,
     height: StyleSheet.hairlineWidth,

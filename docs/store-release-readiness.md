@@ -2,6 +2,28 @@
 
 Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera salida en Colombia.
 
+## Posicionamiento de producto para tiendas
+
+Happy Circles debe presentarse como una app de organizacion privada de saldos entre personas de
+confianza, similar a una herramienta de split expenses / IOU organizer. No debe describirse como:
+
+- banco, billetera, procesador de pagos o pasarela.
+- producto de credito, prestamo, adelanto, factoring o financiacion.
+- asesor financiero o servicio de inversion.
+
+La postura recomendada para review es:
+
+- La app no mueve dinero ni desembolsa fondos.
+- La app no origina creditos ni cobra intereses.
+- La app no consulta burós, puntajes crediticios ni historial financiero externo.
+- La app solo ayuda a registrar solicitudes, confirmar saldos y cerrar cuentas privadas entre
+  usuarios que se conocen.
+
+Aunque no sea un producto financiero regulado, las declaraciones de privacidad deben seguir
+incluyendo los saldos, solicitudes y ledger como datos financieros o de actividad economica del
+usuario, porque las tiendas revisan datos recolectados/procesados, no solo la categoria legal del
+producto.
+
 ## Gates automatizados
 
 CI oficial: `.github/workflows/security-ci.yml`.

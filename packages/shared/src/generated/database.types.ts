@@ -3307,7 +3307,7 @@ export type Database = {
       }
       claim_graph_cycle_job: { Args: { p_worker_id?: string }; Returns: Json }
       complete_graph_cycle_job: {
-        Args: { p_job_id: string; p_result_json: Json }
+        Args: { p_job_id: string; p_result_json: Json; p_worker_id: string }
         Returns: Json
       }
       compute_graph_component_snapshot: {
@@ -3392,6 +3392,10 @@ export type Database = {
         Args: { p_settlement_proposal_id: string }
         Returns: boolean
       }
+      apply_cycle_settlement_execution: {
+        Args: { p_actor_user_id: string; p_proposal_id: string }
+        Returns: Json
+      }
       decide_cycle_settlement: {
         Args: {
           p_actor_user_id: string
@@ -3456,7 +3460,7 @@ export type Database = {
         Returns: Json
       }
       fail_graph_cycle_job: {
-        Args: { p_error: string; p_job_id: string }
+        Args: { p_error: string; p_job_id: string; p_worker_id: string }
         Returns: Json
       }
       friendship_channel_from_label: {
@@ -3579,6 +3583,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      requeue_stale_graph_cycle_jobs: {
+        Args: { p_limit?: number; p_timeout_seconds?: number }
+        Returns: Json
+      }
       reject_financial_request: {
         Args: {
           p_actor_user_id: string
@@ -3641,6 +3649,17 @@ export type Database = {
       }
       supersede_graph_cycle_job: {
         Args: { p_job_id: string; p_result_json: Json }
+        Returns: Json
+      }
+      validate_cycle_settlement_payload: {
+        Args: {
+          p_anchor_user_high_id?: string
+          p_anchor_user_low_id?: string
+          p_currency_code?: string
+          p_graph_snapshot: Json
+          p_movements_json: Json
+          p_participant_user_ids: string[]
+        }
         Returns: Json
       }
       trust_demo_devices: { Args: never; Returns: Json }

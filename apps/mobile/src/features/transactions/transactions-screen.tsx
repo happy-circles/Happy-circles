@@ -20,7 +20,6 @@ import {
   type HistoryCaseItem,
   historyCardTitle,
   historyCaseEyebrow,
-  historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
   historyCaseVisualCategory,
@@ -31,11 +30,11 @@ import {
   historyTimelineStepDetailLabel,
   historyTimelineStepAmountLabel,
 } from '@/lib/history-cases';
-import { useAppSnapshot } from '@/lib/live-data';
 import {
-  getSeenPendingTransactionIds,
-  markPendingTransactionIdsSeen,
-} from '@/lib/pending-transaction-views';
+  markNotificationItemsViewed,
+  notificationViewKeyForItem,
+  useAppSnapshot,
+} from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import {
   normalizeTransactionCategory,
@@ -56,11 +55,11 @@ import {
   isPendingTransactionItem,
   transactionAmountIsVoided,
   transactionAmountLabel,
-  transactionCreatedByMetaLabel,
   transactionContextLabel,
   transactionFocusId,
   transactionStatusLabel,
   transactionStatusTone,
+  transactionTimeLabel,
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
@@ -261,6 +260,10 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
   };
 }
 
+function shouldSurfacePendingStatus(item: ActivityItemDto): boolean {
+  return item.status === 'requires_you' || item.status === 'approved';
+}
+
 function PendingTransactionCard({
   item,
   people,
@@ -294,8 +297,8 @@ function PendingTransactionCard({
       compactMetaLayout="inline"
       context={transactionContextLabel(item, actorLabel)}
       href={transactionDetailHref(people, item, 'pending')}
-      meta={transactionCreatedByMetaLabel(item, actorLabel)}
-      statusLabel={transactionStatusLabel(item)}
+      meta={transactionTimeLabel(item)}
+      statusLabel={shouldSurfacePendingStatus(item) ? transactionStatusLabel(item) : null}
       statusTone={transactionStatusTone(item)}
     />
   );
@@ -342,14 +345,30 @@ export function TransactionsScreen() {
   const categoryFilter = rawCategory ? normalizeTransactionCategory(rawCategory) : null;
   const [activeFilter, setActiveFilter] = useState<TransactionRootFilter>(initialFilter);
   const [expandedCaseIds, setExpandedCaseIds] = useState<readonly string[]>([]);
-  const [seenPendingTransactionIds, setSeenPendingTransactionIds] =
-    useState<ReadonlySet<string> | null>(null);
+  const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
   const activePrimaryFilter = primaryTransactionFilter(activeFilter);
   const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
+  const notificationViewedKeys = useMemo(() => {
+    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
+    for (const key of optimisticNotificationViewedKeys) {
+      keys.add(key);
+    }
+
+    return keys;
+  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
+  const unviewedPendingTransactionItems = useMemo(
+    () =>
+      pendingTransactionItems.filter(
+        (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      ),
+    [notificationViewedKeys, pendingTransactionItems],
+  );
   const visiblePendingTransactionItems = pendingTransactionItems.filter(
     (item) =>
       matchesPendingFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
@@ -369,18 +388,7 @@ export function TransactionsScreen() {
     visiblePendingTransactionItems.length > 0 || historyCases.length > 0;
 
   useEffect(() => {
-    let isMounted = true;
-
-    setSeenPendingTransactionIds(null);
-    void getSeenPendingTransactionIds(session.userId).then((nextIds) => {
-      if (isMounted) {
-        setSeenPendingTransactionIds(nextIds);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
+    setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
 
   useEffect(() => {
@@ -388,20 +396,32 @@ export function TransactionsScreen() {
   }, [initialFilter]);
 
   useEffect(() => {
-    if (!seenPendingTransactionIds) {
+    if (!session.userId || unviewedPendingTransactionItems.length === 0) {
       return;
     }
 
-    const unseenItemIds = pendingTransactionItems
-      .map((item) => item.id)
-      .filter((itemId) => !seenPendingTransactionIds.has(itemId));
+    const nextKeys = unviewedPendingTransactionItems.map((item) => notificationViewKeyForItem(item));
+    const nextKeySet = new Set(nextKeys);
+    setOptimisticNotificationViewedKeys((current) => {
+      const merged = new Set(current);
+      for (const key of nextKeys) {
+        merged.add(key);
+      }
 
-    if (unseenItemIds.length === 0) {
-      return;
-    }
+      return merged;
+    });
 
-    void markPendingTransactionIdsSeen(session.userId, unseenItemIds);
-  }, [pendingTransactionItems, seenPendingTransactionIds, session.userId]);
+    void markNotificationItemsViewed(session.userId, unviewedPendingTransactionItems).catch(() => {
+      setOptimisticNotificationViewedKeys((current) => {
+        const next = new Set(current);
+        for (const key of nextKeySet) {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    });
+  }, [session.userId, unviewedPendingTransactionItems]);
 
   function toggleHistoryCase(caseId: string) {
     setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
@@ -520,7 +540,7 @@ export function TransactionsScreen() {
                   isCycleSnippet={itemCase.isCycleSnippet}
                   isExpanded={expandedCaseIds[0] === itemCase.id}
                   key={itemCase.id}
-                  meta={historyCaseMeta(itemCase)}
+                  meta={latest.happenedAtLabel ?? null}
                   onToggle={() => toggleHistoryCase(itemCase.id)}
                   statusLabel={historyCaseStatusLabel(itemCase)}
                   statusTone={historyCaseStatusTone(itemCase)}

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 
 import {
   BrandLockup,
@@ -27,6 +27,7 @@ const SPIN_FULL_TURN_MS = 1200;
 const SPIN_RELEASE_MIN_MS = 220;
 const SPIN_RELEASE_MAX_MS = 640;
 const SPIN_RELEASE_EPSILON = 0.025;
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 function createMaskId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}`;
@@ -133,7 +134,7 @@ export function BrandVerificationMark({
       duration: reducedMotion ? 140 : 260,
       easing: reducedMotion ? Easing.out(Easing.quad) : BRAND_VERIFICATION_EASING,
       toValue: state === 'loading' ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start();
   }, [loadingMotion, reducedMotion, state]);
 
@@ -142,7 +143,7 @@ export function BrandVerificationMark({
       duration: reducedMotion ? 140 : 240,
       easing: reducedMotion ? Easing.out(Easing.quad) : BRAND_VERIFICATION_EASING,
       toValue: shouldShowOuter ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start();
   }, [outerMotion, reducedMotion, shouldShowOuter]);
 
@@ -160,19 +161,19 @@ export function BrandVerificationMark({
         duration: reducedMotion ? 140 : 170,
         easing: Easing.out(Easing.quad),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
       Animated.timing(resultMotion, {
         duration: reducedMotion ? 0 : 210,
         easing: BRAND_VERIFICATION_EASING,
         toValue: reducedMotion ? 1 : 0.82,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
       Animated.timing(resultMotion, {
         duration: reducedMotion ? 0 : 140,
         easing: BRAND_VERIFICATION_EASING,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     ]).start();
   }, [reducedMotion, resultMotion, state]);
@@ -210,7 +211,7 @@ export function BrandVerificationMark({
           duration: releaseDuration,
           easing: BRAND_VERIFICATION_EASING,
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         });
 
         spinReleaseRef.current = releaseAnimation;
@@ -235,7 +236,7 @@ export function BrandVerificationMark({
         duration: SPIN_FULL_TURN_MS,
         easing: Easing.linear,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
       }),
     );
 
@@ -420,7 +421,7 @@ export function BrandVerificationLockup({
       duration,
       easing: reducedMotion ? Easing.out(Easing.quad) : BRAND_VERIFICATION_EASING,
       toValue: state === 'loading' ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start();
   }, [focusMotion, reducedMotion, state]);
 
