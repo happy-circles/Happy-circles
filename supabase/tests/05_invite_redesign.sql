@@ -106,6 +106,8 @@ declare
   v_cancelable jsonb;
   v_account_cancelable jsonb;
   v_account_claimed jsonb;
+  v_account_activation jsonb;
+  v_account_activation_result jsonb;
   v_preview jsonb;
   v_claim jsonb;
   v_manual_claim jsonb;
@@ -541,6 +543,63 @@ begin
         raise;
       end if;
   end;
+
+  v_account_activation := public.create_account_invite(
+    v_user_elena,
+    'test-account-activation-trust',
+    'remote',
+    'sql_test_account_activation_trust',
+    'Gina trusted device',
+    '+573001111103',
+    'mobile'
+  );
+
+  begin
+    perform public.activate_account_from_invite(
+      v_user_gina,
+      'test-account-activation-untrusted',
+      v_account_activation ->> 'deliveryToken',
+      'sql-untrusted-device'
+    );
+    raise exception 'expected account invite activation to require trusted device';
+  exception
+    when others then
+      if sqlerrm <> 'activation_device_not_trusted' then
+        raise;
+      end if;
+  end;
+
+  insert into public.trusted_devices (
+    user_id,
+    device_id,
+    platform,
+    trust_state,
+    trusted_at,
+    last_seen_at
+  )
+  values (
+    v_user_gina,
+    'sql-trusted-device',
+    'ios',
+    'trusted',
+    timezone('utc', now()),
+    timezone('utc', now())
+  )
+  on conflict (user_id, device_id) do update
+  set trust_state = 'trusted',
+      trusted_at = excluded.trusted_at,
+      last_seen_at = excluded.last_seen_at;
+
+  v_account_activation_result := public.activate_account_from_invite(
+    v_user_gina,
+    'test-account-activation-trusted',
+    v_account_activation ->> 'deliveryToken',
+    'sql-trusted-device'
+  );
+
+  if (v_account_activation_result ->> 'status') <> 'accepted' then
+    raise exception 'expected trusted account activation to be accepted, got %', v_account_activation_result;
+  end if;
 end
 $$;
 

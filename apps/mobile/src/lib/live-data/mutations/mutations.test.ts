@@ -54,7 +54,10 @@ vi.mock('../../support-errors', () => ({
   reportAndCreateSupportError: mocks.reportAndCreateSupportError,
 }));
 
-import { useAccountInvitePreviewQuery } from './account-invites';
+import {
+  useAccountInvitePreviewQuery,
+  useActivateAccountFromInviteMutation,
+} from './account-invites';
 import { resolveAvatarUploadMetadata, uploadAvatar } from './avatar-upload';
 import { withIdempotencyKey } from './edge-action';
 import { useCreateRequestMutation } from './financial-requests';
@@ -191,6 +194,44 @@ describe('live-data mutation hooks', () => {
     await query.queryFn();
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('get-account-invite-preview-public', {
       deliveryToken,
+    });
+  });
+
+  it('blocks account invite activation from untrusted devices before invoking Edge', async () => {
+    mocks.useSession.mockReturnValue({
+      ...trustedSession({ deviceTrustState: 'pending' }),
+      refreshAccountState: vi.fn(),
+      userId: 'user-1',
+    });
+    const mutation = useActivateAccountFromInviteMutation() as unknown as MutationOptions<{
+      readonly currentDeviceId: string;
+      readonly deliveryToken: string;
+    }>;
+
+    await expect(
+      mutation.mutationFn({
+        currentDeviceId: 'device-1',
+        deliveryToken: 'delivery-token-123',
+      }),
+    ).rejects.toThrow('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
+    expect(mocks.invokeSupabaseFunction).not.toHaveBeenCalled();
+  });
+
+  it('passes account invite activation through for trusted devices', async () => {
+    const mutation = useActivateAccountFromInviteMutation() as unknown as MutationOptions<{
+      readonly currentDeviceId: string;
+      readonly deliveryToken: string;
+    }>;
+
+    await mutation.mutationFn({
+      currentDeviceId: 'device-1',
+      deliveryToken: 'delivery-token-123',
+    });
+
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('activate-account-from-invite', {
+      currentDeviceId: 'device-1',
+      deliveryToken: 'delivery-token-123',
+      idempotencyKey: 'activate_account_from_invite_fixed',
     });
   });
 

@@ -52,7 +52,7 @@ import {
   isPasswordRecoveryCallbackUrl,
 } from '../session/auth-callbacks';
 import { buildAppleFullName, generateSecureNonce } from '../session/apple-auth';
-import { getNativeGoogleCredential } from '../session/google-auth';
+import { getNativeGoogleCredential } from './google-auth';
 import {
   deriveAccountAccessState,
   deriveDeviceTrustState,

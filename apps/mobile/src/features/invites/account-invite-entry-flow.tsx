@@ -12,7 +12,6 @@ import {
 import {
   IdentityFlowField,
   IdentityFlowForm,
-  IdentityFlowIdentity,
   IdentityFlowLogoCopy,
   IdentityFlowPrimaryAction,
   IdentityFlowScreen,
@@ -45,6 +44,7 @@ import {
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
+import { AuthEntryIdentity } from './account-invite-entry-identity';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
   AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
@@ -74,33 +74,6 @@ import { AppText } from '@/components/app-text';
 
 const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
-
-function AuthEntryIdentity({
-  avatarLabel,
-  avatarUrl,
-  centerFaceSize = 'small',
-  disabled,
-  state,
-  variant = 'brand',
-}: {
-  readonly avatarLabel?: string;
-  readonly avatarUrl?: string | null;
-  readonly centerFaceSize?: 'large' | 'small';
-  readonly disabled?: boolean;
-  readonly state: BrandVerificationState;
-  readonly variant?: 'brand' | 'remembered';
-}) {
-  return (
-    <IdentityFlowIdentity
-      avatarLabel={avatarLabel}
-      avatarUrl={avatarUrl}
-      centerFaceSize={variant === 'brand' ? centerFaceSize : undefined}
-      disabled={disabled}
-      state={state}
-      variant={variant}
-    />
-  );
-}
 
 export function AccountSignInEntry({
   autoUseRememberedAccount = false,
@@ -772,6 +745,7 @@ export function AccountSignInEntry({
     await writePendingInviteIntent({
       type: 'account_invite',
       token: pendingToken,
+      source: 'account_invite_auth',
     });
   }
 
@@ -1032,6 +1006,7 @@ export function AccountSignInEntry({
     await writePendingInviteIntent({
       type: 'account_invite',
       token,
+      source: 'account_invite_link',
     });
 
     triggerIdentitySuccessHaptic();
@@ -1195,7 +1170,7 @@ export function AccountSignInEntry({
         variant="remembered"
       />
     ) : (
-      <IdentityFlowIdentity
+      <AuthEntryIdentity
         centerFaceSize="small"
         state={authSurfaceTransitioning || previewQuery.isFetching ? 'loading' : 'idle'}
         variant="brand"

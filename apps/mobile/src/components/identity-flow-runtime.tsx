@@ -60,7 +60,7 @@ const IDENTITY_FLOW_FIELD_ERROR_HEIGHT = 24;
 const IDENTITY_FLOW_FOOTER_ACTIONS_MIN_HEIGHT = 56;
 export const IDENTITY_FLOW_LARGE_FACE_VIEW_BOX = '222 222 236 236';
 const IDENTITY_FLOW_MESSAGE_SLOT_HEIGHT = 72;
-const IDENTITY_FLOW_TOP_OFFSET = theme.spacing.xxs * 2 + 28 + theme.spacing.lg;
+const IDENTITY_FLOW_TOP_OFFSET = theme.spacing.xl + theme.spacing.md;
 const IDENTITY_FLOW_STAGE_TRANSITION_MS = 520;
 const IDENTITY_FLOW_KEYBOARD_FIELD_GAP = theme.spacing.md;
 const IDENTITY_FLOW_KEYBOARD_FALLBACK_SHIFT_RATIO = 0.28;
@@ -318,9 +318,7 @@ export function IdentityFlowScreen({
 
   return (
     <IdentityFlowKeyboardAvoidanceContext.Provider value={scheduleKeyboardAdjustment}>
-      <Animated.View
-        style={[styles.keyboardShell, { transform: [{ translateY: keyboardTranslateY }] }]}
-      >
+      <View style={styles.keyboardShell}>
         <ScreenShell
           contentContainerStyle={[styles.content, contentStyle]}
           contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
@@ -336,68 +334,75 @@ export function IdentityFlowScreen({
           title={IDENTITY_FLOW_HEADER_TITLE}
           titleAlign="center"
         >
-          <View pointerEvents="none" style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}>
-            <AppText style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</AppText>
-          </View>
-          <View
-            onLayout={(event) => {
-              const nextHeight = event.nativeEvent.layout.height;
-              if (nextHeight <= 0) {
-                return;
-              }
-
-              if (lockedBodyHeightRef.current > 0) {
-                return;
-              }
-
-              lockedBodyHeightRef.current = nextHeight;
-              setHasMeasuredBody(true);
-              setBodyHeight(nextHeight);
-            }}
-            style={[styles.body, bodyStyle]}
+          <Animated.View
+            style={[styles.keyboardContent, { transform: [{ translateY: keyboardTranslateY }] }]}
           >
-            {identity && layoutReady ? (
+            <View
+              pointerEvents="none"
+              style={[styles.screenTitle, { opacity: layoutReady ? 1 : 0 }]}
+            >
+              <AppText style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</AppText>
+            </View>
+            <View
+              onLayout={(event) => {
+                const nextHeight = event.nativeEvent.layout.height;
+                if (nextHeight <= 0) {
+                  return;
+                }
+
+                if (lockedBodyHeightRef.current > 0) {
+                  return;
+                }
+
+                lockedBodyHeightRef.current = nextHeight;
+                setHasMeasuredBody(true);
+                setBodyHeight(nextHeight);
+              }}
+              style={[styles.body, bodyStyle]}
+            >
+              {identity && layoutReady ? (
+                <Animated.View
+                  pointerEvents="box-none"
+                  style={[
+                    styles.identityMotionLayer,
+                    {
+                      opacity: layoutReady ? 1 : 0,
+                      transform: [{ translateY: identityTranslateY }],
+                    },
+                  ]}
+                >
+                  <View style={styles.identitySlot}>{identity}</View>
+                </Animated.View>
+              ) : null}
               <Animated.View
-                pointerEvents="box-none"
                 style={[
-                  styles.identityMotionLayer,
+                  styles.belowIdentity,
                   {
                     opacity: layoutReady ? 1 : 0,
-                    transform: [{ translateY: identityTranslateY }],
+                    paddingTop: topContentY,
+                    transform: [{ translateY: contentTranslateY }],
                   },
                 ]}
               >
-                <View style={styles.identitySlot}>{identity}</View>
+                <Animated.View
+                  style={[
+                    styles.transitionedContent,
+                    {
+                      opacity: contentMotion,
+                      transform: [{ translateY: contentEnterTranslateY }],
+                    },
+                  ]}
+                >
+                  {shouldReserveMessageSlot ? (
+                    <View style={styles.messageSlot}>{message}</View>
+                  ) : null}
+                  <View style={styles.contentSlot}>{children}</View>
+                </Animated.View>
               </Animated.View>
-            ) : null}
-            <Animated.View
-              style={[
-                styles.belowIdentity,
-                {
-                  opacity: layoutReady ? 1 : 0,
-                  paddingTop: topContentY,
-                  transform: [{ translateY: contentTranslateY }],
-                },
-              ]}
-            >
-              <Animated.View
-                style={[
-                  styles.transitionedContent,
-                  {
-                    opacity: contentMotion,
-                    transform: [{ translateY: contentEnterTranslateY }],
-                  },
-                ]}
-              >
-                {shouldReserveMessageSlot ? (
-                  <View style={styles.messageSlot}>{message}</View>
-                ) : null}
-                <View style={styles.contentSlot}>{children}</View>
-              </Animated.View>
-            </Animated.View>
-          </View>
+            </View>
+          </Animated.View>
         </ScreenShell>
-      </Animated.View>
+      </View>
     </IdentityFlowKeyboardAvoidanceContext.Provider>
   );
 }
@@ -754,6 +759,10 @@ const styles = StyleSheet.create({
   keyboardShell: {
     backgroundColor: theme.colors.background,
     flex: 1,
+  },
+  keyboardContent: {
+    flex: 1,
+    width: '100%',
   },
   content: {
     flexGrow: 1,

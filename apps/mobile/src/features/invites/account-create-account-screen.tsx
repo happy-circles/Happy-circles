@@ -194,6 +194,7 @@ export function AccountCreateAccountScreen() {
     void writePendingInviteIntent({
       type: 'account_invite',
       token,
+      source: 'account_invite_link',
     });
   }, [canCreateAccount, isPreviewMode, token]);
 
@@ -224,6 +225,7 @@ export function AccountCreateAccountScreen() {
       await writePendingInviteIntent({
         type: 'account_invite',
         token,
+        source: 'account_invite_signup',
       });
 
       const result = await session.registerAccount({
@@ -240,7 +242,7 @@ export function AccountCreateAccountScreen() {
       if (result === ACCOUNT_CREATED_SETUP_MESSAGE) {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
-        beginSetupEntryHandoff();
+        await beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       }
 
@@ -276,6 +278,7 @@ export function AccountCreateAccountScreen() {
       await writePendingInviteIntent({
         type: 'account_invite',
         token,
+        source: 'account_invite_signup',
       });
 
       const result =
@@ -285,7 +288,7 @@ export function AccountCreateAccountScreen() {
       if (result === 'Sesion iniciada.') {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
-        beginSetupEntryHandoff();
+        await beginSetupEntryHandoff();
         await session.refreshAccountState({
           preserveTrustedDeviceDuringLoad: true,
         });
@@ -327,7 +330,7 @@ export function AccountCreateAccountScreen() {
       if (result === 'Correo confirmado.') {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
-        beginSetupEntryHandoff();
+        await beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       } else {
         triggerIdentityWarningHaptic();
@@ -385,7 +388,7 @@ export function AccountCreateAccountScreen() {
       if (result === 'Sesion iniciada.') {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
-        beginSetupEntryHandoff();
+        await beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       } else {
         triggerIdentityWarningHaptic();

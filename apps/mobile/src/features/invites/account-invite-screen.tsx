@@ -262,6 +262,7 @@ export function AccountInviteScreen() {
     void writePendingInviteIntent({
       type: 'account_invite',
       token: deliveryToken,
+      source: 'account_invite_link',
     });
   }, [deliveryToken]);
 
@@ -290,7 +291,6 @@ export function AccountInviteScreen() {
         currentDeviceId: session.currentDeviceId,
       });
       await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-      await previewQuery.refetch();
 
       if (response.status === 'accepted') {
         await clearPendingInviteIntent();

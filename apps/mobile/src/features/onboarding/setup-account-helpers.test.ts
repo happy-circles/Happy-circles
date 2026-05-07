@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  resolveSetupAccountMode,
   resolveSetupAccountRouteParams,
   resolveTrustedDeviceAuthMethods,
   resolveTrustActionLabel,
@@ -93,6 +94,30 @@ describe('setup account helpers', () => {
       requestedStep: 'profile',
       returnTo: '/home',
     });
+  });
+
+  it('keeps security route isolated only for required setup trust validation', () => {
+    expect(
+      resolveSetupAccountMode({
+        editPhoneMode: false,
+        requestedStep: 'security',
+        requiredComplete: true,
+      }),
+    ).toBe('security_only');
+    expect(
+      resolveSetupAccountMode({
+        editPhoneMode: true,
+        requestedStep: 'security',
+        requiredComplete: true,
+      }),
+    ).toBe('full_setup');
+    expect(
+      resolveSetupAccountMode({
+        editPhoneMode: false,
+        requestedStep: 'profile',
+        requiredComplete: true,
+      }),
+    ).toBe('full_setup');
   });
 
   it('validates profile fields and reports the first invalid field', () => {

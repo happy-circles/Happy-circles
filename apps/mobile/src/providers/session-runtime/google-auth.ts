@@ -1,13 +1,10 @@
-import {
-  GoogleSignin,
-  isCancelledResponse,
-  isErrorWithCode,
-  isSuccessResponse,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
+import type * as GoogleSignInPackage from '@react-native-google-signin/google-signin';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { appConfig } from '@/lib/config';
+
+type GoogleSignInModule = typeof GoogleSignInPackage;
 
 export interface NativeGoogleCredential {
   readonly idToken: string;
@@ -30,6 +27,7 @@ export type NativeGoogleCredentialResult =
     };
 
 let configuredKey: string | null = null;
+let googleSignInModulePromise: Promise<GoogleSignInModule | null> | null = null;
 
 function resolveConfigurationKey(): string {
   return [
@@ -40,7 +38,25 @@ function resolveConfigurationKey(): string {
   ].join('|');
 }
 
-function configureGoogleSignIn(): NativeGoogleCredentialResult | null {
+function isExpoGoRuntime(): boolean {
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+}
+
+async function loadGoogleSignInModule(): Promise<GoogleSignInModule | null> {
+  if (Platform.OS === 'web' || isExpoGoRuntime()) {
+    return null;
+  }
+
+  googleSignInModulePromise ??= import('@react-native-google-signin/google-signin').catch(
+    () => null,
+  );
+
+  return googleSignInModulePromise;
+}
+
+function configureGoogleSignIn(
+  GoogleSignin: GoogleSignInModule['GoogleSignin'],
+): NativeGoogleCredentialResult | null {
   const key = resolveConfigurationKey();
 
   if (!appConfig.googleWebClientId) {
@@ -68,23 +84,26 @@ function configureGoogleSignIn(): NativeGoogleCredentialResult | null {
   return null;
 }
 
-function formatGoogleSignInError(error: unknown): NativeGoogleCredentialResult {
-  if (isErrorWithCode(error)) {
-    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+function formatGoogleSignInError(
+  googleSignIn: GoogleSignInModule,
+  error: unknown,
+): NativeGoogleCredentialResult {
+  if (googleSignIn.isErrorWithCode(error)) {
+    if (error.code === googleSignIn.statusCodes.SIGN_IN_CANCELLED) {
       return {
         ok: false,
         message: 'Inicio con Google cancelado.',
       };
     }
 
-    if (error.code === statusCodes.IN_PROGRESS) {
+    if (error.code === googleSignIn.statusCodes.IN_PROGRESS) {
       return {
         ok: false,
         message: 'Google ya tiene una validacion en curso.',
       };
     }
 
-    if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+    if (error.code === googleSignIn.statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       return {
         ok: false,
         message: 'Google Play Services no esta disponible o necesita actualizarse.',
@@ -106,7 +125,25 @@ export async function getNativeGoogleCredential(): Promise<NativeGoogleCredentia
     };
   }
 
-  const configurationError = configureGoogleSignIn();
+  if (isExpoGoRuntime()) {
+    return {
+      ok: false,
+      message: 'Google nativo requiere una development build; no esta disponible en Expo Go.',
+    };
+  }
+
+  const googleSignIn = await loadGoogleSignInModule();
+  if (!googleSignIn) {
+    return {
+      ok: false,
+      message:
+        'Google nativo no esta disponible en este binario. Instala una development build nueva.',
+    };
+  }
+
+  const { GoogleSignin, isCancelledResponse, isSuccessResponse } = googleSignIn;
+
+  const configurationError = configureGoogleSignIn(GoogleSignin);
   if (configurationError) {
     return configurationError;
   }
@@ -158,6 +195,6 @@ export async function getNativeGoogleCredential(): Promise<NativeGoogleCredentia
       },
     };
   } catch (error) {
-    return formatGoogleSignInError(error);
+    return formatGoogleSignInError(googleSignIn, error);
   }
 }

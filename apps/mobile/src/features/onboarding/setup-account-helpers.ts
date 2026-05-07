@@ -6,6 +6,8 @@ export type SetupProfileErrors = {
   readonly photo?: string;
 };
 
+export type SetupAccountMode = 'full_setup' | 'security_only';
+
 export {
   resolveTrustedDeviceAuthMethods,
   resolveTrustActionLabel,
@@ -28,6 +30,18 @@ export function resolveSetupAccountRouteParams(input: {
     requestedStep: Array.isArray(input.step) ? input.step[0] : input.step,
     returnTo: Array.isArray(input.returnTo) ? input.returnTo[0] : input.returnTo,
   };
+}
+
+export function resolveSetupAccountMode(input: {
+  readonly editPhoneMode: boolean;
+  readonly requestedStep?: string;
+  readonly requiredComplete: boolean;
+}): SetupAccountMode {
+  if (input.requestedStep === 'security' && input.requiredComplete && !input.editPhoneMode) {
+    return 'security_only';
+  }
+
+  return 'full_setup';
 }
 
 export function validateSetupProfile(input: {

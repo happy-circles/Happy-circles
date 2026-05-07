@@ -546,12 +546,25 @@ function LaunchIntroOverlay({
             return;
           }
 
+          const fadeDuration = reducedMotion ? 90 : 140;
+          const fadeFallbackTimer = setTimeout(() => {
+            completionTimers.delete(fadeFallbackTimer);
+            if (!active) {
+              return;
+            }
+
+            setVisible(false);
+            requestUnlockAfterIntro();
+          }, fadeDuration + 220);
+          completionTimers.add(fadeFallbackTimer);
           Animated.timing(handoffMotion, {
-            duration: reducedMotion ? 90 : 140,
+            duration: fadeDuration,
             easing: Easing.out(Easing.quad),
             toValue: 1,
             useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }).start(() => {
+            clearTimeout(fadeFallbackTimer);
+            completionTimers.delete(fadeFallbackTimer);
             if (!active) {
               return;
             }
@@ -1431,12 +1444,21 @@ function SetupEntryHandoffOverlay({
           return;
         }
 
+        const fadeFallbackTimer = setTimeout(() => {
+          completionTimers.delete(fadeFallbackTimer);
+          if (active) {
+            setVisible(false);
+          }
+        }, SETUP_ENTRY_FADE_MS + 220);
+        completionTimers.add(fadeFallbackTimer);
         Animated.timing(handoffMotion, {
           duration: SETUP_ENTRY_FADE_MS,
           easing: Easing.out(Easing.quad),
           toValue: 1,
           useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }).start(() => {
+          clearTimeout(fadeFallbackTimer);
+          completionTimers.delete(fadeFallbackTimer);
           if (active) {
             setVisible(false);
           }

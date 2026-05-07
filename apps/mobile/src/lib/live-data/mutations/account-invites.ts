@@ -31,11 +31,17 @@ export function useAccountInvitePreviewQuery(deliveryToken: string | null) {
 }
 
 export function useActivateAccountFromInviteMutation() {
+  const session = useSession();
+
   return useMutation({
     mutationFn: async (input: {
       readonly deliveryToken: string;
       readonly currentDeviceId: string;
     }) => {
+      if (session.deviceTrustState !== 'trusted') {
+        throw new Error('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
+      }
+
       return invokeParsedEdgeFunction<
         ReturnType<typeof activateAccountFromInviteSchema.parse>,
         AccountInviteActionResult

@@ -64,8 +64,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'identity_incomplete',
-      message:
-        'Completa tu nombre, celular y confirma tu correo antes de enviar solicitudes.',
+      message: 'Completa tu nombre, celular y confirma tu correo antes de enviar solicitudes.',
     };
   }
 
@@ -74,6 +73,14 @@ function normalizeError(error: unknown): SafeError {
       status: 403,
       code: 'account_not_active',
       message: 'Tu cuenta aun no esta activa para enviar invitaciones.',
+    };
+  }
+
+  if (normalized.includes('activation_device_not_trusted')) {
+    return {
+      status: 403,
+      code: 'device_not_trusted',
+      message: 'Este dispositivo aun no es confiable. Validalo primero desde seguridad.',
     };
   }
 

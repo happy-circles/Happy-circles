@@ -222,6 +222,7 @@ export function InviteLinkScreen() {
         await writePendingInviteIntent({
           type: 'friendship_invite',
           token: deliveryToken,
+          source: 'friendship_invite_link',
         });
 
         if (!cancelled) {
@@ -234,6 +235,7 @@ export function InviteLinkScreen() {
         await writePendingInviteIntent({
           type: 'friendship_invite',
           token: deliveryToken,
+          source: 'friendship_invite_link',
         });
 
         if (!cancelled) {

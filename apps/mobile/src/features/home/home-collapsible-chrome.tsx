@@ -41,6 +41,7 @@ const HOME_CHROME_PROFILE_LEADING_OFFSET =
 const HOME_CHROME_COMPACT_LOGO_SIZE = 78;
 const HOME_CHROME_EXPANDED_LOGO_SIZE = 60;
 const HOME_CHROME_GLASS_COMPACT_SIZE = 92;
+const HOME_CHROME_GLASS_COMPACT_RADIUS = HOME_CHROME_GLASS_COMPACT_SIZE / 2;
 const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 const HOME_CHROME_FAB_EXIT_DISTANCE = 88;
@@ -67,23 +68,24 @@ const liquidGlassPlatformStyle = Platform.select({
   },
 }) as object | undefined;
 
-const hasNativeLiquidGlass = isLiquidGlassAvailable();
+const shouldMountNativeGlass = Platform.OS === 'ios';
+const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
 const liquidGlassBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.16)'
-  : 'rgba(255, 255, 255, 0.82)';
+  ? 'rgba(255, 255, 255, 0.12)'
+  : 'rgba(255, 255, 255, 0.94)';
 const fabGlassBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.14)'
-  : 'rgba(255, 255, 255, 0.78)';
+  ? 'rgba(255, 255, 255, 0.1)'
+  : 'rgba(255, 255, 255, 0.9)';
 const liquidGlassTopGlowBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.22)'
-  : 'rgba(255, 255, 255, 0.74)';
-const liquidGlassTopGlowOpacity = hasNativeLiquidGlass ? 0.34 : 0.9;
+  ? 'rgba(255, 255, 255, 0.24)'
+  : 'rgba(255, 255, 255, 0.82)';
+const liquidGlassTopGlowOpacity = hasNativeLiquidGlass ? 0.42 : 0.96;
 
 function LiquidGlassSurface({
   children,
   showGlow = true,
   style,
-  tintColor = 'rgba(255, 255, 255, 0.025)',
+  tintColor = 'rgba(255, 255, 255, 0.04)',
 }: {
   readonly children?: ReactNode;
   readonly showGlow?: boolean;
@@ -92,7 +94,7 @@ function LiquidGlassSurface({
 }) {
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, style]}>
-      {hasNativeLiquidGlass ? (
+      {shouldMountNativeGlass ? (
         <GlassView
           colorScheme="light"
           glassEffectStyle="regular"
@@ -328,11 +330,7 @@ export function HomeCollapsibleChrome({
   });
   const glassRadius = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [HOME_CHROME_GLASS_EXPANDED_HEIGHT / 2, HOME_CHROME_GLASS_COMPACT_SIZE / 2],
-  });
-  const glassOpacity = progress.interpolate({
-    inputRange: [0, 0.42, 1],
-    outputRange: [0, 0, 1],
+    outputRange: [HOME_CHROME_GLASS_EXPANDED_HEIGHT / 2, HOME_CHROME_GLASS_COMPACT_RADIUS],
   });
   const expandedBrandOpacity = progress.interpolate({
     inputRange: [0, 0.24, 0.58, 1],
@@ -380,7 +378,6 @@ export function HomeCollapsibleChrome({
             borderRadius: glassRadius,
             height: glassHeight,
             left: glassLeft,
-            opacity: glassOpacity,
             top: glassTop,
             width: glassWidth,
           },
@@ -487,6 +484,7 @@ export function HomeRegisterFab({
         styles.fabWrap,
         {
           bottom: 28 + bottomInset,
+          height: HOME_CHROME_FAB_COLLAPSED_SIZE,
           opacity,
           right: contentRight,
           transform: [{ translateY }],
@@ -500,7 +498,7 @@ export function HomeRegisterFab({
           accessibilityRole="button"
           style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
         >
-          <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.02)" />
+          <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.035)" />
           <Ionicons color={theme.colors.text} name="add" size={30} />
         </Pressable>
       </Link>
@@ -641,21 +639,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(20, 30, 51, 0.12)',
   },
   fabWrap: {
+    alignItems: 'center',
+    aspectRatio: 1,
+    borderRadius: HOME_CHROME_GLASS_COMPACT_RADIUS,
+    height: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    justifyContent: 'center',
+    maxHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    maxWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    minHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    minWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
     position: 'absolute',
+    width: HOME_CHROME_FAB_COLLAPSED_SIZE,
     zIndex: 42,
   },
   fab: {
     alignItems: 'center',
+    aspectRatio: 1,
     backgroundColor: fabGlassBackgroundColor,
     borderColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1.25,
-    borderRadius: HOME_CHROME_GLASS_COMPACT_SIZE / 2,
-    flexDirection: 'row',
+    borderRadius: HOME_CHROME_GLASS_COMPACT_RADIUS,
     height: HOME_CHROME_FAB_COLLAPSED_SIZE,
     justifyContent: 'center',
+    maxHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    maxWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    minHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    minWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
     overflow: 'hidden',
     position: 'relative',
-    width: '100%',
+    width: HOME_CHROME_FAB_COLLAPSED_SIZE,
     ...liquidGlassPlatformStyle,
   },
   pressed: {

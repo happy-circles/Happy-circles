@@ -20,6 +20,7 @@ import {
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
+  IdentityFlowLogoCopy,
   IdentityFlowMessageSlot,
   IdentityFlowPrimaryAction,
   IdentityFlowScreen,
@@ -40,6 +41,7 @@ import {
   clearPendingInviteIntent,
   hrefForPendingInviteIntent,
   readPendingInviteIntent,
+  shouldActivateAccountInviteAfterSetup,
 } from '@/lib/invite-intent';
 import {
   useActivateAccountFromInviteMutation,
@@ -54,6 +56,7 @@ import { useSession } from '@/providers/session-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
 import {
   resolveTrustedDeviceAuthMethods,
+  resolveSetupAccountMode,
   resolveSetupAccountRouteParams,
   resolveTrustMethodLabel,
   validateSetupProfile,
@@ -129,6 +132,12 @@ export function SetupAccountScreen() {
   const activateInvite = useActivateAccountFromInviteMutation();
   const profile = session.profile;
   const { editPhoneMode, requestedStep, returnTo } = resolveSetupAccountRouteParams(params);
+  const setupMode = resolveSetupAccountMode({
+    editPhoneMode,
+    requestedStep,
+    requiredComplete: session.setupState.requiredComplete,
+  });
+  const securityOnlyMode = setupMode === 'security_only';
 
   const initialCountry = useMemo(
     () =>
@@ -210,13 +219,18 @@ export function SetupAccountScreen() {
     if (
       !showTrustPasswordFallback ||
       session.isTrustedDevice ||
-      session.setupState.requiredComplete
+      (session.setupState.requiredComplete && !securityOnlyMode)
     ) {
       return;
     }
 
     trustPasswordInputRef.current?.focus();
-  }, [session.isTrustedDevice, session.setupState.requiredComplete, showTrustPasswordFallback]);
+  }, [
+    securityOnlyMode,
+    session.isTrustedDevice,
+    session.setupState.requiredComplete,
+    showTrustPasswordFallback,
+  ]);
 
   useEffect(() => {
     if (!editPhoneMode) {
@@ -252,7 +266,7 @@ export function SetupAccountScreen() {
 
     const pendingIntent = await readPendingInviteIntent();
 
-    if (pendingIntent?.type === 'account_invite') {
+    if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
       if (!session.currentDeviceId) {
         setMessage('Perfil guardado. No pudimos identificar este telefono para activar la cuenta.');
         return;
@@ -288,6 +302,28 @@ export function SetupAccountScreen() {
       await beginHomeEntryHandoffAfterScrollReset();
     }
     returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
+  }
+
+  async function finishSecurityOnly() {
+    if (!session.isTrustedDevice) {
+      triggerWarningHaptic();
+      setMessage('Valida este telefono para continuar.');
+      return;
+    }
+
+    if (returnTo === 'profile') {
+      returnToRoute(router, '/profile');
+      return;
+    }
+
+    const pendingIntent = await readPendingInviteIntent();
+    if (pendingIntent) {
+      returnToRoute(router, hrefForPendingInviteIntent(pendingIntent));
+      return;
+    }
+
+    await beginHomeEntryHandoffAfterScrollReset();
+    returnToRoute(router, '/home');
   }
 
   function clearProfileError(field: 'fullName' | 'phoneNationalNumber' | 'photo') {
@@ -590,20 +626,57 @@ export function SetupAccountScreen() {
     setMessage(result.message);
   }
 
+  const securityOnlyActionDisabled =
+    securityOnlyMode && (securityBusyKey !== null || !session.isTrustedDevice);
+  const primaryActionDisabled = securityOnlyMode ? securityOnlyActionDisabled : isSaving;
+  const primaryActionLoading = securityOnlyMode ? securityBusyKey !== null : isSaving;
+  const primaryActionLabel = securityOnlyMode
+    ? securityBusyKey !== null
+      ? 'Validando...'
+      : session.isTrustedDevice
+        ? 'Listo'
+        : 'Validacion pendiente'
+    : isSaving
+      ? 'Guardando...'
+      : editPhoneMode
+        ? 'Guardar celular'
+        : 'Guardar y entrar';
+
   return (
     <IdentityFlowScreen
       identity={
-        <IdentityFlowIdentity
-          avatarLabel={avatarLabel}
-          avatarUrl={avatarUrl}
-          disabled={avatarMutation.isPending}
-          editable
-          onPress={openAvatarOptions}
-          state={isSaving ? 'loading' : 'idle'}
-          variant="avatar"
-        />
+        securityOnlyMode ? (
+          <IdentityFlowIdentity
+            state={
+              securityBusyKey !== null ? 'loading' : session.isTrustedDevice ? 'success' : 'idle'
+            }
+            variant="status"
+          />
+        ) : (
+          <IdentityFlowIdentity
+            avatarLabel={avatarLabel}
+            avatarUrl={avatarUrl}
+            disabled={avatarMutation.isPending}
+            editable
+            onPress={openAvatarOptions}
+            state={isSaving ? 'loading' : 'idle'}
+            variant="avatar"
+          />
+        )
       }
       identityPosition="top"
+      message={
+        securityOnlyMode ? (
+          <IdentityFlowLogoCopy
+            subtitle={
+              session.isTrustedDevice
+                ? 'Ya puedes volver al flujo que estabas completando.'
+                : 'Confirma este telefono con un metodo vinculado a tu cuenta.'
+            }
+            title={session.isTrustedDevice ? 'Telefono validado' : 'Valida este telefono'}
+          />
+        ) : undefined
+      }
     >
       {message || profileErrors.photo ? (
         <IdentityFlowMessageSlot>
@@ -618,7 +691,7 @@ export function SetupAccountScreen() {
       ) : null}
 
       <View style={styles.setupContent}>
-        {!editPhoneMode ? (
+        {!securityOnlyMode && !editPhoneMode ? (
           <View
             style={[
               styles.photoRequirement,
@@ -664,94 +737,98 @@ export function SetupAccountScreen() {
           </View>
         ) : null}
 
-        <IdentityFlowForm>
-          <IdentityFlowField
-            error={profileErrors.fullName ?? null}
-            icon="person"
-            label="Nombre"
-            status={profileErrors.fullName ? 'danger' : fullNameIsUsable ? 'success' : 'idle'}
-          >
-            <IdentityFlowTextInput
-              autoCapitalize="words"
-              onChangeText={(value) => {
-                setFullName(value);
-                clearProfileError('fullName');
-              }}
-              placeholder="Nombre y apellido"
-              placeholderTextColor={theme.colors.muted}
-              ref={fullNameInputRef}
-              value={fullName}
-            />
-          </IdentityFlowField>
-
-          {needsPhoneInput ? (
+        {!securityOnlyMode ? (
+          <IdentityFlowForm>
             <IdentityFlowField
-              error={profileErrors.phoneNationalNumber ?? null}
-              icon="call"
-              label="Celular"
-              status={
-                profileErrors.phoneNationalNumber
-                  ? 'danger'
-                  : phoneNationalNumber.trim().length >= 7
-                    ? 'success'
-                    : 'idle'
-              }
+              error={profileErrors.fullName ?? null}
+              icon="person"
+              label="Nombre"
+              status={profileErrors.fullName ? 'danger' : fullNameIsUsable ? 'success' : 'idle'}
             >
-              <View style={styles.phoneField}>
-                <View style={styles.phoneRow}>
-                  <Pressable
-                    onPress={() => {
-                      triggerSelectionHaptic();
-                      setCountryMenuOpen((value) => !value);
-                    }}
-                    style={({ pressed }) => [
-                      styles.callingCodeBox,
-                      pressed ? styles.pressed : null,
-                    ]}
-                  >
-                    <AppText style={styles.callingCodeText}>{selectedCountry.callingCode}</AppText>
-                  </Pressable>
-
-                  <IdentityFlowTextInput
-                    keyboardType="phone-pad"
-                    onChangeText={(value) => {
-                      setPhoneNationalNumber(value);
-                      clearProfileError('phoneNationalNumber');
-                    }}
-                    onFocus={() => setCountryMenuOpen(false)}
-                    placeholder="3001234567"
-                    placeholderTextColor={theme.colors.muted}
-                    ref={phoneInputRef}
-                    style={styles.phoneInput}
-                    value={phoneNationalNumber}
-                  />
-                </View>
-
-                {countryMenuOpen ? (
-                  <View style={styles.countryMenu}>
-                    {COUNTRY_OPTIONS.map((country, index) => (
-                      <Pressable
-                        key={country.iso2}
-                        onPress={() => {
-                          triggerSelectionHaptic();
-                          setCountryIso(country.iso2);
-                          setCountryMenuOpen(false);
-                        }}
-                        style={[
-                          styles.countryOption,
-                          index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
-                        ]}
-                      >
-                        <AppText style={styles.countryLabel}>{country.label}</AppText>
-                        <AppText style={styles.countryCode}>{country.callingCode}</AppText>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
+              <IdentityFlowTextInput
+                autoCapitalize="words"
+                onChangeText={(value) => {
+                  setFullName(value);
+                  clearProfileError('fullName');
+                }}
+                placeholder="Nombre y apellido"
+                placeholderTextColor={theme.colors.muted}
+                ref={fullNameInputRef}
+                value={fullName}
+              />
             </IdentityFlowField>
-          ) : null}
-        </IdentityFlowForm>
+
+            {needsPhoneInput ? (
+              <IdentityFlowField
+                error={profileErrors.phoneNationalNumber ?? null}
+                icon="call"
+                label="Celular"
+                status={
+                  profileErrors.phoneNationalNumber
+                    ? 'danger'
+                    : phoneNationalNumber.trim().length >= 7
+                      ? 'success'
+                      : 'idle'
+                }
+              >
+                <View style={styles.phoneField}>
+                  <View style={styles.phoneRow}>
+                    <Pressable
+                      onPress={() => {
+                        triggerSelectionHaptic();
+                        setCountryMenuOpen((value) => !value);
+                      }}
+                      style={({ pressed }) => [
+                        styles.callingCodeBox,
+                        pressed ? styles.pressed : null,
+                      ]}
+                    >
+                      <AppText style={styles.callingCodeText}>
+                        {selectedCountry.callingCode}
+                      </AppText>
+                    </Pressable>
+
+                    <IdentityFlowTextInput
+                      keyboardType="phone-pad"
+                      onChangeText={(value) => {
+                        setPhoneNationalNumber(value);
+                        clearProfileError('phoneNationalNumber');
+                      }}
+                      onFocus={() => setCountryMenuOpen(false)}
+                      placeholder="3001234567"
+                      placeholderTextColor={theme.colors.muted}
+                      ref={phoneInputRef}
+                      style={styles.phoneInput}
+                      value={phoneNationalNumber}
+                    />
+                  </View>
+
+                  {countryMenuOpen ? (
+                    <View style={styles.countryMenu}>
+                      {COUNTRY_OPTIONS.map((country, index) => (
+                        <Pressable
+                          key={country.iso2}
+                          onPress={() => {
+                            triggerSelectionHaptic();
+                            setCountryIso(country.iso2);
+                            setCountryMenuOpen(false);
+                          }}
+                          style={[
+                            styles.countryOption,
+                            index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
+                          ]}
+                        >
+                          <AppText style={styles.countryLabel}>{country.label}</AppText>
+                          <AppText style={styles.countryCode}>{country.callingCode}</AppText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              </IdentityFlowField>
+            ) : null}
+          </IdentityFlowForm>
+        ) : null}
 
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
@@ -761,80 +838,86 @@ export function SetupAccountScreen() {
           </View>
 
           <View style={styles.securityList}>
-            <SecurityStatusRow
-              icon="mail"
-              status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
-              subtitle={
-                session.isEmailConfirmed
-                  ? accountEmailLabel
-                  : 'Abre el enlace o pega el codigo de 8 digitos'
-              }
-              title="Correo confirmado"
-              tone={session.isEmailConfirmed ? 'success' : 'danger'}
-              trailing={
-                session.isEmailConfirmed ? undefined : (
-                  <Pressable
-                    disabled={securityBusyKey !== null}
-                    onPress={() => void handleResendEmailConfirmation()}
-                    style={({ pressed }) => [
-                      styles.inlineButton,
-                      pressed && securityBusyKey === null ? styles.pressed : null,
-                      securityBusyKey !== null ? styles.disabledAction : null,
-                    ]}
-                  >
-                    <AppText style={styles.inlineButtonText}>
-                      {securityBusyKey === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
-                    </AppText>
-                  </Pressable>
-                )
-              }
-            />
-            {!session.isEmailConfirmed ? (
-              <View style={styles.securityAction}>
-                <AppText style={styles.helperText}>
-                  Usa el codigo de 8 digitos si el enlace no abre la app.
-                </AppText>
-                <OtpCodeInput
-                  disabled={securityBusyKey !== null}
-                  hasError={emailConfirmationCode.length > 0 && !emailConfirmationCodeValid}
-                  onChangeText={setEmailConfirmationCode}
-                  value={emailConfirmationCode}
+            {!securityOnlyMode ? (
+              <>
+                <SecurityStatusRow
+                  icon="mail"
+                  status={session.isEmailConfirmed ? 'Listo' : 'Pendiente'}
+                  subtitle={
+                    session.isEmailConfirmed
+                      ? accountEmailLabel
+                      : 'Abre el enlace o pega el codigo de 8 digitos'
+                  }
+                  title="Correo confirmado"
+                  tone={session.isEmailConfirmed ? 'success' : 'danger'}
+                  trailing={
+                    session.isEmailConfirmed ? undefined : (
+                      <Pressable
+                        disabled={securityBusyKey !== null}
+                        onPress={() => void handleResendEmailConfirmation()}
+                        style={({ pressed }) => [
+                          styles.inlineButton,
+                          pressed && securityBusyKey === null ? styles.pressed : null,
+                          securityBusyKey !== null ? styles.disabledAction : null,
+                        ]}
+                      >
+                        <AppText style={styles.inlineButtonText}>
+                          {securityBusyKey === 'resend-email-confirmation'
+                            ? 'Enviando...'
+                            : 'Reenviar'}
+                        </AppText>
+                      </Pressable>
+                    )
+                  }
                 />
-                <View style={styles.inlineActionRow}>
-                  <PrimaryAction
-                    compact
-                    disabled={securityBusyKey !== null}
-                    fullWidth={false}
-                    icon="checkmark"
-                    label={
-                      securityBusyKey === 'verify-email-code'
-                        ? 'Confirmando...'
-                        : 'Confirmar codigo'
-                    }
-                    loading={securityBusyKey === 'verify-email-code'}
-                    onPress={securityBusyKey ? undefined : () => void handleVerifyEmailCode()}
-                  />
-                </View>
-              </View>
+                {!session.isEmailConfirmed ? (
+                  <View style={styles.securityAction}>
+                    <AppText style={styles.helperText}>
+                      Usa el codigo de 8 digitos si el enlace no abre la app.
+                    </AppText>
+                    <OtpCodeInput
+                      disabled={securityBusyKey !== null}
+                      hasError={emailConfirmationCode.length > 0 && !emailConfirmationCodeValid}
+                      onChangeText={setEmailConfirmationCode}
+                      value={emailConfirmationCode}
+                    />
+                    <View style={styles.inlineActionRow}>
+                      <PrimaryAction
+                        compact
+                        disabled={securityBusyKey !== null}
+                        fullWidth={false}
+                        icon="checkmark"
+                        label={
+                          securityBusyKey === 'verify-email-code'
+                            ? 'Confirmando...'
+                            : 'Confirmar codigo'
+                        }
+                        loading={securityBusyKey === 'verify-email-code'}
+                        onPress={securityBusyKey ? undefined : () => void handleVerifyEmailCode()}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+
+                <View style={styles.separator} />
+
+                <SecurityStatusRow
+                  icon="call"
+                  status={editPhoneMode ? 'Editando' : profile?.phone_e164 ? 'Listo' : 'Pendiente'}
+                  subtitle={
+                    editPhoneMode
+                      ? `${selectedCountry.callingCode} ${phoneNationalNumber || 'Nuevo numero'}`
+                      : profile?.phone_e164
+                        ? phoneLabel
+                        : 'Completa el celular arriba'
+                  }
+                  title="Celular confirmado"
+                  tone={editPhoneMode ? 'muted' : profile?.phone_e164 ? 'success' : 'danger'}
+                />
+
+                <View style={styles.separator} />
+              </>
             ) : null}
-
-            <View style={styles.separator} />
-
-            <SecurityStatusRow
-              icon="call"
-              status={editPhoneMode ? 'Editando' : profile?.phone_e164 ? 'Listo' : 'Pendiente'}
-              subtitle={
-                editPhoneMode
-                  ? `${selectedCountry.callingCode} ${phoneNationalNumber || 'Nuevo numero'}`
-                  : profile?.phone_e164
-                    ? phoneLabel
-                    : 'Completa el celular arriba'
-              }
-              title="Celular confirmado"
-              tone={editPhoneMode ? 'muted' : profile?.phone_e164 ? 'success' : 'danger'}
-            />
-
-            <View style={styles.separator} />
 
             <SecurityStatusRow
               icon="phone-portrait"
@@ -954,37 +1037,52 @@ export function SetupAccountScreen() {
               </View>
             ) : null}
 
-            <View style={styles.separator} />
+            {!securityOnlyMode ? (
+              <>
+                <View style={styles.separator} />
 
-            <SecurityStatusRow
-              icon="finger-print"
-              subtitle={
-                session.setupState.biometricsEligible
-                  ? session.biometricLabel
-                  : session.biometricAvailable
-                    ? 'Primero valida este dispositivo'
-                    : 'No disponible'
-              }
-              title="Biometria"
-              tone={session.biometricsEnabled ? 'success' : 'muted'}
-              trailing={
-                <Switch
-                  disabled={!session.setupState.biometricsEligible && !session.biometricsEnabled}
-                  onValueChange={(nextValue) => void handleBiometricToggle(nextValue)}
-                  trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
-                  value={session.biometricsEnabled}
+                <SecurityStatusRow
+                  icon="finger-print"
+                  subtitle={
+                    session.setupState.biometricsEligible
+                      ? session.biometricLabel
+                      : session.biometricAvailable
+                        ? 'Primero valida este dispositivo'
+                        : 'No disponible'
+                  }
+                  title="Biometria"
+                  tone={session.biometricsEnabled ? 'success' : 'muted'}
+                  trailing={
+                    <Switch
+                      disabled={
+                        !session.setupState.biometricsEligible && !session.biometricsEnabled
+                      }
+                      onValueChange={(nextValue) => void handleBiometricToggle(nextValue)}
+                      trackColor={{
+                        false: theme.colors.surfaceSoft,
+                        true: theme.colors.primarySoft,
+                      }}
+                      value={session.biometricsEnabled}
+                    />
+                  }
                 />
-              }
-            />
+              </>
+            ) : null}
           </View>
         </View>
 
         <IdentityFlowPrimaryAction
-          disabled={isSaving}
+          disabled={primaryActionDisabled}
           icon="checkmark"
-          label={isSaving ? 'Guardando...' : editPhoneMode ? 'Guardar celular' : 'Guardar y entrar'}
-          loading={isSaving}
-          onPress={isSaving ? undefined : () => void handleSaveAndFinish()}
+          label={primaryActionLabel}
+          loading={primaryActionLoading}
+          onPress={
+            primaryActionDisabled
+              ? undefined
+              : securityOnlyMode
+                ? () => void finishSecurityOnly()
+                : () => void handleSaveAndFinish()
+          }
         />
       </View>
       <AvatarOptionsSheet

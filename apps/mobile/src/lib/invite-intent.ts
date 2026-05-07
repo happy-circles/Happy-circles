@@ -3,15 +3,41 @@ import type { Href } from 'expo-router';
 import { getStoredItem, removeStoredItem, setStoredItem } from './storage';
 
 const INVITE_INTENT_KEY = 'happy_circles.pending_invite_intent';
+export const PENDING_INVITE_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type AccountInviteIntentSource =
+  | 'account_invite_auth'
+  | 'account_invite_link'
+  | 'account_invite_signup';
+
+export type FriendshipInviteIntentSource = 'friendship_invite_link';
 
 export type PendingInviteIntent =
   | {
       readonly type: 'friendship_invite';
       readonly token: string;
+      readonly source: FriendshipInviteIntentSource;
+      readonly createdAt: string;
     }
   | {
       readonly type: 'account_invite';
       readonly token: string;
+      readonly source: AccountInviteIntentSource;
+      readonly createdAt: string;
+    };
+
+export type PendingInviteIntentInput =
+  | {
+      readonly type: 'friendship_invite';
+      readonly token: string;
+      readonly source: FriendshipInviteIntentSource;
+      readonly createdAt?: string;
+    }
+  | {
+      readonly type: 'account_invite';
+      readonly token: string;
+      readonly source: AccountInviteIntentSource;
+      readonly createdAt?: string;
     };
 
 function isPendingInviteIntent(value: unknown): value is PendingInviteIntent {
@@ -21,12 +47,27 @@ function isPendingInviteIntent(value: unknown): value is PendingInviteIntent {
 
   const type = (value as Record<string, unknown>)['type'];
   const token = (value as Record<string, unknown>)['token'];
+  const source = (value as Record<string, unknown>)['source'];
+  const createdAt = (value as Record<string, unknown>)['createdAt'];
 
-  return (
-    (type === 'friendship_invite' || type === 'account_invite') &&
-    typeof token === 'string' &&
-    token.trim().length >= 12
-  );
+  if (typeof token !== 'string' || token.trim().length < 12 || typeof createdAt !== 'string') {
+    return false;
+  }
+
+  if (type === 'account_invite') {
+    return (
+      source === 'account_invite_auth' ||
+      source === 'account_invite_link' ||
+      source === 'account_invite_signup'
+    );
+  }
+
+  return type === 'friendship_invite' && source === 'friendship_invite_link';
+}
+
+function isFreshInviteIntent(intent: PendingInviteIntent): boolean {
+  const createdAtMs = Date.parse(intent.createdAt);
+  return Number.isFinite(createdAtMs) && Date.now() - createdAtMs <= PENDING_INVITE_INTENT_TTL_MS;
 }
 
 export function hrefForPendingInviteIntent(intent: PendingInviteIntent): Href {
@@ -56,9 +97,16 @@ export async function readPendingInviteIntent(): Promise<PendingInviteIntent | n
       return null;
     }
 
+    if (!isFreshInviteIntent(parsed)) {
+      await removeStoredItem(INVITE_INTENT_KEY);
+      return null;
+    }
+
     return {
       type: parsed.type,
       token: parsed.token.trim(),
+      source: parsed.source,
+      createdAt: parsed.createdAt,
     } as PendingInviteIntent;
   } catch {
     await removeStoredItem(INVITE_INTENT_KEY);
@@ -66,8 +114,21 @@ export async function readPendingInviteIntent(): Promise<PendingInviteIntent | n
   }
 }
 
-export async function writePendingInviteIntent(intent: PendingInviteIntent): Promise<void> {
-  await setStoredItem(INVITE_INTENT_KEY, JSON.stringify(intent));
+export function shouldActivateAccountInviteAfterSetup(
+  intent: PendingInviteIntent | null,
+): intent is Extract<PendingInviteIntent, { readonly type: 'account_invite' }> {
+  return intent?.type === 'account_invite';
+}
+
+export async function writePendingInviteIntent(intent: PendingInviteIntentInput): Promise<void> {
+  await setStoredItem(
+    INVITE_INTENT_KEY,
+    JSON.stringify({
+      ...intent,
+      token: intent.token.trim(),
+      createdAt: intent.createdAt ?? new Date().toISOString(),
+    }),
+  );
 }
 
 export async function clearPendingInviteIntent(): Promise<void> {
