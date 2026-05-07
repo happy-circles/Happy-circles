@@ -22,6 +22,7 @@ import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { SwipePager } from '@/components/swipe-pager';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import * as appHaptics from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
@@ -250,6 +251,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   }
 
   function toggleAmendment(item: ActivityItemDto) {
+    appHaptics.triggerAppSelectionHaptic();
     if (activeAmendmentItemId === item.id) {
       setActiveAmendmentItemId(null);
       setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
@@ -276,6 +278,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     };
     const errorCount = Object.values(nextErrors).filter(Boolean).length;
     if (errorCount > 0) {
+      appHaptics.triggerAppWarningHaptic();
       setAmendmentErrors(nextErrors);
       setBanner({
         message:
@@ -302,8 +305,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       setAmendmentDescription('');
       setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
       setAmendmentErrors({});
+      appHaptics.triggerAppSuccessHaptic();
       showSnackbar('Nuevo monto enviado.', 'success');
     } catch (error) {
+      appHaptics.triggerAppErrorHaptic();
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.';
       if (
@@ -344,6 +349,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         if (action === 'accept') {
           const response = await acceptRequest.mutateAsync(itemId);
           const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
+          appHaptics.triggerAppSuccessHaptic();
           await showActionOverlay({
             message:
               autoCycleStatus === 'queued'
@@ -354,6 +360,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           });
         } else {
           await rejectRequest.mutateAsync(itemId);
+          appHaptics.triggerAppWarningHaptic();
           showSnackbar('Propuesta no aceptada.', 'neutral');
         }
         return;
@@ -364,11 +371,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           const response = await approveSettlement.mutateAsync(itemId);
           const nextStatus = readResultStatus(response);
           if (nextStatus === 'stale') {
+            appHaptics.triggerAppWarningHaptic();
             setBanner({
               message: 'La propuesta quedo obsoleta porque el grafo cambio.',
               tone: 'warning',
             });
           } else {
+            appHaptics.triggerAppSuccessHaptic();
             await showActionOverlay({
               message:
                 nextStatus === 'approved'
@@ -380,6 +389,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           }
         } else {
           await rejectSettlement.mutateAsync(itemId);
+          appHaptics.triggerAppWarningHaptic();
           showSnackbar('Happy Circle no aprobado.', 'neutral');
         }
         return;
@@ -388,6 +398,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
         const response = await executeSettlement.mutateAsync(itemId);
         const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
+        appHaptics.triggerAppSuccessHaptic();
         await showActionOverlay({
           message:
             nextStatus === 'queued'
@@ -398,6 +409,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         });
       }
     } catch (error) {
+      appHaptics.triggerAppErrorHaptic();
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la accion.';
       if (
@@ -429,15 +441,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     readonly confirmLabel: string;
     readonly onConfirm: () => void;
   }) {
+    appHaptics.triggerAppSelectionHaptic();
     Alert.alert(input.title, input.message, [
-      {
-        text: 'Cancelar',
-        style: 'cancel',
-      },
+      { text: 'Cancelar', style: 'cancel' },
       {
         text: input.confirmLabel,
         style: 'destructive',
-        onPress: input.onConfirm,
+        onPress: () => { appHaptics.triggerAppActionHaptic(); input.onConfirm(); },
       },
     ]);
   }
@@ -554,7 +564,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 onPress={
                   busyKey
                     ? undefined
-                    : () => void handlePendingItemAction(item.id, item.kind, item.status, 'approve')
+                    : () => { appHaptics.triggerAppActionHaptic(); void handlePendingItemAction(item.id, item.kind, item.status, 'approve'); }
                 }
               />
             </View>
@@ -592,28 +602,21 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 onPress={
                   busyKey
                     ? undefined
-                    : () =>
+                    : () => {
+                        appHaptics.triggerAppSelectionHaptic();
                         Alert.alert(
                           'Completar Circle',
                           'Aplicaremos este Happy Circle al historial y ya no podras deshacerlo desde aqui.',
                           [
-                            {
-                              text: 'Cancelar',
-                              style: 'cancel',
-                            },
+                            { text: 'Cancelar', style: 'cancel' },
                             {
                               text: 'Completar',
                               style: 'destructive',
-                              onPress: () =>
-                                void handlePendingItemAction(
-                                  item.id,
-                                  item.kind,
-                                  item.status,
-                                  'execute',
-                                ),
+                              onPress: () => { appHaptics.triggerAppActionHaptic(); void handlePendingItemAction(item.id, item.kind, item.status, 'execute'); },
                             },
                           ],
-                        )
+                        );
+                      }
                 }
               />
             </View>

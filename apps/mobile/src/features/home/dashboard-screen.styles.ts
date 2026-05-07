@@ -6,7 +6,7 @@ export const PEOPLE_TILE_WIDTH = 68;
 export const PEOPLE_TILE_CIRCLE_SIZE = 56;
 export const PEOPLE_TILE_AVATAR_SIZE = 52;
 export const PEOPLE_TILE_LABEL_LINE_HEIGHT = 15;
-export const HOME_REGISTER_FAB_CLEARANCE = 76;
+export const HOME_REGISTER_FAB_CLEARANCE = 132;
 
 export const dashboardStyles = StyleSheet.create({
   homeContent: {
@@ -16,54 +16,6 @@ export const dashboardStyles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
-  },
-  homeLoadingStack: {
-    gap: theme.spacing.md,
-    width: '100%',
-  },
-  homeLoadingHero: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-  },
-  homeLoadingTitleLine: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    height: 22,
-    width: '58%',
-  },
-  homeLoadingBodyLine: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    height: 14,
-    width: '82%',
-  },
-  homeLoadingGrid: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  homeLoadingTile: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    flex: 1,
-    height: 74,
-  },
-  homeLoadingList: {
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-  },
-  homeLoadingListLine: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 16,
-    width: '100%',
-  },
-  homeLoadingListLineShort: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 16,
-    width: '68%',
   },
   quickActionPressed: {
     opacity: 0.6,
@@ -141,6 +93,57 @@ export const dashboardStyles = StyleSheet.create({
   },
   transactionList: {
     gap: theme.spacing.sm,
+  },
+  transactionFooter: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  transactionFooterIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  transactionFooterCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  transactionFooterTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  transactionFooterDetail: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
+  },
+  transactionFooterCta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+    maxWidth: 78,
+  },
+  transactionFooterCtaText: {
+    color: theme.colors.textMuted,
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
   },
   sheetScrim: {
     backgroundColor: theme.colors.overlay,

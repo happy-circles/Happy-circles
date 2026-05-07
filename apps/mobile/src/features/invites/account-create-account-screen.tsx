@@ -38,6 +38,7 @@ import {
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
+import type { SocialProvider } from './account-invite-entry-helpers';
 import {
   ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE,
   ACCOUNT_CREATED_SETUP_MESSAGE,
@@ -99,6 +100,8 @@ export function AccountCreateAccountScreen() {
   });
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [socialBusyProvider, setSocialBusyProvider] = useState<SocialProvider | null>(null);
+  const [showEmailPasswordFallback, setShowEmailPasswordFallback] = useState(false);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationBusy, setVerificationBusy] = useState(false);
@@ -118,6 +121,7 @@ export function AccountCreateAccountScreen() {
   const emailChecked = validationAttempted || touchedFields.email;
   const phoneChecked = validationAttempted || touchedFields.phone;
   const passwordChecked = validationAttempted || touchedFields.password;
+  const authBusy = busy || verificationBusy || resendBusy || socialBusyProvider !== null;
   const emailStatus: FieldStatus = !emailChecked ? 'idle' : emailValid ? 'valid' : 'invalid';
   const phoneStatus: FieldStatus = !phoneChecked ? 'idle' : phoneValid ? 'valid' : 'invalid';
   const passwordStatus: FieldStatus = !passwordChecked
@@ -125,20 +129,19 @@ export function AccountCreateAccountScreen() {
     : passwordValid
       ? 'valid'
       : 'invalid';
-  const tokenState: BrandVerificationState =
-    busy || verificationBusy || resendBusy
-      ? 'loading'
-      : pendingVerificationEmail
-        ? verificationCodeValid
-          ? 'success'
-          : 'idle'
-        : !shouldPreview || previewQuery.error || blockingMessage
-          ? 'error'
-          : previewQuery.isLoading
-            ? 'loading'
-            : canCreateAccount
-              ? 'success'
-              : 'idle';
+  const tokenState: BrandVerificationState = authBusy
+    ? 'loading'
+    : pendingVerificationEmail
+      ? verificationCodeValid
+        ? 'success'
+        : 'idle'
+      : !shouldPreview || previewQuery.error || blockingMessage
+        ? 'error'
+        : previewQuery.isLoading
+          ? 'loading'
+          : canCreateAccount
+            ? 'success'
+            : 'idle';
   const contentTransitionKey = !shouldPreview
     ? 'create-account:no-token'
     : previewQuery.isLoading
@@ -164,7 +167,7 @@ export function AccountCreateAccountScreen() {
   }
 
   useEffect(() => {
-    if (isPreviewMode || busy || verificationBusy || setupNavigationStartedRef.current) {
+    if (isPreviewMode || authBusy || setupNavigationStartedRef.current) {
       return;
     }
 
@@ -181,7 +184,7 @@ export function AccountCreateAccountScreen() {
     }
 
     returnToRoute(router, '/join');
-  }, [busy, isPreviewMode, router, session.status, shouldPreview, token, verificationBusy]);
+  }, [authBusy, isPreviewMode, router, session.status, shouldPreview, token]);
 
   useEffect(() => {
     if (!canCreateAccount || isPreviewMode) {
@@ -211,11 +214,6 @@ export function AccountCreateAccountScreen() {
           phoneValid,
         }),
       );
-      return;
-    }
-
-    if (isPreviewMode) {
-      setMessage('Vista temporal de QA. Este boton no crea una cuenta desde preview.');
       return;
     }
 
@@ -256,6 +254,51 @@ export function AccountCreateAccountScreen() {
       setMessage(error instanceof Error ? error.message : ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSocialCreate(provider: SocialProvider) {
+    if (authBusy || !canCreateAccount) {
+      return;
+    }
+
+    triggerIdentityImpactHaptic();
+
+    if (isPreviewMode) {
+      setMessage('Vista temporal de QA. Este boton no crea una cuenta desde preview.');
+      return;
+    }
+
+    setSocialBusyProvider(provider);
+    setMessage(null);
+
+    try {
+      await writePendingInviteIntent({
+        type: 'account_invite',
+        token,
+      });
+
+      const result =
+        provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
+      setMessage(result);
+
+      if (result === 'Sesion iniciada.') {
+        triggerIdentitySuccessHaptic();
+        setupNavigationStartedRef.current = true;
+        beginSetupEntryHandoff();
+        await session.refreshAccountState({
+          preserveTrustedDeviceDuringLoad: true,
+        });
+        returnToRoute(router, buildSetupAccountHref('profile'));
+        return;
+      }
+
+      triggerIdentityWarningHaptic();
+    } catch (error) {
+      triggerIdentityErrorHaptic();
+      setMessage(error instanceof Error ? error.message : ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE);
+    } finally {
+      setSocialBusyProvider(null);
     }
   }
 
@@ -372,7 +415,7 @@ export function AccountCreateAccountScreen() {
             subtitle={
               preview?.inviterDisplayName
                 ? `${preview.inviterDisplayName} te invito.`
-                : 'Completa tus datos para entrar.'
+                : 'Elige tu metodo para entrar.'
             }
             title="Crea tu cuenta"
           />
@@ -473,154 +516,225 @@ export function AccountCreateAccountScreen() {
 
       {canCreateAccount && !pendingVerificationEmail ? (
         <IdentityFlowForm>
-          <IdentityFlowField
-            error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
-            icon="mail"
-            label="Correo"
-            status={
-              emailStatus === 'invalid' ? 'danger' : emailStatus === 'valid' ? 'success' : 'idle'
-            }
-          >
-            <IdentityFlowTextInput
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              onBlur={() => markFieldTouched('email')}
-              onChangeText={setEmail}
-              placeholder="tu@correo.com"
-              placeholderTextColor={theme.colors.muted}
-              value={email}
-            />
-          </IdentityFlowField>
+          <View style={styles.socialProviderStack}>
+            {session.appleSignInAvailable ? (
+              <Pressable
+                disabled={authBusy}
+                onPress={authBusy ? undefined : () => void handleSocialCreate('apple')}
+                style={({ pressed }) => [
+                  styles.socialProviderButton,
+                  styles.socialProviderButtonApple,
+                  pressed && !authBusy ? styles.pressed : null,
+                  authBusy ? styles.disabledAction : null,
+                ]}
+              >
+                <Ionicons color="#ffffff" name="logo-apple" size={18} />
+                <AppText style={styles.socialProviderButtonTextApple}>
+                  {socialBusyProvider === 'apple' ? 'Abriendo Apple...' : 'Continuar con Apple'}
+                </AppText>
+              </Pressable>
+            ) : null}
 
-          <IdentityFlowField
-            error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
-            icon="lock-closed"
-            label="Contrasena"
-            status={
-              passwordStatus === 'invalid'
-                ? 'danger'
-                : passwordStatus === 'valid'
-                  ? 'success'
-                  : 'idle'
-            }
-          >
-            <IdentityFlowTextInput
-              autoCapitalize="none"
-              autoComplete="password"
-              onBlur={() => markFieldTouched('password')}
-              onChangeText={setPassword}
-              placeholder="Tu contrasena"
-              placeholderTextColor={theme.colors.muted}
-              secureTextEntry
-              value={password}
-            />
-          </IdentityFlowField>
+            <Pressable
+              disabled={authBusy}
+              onPress={authBusy ? undefined : () => void handleSocialCreate('google')}
+              style={({ pressed }) => [
+                styles.socialProviderButton,
+                styles.socialProviderButtonGoogle,
+                pressed && !authBusy ? styles.pressed : null,
+                authBusy ? styles.disabledAction : null,
+              ]}
+            >
+              <Ionicons color={theme.colors.brandGreen} name="logo-google" size={18} />
+              <AppText style={styles.socialProviderButtonTextGoogle}>
+                {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
+              </AppText>
+            </Pressable>
+          </View>
 
-          <IdentityFlowField
-            error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : null}
-            icon="call"
-            label="Celular"
-            status={
-              phoneStatus === 'invalid' ? 'danger' : phoneStatus === 'valid' ? 'success' : 'idle'
+          <IdentityFlowSecondaryAction
+            disabled={authBusy}
+            icon={showEmailPasswordFallback ? 'chevron-up' : 'mail'}
+            label={
+              showEmailPasswordFallback ? 'Ocultar correo y contrasena' : 'Usar correo y contrasena'
             }
-          >
-            <View style={styles.phoneField}>
-              <View style={styles.phoneRow}>
-                <Pressable
-                  onPress={() => {
-                    triggerIdentitySelectionHaptic();
-                    setCountryMenuOpen((value) => !value);
-                  }}
-                  style={({ pressed }) => [styles.callingCodeBox, pressed ? styles.pressed : null]}
-                >
-                  <AppText style={styles.countryFlag}>{countryFlag(selectedCountry.iso2)}</AppText>
-                  <AppText style={styles.callingCodeText}>{selectedCountry.callingCode}</AppText>
-                  <Ionicons color={theme.colors.brandGreen} name="chevron-down" size={13} />
-                </Pressable>
+            onPress={() => {
+              triggerIdentitySelectionHaptic();
+              setShowEmailPasswordFallback((open) => !open);
+            }}
+          />
 
+          {showEmailPasswordFallback ? (
+            <View style={styles.emailPasswordFallback}>
+              <IdentityFlowField
+                error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
+                icon="mail"
+                label="Correo"
+                status={
+                  emailStatus === 'invalid'
+                    ? 'danger'
+                    : emailStatus === 'valid'
+                      ? 'success'
+                      : 'idle'
+                }
+              >
                 <IdentityFlowTextInput
-                  keyboardType="phone-pad"
-                  onBlur={() => markFieldTouched('phone')}
-                  onChangeText={setPhoneNationalNumber}
-                  onFocus={() => setCountryMenuOpen(false)}
-                  placeholder="3001234567"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  onBlur={() => markFieldTouched('email')}
+                  onChangeText={setEmail}
+                  placeholder="tu@correo.com"
                   placeholderTextColor={theme.colors.muted}
-                  style={styles.phoneInput}
-                  value={phoneNationalNumber}
+                  value={email}
                 />
-              </View>
+              </IdentityFlowField>
 
-              {countryMenuOpen ? (
-                <View style={styles.countryMenu}>
-                  <ScrollView
-                    bounces={false}
-                    keyboardShouldPersistTaps="handled"
-                    nestedScrollEnabled
-                    onScroll={(event) => setCountryMenuScrollY(event.nativeEvent.contentOffset.y)}
-                    onMoveShouldSetResponder={() => true}
-                    onStartShouldSetResponder={() => true}
-                    scrollEventThrottle={16}
-                    showsVerticalScrollIndicator={false}
-                    style={[styles.countryMenuScroll, countryMenuScrollWebStyle]}
-                  >
-                    {COUNTRY_OPTIONS.map((country, index) => {
-                      const selected = country.iso2 === selectedCountry.iso2;
+              <IdentityFlowField
+                error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
+                icon="lock-closed"
+                label="Contrasena"
+                status={
+                  passwordStatus === 'invalid'
+                    ? 'danger'
+                    : passwordStatus === 'valid'
+                      ? 'success'
+                      : 'idle'
+                }
+              >
+                <IdentityFlowTextInput
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  onBlur={() => markFieldTouched('password')}
+                  onChangeText={setPassword}
+                  placeholder="Tu contrasena"
+                  placeholderTextColor={theme.colors.muted}
+                  secureTextEntry
+                  value={password}
+                />
+              </IdentityFlowField>
 
-                      return (
-                        <Pressable
-                          key={country.iso2}
-                          onPress={() => {
-                            triggerIdentitySelectionHaptic();
-                            setCountryIso(country.iso2);
-                            setCountryMenuOpen(false);
-                          }}
-                          style={[
-                            styles.countryOption,
-                            selected ? styles.countryOptionSelected : null,
-                            index === COUNTRY_OPTIONS.length - 1 ? styles.countryOptionLast : null,
-                          ]}
-                        >
-                          <View style={styles.countryOptionLabel}>
-                            <AppText style={styles.countryFlag}>
-                              {countryFlag(country.iso2)}
-                            </AppText>
-                            <AppText style={styles.countryLabel}>{country.label}</AppText>
-                          </View>
-                          <AppText
-                            style={[
-                              styles.countryCode,
-                              selected ? styles.countryCodeSelected : null,
-                            ]}
-                          >
-                            {country.callingCode}
-                          </AppText>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                  <View pointerEvents="none" style={styles.countryMenuScrollbarTrack}>
-                    <View
-                      style={[
-                        styles.countryMenuScrollbarThumb,
-                        {
-                          height: COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT,
-                          transform: [{ translateY: countryMenuScrollbarTop }],
-                        },
+              <IdentityFlowField
+                error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : null}
+                icon="call"
+                label="Celular"
+                status={
+                  phoneStatus === 'invalid'
+                    ? 'danger'
+                    : phoneStatus === 'valid'
+                      ? 'success'
+                      : 'idle'
+                }
+              >
+                <View style={styles.phoneField}>
+                  <View style={styles.phoneRow}>
+                    <Pressable
+                      onPress={() => {
+                        triggerIdentitySelectionHaptic();
+                        setCountryMenuOpen((value) => !value);
+                      }}
+                      style={({ pressed }) => [
+                        styles.callingCodeBox,
+                        pressed ? styles.pressed : null,
                       ]}
+                    >
+                      <AppText style={styles.countryFlag}>
+                        {countryFlag(selectedCountry.iso2)}
+                      </AppText>
+                      <AppText style={styles.callingCodeText}>
+                        {selectedCountry.callingCode}
+                      </AppText>
+                      <Ionicons color={theme.colors.brandGreen} name="chevron-down" size={13} />
+                    </Pressable>
+
+                    <IdentityFlowTextInput
+                      keyboardType="phone-pad"
+                      onBlur={() => markFieldTouched('phone')}
+                      onChangeText={setPhoneNationalNumber}
+                      onFocus={() => setCountryMenuOpen(false)}
+                      placeholder="3001234567"
+                      placeholderTextColor={theme.colors.muted}
+                      style={styles.phoneInput}
+                      value={phoneNationalNumber}
                     />
                   </View>
-                </View>
-              ) : null}
-            </View>
-          </IdentityFlowField>
 
-          <IdentityFlowPrimaryAction
-            disabled={busy}
-            label={busy ? 'Creando...' : 'Crear cuenta'}
-            loading={busy}
-            onPress={busy ? undefined : () => void handleSubmit()}
-          />
+                  {countryMenuOpen ? (
+                    <View style={styles.countryMenu}>
+                      <ScrollView
+                        bounces={false}
+                        keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled
+                        onMoveShouldSetResponder={() => true}
+                        onScroll={(event) =>
+                          setCountryMenuScrollY(event.nativeEvent.contentOffset.y)
+                        }
+                        onStartShouldSetResponder={() => true}
+                        scrollEventThrottle={16}
+                        showsVerticalScrollIndicator={false}
+                        style={[styles.countryMenuScroll, countryMenuScrollWebStyle]}
+                      >
+                        {COUNTRY_OPTIONS.map((country, index) => {
+                          const selected = country.iso2 === selectedCountry.iso2;
+
+                          return (
+                            <Pressable
+                              key={country.iso2}
+                              onPress={() => {
+                                triggerIdentitySelectionHaptic();
+                                setCountryIso(country.iso2);
+                                setCountryMenuOpen(false);
+                              }}
+                              style={[
+                                styles.countryOption,
+                                selected ? styles.countryOptionSelected : null,
+                                index === COUNTRY_OPTIONS.length - 1
+                                  ? styles.countryOptionLast
+                                  : null,
+                              ]}
+                            >
+                              <View style={styles.countryOptionLabel}>
+                                <AppText style={styles.countryFlag}>
+                                  {countryFlag(country.iso2)}
+                                </AppText>
+                                <AppText style={styles.countryLabel}>{country.label}</AppText>
+                              </View>
+                              <AppText
+                                style={[
+                                  styles.countryCode,
+                                  selected ? styles.countryCodeSelected : null,
+                                ]}
+                              >
+                                {country.callingCode}
+                              </AppText>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                      <View pointerEvents="none" style={styles.countryMenuScrollbarTrack}>
+                        <View
+                          style={[
+                            styles.countryMenuScrollbarThumb,
+                            {
+                              height: COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT,
+                              transform: [{ translateY: countryMenuScrollbarTop }],
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              </IdentityFlowField>
+
+              <IdentityFlowPrimaryAction
+                disabled={authBusy}
+                label={busy ? 'Creando...' : 'Crear con correo'}
+                loading={busy}
+                onPress={authBusy ? undefined : () => void handleSubmit()}
+              />
+            </View>
+          ) : null}
         </IdentityFlowForm>
       ) : null}
     </IdentityFlowScreen>

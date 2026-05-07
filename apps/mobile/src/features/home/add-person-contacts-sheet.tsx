@@ -18,7 +18,7 @@ import {
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
 import { formatCop } from '@/lib/data';
-import { type FriendshipInviteDeliveryResult, type PeopleTargetResolution } from '@/lib/live-data';
+import { type PeopleTargetResolution } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
 import { type ContactCandidate } from '@/features/invites/people-outreach-utils';

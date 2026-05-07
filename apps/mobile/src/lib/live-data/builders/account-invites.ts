@@ -13,7 +13,6 @@ import { sortByNewest, sortHistoryItems } from '../utils/sorting';
 import { resolveAvatarUrl } from '../../avatar-url';
 import {
   buildAccountIntendedRecipientReference,
-  channelLabel,
   inviteProfileFields,
   inviteProfileFromIntendedRecipient,
   inviteProfileFromUser,

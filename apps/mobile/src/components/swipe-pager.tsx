@@ -1,26 +1,19 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import {
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  ScrollView,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
-
-interface PagerLayout {
-  readonly height: number;
-  readonly width: number;
-}
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import PagerView, {
+  type PageScrollStateChangedNativeEvent,
+  type PagerViewOnPageScrollEvent,
+  type PagerViewOnPageSelectedEvent,
+} from 'react-native-pager-view';
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
   readonly onChange: (value: T) => void;
+  readonly onInteractionStateChange?: (isInteracting: boolean) => void;
   readonly onPreviewChange?: (value: T) => void;
   readonly pageStyle?: StyleProp<ViewStyle>;
   readonly renderPage: (value: T, index: number) => ReactNode;
+  readonly scrollEnabled?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly value: T;
   readonly values: readonly T[];
@@ -33,31 +26,28 @@ function clampIndex(index: number, maxIndex: number): number {
 export function SwipePager<T extends string>({
   accessibilityLabel,
   onChange,
+  onInteractionStateChange,
   onPreviewChange,
   pageStyle,
   renderPage,
+  scrollEnabled = true,
   style,
   value,
   values,
 }: SwipePagerProps<T>) {
-  const scrollRef = useRef<ScrollView>(null);
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestOffsetRef = useRef(0);
-  const syncedWidthRef = useRef(0);
-  const hasSyncedInitialPositionRef = useRef(false);
-  const activeIndexRef = useRef(0);
-  const settledIndexRef = useRef(0);
-  const previewIndexRef = useRef(0);
+  const pagerRef = useRef<PagerView>(null);
+  const hasMountedPagerRef = useRef(false);
+  const activeIndexRef = useRef(clampIndex(values.indexOf(value), values.length - 1));
+  const selectedIndexRef = useRef(activeIndexRef.current);
+  const previewIndexRef = useRef(activeIndexRef.current);
+  const isInteractingRef = useRef(false);
   const programmaticTargetIndexRef = useRef<number | null>(null);
-  const isUserDraggingRef = useRef(false);
   const valuesRef = useRef(values);
   const onChangeRef = useRef(onChange);
+  const onInteractionStateChangeRef = useRef(onInteractionStateChange);
   const onPreviewChangeRef = useRef(onPreviewChange);
-  const [layout, setLayout] = useState<PagerLayout>({ height: 0, width: 0 });
 
   const activeIndex = clampIndex(values.indexOf(value), values.length - 1);
-  const pageWidth = layout.width;
-  const pageHeight = layout.height;
 
   useEffect(() => {
     valuesRef.current = values;
@@ -68,225 +58,134 @@ export function SwipePager<T extends string>({
   }, [onChange]);
 
   useEffect(() => {
+    onInteractionStateChangeRef.current = onInteractionStateChange;
+  }, [onInteractionStateChange]);
+
+  useEffect(() => {
     onPreviewChangeRef.current = onPreviewChange;
   }, [onPreviewChange]);
 
   useLayoutEffect(() => {
     activeIndexRef.current = activeIndex;
-    previewIndexRef.current = activeIndex;
   }, [activeIndex]);
 
   useEffect(
     () => () => {
-      if (settleTimerRef.current) {
-        clearTimeout(settleTimerRef.current);
+      if (isInteractingRef.current) {
+        onInteractionStateChangeRef.current?.(false);
       }
     },
     [],
   );
 
   useLayoutEffect(() => {
-    if (pageWidth <= 0 || values.length === 0) {
+    if (values.length === 0) {
       return;
     }
 
-    if (
-      hasSyncedInitialPositionRef.current &&
-      settledIndexRef.current === activeIndex &&
-      syncedWidthRef.current === pageWidth
-    ) {
+    if (!hasMountedPagerRef.current) {
+      hasMountedPagerRef.current = true;
+      selectedIndexRef.current = activeIndex;
+      previewIndexRef.current = activeIndex;
       return;
     }
 
-    const hasSyncedPosition = hasSyncedInitialPositionRef.current;
-    const nextX = activeIndex * pageWidth;
-    clearSettleTimer();
-    isUserDraggingRef.current = false;
-    latestOffsetRef.current = nextX;
-    settledIndexRef.current = activeIndex;
-    previewIndexRef.current = activeIndex;
-    syncedWidthRef.current = pageWidth;
-    hasSyncedInitialPositionRef.current = true;
-    programmaticTargetIndexRef.current = hasSyncedPosition ? activeIndex : null;
-    scrollRef.current?.scrollTo({ animated: false, x: nextX, y: 0 });
-  }, [activeIndex, pageWidth, values.length]);
-
-  function clearSettleTimer() {
-    if (settleTimerRef.current) {
-      clearTimeout(settleTimerRef.current);
-      settleTimerRef.current = null;
+    if (selectedIndexRef.current !== activeIndex) {
+      programmaticTargetIndexRef.current = activeIndex;
+      selectedIndexRef.current = activeIndex;
+      updatePreviewIndex(activeIndex);
+      pagerRef.current?.setPage(activeIndex);
     }
-  }
+  }, [activeIndex, values.length]);
 
   function updatePreviewIndex(nextIndex: number, currentValues = valuesRef.current) {
+    const clampedIndex = clampIndex(nextIndex, currentValues.length - 1);
     const previousPreviewIndex = previewIndexRef.current;
-    const nextPreviewValue = currentValues[nextIndex];
+    const nextPreviewValue = currentValues[clampedIndex];
 
-    previewIndexRef.current = nextIndex;
+    previewIndexRef.current = clampedIndex;
 
-    if (nextPreviewValue && nextIndex !== previousPreviewIndex) {
+    if (nextPreviewValue && clampedIndex !== previousPreviewIndex) {
       onPreviewChangeRef.current?.(nextPreviewValue);
     }
   }
 
-  function settleToOffset(offsetX: number) {
-    const currentValues = valuesRef.current;
-
-    if (pageWidth <= 0 || currentValues.length === 0) {
+  function handlePageScroll(event: PagerViewOnPageScrollEvent) {
+    if (programmaticTargetIndexRef.current !== null) {
+      updatePreviewIndex(programmaticTargetIndexRef.current);
       return;
     }
 
-    const programmaticTargetIndex = programmaticTargetIndexRef.current;
-
-    if (programmaticTargetIndex !== null && activeIndexRef.current === programmaticTargetIndex) {
-      const targetX = programmaticTargetIndex * pageWidth;
-
-      latestOffsetRef.current = targetX;
-      settledIndexRef.current = programmaticTargetIndex;
-      syncedWidthRef.current = pageWidth;
-      updatePreviewIndex(programmaticTargetIndex, currentValues);
-      programmaticTargetIndexRef.current = null;
-
-      if (Math.abs(offsetX - targetX) > 1) {
-        scrollRef.current?.scrollTo({ animated: false, x: targetX, y: 0 });
-      }
-
-      return;
-    }
-
-    const nextIndex = clampIndex(Math.round(offsetX / pageWidth), currentValues.length - 1);
-    const nextX = nextIndex * pageWidth;
-    const nextValue = currentValues[nextIndex];
-
-    latestOffsetRef.current = nextX;
-    settledIndexRef.current = nextIndex;
-    syncedWidthRef.current = pageWidth;
-    updatePreviewIndex(nextIndex, currentValues);
-
-    if (Math.abs(offsetX - nextX) > 1) {
-      scrollRef.current?.scrollTo({ animated: true, x: nextX, y: 0 });
-    }
-
-    if (nextValue && nextIndex !== activeIndexRef.current) {
-      onChangeRef.current(nextValue);
-    }
-  }
-
-  function handleLayout(event: LayoutChangeEvent) {
-    const nextWidth = Math.round(event.nativeEvent.layout.width);
-    const nextHeight = Math.round(event.nativeEvent.layout.height);
-
-    if (nextWidth <= 0 || nextHeight <= 0) {
-      return;
-    }
-
-    setLayout((current) =>
-      Math.abs(current.width - nextWidth) > 1 || Math.abs(current.height - nextHeight) > 1
-        ? { height: nextHeight, width: nextWidth }
-        : current,
-    );
-  }
-
-  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const offsetX = event.nativeEvent.contentOffset.x;
-
-    if (programmaticTargetIndexRef.current !== null && !isUserDraggingRef.current) {
-      const targetIndex = programmaticTargetIndexRef.current;
-      const targetX = targetIndex * pageWidth;
-
-      if (pageWidth > 0 && Math.abs(offsetX - targetX) <= 1) {
-        latestOffsetRef.current = targetX;
-        settledIndexRef.current = targetIndex;
-        syncedWidthRef.current = pageWidth;
-        updatePreviewIndex(targetIndex);
-        programmaticTargetIndexRef.current = null;
-      }
-
-      return;
-    }
-
-    latestOffsetRef.current = offsetX;
-
-    if (pageWidth <= 0 || valuesRef.current.length === 0) {
-      return;
-    }
-
-    const nextPreviewIndex = clampIndex(
-      Math.round(offsetX / pageWidth),
-      valuesRef.current.length - 1,
-    );
+    const nextPreviewIndex = Math.round(event.nativeEvent.position + event.nativeEvent.offset);
 
     if (nextPreviewIndex !== previewIndexRef.current) {
       updatePreviewIndex(nextPreviewIndex);
     }
   }
 
-  function handleScrollBeginDrag() {
-    isUserDraggingRef.current = true;
+  function handlePageSelected(event: PagerViewOnPageSelectedEvent) {
+    const currentValues = valuesRef.current;
+    const nextIndex = clampIndex(Math.round(event.nativeEvent.position), currentValues.length - 1);
+    const nextValue = currentValues[nextIndex];
+    const wasProgrammaticTransition = programmaticTargetIndexRef.current !== null;
+
+    selectedIndexRef.current = nextIndex;
     programmaticTargetIndexRef.current = null;
-    clearSettleTimer();
+    updatePreviewIndex(nextIndex, currentValues);
+
+    if (wasProgrammaticTransition) {
+      isInteractingRef.current = false;
+      onInteractionStateChangeRef.current?.(false);
+    }
+
+    if (nextValue && nextIndex !== activeIndexRef.current) {
+      activeIndexRef.current = nextIndex;
+      onChangeRef.current(nextValue);
+    }
   }
 
-  function handleMomentumScrollBegin() {
-    clearSettleTimer();
-  }
+  function handlePageScrollStateChanged(event: PageScrollStateChangedNativeEvent) {
+    const pageScrollState = event.nativeEvent.pageScrollState;
 
-  function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    clearSettleTimer();
-    settleToOffset(event.nativeEvent.contentOffset.x);
-    isUserDraggingRef.current = false;
-  }
+    if (pageScrollState === 'dragging') {
+      programmaticTargetIndexRef.current = null;
+    }
 
-  function handleScrollEndDrag() {
-    clearSettleTimer();
-    settleTimerRef.current = setTimeout(() => {
-      settleTimerRef.current = null;
-      settleToOffset(latestOffsetRef.current);
-      isUserDraggingRef.current = false;
-    }, 120);
+    if (pageScrollState === 'idle' && programmaticTargetIndexRef.current !== null) {
+      updatePreviewIndex(programmaticTargetIndexRef.current);
+      programmaticTargetIndexRef.current = null;
+    }
+
+    const isInteracting = pageScrollState !== 'idle';
+
+    if (isInteractingRef.current === isInteracting) {
+      return;
+    }
+
+    isInteractingRef.current = isInteracting;
+    onInteractionStateChangeRef.current?.(isInteracting);
   }
 
   return (
-    <View onLayout={handleLayout} style={[styles.root, style]}>
-      <ScrollView
+    <View style={[styles.root, style]}>
+      <PagerView
         accessibilityLabel={accessibilityLabel}
-        alwaysBounceHorizontal={false}
-        bounces={false}
-        contentContainerStyle={styles.track}
-        decelerationRate="fast"
-        directionalLockEnabled
-        disableIntervalMomentum
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-        onMomentumScrollBegin={handleMomentumScrollBegin}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
-        onScroll={handleScroll}
-        onScrollBeginDrag={handleScrollBeginDrag}
-        onScrollEndDrag={handleScrollEndDrag}
+        initialPage={activeIndex}
+        keyboardDismissMode="on-drag"
+        onPageScroll={handlePageScroll}
+        onPageScrollStateChanged={handlePageScrollStateChanged}
+        onPageSelected={handlePageSelected}
         overScrollMode="never"
-        pagingEnabled
-        ref={scrollRef}
-        removeClippedSubviews={false}
-        scrollEventThrottle={16}
-        showsHorizontalScrollIndicator={false}
-        snapToAlignment="start"
-        snapToInterval={pageWidth > 0 ? pageWidth : undefined}
-        style={styles.scroll}
+        ref={pagerRef}
+        scrollEnabled={scrollEnabled}
+        style={styles.pager}
       >
         {values.map((pageValue, index) => (
-          <View
-            key={pageValue}
-            style={[
-              styles.page,
-              pageWidth > 0 ? { minHeight: pageHeight, width: pageWidth } : styles.hiddenPage,
-              pageStyle,
-            ]}
-          >
+          <View collapsable={false} key={pageValue} style={[styles.page, pageStyle]}>
             {renderPage(pageValue, index)}
           </View>
         ))}
-      </ScrollView>
+      </PagerView>
     </View>
   );
 }
@@ -297,18 +196,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     overflow: 'hidden',
   },
-  scroll: {
+  pager: {
     flex: 1,
     minHeight: 0,
   },
-  track: {
-    alignItems: 'stretch',
-  },
   page: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  hiddenPage: {
-    width: 0,
+    flex: 1,
   },
 });

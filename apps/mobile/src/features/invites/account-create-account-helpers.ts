@@ -56,10 +56,6 @@ export function resolveCreateAccountMessageTone(message: string): MessageBannerT
     return 'danger';
   }
 
-  if (message.startsWith('Vista temporal de QA')) {
-    return 'neutral';
-  }
-
   return 'warning';
 }
 

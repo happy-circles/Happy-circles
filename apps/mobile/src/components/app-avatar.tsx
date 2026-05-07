@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { StyleSheet, View } from 'react-native';
 
 import {
   HappyCirclesCenterSvg,
@@ -37,11 +38,12 @@ export function AppAvatar({
   const avatarLabel = buildAvatarLabel(label);
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
   const [hasImageError, setHasImageError] = useState(false);
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
   const hasImageSource = Boolean(imageUrl?.trim());
-  const isWaitingForImage = hasImageSource && !hasImageError;
 
   useEffect(() => {
     setHasImageError(false);
+    setIsImageLoaded(false);
   }, [resolvedImageUrl]);
 
   const isSystemAvatar = variant === 'system';
@@ -50,12 +52,8 @@ export function AppAvatar({
   );
   const backgroundColor = isSystemAvatar
     ? theme.colors.successSoft
-    : isWaitingForImage
-      ? theme.colors.surfaceSoft
-      : (fallbackBackgroundColor ?? theme.colors.surfaceSoft);
-  const labelColor = isWaitingForImage
-    ? theme.colors.textMuted
-    : (fallbackTextColor ?? theme.colors.text);
+    : (fallbackBackgroundColor ?? theme.colors.surfaceSoft);
+  const labelColor = fallbackTextColor ?? theme.colors.text;
   const systemAvatarSize = Math.max(1, size - 6);
 
   return (
@@ -78,24 +76,43 @@ export function AppAvatar({
           size={systemAvatarSize}
           viewBox={SYSTEM_AVATAR_FACE_VIEW_BOX}
         />
-      ) : canShowImage ? (
-        <Image
-          onError={() => setHasImageError(true)}
-          source={{ uri: resolvedImageUrl as string }}
-          style={{ borderRadius: radius, height: size, width: size }}
-        />
       ) : (
-        <AppText
-          style={[
-            styles.avatarLabel,
-            {
-              color: labelColor,
-              fontSize: Math.max(16, size * 0.38),
-            },
-          ]}
-        >
-          {avatarLabel}
-        </AppText>
+        <>
+          <AppText
+            style={[
+              styles.avatarLabel,
+              {
+                color: labelColor,
+                fontSize: Math.max(16, size * 0.38),
+              },
+            ]}
+          >
+            {avatarLabel}
+          </AppText>
+          {canShowImage ? (
+            <ExpoImage
+              cachePolicy="disk"
+              contentFit="cover"
+              onError={() => {
+                setHasImageError(true);
+                setIsImageLoaded(false);
+              }}
+              onLoad={() => setIsImageLoaded(true)}
+              recyclingKey={resolvedImageUrl}
+              source={resolvedImageUrl}
+              style={[
+                styles.avatarImage,
+                {
+                  borderRadius: radius,
+                  height: size,
+                  opacity: isImageLoaded ? 1 : 0,
+                  width: size,
+                },
+              ]}
+              transition={120}
+            />
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -106,6 +123,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  avatarImage: {
+    ...StyleSheet.absoluteFillObject,
   },
   avatarLabel: {
     fontWeight: '800',

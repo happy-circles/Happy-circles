@@ -49,7 +49,10 @@ export function BrandLockup({
       </Animated.View>
       <Animated.View style={[styles.titleContainer, titleContainerStyle as never]}>
         <AppText
+          adjustsFontSizeToFit
+          minimumFontScale={0.82}
           numberOfLines={1}
+          scaleRole="display"
           style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }, titleStyle]}
         >
           {title}

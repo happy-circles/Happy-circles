@@ -4,11 +4,14 @@ import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-na
 
 import { theme } from '@/lib/theme';
 
-const REFRESH_PROGRESS_OFFSET = theme.spacing.xl + theme.spacing.md;
+const DEFAULT_REFRESH_PROGRESS_OFFSET = theme.spacing.xl + theme.spacing.md;
+const TRANSPARENT_REFRESH_COLOR = 'rgba(0, 0, 0, 0)';
 
 export interface BrandedRefreshProps {
   readonly label?: string;
+  readonly nativeIndicatorVisible?: boolean;
   readonly onRefresh: () => void | Promise<void>;
+  readonly progressViewOffset?: number;
   readonly refreshing: boolean;
 }
 
@@ -44,17 +47,30 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
       void Promise.resolve(refresh.onRefresh()).catch(() => undefined);
     }
 
+    const progressViewOffset = refresh?.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
+    const nativeIndicatorVisible = refresh?.nativeIndicatorVisible !== false;
     const nativeRefreshControl = refresh ? (
       <RefreshControl
-        colors={[theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]}
+        key={`refresh-control-${Math.round(progressViewOffset)}`}
+        colors={
+          nativeIndicatorVisible
+            ? [theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]
+            : [TRANSPARENT_REFRESH_COLOR]
+        }
         enabled
         onRefresh={handleRefresh}
-        progressBackgroundColor={theme.colors.surface}
-        progressViewOffset={REFRESH_PROGRESS_OFFSET}
+        progressBackgroundColor={
+          nativeIndicatorVisible ? theme.colors.surface : TRANSPARENT_REFRESH_COLOR
+        }
+        progressViewOffset={progressViewOffset}
         refreshing={refresh.refreshing}
-        tintColor={theme.colors.primary}
-        title={Platform.OS === 'ios' ? (refresh.label ?? 'Sincronizando') : undefined}
-        titleColor={theme.colors.textMuted}
+        tintColor={nativeIndicatorVisible ? theme.colors.primary : TRANSPARENT_REFRESH_COLOR}
+        title={
+          Platform.OS === 'ios' && nativeIndicatorVisible
+            ? (refresh.label ?? 'Sincronizando')
+            : undefined
+        }
+        titleColor={nativeIndicatorVisible ? theme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
       />
     ) : undefined;
 

@@ -1,22 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
+import { theme } from '@/lib/theme';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
 import { AppText } from '@/components/app-text';
 
 export function DashboardPeopleSection({
   activePeople,
-  inviteRequestCount,
   onAddPerson,
-  onOpenInviteRequests,
 }: {
   readonly activePeople: readonly PersonCardDto[];
-  readonly inviteRequestCount: number;
   readonly onAddPerson: () => void;
-  readonly onOpenInviteRequests: () => void;
 }) {
   return (
     <SectionBlock
@@ -28,7 +26,7 @@ export function DashboardPeopleSection({
               pressed ? styles.quickActionPressed : null,
             ]}
           >
-            <AppText style={styles.peopleSectionActionText}>Ver todas</AppText>
+            <AppText style={styles.peopleSectionActionText}>Ver lista</AppText>
           </Pressable>
         </Link>
       }
@@ -39,12 +37,6 @@ export function DashboardPeopleSection({
         contentContainerStyle={styles.peopleRailContent}
         showsHorizontalScrollIndicator={false}
       >
-        <ShortcutTile
-          badgeCount={inviteRequestCount}
-          icon="person-add-outline"
-          label="Solicitudes"
-          onPress={onOpenInviteRequests}
-        />
         <ShortcutTile dashed icon="add" label="Agregar" onPress={onAddPerson} />
         {activePeople.map((person) => (
           <PersonTile key={person.userId} person={person} />
@@ -65,7 +57,7 @@ export function DashboardTransactionsSection({
     readonly item: ActivityItemDto;
     readonly unread: boolean;
   }[];
-  readonly onOpenItem: (item: ActivityItemDto, isPending: boolean) => void;
+  readonly onOpenItem: (item: ActivityItemDto) => void;
   readonly people: readonly PersonCardDto[];
 }) {
   if (items.length === 0) {
@@ -73,21 +65,7 @@ export function DashboardTransactionsSection({
   }
 
   return (
-    <SectionBlock
-      action={
-        <Link href="/transactions" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.peopleSectionAction,
-              pressed ? styles.quickActionPressed : null,
-            ]}
-          >
-            <AppText style={styles.peopleSectionActionText}>Ver todas</AppText>
-          </Pressable>
-        </Link>
-      }
-      title="Transacciones"
-    >
+    <SectionBlock title="Ultimos movimientos">
       <View style={styles.transactionList}>
         {items.map(({ highlightPending, isPending, item, unread }) => (
           <TransactionPreviewCard
@@ -95,11 +73,37 @@ export function DashboardTransactionsSection({
             isPending={isPending}
             item={item}
             key={item.id}
-            onPress={() => onOpenItem(item, isPending)}
+            onPress={() => onOpenItem(item)}
             people={people}
             unread={unread}
           />
         ))}
+        <Link href="/transactions" asChild>
+          <Pressable
+            style={({ pressed }) => [
+              styles.transactionFooter,
+              pressed ? styles.quickActionPressed : null,
+            ]}
+          >
+            <View style={styles.transactionFooterIcon}>
+              <Ionicons color={theme.colors.primary} name="time-outline" size={19} />
+            </View>
+            <View style={styles.transactionFooterCopy}>
+              <AppText numberOfLines={1} style={styles.transactionFooterTitle}>
+                Ver historial completo
+              </AppText>
+              <AppText numberOfLines={1} style={styles.transactionFooterDetail}>
+                Abre todos los movimientos y filtros.
+              </AppText>
+            </View>
+            <View style={styles.transactionFooterCta}>
+              <AppText numberOfLines={1} style={styles.transactionFooterCtaText}>
+                Abrir
+              </AppText>
+              <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
+            </View>
+          </Pressable>
+        </Link>
       </View>
     </SectionBlock>
   );

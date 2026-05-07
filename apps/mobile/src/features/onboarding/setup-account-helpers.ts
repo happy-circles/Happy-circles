@@ -6,30 +6,12 @@ export type SetupProfileErrors = {
   readonly photo?: string;
 };
 
-export function resolveTrustActionLabel(input: {
-  readonly canTrustCurrentDeviceWithoutPassword: boolean;
-  readonly hasApple: boolean;
-  readonly hasEmailPassword: boolean;
-  readonly hasGoogle: boolean;
-}): string {
-  if (input.canTrustCurrentDeviceWithoutPassword) {
-    return 'Confiar este dispositivo';
-  }
-
-  if (input.hasEmailPassword) {
-    return 'Validar con clave';
-  }
-
-  if (input.hasGoogle) {
-    return 'Validar con Google';
-  }
-
-  if (input.hasApple) {
-    return 'Validar con Apple';
-  }
-
-  return 'Validar dispositivo';
-}
+export {
+  resolveTrustedDeviceAuthMethods,
+  resolveTrustActionLabel,
+  resolveTrustMethodLabel,
+  type TrustedDeviceAuthAvailability,
+} from '@/lib/trusted-device-auth';
 
 export function resolveSetupAccountRouteParams(input: {
   readonly editPhone?: string | string[];

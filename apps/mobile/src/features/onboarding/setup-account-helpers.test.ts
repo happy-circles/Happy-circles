@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   resolveSetupAccountRouteParams,
+  resolveTrustedDeviceAuthMethods,
   resolveTrustActionLabel,
   validateSetupProfile,
 } from './setup-account-helpers';
@@ -23,6 +24,14 @@ describe('setup account helpers', () => {
         hasEmailPassword: true,
         hasGoogle: true,
       }),
+    ).toBe('Validar con Google');
+    expect(
+      resolveTrustActionLabel({
+        canTrustCurrentDeviceWithoutPassword: false,
+        hasApple: false,
+        hasEmailPassword: true,
+        hasGoogle: false,
+      }),
     ).toBe('Validar con clave');
     expect(
       resolveTrustActionLabel({
@@ -40,6 +49,25 @@ describe('setup account helpers', () => {
         hasGoogle: false,
       }),
     ).toBe('Validar con Apple');
+  });
+
+  it('orders trusted-device methods with social before password fallback', () => {
+    expect(
+      resolveTrustedDeviceAuthMethods({
+        canTrustCurrentDeviceWithoutPassword: false,
+        hasApple: true,
+        hasEmailPassword: true,
+        hasGoogle: true,
+      }),
+    ).toEqual(['google', 'apple', 'password']);
+    expect(
+      resolveTrustedDeviceAuthMethods({
+        canTrustCurrentDeviceWithoutPassword: true,
+        hasApple: true,
+        hasEmailPassword: true,
+        hasGoogle: true,
+      }),
+    ).toEqual(['password', 'google', 'apple']);
   });
 
   it('normalizes route params from Expo arrays and strings', () => {

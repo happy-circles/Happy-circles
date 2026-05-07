@@ -33,11 +33,17 @@ describe('live-data builder boundaries', () => {
 
   it('keeps public builder entrypoints compact', () => {
     const budgets = new Map<string, number>([
-      ['builders/balance-analytics.ts', 500],
-      ['builders/financial-requests.ts', 500],
-      ['builders/friendship-invites.ts', 500],
-      ['builders/settlements.ts', 500],
-      ['types.ts', 500],
+      ['builders/balance-analytics.ts', 20],
+      ['builders/balance-analytics-runtime.ts', 500],
+      ['builders/financial-requests.ts', 20],
+      ['builders/financial-requests-runtime.ts', 420],
+      ['builders/friendship-invites.ts', 20],
+      ['builders/friendship-invites-runtime.ts', 500],
+      ['builders/settlements.ts', 20],
+      ['builders/settlements-runtime.ts', 430],
+      ['snapshot-types.ts', 120],
+      ['types.ts', 20],
+      ['types-runtime.ts', 470],
     ]);
 
     for (const [path, maxLines] of budgets) {

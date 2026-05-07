@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 
 import { useSession } from '@/providers/session-provider';
-import { extractAccountInviteToken } from './account-invite-utils';
 import { AccountSignInEntry } from './account-invite-entry-flow';
 import { resolveAccountInviteEntryParams } from './account-invite-entry-helpers';
 

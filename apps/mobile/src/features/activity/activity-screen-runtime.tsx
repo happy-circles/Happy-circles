@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { InteractionManager, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
@@ -19,7 +19,6 @@ import {
   notificationViewKeyForItem,
   useAppSnapshot,
 } from '@/lib/live-data';
-import { publishHomeNavigationIntent } from '@/lib/home-navigation-intent';
 import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
 import {
   buildAppleAuthReminderItem,
@@ -720,16 +719,6 @@ export function ActivityScreen() {
   }
 
   function openNotificationTarget(target: NotificationTarget) {
-    if (target.homeIntent) {
-      const homeIntent = target.homeIntent;
-      returnToRoute(router, target.href);
-
-      InteractionManager.runAfterInteractions(() => {
-        publishHomeNavigationIntent(homeIntent);
-      });
-      return;
-    }
-
     returnToRoute(router, target.href);
   }
 

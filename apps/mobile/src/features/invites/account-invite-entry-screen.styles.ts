@@ -40,7 +40,6 @@ export const accountInviteEntryStyles = StyleSheet.create({
   authSecondaryBlock: {
     alignItems: 'center',
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xl,
     width: '100%',
   },
   passwordFieldGroup: {

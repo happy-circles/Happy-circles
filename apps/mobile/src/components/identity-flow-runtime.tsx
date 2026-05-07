@@ -167,7 +167,6 @@ export function IdentityFlowScreen({
     topOffset: IDENTITY_FLOW_TOP_OFFSET,
     verticalGap: theme.spacing.sm,
   });
-  const resolvedIdentityPosition = layoutMetrics.resolvedIdentityPosition;
   const isCenterIdentity = layoutMetrics.isCenterIdentity;
   const shouldReserveMessageSlot = layoutMetrics.shouldReserveMessageSlot;
   const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;

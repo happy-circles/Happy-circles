@@ -27,7 +27,6 @@ import {
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,
 } from '@/lib/live-data';
-import { theme } from '@/lib/theme';
 import { accountInviteStyles as styles } from './account-invite-screen.styles';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';

@@ -88,8 +88,7 @@ describe('activity helpers', () => {
         [],
       ),
     ).toEqual({
-      href: '/home',
-      homeIntent: { kind: 'open_invite_requests', tab: 'sent' },
+      href: '/people?requests=1&requestTab=sent',
     });
     expect(
       pendingDetailHref(

@@ -10,6 +10,7 @@ const LIMITS = {
   notificationViews: 1000,
 } as const;
 
+const AVATAR_SIGNED_URL_TTL_SECONDS = 60 * 60;
 const ACTIVE_FRIENDSHIP_INVITE_STATUSES = [
   'pending_recipient',
   'pending_claim',
@@ -281,6 +282,63 @@ function addMovementUserIds(target: Set<string>, movementsJson: unknown) {
     const record = movement as Record<string, unknown>;
     addIds(target, record.debtor_user_id, record.creditor_user_id);
   }
+}
+
+function normalizeAvatarPath(path: unknown): string | null {
+  if (typeof path !== 'string') {
+    return null;
+  }
+
+  const normalizedPath = path.trim().replace(/^\/+/, '');
+  return normalizedPath.length > 0 ? normalizedPath : null;
+}
+
+function isDirectAvatarUri(path: string): boolean {
+  return /^(https?:|file:|content:|asset:|data:|blob:|ph:)/i.test(path);
+}
+
+async function createSignedAvatarUrlsByPath(
+  client: ReturnType<typeof createServiceRoleClient>,
+  profiles: readonly Record<string, unknown>[],
+): Promise<Record<string, { readonly expiresAt: string; readonly url: string }>> {
+  const avatarPaths = Array.from(
+    new Set(
+      profiles
+        .map((profile) => normalizeAvatarPath(profile.avatar_path))
+        .filter((path): path is string => Boolean(path && !isDirectAvatarUri(path))),
+    ),
+  );
+
+  if (avatarPaths.length === 0) {
+    return {};
+  }
+
+  const expiresAt = new Date(Date.now() + AVATAR_SIGNED_URL_TTL_SECONDS * 1000).toISOString();
+  const entries = await Promise.all(
+    avatarPaths.map(async (path) => {
+      const { data, error } = await client.storage
+        .from('avatars')
+        .createSignedUrl(path, AVATAR_SIGNED_URL_TTL_SECONDS);
+
+      if (error || !data?.signedUrl) {
+        console.error('avatar_signed_url_error', {
+          message: error?.message ?? 'missing signed url',
+          path,
+        });
+        return null;
+      }
+
+      return [
+        path,
+        {
+          expiresAt,
+          url: data.signedUrl,
+        },
+      ] as const;
+    }),
+  );
+
+  return Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry));
 }
 
 function participantScope(actorUserId: string) {
@@ -586,9 +644,11 @@ Deno.serve((request) =>
         .order('display_name', { ascending: true }),
       'profiles',
     );
+    const avatarSignedUrlsByPath = await createSignedAvatarUrlsByPath(client, profiles);
 
     return {
       profiles,
+      avatarSignedUrlsByPath,
       relationships,
       openDebts,
       financialRequests,

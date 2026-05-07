@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Link } from 'expo-router';
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import type {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 import {
   AccessibilityInfo,
   Animated,
+  Platform,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -12,13 +19,10 @@ import {
 } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
-import {
-  HappyCirclesCenterSvg,
-  HappyCirclesOuterSvg,
-  resolveHappyCirclesPalette,
-} from '@/components/happy-circles-glyph';
-import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { HeaderBrandTitle } from '@/components/header-brand-title';
+import { HappyCirclesOuterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
+import { theme } from '@/lib/theme';
 
 const HOME_CHROME_MORPH_START_Y = 8;
 const HOME_CHROME_COMPACT_STATE_Y = 88;
@@ -27,24 +31,81 @@ const HOME_CHROME_COMPACT_PROGRESS = 0.82;
 const HOME_CHROME_EXPANDED_PROGRESS = 0.18;
 const HOME_CHROME_SCROLL_EXPAND_DISTANCE = 82;
 const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 132;
+const HOME_CHROME_CONTENT_MAX_WIDTH = 560;
 const HOME_CHROME_PROFILE_BUTTON_SIZE = 48;
 const HOME_CHROME_AVATAR_SIZE = 40;
+const HOME_CHROME_PROFILE_CARD_AVATAR_INSET = theme.spacing.sm;
+const HOME_CHROME_PROFILE_LEADING_OFFSET =
+  HOME_CHROME_PROFILE_CARD_AVATAR_INSET -
+  (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_AVATAR_SIZE) / 2;
+const HOME_CHROME_COMPACT_LOGO_SIZE = 78;
 const HOME_CHROME_EXPANDED_LOGO_SIZE = 60;
-const HOME_CHROME_ANCHOR_LOGO_SIZE = 78;
-const HOME_CHROME_LOGO_VISUAL_Y_OFFSET = 3;
-const HOME_CHROME_BRAND_GAP = 6;
-const HOME_CHROME_TITLE_SIZE = 22;
-const HOME_CHROME_TITLE_LINE_HEIGHT = 28;
-const HOME_CHROME_TITLE_WIDTH = 150;
-const HOME_CHROME_BADGE_SIZE = 25;
-const HOME_CHROME_BADGE_COMPACT_RADIUS = 0.34;
-const HOME_CHROME_BADGE_COMPACT_ANGLE = -42;
+const HOME_CHROME_GLASS_COMPACT_SIZE = 92;
+const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 const HOME_CHROME_FAB_EXIT_DISTANCE = 88;
+const HOME_CHROME_FAB_COLLAPSED_SIZE = HOME_CHROME_GLASS_COMPACT_SIZE;
 
 export const HOME_CHROME_EXPANDED_HEIGHT = 86;
 
 type HomeChromeProgress = Animated.Value;
+
+const liquidGlassPlatformStyle = Platform.select({
+  web: {
+    WebkitBackdropFilter: 'blur(38px) saturate(220%)',
+    backdropFilter: 'blur(38px) saturate(220%)',
+    boxShadow: '0 22px 54px rgba(15, 23, 40, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.86)',
+  },
+  ios: {
+    shadowColor: '#0f1728',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.16,
+    shadowRadius: 34,
+  },
+  default: {
+    elevation: 9,
+  },
+}) as object | undefined;
+
+const hasNativeLiquidGlass = isLiquidGlassAvailable();
+const liquidGlassBackgroundColor = hasNativeLiquidGlass
+  ? 'rgba(255, 255, 255, 0.16)'
+  : 'rgba(255, 255, 255, 0.82)';
+const fabGlassBackgroundColor = hasNativeLiquidGlass
+  ? 'rgba(255, 255, 255, 0.14)'
+  : 'rgba(255, 255, 255, 0.78)';
+const liquidGlassTopGlowBackgroundColor = hasNativeLiquidGlass
+  ? 'rgba(255, 255, 255, 0.22)'
+  : 'rgba(255, 255, 255, 0.74)';
+const liquidGlassTopGlowOpacity = hasNativeLiquidGlass ? 0.34 : 0.9;
+
+function LiquidGlassSurface({
+  children,
+  showGlow = true,
+  style,
+  tintColor = 'rgba(255, 255, 255, 0.025)',
+}: {
+  readonly children?: ReactNode;
+  readonly showGlow?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly tintColor?: string;
+}) {
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, style]}>
+      {hasNativeLiquidGlass ? (
+        <GlassView
+          colorScheme="light"
+          glassEffectStyle="regular"
+          pointerEvents="none"
+          style={styles.nativeLiquidGlass}
+          tintColor={tintColor}
+        />
+      ) : null}
+      {showGlow ? <View pointerEvents="none" style={styles.liquidGlassTopGlow} /> : null}
+      {children}
+    </View>
+  );
+}
 
 function useReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -155,91 +216,55 @@ export function useCollapsibleHomeChrome() {
   return { isCompact, onScroll, progress };
 }
 
-function HomeMorphLogo({
-  compactCenterX,
-  compactCenterY,
-  expandedCenterX,
-  expandedCenterY,
-  progress,
-}: {
-  readonly compactCenterX: number;
-  readonly compactCenterY: number;
-  readonly expandedCenterX: number;
-  readonly expandedCenterY: number;
-  readonly progress: HomeChromeProgress;
-}) {
-  const maskId = useMemo(() => `home-morph-brand-${Math.random().toString(36).slice(2)}`, []);
+function HomeCompactAvatarFrame({ progress }: { readonly progress: HomeChromeProgress }) {
+  const maskId = useMemo(() => `home-compact-brand-${Math.random().toString(36).slice(2)}`, []);
   const palette = resolveHappyCirclesPalette('brand');
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.34, 1],
+    outputRange: [0, 0.42, 1],
+  });
   const rotate = progress.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '-45deg'],
   });
-  const faceOpacity = progress.interpolate({
-    inputRange: [0, 0.42, 0.84],
-    outputRange: [1, 0.42, 0],
-  });
   const scale = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [HOME_CHROME_EXPANDED_LOGO_SIZE / HOME_CHROME_ANCHOR_LOGO_SIZE, 1],
-  });
-  const left = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [
-      expandedCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
-      compactCenterX - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
-    ],
-  });
-  const top = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [
-      expandedCenterY - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
-      compactCenterY - HOME_CHROME_ANCHOR_LOGO_SIZE / 2,
-    ],
+    outputRange: [0.9, 1],
   });
 
   return (
     <Animated.View
       pointerEvents="none"
       style={[
-        styles.morphLogoLayer,
+        styles.compactAvatarFrame,
         {
-          left,
-          top,
+          opacity,
           transform: [{ rotate }, { scale }],
         },
       ]}
     >
-      <HappyCirclesOuterSvg maskId={maskId} palette={palette} size={HOME_CHROME_ANCHOR_LOGO_SIZE} />
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.morphLogoFaceLayer, { opacity: faceOpacity }]}
-      >
-        <HappyCirclesCenterSvg palette={palette} size={HOME_CHROME_ANCHOR_LOGO_SIZE} />
-      </Animated.View>
+      <HappyCirclesOuterSvg
+        maskId={maskId}
+        palette={palette}
+        size={HOME_CHROME_COMPACT_LOGO_SIZE}
+      />
     </Animated.View>
   );
 }
 
-function HomeActivityButton({
-  count,
-  isCompact,
-}: {
-  readonly count: number;
-  readonly isCompact: boolean;
-}) {
+function HomeActivityButton({ count }: { readonly count: number }) {
   const hasAttention = count > 0;
 
   return (
     <Link href="/activity" asChild>
       <Pressable
         accessibilityLabel={
-          hasAttention ? `${compactCountLabel(count)} pendientes o notificaciones` : 'Actividad'
+          hasAttention ? `${compactCountLabel(count)} notificaciones no vistas` : 'Actividad'
         }
         accessibilityRole="button"
         style={({ pressed }) => [
           styles.activityButton,
           hasAttention ? styles.activityButtonActive : null,
-          isCompact ? styles.activityButtonCompact : null,
           pressed ? styles.pressed : null,
         ]}
       >
@@ -248,6 +273,11 @@ function HomeActivityButton({
           name={hasAttention ? 'notifications' : 'notifications-outline'}
           size={24}
         />
+        {hasAttention ? (
+          <View style={styles.activityBadge}>
+            <AppText style={styles.activityBadgeText}>{compactCountLabel(count)}</AppText>
+          </View>
+        ) : null}
       </Pressable>
     </Link>
   );
@@ -258,7 +288,6 @@ export function HomeCollapsibleChrome({
   avatarUrl,
   isCompact,
   notificationCount,
-  pendingCount,
   progress,
   topInset,
 }: {
@@ -266,81 +295,99 @@ export function HomeCollapsibleChrome({
   readonly avatarUrl: string | null;
   readonly isCompact: boolean;
   readonly notificationCount: number;
-  readonly pendingCount: number;
   readonly progress: HomeChromeProgress;
   readonly topInset: number;
 }) {
   const { width } = useWindowDimensions();
-  const attentionCount = notificationCount > 0 ? notificationCount : pendingCount;
-  const contentWidth = Math.min(560, Math.max(0, width - theme.spacing.lg * 2));
+  const contentWidth = Math.min(
+    HOME_CHROME_CONTENT_MAX_WIDTH,
+    Math.max(0, width - theme.spacing.lg * 2),
+  );
   const contentLeft = (width - contentWidth) / 2;
-  const profileCenterX = contentLeft + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
-  const profileCenterY =
-    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
-  const expandedLogoCenterX =
-    contentLeft + contentWidth / 2 - (HOME_CHROME_TITLE_WIDTH + HOME_CHROME_BRAND_GAP) / 2;
-  const expandedLogoCenterY =
-    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_EXPANDED_LOGO_SIZE / 2;
-  const compactLogoCenterX = profileCenterX;
-  const compactLogoCenterY = profileCenterY + HOME_CHROME_LOGO_VISUAL_Y_OFFSET;
-  const badgeStartCenterX =
-    contentLeft + contentWidth - HOME_CHROME_PROFILE_BUTTON_SIZE + 42;
-  const badgeStartCenterY =
-    topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_BADGE_SIZE / 2 - 4;
-  const compactBadgeAngle = (HOME_CHROME_BADGE_COMPACT_ANGLE * Math.PI) / 180;
-  const compactBadgeRadius =
-    HOME_CHROME_ANCHOR_LOGO_SIZE * HOME_CHROME_BADGE_COMPACT_RADIUS;
-  const badgeFinalCenterX =
-    compactLogoCenterX + Math.cos(compactBadgeAngle) * compactBadgeRadius;
-  const badgeFinalCenterY =
-    compactLogoCenterY + Math.sin(compactBadgeAngle) * compactBadgeRadius;
-  const badgeLeft = progress.interpolate({
+  const rowCenterY = topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_EXPANDED_LOGO_SIZE / 2;
+  const profileCenterX =
+    contentLeft + HOME_CHROME_PROFILE_LEADING_OFFSET + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
+  const glassExpandedTop = rowCenterY - HOME_CHROME_GLASS_EXPANDED_HEIGHT / 2;
+  const glassCompactLeft = profileCenterX - HOME_CHROME_GLASS_COMPACT_SIZE / 2;
+  const glassCompactTop = rowCenterY - HOME_CHROME_GLASS_COMPACT_SIZE / 2;
+  const glassLeft = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [
-      badgeStartCenterX - HOME_CHROME_BADGE_SIZE / 2,
-      badgeFinalCenterX - HOME_CHROME_BADGE_SIZE / 2,
-    ],
+    outputRange: [contentLeft, glassCompactLeft],
   });
-  const badgeTop = progress.interpolate({
+  const glassTop = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [
-      badgeStartCenterY - HOME_CHROME_BADGE_SIZE / 2,
-      badgeFinalCenterY - HOME_CHROME_BADGE_SIZE / 2,
-    ],
+    outputRange: [glassExpandedTop, glassCompactTop],
   });
-  const titleOpacity = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 0.4, 0],
-  });
-  const titleTranslateY = progress.interpolate({
+  const glassWidth = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -6],
+    outputRange: [contentWidth, HOME_CHROME_GLASS_COMPACT_SIZE],
+  });
+  const glassHeight = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [HOME_CHROME_GLASS_EXPANDED_HEIGHT, HOME_CHROME_GLASS_COMPACT_SIZE],
+  });
+  const glassRadius = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [HOME_CHROME_GLASS_EXPANDED_HEIGHT / 2, HOME_CHROME_GLASS_COMPACT_SIZE / 2],
+  });
+  const glassOpacity = progress.interpolate({
+    inputRange: [0, 0.42, 1],
+    outputRange: [0, 0, 1],
+  });
+  const expandedBrandOpacity = progress.interpolate({
+    inputRange: [0, 0.24, 0.58, 1],
+    outputRange: [1, 0.82, 0, 0],
+  });
+  const expandedBrandScale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.94],
+  });
+  const expandedBrandTranslateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -18],
+  });
+  const expandedBrandTranslateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -10],
   });
   const actionOpacity = progress.interpolate({
-    inputRange: [0, 0.72, 1],
-    outputRange: [1, 0.28, 0],
+    inputRange: [0, 0.18, 0.48, 1],
+    outputRange: [1, 0.72, 0, 0],
   });
   const actionScale = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.9],
+    outputRange: [1, 0.84],
   });
-  const badgeScale = progress.interpolate({
+  const actionTranslateX = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [0, -24],
   });
-
+  const actionTranslateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -4],
+  });
   return (
     <View
       pointerEvents="box-none"
       style={[styles.chromeRoot, { height: topInset + HOME_CHROME_EXPANDED_HEIGHT }]}
     >
-      <HomeMorphLogo
-        compactCenterX={compactLogoCenterX}
-        compactCenterY={compactLogoCenterY}
-        expandedCenterX={expandedLogoCenterX}
-        expandedCenterY={expandedLogoCenterY}
-        progress={progress}
-      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.liquidGlass,
+          liquidGlassPlatformStyle,
+          {
+            borderRadius: glassRadius,
+            height: glassHeight,
+            left: glassLeft,
+            opacity: glassOpacity,
+            top: glassTop,
+            width: glassWidth,
+          },
+        ]}
+      >
+        <LiquidGlassSurface />
+      </Animated.View>
       <Animated.View
         pointerEvents="box-none"
         style={[
@@ -352,36 +399,40 @@ export function HomeCollapsibleChrome({
         ]}
       >
         <View style={styles.expandedContent}>
-          <Link href="/profile" asChild>
-            <Pressable
-              accessibilityLabel="Abrir perfil"
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.profileButton, pressed ? styles.pressed : null]}
-            >
-              <View style={styles.avatarAnchor}>
-                <AppAvatar
-                  imageUrl={avatarUrl}
-                  label={avatarLabel}
-                  size={HOME_CHROME_AVATAR_SIZE}
-                />
-              </View>
-            </Pressable>
-          </Link>
+          <View style={styles.profileCluster}>
+            <Link href="/profile" asChild>
+              <Pressable
+                accessibilityLabel="Abrir perfil"
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.profileButton, pressed ? styles.pressed : null]}
+              >
+                <View style={styles.profileVisual}>
+                  <HomeCompactAvatarFrame progress={progress} />
+                  <View style={styles.avatarAnchor}>
+                    <AppAvatar
+                      imageUrl={avatarUrl}
+                      label={avatarLabel}
+                      size={HOME_CHROME_AVATAR_SIZE}
+                    />
+                  </View>
+                </View>
+              </Pressable>
+            </Link>
+          </View>
           <Animated.View
             style={[
               styles.expandedBrand,
               {
-                opacity: titleOpacity,
-                transform: [{ translateY: titleTranslateY }],
+                opacity: expandedBrandOpacity,
+                transform: [
+                  { translateX: expandedBrandTranslateX },
+                  { translateY: expandedBrandTranslateY },
+                  { scale: expandedBrandScale },
+                ],
               },
             ]}
           >
-            <View style={styles.titleLockup}>
-              <View style={styles.titleLogoPlaceholder} />
-              <AppText numberOfLines={1} style={styles.brandTitle}>
-                Happy Circles
-              </AppText>
-            </View>
+            <HeaderBrandTitle logoSize={60} titleSize={22} />
           </Animated.View>
           <Animated.View
             pointerEvents={isCompact ? 'none' : 'auto'}
@@ -389,41 +440,18 @@ export function HomeCollapsibleChrome({
               styles.expandedAction,
               {
                 opacity: actionOpacity,
-                transform: [{ scale: actionScale }],
+                transform: [
+                  { translateX: actionTranslateX },
+                  { translateY: actionTranslateY },
+                  { scale: actionScale },
+                ],
               },
             ]}
           >
-            <HomeActivityButton count={attentionCount} isCompact={isCompact} />
+            <HomeActivityButton count={notificationCount} />
           </Animated.View>
         </View>
       </Animated.View>
-
-      {attentionCount > 0 ? (
-        <Animated.View
-          pointerEvents="box-none"
-          style={[
-            styles.morphBadgeWrap,
-            {
-              left: badgeLeft,
-              top: badgeTop,
-              transform: [{ scale: badgeScale }],
-            },
-          ]}
-        >
-          <Link href="/activity" asChild>
-            <Pressable
-              accessibilityLabel={`${compactCountLabel(
-                attentionCount,
-              )} pendientes o notificaciones`}
-              accessibilityRole="button"
-              hitSlop={8}
-              style={({ pressed }) => [styles.morphBadge, pressed ? styles.pressed : null]}
-            >
-              <AppText style={styles.compactBadgeText}>{compactCountLabel(attentionCount)}</AppText>
-            </Pressable>
-          </Link>
-        </Animated.View>
-      ) : null}
     </View>
   );
 }
@@ -437,13 +465,19 @@ export function HomeRegisterFab({
   readonly isCompact: boolean;
   readonly progress: HomeChromeProgress;
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const contentWidth = Math.min(
+    HOME_CHROME_CONTENT_MAX_WIDTH,
+    Math.max(0, windowWidth - theme.spacing.lg * 2),
+  );
+  const contentRight = Math.max(theme.spacing.lg, (windowWidth - contentWidth) / 2);
   const opacity = progress.interpolate({
-    inputRange: [0, 0.52, 1],
-    outputRange: [1, 0.56, 0],
+    inputRange: [0, 0.62, 1],
+    outputRange: [1, 1, 0],
   });
   const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, HOME_CHROME_FAB_EXIT_DISTANCE + bottomInset],
+    inputRange: [0, 0.58, 1],
+    outputRange: [0, 0, HOME_CHROME_FAB_EXIT_DISTANCE + bottomInset],
   });
 
   return (
@@ -454,7 +488,9 @@ export function HomeRegisterFab({
         {
           bottom: 28 + bottomInset,
           opacity,
+          right: contentRight,
           transform: [{ translateY }],
+          width: HOME_CHROME_FAB_COLLAPSED_SIZE,
         },
       ]}
     >
@@ -464,8 +500,8 @@ export function HomeRegisterFab({
           accessibilityRole="button"
           style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
         >
-          <Ionicons color={theme.colors.white} name="add" size={22} />
-          <AppText style={styles.fabLabel}>Registrar</AppText>
+          <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.02)" />
+          <Ionicons color={theme.colors.text} name="add" size={30} />
         </Pressable>
       </Link>
     </Animated.View>
@@ -480,6 +516,28 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 40,
+  },
+  liquidGlass: {
+    backgroundColor: liquidGlassBackgroundColor,
+    borderColor: 'rgba(255, 255, 255, 0.96)',
+    borderWidth: 1.25,
+    overflow: 'hidden',
+    position: 'absolute',
+    zIndex: 1,
+  },
+  nativeLiquidGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+  },
+  liquidGlassTopGlow: {
+    backgroundColor: liquidGlassTopGlowBackgroundColor,
+    borderRadius: theme.radius.pill,
+    height: 8,
+    left: 14,
+    opacity: liquidGlassTopGlowOpacity,
+    position: 'absolute',
+    right: 14,
+    top: 5,
   },
   expandedBar: {
     left: 0,
@@ -503,52 +561,48 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     height: HOME_CHROME_PROFILE_BUTTON_SIZE,
     justifyContent: 'center',
+    overflow: 'visible',
     position: 'relative',
     width: HOME_CHROME_PROFILE_BUTTON_SIZE,
     zIndex: 2,
   },
-  morphLogoLayer: {
-    height: HOME_CHROME_ANCHOR_LOGO_SIZE,
-    position: 'absolute',
-    width: HOME_CHROME_ANCHOR_LOGO_SIZE,
-    zIndex: 1,
+  profileCluster: {
+    height: HOME_CHROME_PROFILE_BUTTON_SIZE,
+    marginLeft: HOME_CHROME_PROFILE_LEADING_OFFSET,
+    position: 'relative',
+    width: HOME_CHROME_PROFILE_BUTTON_SIZE,
+    zIndex: 4,
   },
-  morphLogoFaceLayer: {
-    height: HOME_CHROME_ANCHOR_LOGO_SIZE,
+  profileVisual: {
+    alignItems: 'center',
+    height: HOME_CHROME_COMPACT_LOGO_SIZE,
+    justifyContent: 'center',
+    left: -(HOME_CHROME_COMPACT_LOGO_SIZE - HOME_CHROME_PROFILE_BUTTON_SIZE) / 2,
+    position: 'absolute',
+    top: -(HOME_CHROME_COMPACT_LOGO_SIZE - HOME_CHROME_PROFILE_BUTTON_SIZE) / 2,
+    width: HOME_CHROME_COMPACT_LOGO_SIZE,
+  },
+  compactAvatarFrame: {
+    height: HOME_CHROME_COMPACT_LOGO_SIZE,
     left: 0,
     position: 'absolute',
     top: 0,
-    width: HOME_CHROME_ANCHOR_LOGO_SIZE,
+    width: HOME_CHROME_COMPACT_LOGO_SIZE,
+    zIndex: 1,
   },
   avatarAnchor: {
+    position: 'relative',
     zIndex: 3,
   },
   expandedBrand: {
     alignItems: 'center',
     flex: 1,
   },
-  titleLockup: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: HOME_CHROME_BRAND_GAP,
-    justifyContent: 'center',
-  },
-  titleLogoPlaceholder: {
-    height: HOME_CHROME_EXPANDED_LOGO_SIZE,
-    width: HOME_CHROME_EXPANDED_LOGO_SIZE,
-  },
-  brandTitle: {
-    color: theme.colors.text,
-    fontSize: HOME_CHROME_TITLE_SIZE,
-    fontWeight: '800',
-    letterSpacing: 0,
-    lineHeight: HOME_CHROME_TITLE_LINE_HEIGHT,
-    width: HOME_CHROME_TITLE_WIDTH,
-  },
   expandedAction: {
     alignItems: 'center',
     height: 48,
     justifyContent: 'center',
+    marginRight: HOME_CHROME_PROFILE_LEADING_OFFSET,
     width: 48,
   },
   activityButton: {
@@ -562,56 +616,47 @@ const styles = StyleSheet.create({
     width: 48,
     ...theme.shadow.card,
   },
-  activityButtonActive: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: 'rgba(20, 30, 51, 0.12)',
-  },
-  activityButtonCompact: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-    shadowOpacity: 0,
-  },
-  morphBadgeWrap: {
-    position: 'absolute',
-    zIndex: 48,
-  },
-  morphBadge: {
+  activityBadge: {
     alignItems: 'center',
     backgroundColor: theme.colors.danger,
     borderColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
     borderWidth: 2,
-    height: HOME_CHROME_BADGE_SIZE,
+    height: 19,
     justifyContent: 'center',
-    minWidth: HOME_CHROME_BADGE_SIZE,
+    minWidth: 19,
     paddingHorizontal: 5,
+    position: 'absolute',
+    right: -4,
+    top: -4,
   },
-  compactBadgeText: {
+  activityBadgeText: {
     color: theme.colors.white,
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 12,
   },
+  activityButtonActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: 'rgba(20, 30, 51, 0.12)',
+  },
   fabWrap: {
     position: 'absolute',
-    right: theme.spacing.lg,
     zIndex: 42,
   },
   fab: {
     alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
+    backgroundColor: fabGlassBackgroundColor,
+    borderColor: 'rgba(255, 255, 255, 0.96)',
+    borderWidth: 1.25,
+    borderRadius: HOME_CHROME_GLASS_COMPACT_SIZE / 2,
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    height: HOME_CHROME_FAB_COLLAPSED_SIZE,
     justifyContent: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 14,
-    ...theme.shadow.floating,
-  },
-  fabLabel: {
-    color: theme.colors.white,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+    ...liquidGlassPlatformStyle,
   },
   pressed: {
     opacity: 0.68,

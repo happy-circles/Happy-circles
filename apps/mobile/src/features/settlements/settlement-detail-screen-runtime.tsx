@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
@@ -12,11 +12,19 @@ import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
-import { StatusChip, type StatusChipProps } from '@/components/status-chip';
+import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
 import { recordProductEventSafe } from '@/lib/analytics-client';
+import {
+  triggerAppActionHaptic,
+  triggerAppErrorHaptic,
+  triggerAppSelectionHaptic,
+  triggerAppSuccessHaptic,
+  triggerAppWarningHaptic,
+} from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
+import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation';
 import {
   useAppSnapshot,
   useApproveSettlementMutation,
@@ -25,6 +33,7 @@ import {
   type SettlementDetailParticipantDto,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { settlementDetailScreenStyles as styles } from './settlement-detail-screen-styles';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
@@ -62,46 +71,6 @@ function readNestedStatus(value: unknown, key: string): string | null {
   }
 
   return readResultStatus((value as Record<string, unknown>)[key]);
-}
-
-function settlementStatusLabel(status: string): string {
-  if (status === 'pending_approvals') {
-    return 'Happy Circle pendiente';
-  }
-
-  if (status === 'approved') {
-    return 'Happy Circle listo';
-  }
-
-  if (status === 'executed') {
-    return 'Completado';
-  }
-
-  if (status === 'rejected') {
-    return 'No completado';
-  }
-
-  if (status === 'stale') {
-    return 'Reemplazado';
-  }
-
-  return status;
-}
-
-function settlementStatusTone(status: string): StatusChipProps['tone'] {
-  if (status === 'rejected') {
-    return 'danger';
-  }
-
-  if (status === 'stale') {
-    return 'neutral';
-  }
-
-  if (status === 'pending_approvals') {
-    return 'warning';
-  }
-
-  return 'cycle';
 }
 
 function orderParticipantsForCircle(
@@ -399,6 +368,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   }
 
   async function handleAction(action: 'approve' | 'reject') {
+    triggerAppActionHaptic();
     setBusyAction(action);
     setBanner(null);
     setActionOverlay(null);
@@ -408,11 +378,13 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         const response = await approveSettlement.mutateAsync(proposalId);
         const nextStatus = readResultStatus(response);
         if (nextStatus === 'stale') {
+          triggerAppWarningHaptic();
           setBanner({
             message: 'Este Circle fue reemplazado porque el grafo cambio.',
             tone: 'warning',
           });
         } else {
+          triggerAppSuccessHaptic();
           const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
           await showActionOverlay({
             message:
@@ -427,9 +399,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         }
       } else if (action === 'reject') {
         await rejectSettlement.mutateAsync(proposalId);
+        triggerAppWarningHaptic();
         showSnackbar('Happy Circle no aprobado.', 'neutral');
       }
     } catch (error) {
+      triggerAppErrorHaptic();
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la accion.';
       if (
@@ -509,18 +483,12 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const approvalsPending = settlement.participantDecisions.filter(
     (participant) => participant.decision === 'pending',
   ).length;
-  const summaryText =
-    settlement.status === 'pending_approvals'
-      ? approvalsPending > 0
-        ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para completarlo automaticamente.`
-        : 'Ya no faltan respuestas. Estamos completando el Circle.'
-      : settlement.status === 'approved'
-        ? 'Todos aprobaron este Happy Circle. Estamos verificando el cierre automatico.'
-        : settlement.status === 'executed'
-          ? 'Happy Circle completado.'
-          : settlement.status === 'rejected'
-            ? 'Este Circle no se completo.'
-            : 'Este Circle fue reemplazado por cambios nuevos.';
+  const presentation = resolveHappyCirclePresentation({
+    approvalsPending,
+    myDecision,
+    status: settlement.status,
+  });
+  const summaryText = presentation.summary;
   return (
     <ScreenShell
       eyebrow="Happy Circle"
@@ -536,8 +504,8 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
       <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
         <StatusChip
-          label={settlementStatusLabel(settlement.status)}
-          tone={settlementStatusTone(settlement.status)}
+          label={presentation.label}
+          tone={presentation.tone}
         />
         <AppText style={styles.summaryTitle}>Que pasa con este Happy Circle</AppText>
         <AppText style={styles.summaryBody}>{summaryText}</AppText>
@@ -558,7 +526,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
               graphFocused ? 'Mostrar Circle completo' : 'Mostrar conexiones importantes'
             }
             hitSlop={10}
-            onPress={() => setGraphFocused((current) => !current)}
+            onPress={() => {
+              triggerAppSelectionHaptic();
+              setGraphFocused((current) => !current);
+            }}
             style={({ pressed }) => [
               styles.circleGraphInfoButton,
               graphFocused ? styles.circleGraphInfoButtonActive : null,
@@ -596,7 +567,8 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
               onPress={
                 busyAction
                   ? undefined
-                  : () =>
+                  : () => {
+                      triggerAppSelectionHaptic();
                       Alert.alert(
                         '¿Seguro quieres rechazar este Happy Circle?',
                         'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
@@ -611,7 +583,8 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                             onPress: () => void handleAction('reject'),
                           },
                         ],
-                      )
+                      );
+                    }
               }
               variant="secondary"
             />
@@ -629,166 +602,3 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  supportText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  summaryCard: {
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
-  },
-  summaryTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-  },
-  summaryBody: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  circleGraphCard: {
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
-  },
-  circleGraphHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  circleGraphTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  circleGraphTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    lineHeight: 24,
-  },
-  circleGraphSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  circleGraphInfoButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 32,
-    justifyContent: 'center',
-    marginTop: -2,
-    width: 32,
-  },
-  circleGraphInfoButtonActive: {
-    backgroundColor: theme.colors.primaryGhost,
-  },
-  circleGraphInfoButtonPressed: {
-    opacity: 0.72,
-  },
-  circleGraph: {
-    alignSelf: 'center',
-    marginTop: theme.spacing.md,
-    position: 'relative',
-  },
-  focusGraph: {
-    alignSelf: 'center',
-    height: 228,
-    marginTop: theme.spacing.md,
-    position: 'relative',
-    width: 282,
-  },
-  focusCurveLayer: {
-    left: 0,
-    position: 'absolute',
-    top: 0,
-  },
-  focusNodeAbsolute: {
-    position: 'absolute',
-  },
-  focusNodeIncoming: {
-    left: 0,
-    top: 82,
-  },
-  focusNodeCurrentPosition: {
-    left: 114,
-    top: 0,
-  },
-  focusNodeOutgoing: {
-    left: 228,
-    top: 82,
-  },
-  focusNodeWrap: {
-    alignItems: 'center',
-    width: 56,
-  },
-  focusNode: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  focusNodeLabel: {
-    color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 13,
-    marginTop: 3,
-    maxWidth: 56,
-    textAlign: 'center',
-  },
-  focusArrowLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 13,
-    position: 'absolute',
-  },
-  focusArrowLabelIncoming: {
-    left: 64,
-    top: 44,
-  },
-  focusArrowLabelOutgoing: {
-    right: 54,
-    top: 44,
-  },
-  focusExplanationPill: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: 2,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    position: 'absolute',
-    top: 164,
-    width: 132,
-  },
-  focusExplanationIncoming: {
-    left: 0,
-  },
-  focusExplanationOutgoing: {
-    right: 0,
-  },
-  focusExplanationLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  focusExplanationAmount: {
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  actionSlot: {
-    flexGrow: 1,
-    minWidth: 140,
-  },
-});

@@ -11,16 +11,6 @@ export const TRANSACTION_ROOT_FILTERS = [
 
 export type TransactionRootFilter = (typeof TRANSACTION_ROOT_FILTERS)[number];
 
-export type ProjectionChartFilter = Extract<
-  TransactionRootFilter,
-  | 'current_balance'
-  | 'owed_to_me'
-  | 'i_owe'
-  | 'pending_incoming'
-  | 'pending_outgoing'
-  | 'projection'
->;
-
 const TRANSACTION_ROOT_FILTER_SET = new Set<string>(TRANSACTION_ROOT_FILTERS);
 
 export function normalizeTransactionFilter(

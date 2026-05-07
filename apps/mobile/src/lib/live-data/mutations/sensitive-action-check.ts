@@ -1,14 +1,6 @@
 interface SensitiveStepUpResult {
   readonly success: boolean;
-  readonly error?:
-    | 'authentication_failed'
-    | 'lockout'
-    | 'not_available'
-    | 'not_enrolled'
-    | 'passcode_not_set'
-    | 'user_cancel'
-    | string
-    | null;
+  readonly error?: string | null;
 }
 
 export interface SensitiveMutationSession {

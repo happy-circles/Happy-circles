@@ -15,6 +15,8 @@ This app keeps product behavior in screens, but moves reusable decisions into sm
 
 The current large files are accepted as the post-refactor baseline because each now has extracted helpers and targeted tests. Future work should reduce these files, not grow them.
 
+The next alignment phase must reduce the `*-runtime`, controller and builder files directly. Moving code behind another facade does not count as completing a split unless the runtime itself becomes a smaller orchestrator with domain hooks, local components or pure helpers.
+
 Primary candidates for later mechanical splits:
 
 - `src/providers/session-runtime/session-controller.tsx`: split remaining action handlers into session domain hooks after profile/auth flows are stable. `src/providers/session-provider.tsx` is now only the public context facade.
@@ -31,7 +33,7 @@ Primary candidates for later mechanical splits:
 - `src/features/settlements/settlement-detail-screen-runtime.tsx`: split participants, timeline, approval actions and status header.
 - `src/features/transactions/transactions-screen-runtime.tsx`: split filters, list rows, empty states and route param parsing.
 - `src/features/categories/categories-index-screen-runtime.tsx`: split category grouping, rows and empty states.
-- `src/components/projection-forecast-card-runtime.tsx`, `src/components/pending-financial-request-card-runtime.tsx`, `src/components/transaction-event-card-runtime.tsx` and `src/components/brand-verification-lockup-runtime.tsx`: split derivations from visual primitives while keeping public component wrappers stable.
+- `src/components/pending-financial-request-card-runtime.tsx`, `src/components/transaction-event-card-runtime.tsx` and `src/components/brand-verification-lockup-runtime.tsx`: split derivations from visual primitives while keeping public component wrappers stable.
 - `src/lib/live-data/builders/*-runtime.ts` and `src/lib/live-data/types-runtime.ts`: split large live-data builders by subdomain while keeping the compact builder/type entrypoints stable.
 
 `src/mobile-architecture-boundaries.test.ts` protects these budgets and the helper purity rule.

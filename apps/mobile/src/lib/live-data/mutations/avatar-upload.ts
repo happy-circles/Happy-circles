@@ -19,7 +19,7 @@ interface AvatarUploadClient {
       },
     ): Promise<{
       readonly data: TResult | null;
-      readonly error: unknown | null;
+      readonly error: unknown;
     }>;
   };
 }

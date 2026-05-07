@@ -4,8 +4,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-type SurfaceCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
-type SurfaceCardPadding = 'none' | 'sm' | 'md' | 'lg';
+export type SurfaceCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
+export type SurfaceCardPadding = 'none' | 'sm' | 'md' | 'lg';
 
 export interface SurfaceCardProps extends PropsWithChildren {
   readonly style?: StyleProp<ViewStyle>;

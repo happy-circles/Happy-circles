@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, View } from 'react-native';
 
 import {
   BrandLockup,
@@ -14,6 +14,7 @@ import {
   HappyCirclesOuterSvg,
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
+import { brandVerificationLockupStyles as styles } from './brand-verification-lockup-styles';
 import { theme } from '@/lib/theme';
 
 export type BrandVerificationState = 'idle' | 'loading' | 'success' | 'error';
@@ -486,37 +487,3 @@ export function BrandVerificationLockup({
 }
 
 export const BRAND_VERIFICATION_RESULT_MS = DEFAULT_RESULT_MS;
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  lockup: {
-    minHeight: DEFAULT_SIZE,
-  },
-  markStage: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-    position: 'relative',
-  },
-  logoStage: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    overflow: 'visible',
-    position: 'relative',
-  },
-  logoLayer: {
-    left: 0,
-    position: 'absolute',
-    top: 0,
-  },
-  customCenterLayer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-  },
-});

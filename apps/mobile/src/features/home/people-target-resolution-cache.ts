@@ -66,8 +66,16 @@ export function isPeopleTargetResolutionCacheEntryFresh(input: {
 export function stripPhoneFromPeopleTargetResolution(
   resolution: PeopleTargetResolution,
 ): StoredPeopleTargetResolution {
-  const { phoneE164: _phoneE164, ...storedResolution } = resolution;
-  return storedResolution;
+  return {
+    accountInviteId: resolution.accountInviteId,
+    accountInviteStatus: resolution.accountInviteStatus,
+    avatarPath: resolution.avatarPath,
+    displayName: resolution.displayName,
+    friendshipInviteId: resolution.friendshipInviteId,
+    matchedUserId: resolution.matchedUserId,
+    relationshipId: resolution.relationshipId,
+    status: resolution.status,
+  };
 }
 
 export function restorePhoneOnPeopleTargetResolution(input: {

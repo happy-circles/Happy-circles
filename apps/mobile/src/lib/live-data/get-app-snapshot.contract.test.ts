@@ -64,4 +64,12 @@ describe('get-app-snapshot contract', () => {
     expect(mobileFetcherSource).not.toContain('.from(');
     expect(mobileFetcherSource).not.toContain('Promise.all([');
   });
+
+  it('returns private avatar signed URLs in the snapshot contract', () => {
+    expect(functionSource).toContain('avatarSignedUrlsByPath');
+    expect(functionSource).toContain(".from('avatars')");
+    expect(functionSource).toContain('.createSignedUrl(path');
+    expect(functionSource).not.toContain('.getPublicUrl(');
+    expect(mobileFetcherSource).toContain('hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath)');
+  });
 });

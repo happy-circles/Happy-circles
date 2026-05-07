@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
+import { CardTimeline, type CardTone } from '@/components/card-shell';
+import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { theme } from '@/lib/theme';
+import { pendingFinancialRequestCardStyles as styles } from './pending-financial-request-card-styles';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
@@ -62,6 +65,7 @@ export interface PendingFinancialRequestCardProps {
 type ResponseActionTone = 'primary' | 'neutral' | 'danger';
 
 interface ResponseActionButtonProps {
+  readonly haptic?: 'impact' | 'selection' | 'none';
   readonly icon: keyof typeof Ionicons.glyphMap;
   readonly label: string;
   readonly tone?: ResponseActionTone;
@@ -70,6 +74,7 @@ interface ResponseActionButtonProps {
 }
 
 function ResponseActionButton({
+  haptic = 'impact',
   icon,
   label,
   tone = 'neutral',
@@ -87,7 +92,18 @@ function ResponseActionButton({
   return (
     <Pressable
       disabled={disabled}
-      onPress={disabled ? undefined : onPress}
+      onPress={
+        disabled
+          ? undefined
+          : () => {
+              if (haptic === 'selection') {
+                triggerAppSelectionHaptic();
+              } else if (haptic === 'impact') {
+                triggerAppActionHaptic();
+              }
+              onPress?.();
+            }
+      }
       style={({ pressed }) => [
         styles.responseAction,
         tone === 'primary' ? styles.responseActionPrimary : null,
@@ -139,6 +155,25 @@ function pendingHistoryStepAmountLabel(
   }
 
   return formatCop(step.amountMinor);
+}
+
+function pendingTimelineTone(
+  step: PendingFinancialRequestHistoryStep,
+  amountTone: PendingFinancialRequestCardProps['amountTone'],
+): CardTone {
+  if (amountTone === 'positive') {
+    return 'success';
+  }
+
+  if (amountTone === 'negative') {
+    return 'warning';
+  }
+
+  if (amountTone === 'danger') {
+    return 'danger';
+  }
+
+  return step.isCurrent ? 'primary' : 'neutral';
 }
 
 export function PendingFinancialRequestCard({
@@ -208,7 +243,10 @@ export function PendingFinancialRequestCard({
               isHistoryExpanded ? 'Ocultar historia del pendiente' : 'Ver historia del pendiente'
             }
             accessibilityRole="button"
-            onPress={() => setIsHistoryExpanded((current) => !current)}
+            onPress={() => {
+              triggerAppSelectionHaptic();
+              setIsHistoryExpanded((current) => !current);
+            }}
             style={({ pressed }) => [
               styles.historyToggle,
               pressed ? styles.historyTogglePressed : null,
@@ -236,14 +274,8 @@ export function PendingFinancialRequestCard({
           </Pressable>
 
           {isHistoryExpanded ? (
-            <View style={styles.historySteps}>
-              {visibleHistorySteps.map((step, index) => {
-                const isLast = index === visibleHistorySteps.length - 1;
-                const stepAmountLabel = pendingHistoryStepAmountLabel(
-                  visibleHistorySteps,
-                  step,
-                  index,
-                );
+            <CardTimeline
+              steps={visibleHistorySteps.map((step, index) => {
                 const stepMeta = [
                   showHistoryActors ? historyActorLabel(step.createdByLabel) : null,
                   step.createdAtLabel,
@@ -251,41 +283,16 @@ export function PendingFinancialRequestCard({
                   .filter(Boolean)
                   .join(' - ');
 
-                return (
-                  <View key={step.id} style={styles.historyStepRow}>
-                    <View style={styles.historyRail}>
-                      <View
-                        style={[
-                          styles.historyMarker,
-                          step.isCurrent ? styles.historyMarkerCurrent : null,
-                        ]}
-                      />
-                      {!isLast ? <View style={styles.historyLine} /> : null}
-                    </View>
-
-                    <View style={styles.historyStepBody}>
-                      <View style={styles.historyStepTop}>
-                        <AppText style={styles.historyStepTitle}>{step.title}</AppText>
-                        {stepAmountLabel ? (
-                          <AppText
-                            style={[
-                              styles.historyAmount,
-                              amountTone === 'positive' ? styles.historyAmountPositive : null,
-                              amountTone === 'negative' ? styles.historyAmountNegative : null,
-                              amountTone === 'danger' ? styles.historyAmountDanger : null,
-                            ]}
-                          >
-                            {stepAmountLabel}
-                          </AppText>
-                        ) : null}
-                      </View>
-                      <AppText style={styles.historyDescription}>{step.description}</AppText>
-                      {stepMeta ? <AppText style={styles.historyMeta}>{stepMeta}</AppText> : null}
-                    </View>
-                  </View>
-                );
+                return {
+                  amountLabel: pendingHistoryStepAmountLabel(visibleHistorySteps, step, index),
+                  detail: step.description,
+                  id: step.id,
+                  meta: stepMeta,
+                  title: step.title,
+                  tone: pendingTimelineTone(step, amountTone),
+                };
               })}
-            </View>
+            />
           ) : null}
         </View>
       ) : null}
@@ -304,6 +311,7 @@ export function PendingFinancialRequestCard({
               disabled={busyAccept || busyReject || busyAmendment}
               icon={busyReject ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
               label={busyReject ? 'Enviando' : 'No aceptar'}
+              haptic="none"
               onPress={onReject}
               tone="danger"
             />
@@ -311,6 +319,7 @@ export function PendingFinancialRequestCard({
               disabled={busyAccept || busyReject || busyAmendment}
               icon={showAmendment ? 'chevron-up-circle-outline' : 'create-outline'}
               label={showAmendment ? 'Ocultar' : 'Cambiar monto'}
+              haptic="selection"
               onPress={onToggleAmendment}
             />
           </View>
@@ -367,7 +376,12 @@ export function PendingFinancialRequestCard({
                     compact
                     loading={busyAmendment}
                     onPress={
-                      busyAccept || busyReject || busyAmendment ? undefined : onSubmitAmendment
+                      busyAccept || busyReject || busyAmendment
+                        ? undefined
+                        : () => {
+                            triggerAppActionHaptic();
+                            onSubmitAmendment?.();
+                          }
                     }
                   />
                 </View>
@@ -379,190 +393,3 @@ export function PendingFinancialRequestCard({
     </PendingSnippetCard>
   );
 }
-
-const styles = StyleSheet.create({
-  actionRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  actionSlot: {
-    flex: 1,
-  },
-  responseActionRail: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    marginTop: 2,
-    paddingTop: theme.spacing.xs,
-  },
-  responseAction: {
-    alignItems: 'center',
-    borderRadius: theme.radius.small,
-    flex: 1,
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'center',
-    minHeight: 38,
-    paddingHorizontal: 6,
-  },
-  responseActionPrimary: {
-    backgroundColor: theme.colors.primaryGhost,
-  },
-  responseActionDanger: {
-    backgroundColor: theme.colors.dangerSoft,
-  },
-  responseActionPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
-  },
-  responseActionDisabled: {
-    opacity: 0.58,
-  },
-  responseActionText: {
-    color: theme.colors.primary,
-    flexShrink: 1,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  responseActionPrimaryText: {
-    color: theme.colors.primary,
-  },
-  responseActionDangerText: {
-    color: theme.colors.danger,
-  },
-  amendmentPanel: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.xs,
-    padding: theme.spacing.md,
-  },
-  amountPreview: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  historyPanel: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-  },
-  historyToggle: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    justifyContent: 'space-between',
-    minHeight: 40,
-  },
-  historyTogglePressed: {
-    opacity: 0.82,
-  },
-  historyToggleCopy: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: 6,
-  },
-  historyToggleText: {
-    flex: 1,
-    gap: 2,
-  },
-  historyTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  historySummary: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-  },
-  historyToggleAction: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 2,
-  },
-  historyToggleActionText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  historySteps: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 0,
-    paddingTop: theme.spacing.xs,
-  },
-  historyStepRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  historyRail: {
-    alignItems: 'center',
-    width: 14,
-  },
-  historyMarker: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 8,
-    marginTop: 5,
-    width: 8,
-  },
-  historyMarkerCurrent: {
-    backgroundColor: theme.colors.primary,
-  },
-  historyLine: {
-    backgroundColor: theme.colors.hairline,
-    flex: 1,
-    marginVertical: 3,
-    width: StyleSheet.hairlineWidth,
-  },
-  historyStepBody: {
-    flex: 1,
-    gap: 3,
-    paddingBottom: theme.spacing.xs,
-  },
-  historyStepTop: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    justifyContent: 'space-between',
-  },
-  historyStepTitle: {
-    color: theme.colors.text,
-    flex: 1,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 17,
-  },
-  historyAmount: {
-    color: theme.colors.text,
-    flexShrink: 0,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 17,
-  },
-  historyAmountPositive: {
-    color: theme.colors.success,
-  },
-  historyAmountNegative: {
-    color: theme.colors.warning,
-  },
-  historyAmountDanger: {
-    color: theme.colors.danger,
-  },
-  historyDescription: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-  },
-  historyMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-  },
-});

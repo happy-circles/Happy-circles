@@ -1,6 +1,5 @@
 import type {
   ActivityItemDto,
-  PersonDetailDto,
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import type { Database } from '@happy-circles/shared';
@@ -12,7 +11,6 @@ import type {
   FriendshipInviteRow,
   InviteProfilePresentation,
   LivePersonDetailDto,
-  TimelineEventDraft,
   UserProfileRow,
 } from '../types';
 import { resolveAvatarUrl } from '../../avatar-url';

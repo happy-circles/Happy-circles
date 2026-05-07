@@ -1,13 +1,7 @@
 import type {
   ActivityItemDto,
-  ActivitySectionDto,
-  BalanceAnalyticsDto,
-  BalanceOverviewDto,
-  DashboardDto,
   PendingActionDto,
   PendingRequestHistoryStepDto,
-  PersonCardDto,
-  PersonDetailDto,
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import type { Database, TransactionCategory } from '@happy-circles/shared';
@@ -455,71 +449,4 @@ export interface InviteProfilePresentation {
   readonly emailLabel: string | null;
   readonly referenceLabel: string | null;
   readonly roleLabel: string | null;
-}
-
-export type LivePersonDetailDto = PersonDetailDto & {
-  readonly relationshipStatus?: 'active' | 'pending_invite';
-};
-
-export interface AppSnapshot {
-  readonly dashboard: DashboardDto;
-  readonly balanceOverview: BalanceOverviewDto;
-  readonly balanceAnalytics: BalanceAnalyticsDto;
-  readonly people: readonly PersonCardDto[];
-  readonly peopleById: Readonly<Record<string, LivePersonDetailDto>>;
-  readonly currentUserProfile: {
-    readonly displayName: string;
-    readonly email: string;
-    readonly avatarUrl: string | null;
-  } | null;
-  readonly friendshipPendingItems: readonly FriendshipInviteListItem[];
-  readonly friendshipHistoryItems: readonly FriendshipInviteListItem[];
-  readonly friendshipSummary: FriendshipSummary;
-  readonly accountInvitePendingItems: readonly AccountInviteListItem[];
-  readonly accountInviteHistoryItems: readonly AccountInviteListItem[];
-  readonly accountInviteSummary: AccountInviteSummary;
-  readonly activitySections: readonly ActivitySectionDto[];
-  readonly notificationUnreadCount: number;
-  readonly notificationViewedKeys: ReadonlySet<string>;
-  readonly pendingCount: number;
-  readonly auditEvents: readonly AuditListItem[];
-  readonly settlementsById: Readonly<Record<string, SettlementDetailDto>>;
-}
-
-export interface CreateRequestInput {
-  readonly responderUserId: string;
-  readonly debtorUserId: string;
-  readonly creditorUserId: string;
-  readonly amountMinor: number;
-  readonly description: string;
-  readonly category?: TransactionCategory;
-}
-
-export interface LiveSnapshotLimits {
-  readonly financialRequestHistory: number;
-  readonly relationshipHistory: number;
-  readonly friendshipInviteHistory: number;
-  readonly accountInviteHistory: number;
-  readonly settlementHistory: number;
-  readonly auditEvents: number;
-  readonly notificationViews: number;
-}
-
-export interface LiveSnapshotRows {
-  readonly profiles: readonly UserProfileRow[];
-  readonly relationships: readonly RelationshipRow[];
-  readonly openDebts: readonly OpenDebtRow[];
-  readonly financialRequests: readonly FinancialRequestRow[];
-  readonly history: readonly RelationshipHistoryRow[];
-  readonly inboxItems: readonly InboxItemRow[];
-  readonly friendshipInvites: readonly FriendshipInviteRow[];
-  readonly friendshipInviteDeliveries: readonly FriendshipInviteDeliveryRow[];
-  readonly accountInvites: readonly AccountInviteRow[];
-  readonly accountInviteDeliveries: readonly AccountInviteDeliveryRow[];
-  readonly settlementProposals: readonly SettlementProposalRow[];
-  readonly settlementParticipants: readonly SettlementParticipantRow[];
-  readonly notificationViews: readonly NotificationViewRow[];
-  readonly auditEvents: readonly AuditEventRow[];
-  readonly limits: LiveSnapshotLimits;
-  readonly fetchedAt: string;
 }

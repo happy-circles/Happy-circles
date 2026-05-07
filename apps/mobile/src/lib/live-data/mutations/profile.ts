@@ -3,9 +3,16 @@ import { useMutation } from '@tanstack/react-query';
 import { requestAccountDeletionSchema } from '@happy-circles/shared';
 
 import { useSession } from '@/providers/session-provider';
+import { queryClient } from '../../query-client';
 
 import { assertSupabaseClient, invalidateAppSnapshot } from '../client';
+import { APP_SNAPSHOT_QUERY_KEY } from '../constants';
+import {
+  replaceCurrentUserAvatarInSnapshot,
+  updateCachedSnapshotCurrentUserAvatar,
+} from '../snapshot-cache';
 import type { AccountDeletionRequestResult } from '../types';
+import type { AppSnapshot } from '../types';
 import { uploadAvatar } from './avatar-upload';
 import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 
@@ -21,7 +28,19 @@ export function useUpdateProfileAvatarMutation() {
 
       return uploadAvatar(assertSupabaseClient(), input);
     },
-    onSuccess: async () => {
+    onSuccess: async (avatarPath) => {
+      const userId = session.userId;
+      if (userId) {
+        queryClient.setQueryData<AppSnapshot>(
+          [APP_SNAPSHOT_QUERY_KEY, userId],
+          (currentSnapshot) =>
+            currentSnapshot
+              ? replaceCurrentUserAvatarInSnapshot(currentSnapshot, avatarPath)
+              : currentSnapshot,
+        );
+        void updateCachedSnapshotCurrentUserAvatar(userId, avatarPath).catch(() => undefined);
+      }
+
       await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       await invalidateAppSnapshot();
     },

@@ -1,0 +1,135 @@
+import { StyleSheet } from 'react-native';
+
+import { theme } from '@/lib/theme';
+
+export const categoriesIndexScreenStyles = StyleSheet.create({
+  loadingState: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  supportText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    lineHeight: 22,
+  },
+  summaryCard: {
+    gap: theme.spacing.xs,
+  },
+  summaryEyebrow: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  summaryAmount: {
+    color: theme.colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    lineHeight: 40,
+  },
+  summaryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
+  activeFilterWrap: {
+    alignItems: 'flex-start',
+  },
+  activeFilterPill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    maxWidth: '100%',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 7,
+  },
+  activeFilterText: {
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  list: {
+    gap: theme.spacing.sm,
+  },
+  pressed: {
+    opacity: 0.92,
+  },
+  categoryCard: {
+    alignItems: 'center',
+    borderLeftWidth: 3,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  cardPositive: {
+    borderLeftColor: theme.colors.success,
+  },
+  cardNegative: {
+    borderLeftColor: theme.colors.warning,
+  },
+  leading: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minWidth: 0,
+  },
+  categoryIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  categoryCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  categoryTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  categoryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
+  trailing: {
+    alignItems: 'flex-end',
+    gap: 4,
+    maxWidth: 132,
+  },
+  amountLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  amountRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  amount: {
+    flexShrink: 1,
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+    lineHeight: 22,
+    textAlign: 'right',
+  },
+  positive: {
+    color: theme.colors.success,
+  },
+  negative: {
+    color: theme.colors.warning,
+  },
+  neutral: {
+    color: theme.colors.text,
+  },
+});

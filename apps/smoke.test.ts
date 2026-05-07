@@ -18,7 +18,8 @@ describe('app smoke checks', () => {
     const page = readRepoFile('apps', 'landing', 'app', 'page.tsx');
     const scheme = process.env.NEXT_PUBLIC_APP_SCHEME ?? 'happycircles';
 
-    expect(page).toContain('Registra solicitudes, confirma saldos');
+    expect(page).toContain('Happy Circles');
+    expect(page).toContain('Abrir Happy Circles');
     expect(page).toContain('Términos');
     expect(page).not.toContain('Terminos');
     expect(buildNativeAppUrl('/join/sample-token', '?source=email', '#open')).toBe(
@@ -59,7 +60,23 @@ describe('app smoke checks', () => {
       'home',
       'add-person-contacts-sheet-controller.ts',
     );
-    const inviteSurface = `${inviteSheet}\n${inviteSheetController}`;
+    const inviteQrActions = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'home',
+      'add-person-qr-actions.ts',
+    );
+    const inviteOutreachActions = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'home',
+      'add-person-outreach-actions.ts',
+    );
+    const inviteSurface = `${inviteSheet}\n${inviteSheetController}\n${inviteQrActions}\n${inviteOutreachActions}`;
 
     expect(inviteSurface).not.toContain('Fallback light');
     expect(inviteSurface).not.toContain('Receiver');

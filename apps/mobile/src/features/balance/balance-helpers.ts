@@ -4,16 +4,13 @@ import type {
   BalanceAnalyticsPeriod,
   BalanceAnalyticsPersonRowDto,
 } from '@happy-circles/application';
-import type { Href } from 'expo-router';
 
 import { formatCop } from '@/lib/data';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
-import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 
-export type BalanceFocus = 'balance' | 'projection' | 'people' | 'categories' | 'settlements';
+export type BalanceFocus = 'balance' | 'people' | 'categories' | 'settlements';
 export type BalanceFocusIconName =
   | 'wallet-outline'
-  | 'trending-up-outline'
   | 'people-outline'
   | 'pricetags-outline'
   | 'happy-outline';
@@ -26,7 +23,6 @@ export type FocusOption = {
 
 export const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Balance', value: 'balance', icon: 'wallet-outline' },
-  { label: 'Proyeccion', value: 'projection', icon: 'trending-up-outline' },
   { label: 'Personas', value: 'people', icon: 'people-outline' },
   { label: 'Categorias', value: 'categories', icon: 'pricetags-outline' },
   { label: 'Happy Circles', value: 'settlements', icon: 'happy-outline' },
@@ -35,7 +31,6 @@ export const FOCUS_OPTIONS: readonly FocusOption[] = [
 export function isBalanceFocus(value: string | null | undefined): value is BalanceFocus {
   return (
     value === 'balance' ||
-    value === 'projection' ||
     value === 'people' ||
     value === 'categories' ||
     value === 'settlements'
@@ -135,10 +130,6 @@ export function comparisonCopy(changeRatio: number | null, previousLabel: string
   return changeRatio > 0
     ? `Subio ${percentage} frente a ${previous}.`
     : `Bajo ${percentage} frente a ${previous}.`;
-}
-
-export function transactionFilterHref(filter: ProjectionChartFilter): Href {
-  return `/transactions?filter=${filter}` as Href;
 }
 
 export function personImpactAmount(row: BalanceAnalyticsPersonRowDto): number {

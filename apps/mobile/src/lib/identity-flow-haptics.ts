@@ -1,21 +1,27 @@
-import * as Haptics from 'expo-haptics';
+import {
+  triggerAppActionHaptic,
+  triggerAppErrorHaptic,
+  triggerAppSelectionHaptic,
+  triggerAppSuccessHaptic,
+  triggerAppWarningHaptic,
+} from './app-haptics';
 
 export function triggerIdentitySelectionHaptic() {
-  void Haptics.selectionAsync().catch(() => undefined);
+  triggerAppSelectionHaptic();
 }
 
 export function triggerIdentityImpactHaptic() {
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+  triggerAppActionHaptic();
 }
 
 export function triggerIdentityWarningHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+  triggerAppWarningHaptic();
 }
 
 export function triggerIdentitySuccessHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  triggerAppSuccessHaptic();
 }
 
 export function triggerIdentityErrorHaptic() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+  triggerAppErrorHaptic();
 }

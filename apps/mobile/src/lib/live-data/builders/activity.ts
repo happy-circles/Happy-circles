@@ -3,7 +3,6 @@ import { buildActivityHistoryItems } from '../../history-cases';
 import { notificationViewKeyForItem } from './notifications';
 import type { AccountInviteListItem, ActionableItem, FriendshipInviteListItem } from '../types';
 import {
-  actionableItemToActivityItem,
   sortActionableItems,
   sortHistoryItems,
   uniqueActivityItemsById,

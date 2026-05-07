@@ -117,6 +117,8 @@ export function LaunchIntroVisibilityProvider({
         previous.avatarFallbackTextColor === target.avatarFallbackTextColor &&
         previous.outerRotationDegrees === target.outerRotationDegrees &&
         previous.visualState === target.visualState &&
+        previous.stableAt === target.stableAt &&
+        previous.updatedAt === target.updatedAt &&
         Math.abs(previous.x - target.x) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
         Math.abs(previous.y - target.y) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
         Math.abs(previous.width - target.width) <= LAUNCH_TARGET_STABLE_THRESHOLD &&
@@ -228,6 +230,8 @@ export function LaunchIntroTargetView({
   const unregisterRef = useRef<(() => void) | null>(null);
   const latestMeasurementRef = useRef<LaunchTargetMeasurement | null>(null);
   const registeredMeasurementRef = useRef<LaunchTargetMeasurement | null>(null);
+  const registeredStableAtRef = useRef<number | null>(null);
+  const registeredUpdatedAtRef = useRef<number | null>(null);
   const stableSamplesRef = useRef(0);
   const remeasureFrameRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
   const resolvedVisualKind =
@@ -238,6 +242,8 @@ export function LaunchIntroTargetView({
     unregisterRef.current?.();
     unregisterRef.current = null;
     registeredMeasurementRef.current = null;
+    registeredStableAtRef.current = null;
+    registeredUpdatedAtRef.current = null;
   }, []);
 
   const resetMeasurementStability = useCallback(() => {
@@ -254,7 +260,7 @@ export function LaunchIntroTargetView({
     remeasureFrameRef.current = null;
   }, []);
 
-  const measureTarget = useCallback(() => {
+  const measureTarget = useCallback((options?: { readonly refreshStableTimestamp?: boolean }) => {
     if (disabled) {
       resetMeasurementStability();
       clearRegistration();
@@ -292,8 +298,23 @@ export function LaunchIntroTargetView({
           return;
         }
 
-        registeredMeasurementRef.current = nextMeasurement;
         const measuredAt = Date.now();
+        const isRegisteredMeasurementStable = isSameMeasurement(
+          registeredMeasurementRef.current,
+          nextMeasurement,
+        );
+        const shouldRefreshStableTimestamp = Boolean(options?.refreshStableTimestamp);
+        const stableAt =
+          isRegisteredMeasurementStable && !shouldRefreshStableTimestamp
+            ? (registeredStableAtRef.current ?? measuredAt)
+            : measuredAt;
+        const updatedAt =
+          isRegisteredMeasurementStable && !shouldRefreshStableTimestamp
+            ? (registeredUpdatedAtRef.current ?? measuredAt)
+            : measuredAt;
+        registeredMeasurementRef.current = nextMeasurement;
+        registeredStableAtRef.current = stableAt;
+        registeredUpdatedAtRef.current = updatedAt;
         unregisterRef.current = registerTarget({
           avatarEditable,
           avatarFallbackBackgroundColor,
@@ -307,9 +328,9 @@ export function LaunchIntroTargetView({
           kind,
           outerRotationDegrees,
           priority,
-          stableAt: measuredAt,
+          stableAt,
           stageSize: nextMeasurement.stageSize,
-          updatedAt: measuredAt,
+          updatedAt,
           visualState,
           visualKind: resolvedVisualKind,
           width: nextMeasurement.width,
@@ -346,7 +367,7 @@ export function LaunchIntroTargetView({
     let frameCount = 0;
     function measureNextFrame() {
       frameCount += 1;
-      measureTarget();
+      measureTarget({ refreshStableTimestamp: true });
 
       if (frameCount < LAUNCH_TARGET_REMEASURE_FRAMES) {
         remeasureFrameRef.current = requestAnimationFrame(measureNextFrame);

@@ -15,7 +15,7 @@ import {
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
 
-type HappyCirclesMotionVariant = 'idle' | 'splash' | 'loading' | 'refresh' | 'success' | 'wink';
+type HappyCirclesMotionVariant = 'idle' | 'splash' | 'loading' | 'success' | 'wink';
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export interface HappyCirclesMotionProps {
@@ -121,17 +121,6 @@ export function HappyCirclesMotion({
       return;
     }
 
-    if (variant === 'refresh') {
-      progress.setValue(0.45);
-      Animated.timing(progress, {
-        duration: 360,
-        easing: Easing.out(Easing.cubic),
-        toValue: 1,
-        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-      }).start();
-      return;
-    }
-
     progress.setValue(1);
   }, [active, progress, reducedMotion, variant]);
 
@@ -139,13 +128,13 @@ export function HappyCirclesMotion({
     rotation.stopAnimation();
     rotation.setValue(0);
 
-    if (!active || reducedMotion || (variant !== 'loading' && variant !== 'refresh')) {
+    if (!active || reducedMotion || variant !== 'loading') {
       return;
     }
 
     const loop = Animated.loop(
       Animated.timing(rotation, {
-        duration: variant === 'refresh' ? 1200 : 1400,
+        duration: 1400,
         easing: Easing.linear,
         toValue: 1,
         useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
@@ -162,7 +151,7 @@ export function HappyCirclesMotion({
     pulse.stopAnimation();
     pulse.setValue(0);
 
-    if (!active || reducedMotion || (variant !== 'loading' && variant !== 'refresh')) {
+    if (!active || reducedMotion || variant !== 'loading') {
       return;
     }
 

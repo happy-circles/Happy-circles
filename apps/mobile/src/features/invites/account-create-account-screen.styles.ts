@@ -13,6 +13,41 @@ export const accountCreateAccountStyles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
   },
+  socialProviderStack: {
+    gap: theme.spacing.sm,
+  },
+  socialProviderButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.md,
+  },
+  socialProviderButtonApple: {
+    backgroundColor: '#111111',
+    borderColor: '#111111',
+  },
+  socialProviderButtonGoogle: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  socialProviderButtonTextApple: {
+    color: '#ffffff',
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+  },
+  socialProviderButtonTextGoogle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+  },
+  emailPasswordFallback: {
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+  },
   phoneField: {
     position: 'relative',
     zIndex: 20,
@@ -118,5 +153,8 @@ export const accountCreateAccountStyles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.9,
+  },
+  disabledAction: {
+    opacity: 0.58,
   },
 });

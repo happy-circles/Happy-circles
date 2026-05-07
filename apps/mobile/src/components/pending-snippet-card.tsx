@@ -1,7 +1,8 @@
 import type { PropsWithChildren } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { CardPressable } from '@/components/card-shell';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
@@ -92,12 +93,9 @@ export function PendingSnippetCard({
       variant={variant}
     >
       {onPress ? (
-        <Pressable
-          onPress={onPress}
-          style={({ pressed }) => [styles.pressable, pressed ? styles.pressablePressed : null]}
-        >
+        <CardPressable accessibilityRole="button" onPress={onPress} style={styles.pressable}>
           {body}
-        </Pressable>
+        </CardPressable>
       ) : (
         body
       )}
@@ -174,9 +172,6 @@ const styles = StyleSheet.create({
   },
   pressable: {
     gap: theme.spacing.xs,
-  },
-  pressablePressed: {
-    opacity: 0.94,
   },
   cardPrimary: {
     borderLeftColor: theme.colors.primary,

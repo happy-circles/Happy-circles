@@ -17,6 +17,7 @@ export type TransactionStatusTone =
   | 'danger'
   | 'neutral'
   | 'cycle';
+export type TransactionCardDensity = 'summary' | 'list' | 'action' | 'case';
 
 export const PENDING_TRANSACTION_STATUSES = new Set([
   'pending',
@@ -183,7 +184,7 @@ export function transactionAmountLabel(item: ActivityItemDto): string | null {
 export function transactionStatusLabel(item: ActivityItemDto): string | null {
   if (item.kind === 'settlement_proposal' || isCycleTransactionItem(item)) {
     if (item.status === 'pending_approvals') {
-      return 'Happy Circle pendiente';
+      return 'Necesita tu aprobacion';
     }
 
     if (item.status === 'waiting_other_side') {
@@ -191,7 +192,7 @@ export function transactionStatusLabel(item: ActivityItemDto): string | null {
     }
 
     if (item.status === 'approved') {
-      return 'Happy Circle listo';
+      return 'Listo para completar';
     }
 
     if (item.status === 'executed' || item.status === 'posted') {
@@ -280,6 +281,59 @@ export function transactionStatusTone(item: ActivityItemDto): TransactionStatusT
   }
 
   return 'neutral';
+}
+
+export function transactionShouldSurfaceStatus(
+  item: ActivityItemDto,
+  options: {
+    readonly density: TransactionCardDensity;
+    readonly unread?: boolean;
+  },
+): boolean {
+  if (options.unread) {
+    return true;
+  }
+
+  if (options.density === 'case') {
+    return (
+      item.status === 'requires_you' ||
+      item.status === 'pending_approvals' ||
+      item.status === 'waiting_other_side' ||
+      item.status === 'approved' ||
+      item.status === 'rejected' ||
+      item.status === 'stale' ||
+      item.status === 'expired' ||
+      item.status === 'canceled'
+    );
+  }
+
+  if (options.density === 'action' || options.density === 'list') {
+    return (
+      item.status === 'requires_you' ||
+      item.status === 'waiting_other_side' ||
+      item.status === 'pending_approvals' ||
+      item.status === 'approved' ||
+      item.status === 'rejected' ||
+      item.status === 'stale' ||
+      item.status === 'expired' ||
+      item.status === 'canceled'
+    );
+  }
+
+  return (
+    isCycleTransactionItem(item) ||
+    item.status === 'requires_you' ||
+    item.status === 'waiting_other_side' ||
+    item.status === 'approved' ||
+    item.status === 'rejected' ||
+    item.status === 'stale' ||
+    item.status === 'expired' ||
+    item.status === 'canceled'
+  );
+}
+
+export function transactionSummaryMetaLabel(item: ActivityItemDto): string {
+  return transactionTimeLabel(item);
 }
 
 export function transactionCreatorLabel(item: ActivityItemDto, actorLabel: string): string {

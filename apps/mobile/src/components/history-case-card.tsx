@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
+import { CardTimeline, type CardTone, type CardTimelineStep } from '@/components/card-shell';
 import { TransactionSummaryRow } from '@/components/transaction-summary-row';
+import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { theme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
@@ -63,6 +65,7 @@ const historyCloseLayoutAnimation = {
 };
 
 function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
+  triggerAppSelectionHaptic();
   LayoutAnimation.configureNext(
     isExpanded ? historyCloseLayoutAnimation : historyOpenLayoutAnimation,
   );
@@ -151,68 +154,52 @@ export function HistoryCaseCard({
               ) : null}
             </View>
           ) : null}
-          <View style={styles.steps}>
-            {steps.map((step, index) => (
-              <View key={step.id} style={styles.stepRow}>
-                <View style={styles.stepRail}>
-                  <View
-                    style={[
-                      styles.stepMarker,
-                      step.tone === 'positive' ? styles.stepMarkerPositive : null,
-                      step.tone === 'negative' ? styles.stepMarkerNegative : null,
-                      step.tone === 'neutral' ? styles.stepMarkerNeutral : null,
-                      step.tone === 'danger' ? styles.stepMarkerDanger : null,
-                      step.tone === 'cycle' ? styles.stepMarkerCycle : null,
-                    ]}
-                  />
-                  {index < steps.length - 1 ? <View style={styles.stepLine} /> : null}
-                </View>
-                <View style={styles.stepBody}>
-                  <View style={styles.stepTop}>
-                    <View style={styles.stepTitleRow}>
-                      {step.category ? (
-                        <View
-                          style={[
-                            styles.stepCategoryBadge,
-                            {
-                              backgroundColor: transactionCategoryBackgroundColor(step.category),
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            color={transactionCategoryColor(step.category)}
-                            name={
-                              transactionCategoryIcon(
-                                step.category,
-                              ) as keyof typeof Ionicons.glyphMap
-                            }
-                            size={11}
-                          />
-                        </View>
-                      ) : null}
-                      <AppText style={styles.stepTitle}>{step.title}</AppText>
-                    </View>
-                    {step.amountLabel ? (
-                      <AppText style={[styles.stepAmount, toneStyles[step.tone]]}>
-                        {step.amountLabel}
-                      </AppText>
-                    ) : null}
-                  </View>
-                  {step.detail ? <AppText style={styles.stepDetail}>{step.detail}</AppText> : null}
-                  {step.impact && !step.amountLabel ? (
-                    <AppText style={[styles.stepImpact, toneStyles[step.tone]]}>
-                      {step.impact}
-                    </AppText>
-                  ) : null}
-                  {step.meta ? <AppText style={styles.stepMeta}>{step.meta}</AppText> : null}
-                </View>
-              </View>
-            ))}
-          </View>
+          <CardTimeline steps={historyTimelineSteps(steps)} />
         </View>
       ) : null}
     </SurfaceCard>
   );
+}
+
+function historyTimelineSteps(
+  steps: readonly HistoryCaseStepViewModel[],
+): readonly CardTimelineStep[] {
+  return steps.map((step) => ({
+    amountLabel: step.amountLabel ?? step.impact,
+    detail: step.detail,
+    id: step.id,
+    leadingNode: step.category ? (
+      <View
+        style={[
+          styles.stepCategoryBadge,
+          {
+            backgroundColor: transactionCategoryBackgroundColor(step.category),
+          },
+        ]}
+      >
+        <Ionicons
+          color={transactionCategoryColor(step.category)}
+          name={transactionCategoryIcon(step.category) as keyof typeof Ionicons.glyphMap}
+          size={11}
+        />
+      </View>
+    ) : null,
+    meta: step.meta,
+    title: step.title,
+    tone: historyTimelineTone(step.tone),
+  }));
+}
+
+function historyTimelineTone(tone: HistoryCaseTone): CardTone {
+  if (tone === 'positive') {
+    return 'success';
+  }
+
+  if (tone === 'negative') {
+    return 'warning';
+  }
+
+  return tone;
 }
 
 const toneStyles = StyleSheet.create({

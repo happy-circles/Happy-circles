@@ -47,9 +47,6 @@ export const balanceOverviewStyles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 28,
   },
-  projectionSummary: {
-    gap: theme.spacing.sm,
-  },
   rankingRow: {
     alignItems: 'center',
     borderBottomColor: theme.colors.hairline,
@@ -97,6 +94,9 @@ export const balanceOverviewStyles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: -theme.spacing.xs,
   },
+  carouselBlock: {
+    gap: theme.spacing.xs,
+  },
   carouselDotHitArea: {
     alignItems: 'center',
     height: 28,
@@ -114,10 +114,9 @@ export const balanceOverviewStyles = StyleSheet.create({
     width: 18,
   },
   carouselViewport: {
-    overflow: 'hidden',
-  },
-  carousel: {
+    height: FOCUS_CARD_HEIGHT,
     marginHorizontal: -theme.spacing.xs,
+    overflow: 'hidden',
   },
   carouselPage: {
     paddingHorizontal: theme.spacing.xs,
@@ -182,21 +181,21 @@ export const balanceOverviewStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   focusCardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 30,
+    alignItems: 'stretch',
+    gap: theme.spacing.xxs,
+    minHeight: 48,
   },
   focusCardTitle: {
-    flex: 1,
-    color: theme.colors.text,
+    color: theme.colors.brandNavy,
     fontSize: theme.typography.title3,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 24,
     minWidth: 0,
+    textAlign: 'center',
   },
   focusCardContextPill: {
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.surfaceMuted,
     borderColor: theme.colors.hairline,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
@@ -406,30 +405,6 @@ export const balanceOverviewStyles = StyleSheet.create({
     fontSize: theme.typography.caption,
     fontWeight: '700',
     lineHeight: 15,
-  },
-  inlineMetric: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  inlineMetricValue: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title3,
-    fontWeight: '800',
-    minWidth: 52,
-  },
-  inlineMetricLabel: {
-    color: theme.colors.textMuted,
-    flex: 1,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 18,
-    textAlign: 'right',
   },
   positiveText: {
     color: theme.colors.success,

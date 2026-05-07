@@ -12,6 +12,13 @@ interface CachedSignedAvatarUrl {
   readonly url: string;
 }
 
+export interface SignedAvatarUrlMetadata {
+  readonly expiresAt: string;
+  readonly url: string;
+}
+
+export type SignedAvatarUrlRecord = Readonly<Record<string, SignedAvatarUrlMetadata>>;
+
 interface ResolvedAvatarUrlState {
   readonly path: string;
   readonly url: string | null;
@@ -34,6 +41,52 @@ function cachedSignedAvatarUrl(path: string): CachedSignedAvatarUrl | null {
   return cached;
 }
 
+function parseSignedUrlExpiresAt(value: string): number | null {
+  const expiresAt = Date.parse(value);
+  return Number.isNaN(expiresAt) ? null : expiresAt;
+}
+
+export function hydrateSignedAvatarUrlCache(
+  avatarSignedUrlsByPath: SignedAvatarUrlRecord | null | undefined,
+): void {
+  if (!avatarSignedUrlsByPath) {
+    return;
+  }
+
+  for (const [rawPath, signedUrl] of Object.entries(avatarSignedUrlsByPath)) {
+    const normalizedPath = normalizeStoredAvatarPath(rawPath);
+    const expiresAt = parseSignedUrlExpiresAt(signedUrl.expiresAt);
+
+    if (
+      !normalizedPath ||
+      avatarPathIsRemoteUrl(normalizedPath) ||
+      !signedUrl.url ||
+      expiresAt === null ||
+      expiresAt - SIGNED_URL_REFRESH_MARGIN_MS <= Date.now()
+    ) {
+      continue;
+    }
+
+    signedAvatarUrlCache.set(normalizedPath, {
+      expiresAt,
+      url: signedUrl.url,
+    });
+  }
+}
+
+export function getCachedResolvedAvatarUrl(path: string | null | undefined): string | null {
+  const normalizedPath = normalizeStoredAvatarPath(path);
+  if (!normalizedPath) {
+    return null;
+  }
+
+  if (avatarPathIsRemoteUrl(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  return cachedSignedAvatarUrl(normalizedPath)?.url ?? null;
+}
+
 export function buildAvatarLabel(value: string | null | undefined): string {
   const normalized = value?.trim() ?? '';
   const firstCharacter = normalized.charAt(0);
@@ -44,13 +97,17 @@ export { resolveAvatarUrl } from './avatar-url';
 
 async function createSignedAvatarUrl(path: string): Promise<CachedSignedAvatarUrl | null> {
   const normalizedPath = normalizeStoredAvatarPath(path);
-  if (!normalizedPath || avatarPathIsRemoteUrl(normalizedPath) || !supabase) {
+  if (!normalizedPath || avatarPathIsRemoteUrl(normalizedPath)) {
     return null;
   }
 
   const cached = cachedSignedAvatarUrl(normalizedPath);
   if (cached) {
     return cached;
+  }
+
+  if (!supabase) {
+    return null;
   }
 
   const pendingRequest = signedAvatarUrlRequests.get(normalizedPath);
@@ -84,6 +141,37 @@ async function createSignedAvatarUrl(path: string): Promise<CachedSignedAvatarUr
   return request;
 }
 
+export async function resolveSignedAvatarUrl(
+  path: string | null | undefined,
+): Promise<string | null> {
+  const normalizedPath = normalizeStoredAvatarPath(path);
+  if (!normalizedPath) {
+    return null;
+  }
+
+  if (avatarPathIsRemoteUrl(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  const signedUrl = await createSignedAvatarUrl(normalizedPath);
+  return signedUrl?.url ?? null;
+}
+
+export async function resolveSignedAvatarUrls(
+  paths: readonly (string | null | undefined)[],
+): Promise<readonly string[]> {
+  const uniquePaths = Array.from(
+    new Set(
+      paths
+        .map((path) => normalizeStoredAvatarPath(path))
+        .filter((path) => path.length > 0),
+    ),
+  );
+  const resolvedUrls = await Promise.all(uniquePaths.map(resolveSignedAvatarUrl));
+
+  return resolvedUrls.filter((url): url is string => Boolean(url));
+}
+
 export function useResolvedAvatarUrl(path: string | null | undefined): string | null {
   const [resolvedUrl, setResolvedUrl] = useState<ResolvedAvatarUrlState>(() => {
     const normalizedPath = normalizeStoredAvatarPath(path);
@@ -97,7 +185,7 @@ export function useResolvedAvatarUrl(path: string | null | undefined): string | 
 
     return {
       path: normalizedPath,
-      url: cachedSignedAvatarUrl(normalizedPath)?.url ?? null,
+      url: getCachedResolvedAvatarUrl(normalizedPath),
     };
   });
 

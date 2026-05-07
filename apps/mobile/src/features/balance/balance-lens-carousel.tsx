@@ -1,13 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Href } from 'expo-router';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import type {
-  DimensionValue,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollView as ScrollViewType,
-} from 'react-native';
-import { Pressable, ScrollView, View } from 'react-native';
+import type { DimensionValue } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import type {
   BalanceAnalyticsCategoryRowDto,
@@ -19,15 +13,14 @@ import type {
 
 import { HappyCircleCard } from '@/components/happy-circle-card';
 import { HappyWaterfallChart } from '@/components/happy-waterfall-chart';
-import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { SectionBlock } from '@/components/section-block';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
+import { SwipePager } from '@/components/swipe-pager';
 import { formatCop } from '@/lib/data';
 import { toneVisual } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
-import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 import { balanceOverviewStyles as styles } from './balance-overview-screen.styles';
 import {
   FOCUS_OPTIONS,
@@ -38,7 +31,6 @@ import {
   categoryLensAmount,
   comparisonCopy,
   firstName,
-  focusIndex,
   formatCompactCop,
   formatHomeBalanceCop,
   periodScopeLabel,
@@ -47,10 +39,11 @@ import {
   personLensAmount,
   signedFormatCop,
   signedFormatCompactCop,
-  transactionFilterHref,
   type BalanceFocus,
 } from './balance-helpers';
 import { AppText } from '@/components/app-text';
+
+const FOCUS_VALUES = FOCUS_OPTIONS.map((option) => option.value);
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -67,9 +60,11 @@ const LENS_OPTIONS: readonly SegmentedOption<BalanceAnalyticsLens>[] = [
 
 function CarouselDots({
   activeFocus,
+  disabled = false,
   onChange,
 }: {
   readonly activeFocus: BalanceFocus;
+  readonly disabled?: boolean;
   readonly onChange: (focus: BalanceFocus) => void;
 }) {
   return (
@@ -80,6 +75,8 @@ function CarouselDots({
           <Pressable
             accessibilityLabel={option.label}
             accessibilityRole="button"
+            accessibilityState={{ disabled, selected }}
+            disabled={disabled}
             key={option.value}
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [styles.carouselDotHitArea, pressed ? styles.pressed : null]}
@@ -122,7 +119,7 @@ function TrendChip({
   readonly amountMinor?: number;
   readonly changeRatio?: number | null;
   readonly centered?: boolean;
-  readonly contextLabel: string;
+  readonly contextLabel?: string;
 }) {
   const hasComparison =
     amountMinor !== undefined || (changeRatio !== undefined && changeRatio !== null);
@@ -171,9 +168,11 @@ function TrendChip({
       >
         {hasComparison ? valueLabel : 'Sin data'}
       </AppText>
-      <AppText numberOfLines={1} style={styles.trendChipContext}>
-        {contextLabel}
-      </AppText>
+      {contextLabel ? (
+        <AppText numberOfLines={1} style={styles.trendChipContext}>
+          {contextLabel}
+        </AppText>
+      ) : null}
     </View>
   );
 }
@@ -255,7 +254,7 @@ function BalanceFocusCard({
         >
           {formatHomeBalanceCop(netBalanceMinor)}
         </AppText>
-        <TrendChip amountMinor={periodChangeMinor} centered contextLabel={periodContextLabel} />
+        <TrendChip amountMinor={periodChangeMinor} centered />
         <View style={styles.homeBalanceMetricsRow}>
           <BalanceCarouselMetricItem amountMinor={totalIOweMinor} tone="negative" />
           <BalanceCarouselMetricItem amountMinor={totalOwedToMeMinor} tone="positive" />
@@ -531,97 +530,6 @@ export function BalanceDetail({
           </SurfaceCard>
         ) : null}
       </View>
-    </SectionBlock>
-  );
-}
-
-export function ProjectionDetail({
-  onSegmentPress,
-  overview,
-}: {
-  readonly onSegmentPress: (filter: ProjectionChartFilter) => void;
-  readonly overview: {
-    readonly netBalanceMinor: number;
-    readonly projectedBalanceMinor: number;
-    readonly impactMinor: number;
-    readonly pendingCount: number;
-    readonly pendingIncomingMinor: number;
-    readonly pendingOutgoingMinor: number;
-    readonly totalOwedToMeMinor: number;
-    readonly totalIOweMinor: number;
-  };
-}) {
-  const rows: readonly {
-    readonly filter: ProjectionChartFilter;
-    readonly icon: keyof typeof Ionicons.glyphMap;
-    readonly label: string;
-    readonly valueMinor: number;
-  }[] = [
-    {
-      filter: 'owed_to_me',
-      icon: 'arrow-down-outline',
-      label: 'Te deben hoy',
-      valueMinor: overview.totalOwedToMeMinor,
-    },
-    {
-      filter: 'i_owe',
-      icon: 'arrow-up-outline',
-      label: 'Debes hoy',
-      valueMinor: overview.totalIOweMinor,
-    },
-    {
-      filter: 'current_balance',
-      icon: 'wallet-outline',
-      label: 'Balance actual',
-      valueMinor: overview.netBalanceMinor,
-    },
-    {
-      filter: 'pending_incoming',
-      icon: 'arrow-down-circle-outline',
-      label: 'Te deberan',
-      valueMinor: overview.pendingIncomingMinor,
-    },
-    {
-      filter: 'pending_outgoing',
-      icon: 'arrow-up-circle-outline',
-      label: 'Deberas',
-      valueMinor: overview.pendingOutgoingMinor,
-    },
-    {
-      filter: 'projection',
-      icon: 'flag-outline',
-      label: 'Proyectado',
-      valueMinor: overview.projectedBalanceMinor,
-    },
-  ];
-
-  return (
-    <SectionBlock title="Detalle de proyeccion">
-      <SurfaceCard padding="md" style={styles.projectionSummary} variant="muted">
-        <View style={styles.inlineMetric}>
-          <AppText style={styles.inlineMetricValue}>{overview.pendingCount}</AppText>
-          <AppText style={styles.inlineMetricLabel}>pendientes abiertos</AppText>
-        </View>
-        <View style={styles.inlineMetric}>
-          <AppText style={styles.inlineMetricValue}>
-            {formatCompactCop(overview.impactMinor)}
-          </AppText>
-          <AppText style={styles.inlineMetricLabel}>impacto estimado</AppText>
-        </View>
-      </SurfaceCard>
-      <SurfaceCard padding="md">
-        {rows.map((row) => (
-          <RankingRow
-            icon={row.icon}
-            key={row.filter}
-            label={row.label}
-            meta="Abrir movimientos relacionados"
-            onPress={() => onSegmentPress(row.filter)}
-            tone={amountTone(row.valueMinor)}
-            valueLabel={formatCop(row.valueMinor)}
-          />
-        ))}
-      </SurfaceCard>
     </SectionBlock>
   );
 }
@@ -913,13 +821,6 @@ function SettlementsFocusCard({
 }
 
 type BalanceCarouselOverview = {
-  readonly projection: {
-    readonly impactMinor: number;
-    readonly pendingCount: number;
-    readonly pendingIncomingMinor: number;
-    readonly pendingOutgoingMinor: number;
-    readonly projectedNetBalanceMinor: number;
-  };
   readonly summary: {
     readonly netBalanceMinor: number;
     readonly totalIOweMinor: number;
@@ -937,7 +838,7 @@ export function BalanceLensCarousel({
   initialFocus = 'balance',
   lens = 'balance',
   onFocusPress,
-  onProjectionSegmentPress,
+  onSwipeInteractionChange,
   overview,
   period,
   swipeEnabled = true,
@@ -946,22 +847,14 @@ export function BalanceLensCarousel({
   readonly initialFocus?: BalanceFocus;
   readonly lens?: BalanceAnalyticsLens;
   readonly onFocusPress?: (focus: BalanceFocus) => void;
-  readonly onProjectionSegmentPress?: (filter: ProjectionChartFilter) => void;
+  readonly onSwipeInteractionChange?: (isInteracting: boolean) => void;
   readonly overview: BalanceCarouselOverview;
   readonly period?: BalanceAnalyticsPeriod;
   readonly swipeEnabled?: boolean;
 }) {
-  const carouselRef = useRef<ScrollViewType | null>(null);
-  const lastSyncedFocusRef = useRef<BalanceFocus>(initialFocus);
-  const activeFocusRef = useRef<BalanceFocus>(initialFocus);
-  const visualFocusRef = useRef<BalanceFocus>(initialFocus);
-  const latestCarouselOffsetRef = useRef(0);
-  const syncedCarouselWidthRef = useRef(0);
-  const hasSyncedCarouselPositionRef = useRef(false);
-  const carouselSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [carouselWidth, setCarouselWidth] = useState(0);
   const [activeFocus, setActiveFocus] = useState<BalanceFocus>(initialFocus);
   const [visualFocus, setVisualFocus] = useState<BalanceFocus>(initialFocus);
+  const [pagerInteracting, setPagerInteracting] = useState(false);
   const selectedPeriod = period ?? analytics.defaultPeriod ?? 'month';
   const currentPeriod = analytics.periods[selectedPeriod];
   const periodContextLabel = periodScopeLabel(selectedPeriod);
@@ -996,123 +889,29 @@ export function BalanceLensCarousel({
   useEffect(() => {
     setActiveFocus(initialFocus);
     setVisualFocus(initialFocus);
-    activeFocusRef.current = initialFocus;
-    visualFocusRef.current = initialFocus;
   }, [initialFocus]);
 
-  useEffect(() => {
-    activeFocusRef.current = activeFocus;
-  }, [activeFocus]);
-
-  useEffect(
-    () => () => {
-      if (carouselSettleTimerRef.current) {
-        clearTimeout(carouselSettleTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (carouselWidth <= 0) {
-      return;
-    }
-
-    if (
-      lastSyncedFocusRef.current === activeFocus &&
-      syncedCarouselWidthRef.current === carouselWidth
-    ) {
-      return;
-    }
-
-    lastSyncedFocusRef.current = activeFocus;
-    syncedCarouselWidthRef.current = carouselWidth;
-    const nextX = focusIndex(activeFocus) * carouselWidth;
-    latestCarouselOffsetRef.current = nextX;
-    carouselRef.current?.scrollTo({
-      animated: hasSyncedCarouselPositionRef.current,
-      x: nextX,
-      y: 0,
-    });
-    hasSyncedCarouselPositionRef.current = true;
-  }, [activeFocus, carouselWidth]);
-
-  function clearCarouselSettleTimer() {
-    if (carouselSettleTimerRef.current) {
-      clearTimeout(carouselSettleTimerRef.current);
-      carouselSettleTimerRef.current = null;
-    }
+  function handlePagerInteractionChange(isInteracting: boolean) {
+    setPagerInteracting(isInteracting);
+    onSwipeInteractionChange?.(isInteracting);
   }
 
-  function updateVisualFocus(nextFocus: BalanceFocus) {
-    if (nextFocus === visualFocusRef.current) {
-      return;
-    }
-
-    visualFocusRef.current = nextFocus;
+  function changeActiveFocus(nextFocus: BalanceFocus) {
     setVisualFocus(nextFocus);
+    setActiveFocus(nextFocus);
   }
 
-  function settleCarousel(offsetX: number) {
-    if (carouselWidth <= 0) {
+  function requestFocusFromDots(nextFocus: BalanceFocus) {
+    if (pagerInteracting || nextFocus === activeFocus) {
       return;
     }
 
-    const rawIndex = offsetX / carouselWidth;
-    const nextIndex = Math.max(0, Math.min(FOCUS_OPTIONS.length - 1, Math.round(rawIndex)));
-    const nextFocus = FOCUS_OPTIONS[nextIndex]?.value;
-    if (!nextFocus) {
-      return;
-    }
-
-    const nextX = nextIndex * carouselWidth;
-    latestCarouselOffsetRef.current = nextX;
-    lastSyncedFocusRef.current = nextFocus;
-    syncedCarouselWidthRef.current = carouselWidth;
-    updateVisualFocus(nextFocus);
-
-    if (Math.abs(offsetX - nextX) > 1) {
-      carouselRef.current?.scrollTo({ animated: true, x: nextX, y: 0 });
-    }
-
-    if (nextFocus !== activeFocusRef.current) {
-      activeFocusRef.current = nextFocus;
-      lastSyncedFocusRef.current = nextFocus;
-      setActiveFocus(nextFocus);
-    }
+    setPagerInteracting(true);
+    onSwipeInteractionChange?.(true);
+    changeActiveFocus(nextFocus);
   }
 
-  function handleCarouselScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    latestCarouselOffsetRef.current = offsetX;
-
-    if (carouselWidth <= 0) {
-      return;
-    }
-
-    const rawIndex = offsetX / carouselWidth;
-    const nextIndex = Math.max(0, Math.min(FOCUS_OPTIONS.length - 1, Math.round(rawIndex)));
-    const nextFocus = FOCUS_OPTIONS[nextIndex]?.value;
-
-    if (nextFocus) {
-      updateVisualFocus(nextFocus);
-    }
-  }
-
-  function handleCarouselScrollEndDrag() {
-    clearCarouselSettleTimer();
-    carouselSettleTimerRef.current = setTimeout(() => {
-      carouselSettleTimerRef.current = null;
-      settleCarousel(latestCarouselOffsetRef.current);
-    }, 140);
-  }
-
-  function handleCarouselMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    clearCarouselSettleTimer();
-    settleCarousel(event.nativeEvent.contentOffset.x);
-  }
-
-  function renderPage(focus: BalanceFocus, content: ReactNode) {
+  function renderPageContent(focus: BalanceFocus, content: ReactNode) {
     const pageContent = onFocusPress ? (
       <Pressable
         accessibilityRole="button"
@@ -1125,105 +924,75 @@ export function BalanceLensCarousel({
       content
     );
 
-    return (
-      <View key={focus} style={[styles.carouselPage, { width: carouselWidth }]}>
-        {pageContent}
-      </View>
+    return pageContent;
+  }
+
+  function renderCarouselPage(focus: BalanceFocus) {
+    if (focus === 'balance') {
+      return renderPageContent(
+        focus,
+        <BalanceFocusCard
+          netBalanceMinor={overview.summary.netBalanceMinor}
+          periodChangeMinor={balanceSummary.deltaMinor}
+          periodContextLabel={periodContextLabel}
+          totalIOweMinor={overview.summary.totalIOweMinor}
+          totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
+        />,
+      );
+    }
+
+    if (focus === 'people') {
+      return renderPageContent(
+        focus,
+        <PeopleFocusCard people={sortedPeople} periodContextLabel={periodContextLabel} />,
+      );
+    }
+
+    if (focus === 'categories') {
+      return renderPageContent(
+        focus,
+        <CategoriesFocusCard
+          categories={sortedCategories}
+          periodContextLabel={periodContextLabel}
+        />,
+      );
+    }
+
+    return renderPageContent(
+      focus,
+      <SettlementsFocusCard
+        activeCount={currentPeriod.settlements.activeCount}
+        changeRatio={currentPeriod.settlements.changeRatio}
+        movementCount={currentPeriod.settlements.movementCount}
+        periodContextLabel={periodContextLabel}
+        resolvedMinor={currentPeriod.settlements.resolvedMinor}
+        savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
+      />,
     );
   }
 
   return (
-    <>
-      <View
-        onLayout={(event) => setCarouselWidth(event.nativeEvent.layout.width)}
+    <View style={styles.carouselBlock}>
+      <SwipePager
+        accessibilityLabel="Resumen de balance"
+        onChange={changeActiveFocus}
+        onInteractionStateChange={handlePagerInteractionChange}
+        onPreviewChange={setVisualFocus}
+        pageStyle={styles.carouselPage}
+        renderPage={(focus) => renderCarouselPage(focus)}
+        scrollEnabled={swipeEnabled}
         style={styles.carouselViewport}
-      >
-        <ScrollView
-          ref={carouselRef}
-          alwaysBounceHorizontal={false}
-          bounces={false}
-          decelerationRate="fast"
-          directionalLockEnabled
-          disableIntervalMomentum
-          horizontal
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          onMomentumScrollBegin={clearCarouselSettleTimer}
-          onMomentumScrollEnd={handleCarouselMomentumScrollEnd}
-          onScroll={handleCarouselScroll}
-          onScrollBeginDrag={clearCarouselSettleTimer}
-          onScrollEndDrag={handleCarouselScrollEndDrag}
-          overScrollMode="never"
-          pagingEnabled
-          removeClippedSubviews={false}
-          scrollEnabled={swipeEnabled}
-          scrollEventThrottle={16}
-          snapToAlignment="start"
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={carouselWidth > 0 ? carouselWidth : undefined}
-          style={styles.carousel}
-        >
-          {renderPage(
-            'balance',
-            <BalanceFocusCard
-              netBalanceMinor={overview.summary.netBalanceMinor}
-              periodChangeMinor={balanceSummary.deltaMinor}
-              periodContextLabel={periodContextLabel}
-              totalIOweMinor={overview.summary.totalIOweMinor}
-              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
-            />,
-          )}
-
-          {renderPage(
-            'projection',
-            <ProjectionForecastCard
-              currentBalanceMinor={overview.summary.netBalanceMinor}
-              impactMinor={overview.projection.impactMinor}
-              onSegmentPress={onFocusPress ? undefined : onProjectionSegmentPress}
-              pendingCount={overview.projection.pendingCount}
-              pendingIncomingMinor={overview.projection.pendingIncomingMinor}
-              pendingOutgoingMinor={overview.projection.pendingOutgoingMinor}
-              projectedBalanceMinor={overview.projection.projectedNetBalanceMinor}
-              style={styles.focusCard}
-              totalIOweMinor={overview.summary.totalIOweMinor}
-              totalOwedToMeMinor={overview.summary.totalOwedToMeMinor}
-            />,
-          )}
-
-          {renderPage(
-            'people',
-            <PeopleFocusCard people={sortedPeople} periodContextLabel={periodContextLabel} />,
-          )}
-
-          {renderPage(
-            'categories',
-            <CategoriesFocusCard
-              categories={sortedCategories}
-              periodContextLabel={periodContextLabel}
-            />,
-          )}
-
-          {renderPage(
-            'settlements',
-            <SettlementsFocusCard
-              activeCount={currentPeriod.settlements.activeCount}
-              changeRatio={currentPeriod.settlements.changeRatio}
-              movementCount={currentPeriod.settlements.movementCount}
-              periodContextLabel={periodContextLabel}
-              resolvedMinor={currentPeriod.settlements.resolvedMinor}
-              savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
-            />,
-          )}
-        </ScrollView>
-      </View>
+        value={activeFocus}
+        values={FOCUS_VALUES}
+      />
 
       <CarouselDots
         activeFocus={visualFocus}
+        disabled={pagerInteracting}
         onChange={(nextFocus) => {
-          updateVisualFocus(nextFocus);
-          setActiveFocus(nextFocus);
+          requestFocusFromDots(nextFocus);
         }}
       />
-    </>
+    </View>
   );
 }

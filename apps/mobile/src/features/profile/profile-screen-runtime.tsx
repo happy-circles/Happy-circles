@@ -1,7 +1,6 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams } from 'expo-router';
-import type { Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ActionSheetIOS,
@@ -15,19 +14,22 @@ import {
 } from 'react-native';
 import type { ScrollView } from 'react-native';
 
+import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
+import { StatusChip, type StatusChipProps } from '@/components/status-chip';
+import { prepareAvatarImageForUpload } from '@/lib/avatar-image';
 import { presentLimitedContactsAccessPicker } from '@/lib/contacts-permissions';
 import {
-  triggerIdentityImpactHaptic,
-  triggerIdentitySelectionHaptic,
-  triggerIdentitySuccessHaptic,
-  triggerIdentityWarningHaptic,
-} from '@/lib/identity-flow-haptics';
+  triggerAppActionHaptic,
+  triggerAppSelectionHaptic,
+  triggerAppSuccessHaptic,
+  triggerAppWarningHaptic,
+} from '@/lib/app-haptics';
 import {
   useAppSnapshot,
   useRequestAccountDeletionMutation,
@@ -36,8 +38,13 @@ import {
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
+import {
+  resolveTrustedDeviceAuthMethods,
+  resolveTrustMethodLabel,
+} from '@/lib/trusted-device-auth';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
+import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
 import {
   formatContactsPermissionStateLabel,
   formatContactsPermissionSubtitle,
@@ -58,19 +65,19 @@ const TERMS_URL = 'https://app.happy-circles.com/terms';
 const SUPPORT_URL = 'https://app.happy-circles.com/support';
 
 function triggerSelectionHaptic() {
-  triggerIdentitySelectionHaptic();
+  triggerAppSelectionHaptic();
 }
 
 function triggerImpactHaptic() {
-  triggerIdentityImpactHaptic();
+  triggerAppActionHaptic();
 }
 
 function triggerSuccessHaptic() {
-  triggerIdentitySuccessHaptic();
+  triggerAppSuccessHaptic();
 }
 
 function triggerWarningHaptic() {
-  triggerIdentityWarningHaptic();
+  triggerAppWarningHaptic();
 }
 
 function resolveRowTone(tone: RowTone) {
@@ -101,6 +108,22 @@ function resolveRowTone(tone: RowTone) {
   };
 }
 
+function rowStatusTone(tone: RowTone): StatusChipProps['tone'] {
+  if (tone === 'success') {
+    return 'success';
+  }
+
+  if (tone === 'danger') {
+    return 'danger';
+  }
+
+  if (tone === 'primary') {
+    return 'primary';
+  }
+
+  return 'neutral';
+}
+
 function ProfileStatusRow({
   icon,
   status,
@@ -128,9 +151,7 @@ function ProfileStatusRow({
         {subtitle ? <AppText style={styles.rowSubtitle}>{subtitle}</AppText> : null}
       </View>
       {trailing ??
-        (status ? (
-          <AppText style={[styles.statusText, { color: visual.color }]}>{status}</AppText>
-        ) : null)}
+        (status ? <StatusChip compact label={status} tone={rowStatusTone(tone)} /> : null)}
     </View>
   );
 }
@@ -150,7 +171,9 @@ export function ProfileScreen() {
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
+  const [trustPasswordFallbackOpen, setTrustPasswordFallbackOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const accountOffsetRef = useRef(0);
@@ -173,6 +196,8 @@ export function ProfileScreen() {
     session.profile?.display_name ??
     session.email ??
     'Sin sesion';
+  const profileAvatarUrl = localAvatarPath ?? currentUserProfile?.avatarUrl ?? null;
+  const canViewProfileAvatar = Boolean(profileAvatarUrl);
   const accountEmailValue =
     currentUserProfile?.email ?? session.profile?.email ?? session.email ?? '';
   const accountEmail = accountEmailValue || 'Sin correo';
@@ -184,40 +209,20 @@ export function ProfileScreen() {
   const contactsPermissionStatus = session.setupState.contactsPermissionStatus;
   const contactsActionLabel = resolveContactsPermissionActionLabel(contactsPermissionStatus);
   const phoneLabel = session.profile?.phone_e164 ?? 'Falta completar';
-  const primaryReauthLabel = useMemo(() => {
-    if (session.canTrustCurrentDeviceWithoutPassword) {
-      return 'Confiar este dispositivo';
-    }
-
-    if (session.linkedMethods.hasEmailPassword) {
-      return 'Validar con clave';
-    }
-
-    if (session.linkedMethods.hasGoogle) {
-      return 'Validar con Google';
-    }
-
-    if (session.linkedMethods.hasApple) {
-      return 'Validar con Apple';
-    }
-
-    return 'Validar dispositivo';
-  }, [
-    session.canTrustCurrentDeviceWithoutPassword,
-    session.linkedMethods.hasApple,
-    session.linkedMethods.hasEmailPassword,
-    session.linkedMethods.hasGoogle,
-  ]);
+  const trustMethods = resolveTrustedDeviceAuthMethods({
+    canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
+    hasApple: session.linkedMethods.hasApple,
+    hasEmailPassword: session.linkedMethods.hasEmailPassword,
+    hasGoogle: session.linkedMethods.hasGoogle,
+  });
+  const socialTrustMethods = trustMethods.filter((method) => method !== 'password');
+  const hasPasswordTrustMethod = trustMethods.includes('password');
+  const showTrustPasswordFallback =
+    hasPasswordTrustMethod &&
+    !session.canTrustCurrentDeviceWithoutPassword &&
+    (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
   const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'security';
   const completeProfileHref = buildSetupAccountHref(setupEntryStep);
-  const qaInviteEntryHref = {
-    pathname: '/join',
-    params: { preview: 'true' },
-  } as unknown as Href;
-  const qaTokenCreateHref = {
-    pathname: '/join/[token]/create-account',
-    params: { preview: 'true', token: 'preview-invite-token' },
-  } as unknown as Href;
 
   const clearFocusTimers = useCallback(() => {
     if (pendingScrollTimeoutRef.current) {
@@ -302,9 +307,11 @@ export function ProfileScreen() {
 
       if (focusRequest.inputTarget === 'trust-password') {
         if (!deviceMeasuredRef.current || !trustPasswordInputRef.current) {
+          setTrustPasswordFallbackOpen(true);
           return false;
         }
 
+        setTrustPasswordFallbackOpen(true);
         scrollToDevice();
         delayedFocusTimeoutRef.current = setTimeout(() => {
           trustPasswordInputRef.current?.focus();
@@ -405,6 +412,22 @@ export function ProfileScreen() {
       return failureMessage;
     } finally {
       setBusyAction(null);
+    }
+  }
+
+  async function handleTrustDevice(method: TrustedDeviceAuthMethod) {
+    const result = await runAction(`trust-device-${method}`, async () =>
+      session.trustCurrentDevice(
+        method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
+          ? { method, password: trustPassword }
+          : { method },
+      ),
+    );
+
+    if (result === 'Este dispositivo ahora es confiable.') {
+      triggerSuccessHaptic();
+      setTrustPassword('');
+      setTrustPasswordFallbackOpen(false);
     }
   }
 
@@ -544,15 +567,18 @@ export function ProfileScreen() {
       return;
     }
 
+    const asset = result.assets[0];
+    const previousLocalAvatarPath = localAvatarPath;
+    setLocalAvatarPath(asset.uri);
+
     try {
-      const nextAvatarPath = await avatarMutation.mutateAsync({
-        uri: result.assets[0].uri,
-        contentType: result.assets[0].mimeType,
-      });
+      const preparedAvatar = await prepareAvatarImageForUpload(asset);
+      const nextAvatarPath = await avatarMutation.mutateAsync(preparedAvatar);
       setLocalAvatarPath(nextAvatarPath);
       triggerSuccessHaptic();
       setMessage('Foto de perfil actualizada.');
     } catch (error) {
+      setLocalAvatarPath(previousLocalAvatarPath);
       setMessage(error instanceof Error ? error.message : 'No se pudo actualizar la foto.');
     }
   }
@@ -590,6 +616,11 @@ export function ProfileScreen() {
     await uploadPickedAvatar(result);
   }
 
+  function closeAvatarOptionsAndRun(action: () => void) {
+    setAvatarOptionsVisible(false);
+    requestAnimationFrame(action);
+  }
+
   function openAvatarOptions() {
     if (avatarMutation.isPending) {
       return;
@@ -598,7 +629,7 @@ export function ProfileScreen() {
     triggerSelectionHaptic();
 
     if (Platform.OS === 'ios') {
-      const options = currentUserProfile?.avatarUrl
+      const options = canViewProfileAvatar
         ? ['Ver foto', 'Tomar foto', 'Elegir foto', 'Cancelar']
         : ['Tomar foto', 'Elegir foto', 'Cancelar'];
       const cancelButtonIndex = options.length - 1;
@@ -630,14 +661,7 @@ export function ProfileScreen() {
       return;
     }
 
-    Alert.alert('Foto de perfil', undefined, [
-      ...(currentUserProfile?.avatarUrl
-        ? [{ text: 'Ver foto', onPress: () => setAvatarViewerVisible(true) }]
-        : []),
-      { text: 'Tomar foto', onPress: () => void handleTakeAvatarPhoto() },
-      { text: 'Elegir foto', onPress: () => void handlePickAvatar() },
-      { style: 'cancel', text: 'Cancelar' },
-    ]);
+    setAvatarOptionsVisible(true);
   }
 
   async function handleRequestAccountDeletion() {
@@ -716,7 +740,7 @@ export function ProfileScreen() {
       <View style={styles.accountHeader}>
         <IdentityFlowIdentity
           avatarLabel={accountLabel}
-          avatarUrl={localAvatarPath ?? currentUserProfile?.avatarUrl ?? null}
+          avatarUrl={profileAvatarUrl}
           disabled={avatarMutation.isPending}
           editable
           onPress={openAvatarOptions}
@@ -742,37 +766,6 @@ export function ProfileScreen() {
               <AppText style={styles.inlineButtonText}>Abrir setup</AppText>
             </Pressable>
           </Link>
-        </View>
-      ) : null}
-
-      {__DEV__ ? (
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeader}>
-            <AppText style={styles.sectionTitle}>QA temporal</AppText>
-          </View>
-          <View style={styles.qaButtonRow}>
-            <Link href={buildSetupAccountHref('profile', { preview: 'true' })} asChild>
-              <Pressable
-                style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
-              >
-                <AppText style={styles.inlineButtonText}>Onboarding</AppText>
-              </Pressable>
-            </Link>
-            <Link href={qaInviteEntryHref} asChild>
-              <Pressable
-                style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
-              >
-                <AppText style={styles.inlineButtonText}>Invitacion</AppText>
-              </Pressable>
-            </Link>
-            <Link href={qaTokenCreateHref} asChild>
-              <Pressable
-                style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
-              >
-                <AppText style={styles.inlineButtonText}>Crear con token</AppText>
-              </Pressable>
-            </Link>
-          </View>
         </View>
       ) : null}
 
@@ -1055,38 +1048,97 @@ export function ProfileScreen() {
                   vez.
                 </AppText>
               ) : null}
-              {session.linkedMethods.hasEmailPassword &&
-              !session.canTrustCurrentDeviceWithoutPassword ? (
-                <AppTextInput
-                  autoCapitalize="none"
-                  onChangeText={setTrustPassword}
-                  placeholder="Tu clave actual"
-                  placeholderTextColor={theme.colors.muted}
-                  ref={trustPasswordInputRef}
-                  secureTextEntry
-                  style={styles.input}
-                  value={trustPassword}
-                />
-              ) : null}
               <View style={styles.inlineActionRow}>
-                <PrimaryAction
-                  compact
-                  fullWidth={false}
-                  label={busyAction === 'trust-device' ? 'Validando...' : primaryReauthLabel}
-                  onPress={
-                    busyAction
-                      ? undefined
-                      : () =>
-                          void runAction('trust-device', async () =>
-                            session.trustCurrentDevice(
-                              session.canTrustCurrentDeviceWithoutPassword
-                                ? undefined
-                                : { password: trustPassword },
-                            ),
-                          )
-                  }
-                />
+                {socialTrustMethods.map((method) => (
+                  <PrimaryAction
+                    compact
+                    disabled={busyAction !== null}
+                    fullWidth={false}
+                    key={method}
+                    label={
+                      busyAction === `trust-device-${method}`
+                        ? 'Validando...'
+                        : resolveTrustMethodLabel({
+                            canTrustCurrentDeviceWithoutPassword:
+                              session.canTrustCurrentDeviceWithoutPassword,
+                            method,
+                          })
+                    }
+                    onPress={busyAction ? undefined : () => void handleTrustDevice(method)}
+                  />
+                ))}
+                {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                  <PrimaryAction
+                    compact
+                    disabled={busyAction !== null}
+                    fullWidth={false}
+                    label={
+                      busyAction === 'trust-device-password'
+                        ? 'Validando...'
+                        : resolveTrustMethodLabel({
+                            canTrustCurrentDeviceWithoutPassword:
+                              session.canTrustCurrentDeviceWithoutPassword,
+                            method: 'password',
+                          })
+                    }
+                    onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
+                  />
+                ) : null}
               </View>
+              {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
+                <Pressable
+                  disabled={busyAction !== null}
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    setTrustPasswordFallbackOpen((open) => !open);
+                  }}
+                  style={({ pressed }) => [
+                    styles.inlineButton,
+                    pressed && busyAction === null ? styles.rowPressed : null,
+                    busyAction !== null ? styles.disabledButton : null,
+                  ]}
+                >
+                  <AppText style={styles.inlineButtonText}>
+                    {showTrustPasswordFallback ? 'Ocultar clave' : 'Usar clave'}
+                  </AppText>
+                </Pressable>
+              ) : null}
+              {showTrustPasswordFallback ? (
+                <>
+                  <AppTextInput
+                    autoCapitalize="none"
+                    onChangeText={setTrustPassword}
+                    placeholder="Tu clave actual"
+                    placeholderTextColor={theme.colors.muted}
+                    ref={trustPasswordInputRef}
+                    secureTextEntry
+                    style={styles.input}
+                    value={trustPassword}
+                  />
+                  <View style={styles.inlineActionRow}>
+                    <PrimaryAction
+                      compact
+                      disabled={busyAction !== null}
+                      fullWidth={false}
+                      label={
+                        busyAction === 'trust-device-password'
+                          ? 'Validando...'
+                          : resolveTrustMethodLabel({
+                              canTrustCurrentDeviceWithoutPassword:
+                                session.canTrustCurrentDeviceWithoutPassword,
+                              method: 'password',
+                            })
+                      }
+                      onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
+                    />
+                  </View>
+                </>
+              ) : null}
+              {trustMethods.length === 0 ? (
+                <AppText style={styles.sectionBody}>
+                  Esta cuenta no tiene un metodo disponible para revalidar el dispositivo.
+                </AppText>
+              ) : null}
             </View>
           ) : null}
 
@@ -1224,8 +1276,17 @@ export function ProfileScreen() {
         </View>
       </View>
 
+      <AvatarOptionsSheet
+        canViewPhoto={canViewProfileAvatar}
+        onChoosePhoto={() => closeAvatarOptionsAndRun(() => void handlePickAvatar())}
+        onClose={() => setAvatarOptionsVisible(false)}
+        onTakePhoto={() => closeAvatarOptionsAndRun(() => void handleTakeAvatarPhoto())}
+        onViewPhoto={() => closeAvatarOptionsAndRun(() => setAvatarViewerVisible(true))}
+        visible={avatarOptionsVisible}
+      />
+
       <AvatarViewerModal
-        imageUrl={localAvatarPath ?? currentUserProfile?.avatarUrl ?? null}
+        imageUrl={profileAvatarUrl}
         label={accountLabel}
         onClose={() => setAvatarViewerVisible(false)}
         visible={avatarViewerVisible}
@@ -1284,13 +1345,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sectionBlock: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.large,
+    borderWidth: 1,
     gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    padding: theme.spacing.md,
   },
   focusPanel: {
-    borderTopColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    ...theme.shadow.card,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -1366,12 +1430,8 @@ const styles = StyleSheet.create({
     paddingLeft: 52,
   },
   inlineActionRow: {
-    alignItems: 'flex-end',
-  },
-  qaButtonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
   },
   input: {
     minHeight: 48,

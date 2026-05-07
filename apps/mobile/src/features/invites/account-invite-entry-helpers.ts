@@ -121,7 +121,7 @@ export function resolveAuthLogoCopy(input: {
   return {
     subtitle: input.isOtherAccountMode
       ? 'Usa otra cuenta para continuar.'
-      : 'Usa tu correo y contrasena.',
+      : 'Elige tu metodo de ingreso.',
     title: 'Ingresa a Happy Circles',
   };
 }

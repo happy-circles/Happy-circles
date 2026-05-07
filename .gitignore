@@ -3,6 +3,8 @@ node_modules
 .expo
 .turbo
 .tmp
+.codex/
+.codex-*
 .idea
 .vscode
 dist
@@ -10,8 +12,12 @@ coverage
 .DS_Store
 supabase/.temp
 apps/mobile/.expo
+apps/mobile/.codex-*
 apps/mobile/dist
 apps/mobile/web-build
+apps/landing/.codex-*
+apps/landing/.screenshots/
+apps/landing/.tmp/
 .verify-*.log
 .expo-web.log
 .expo-web.err

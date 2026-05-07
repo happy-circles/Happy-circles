@@ -3,7 +3,6 @@ import type { Session } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { AppState, Platform } from 'react-native';
 import {
   attachEmailPasswordSchema,
@@ -53,6 +52,7 @@ import {
   isPasswordRecoveryCallbackUrl,
 } from '../session/auth-callbacks';
 import { buildAppleFullName, generateSecureNonce } from '../session/apple-auth';
+import { getNativeGoogleCredential } from '../session/google-auth';
 import {
   deriveAccountAccessState,
   deriveDeviceTrustState,
@@ -113,8 +113,6 @@ import type {
   TrustedDeviceRow,
   UserProfileRow,
 } from '../session/types';
-
-WebBrowser.maybeCompleteAuthSession();
 
 async function hashInviteTokenForRegistration(deliveryToken: string): Promise<string> {
   const digest = await Crypto.digestStringAsync(
@@ -695,74 +693,99 @@ export function useSessionController(): SessionContextValue {
     return () => clearTimeout(timer);
   }, [recentPasswordAuth]);
 
-  const performGoogleOAuthFlow = useCallback(
-    async (mode: 'sign-in' | 'link'): Promise<string> => {
+  const performGoogleAuth = useCallback(
+    async (
+      mode: 'sign-in' | 'link',
+    ): Promise<{ readonly message: string; readonly userId: string | null }> => {
       if (!supabase) {
-        return 'Supabase no esta configurado en esta app.';
+        return {
+          message: 'Supabase no esta configurado en esta app.',
+          userId: null,
+        };
       }
 
-      const redirectTo = Linking.createURL('/join?mode=sign-in');
-      const authApi = supabase.auth as unknown as {
-        readonly linkIdentity?: (input: {
-          readonly provider: 'google';
-          readonly options?: {
-            readonly redirectTo?: string;
-            readonly queryParams?: Record<string, string>;
+      const credentialResult = await getNativeGoogleCredential();
+      if (!credentialResult.ok) {
+        return {
+          message:
+            mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
+              ? 'Vinculacion con Google cancelada.'
+              : credentialResult.message,
+          userId: null,
+        };
+      }
+
+      const { credential } = credentialResult;
+
+      if (mode === 'link') {
+        const authApi = supabase.auth as unknown as {
+          readonly linkIdentity?: (input: {
+            readonly provider: 'google';
+            readonly token: string;
+            readonly access_token: string;
+          }) => Promise<{ error?: { message: string } | null }>;
+        };
+
+        if (typeof authApi.linkIdentity !== 'function') {
+          return {
+            message: 'Esta version de Supabase no expone linkIdentity para Google.',
+            userId: null,
           };
-        }) => Promise<{ data?: { url?: string | null }; error?: { message: string } | null }>;
+        }
+
+        const { error } = await authApi.linkIdentity({
+          provider: 'google',
+          token: credential.idToken,
+          access_token: credential.accessToken,
+        });
+
+        if (error) {
+          return {
+            message: formatSupabaseAuthErrorMessage(error.message),
+            userId: null,
+          };
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: credential.idToken,
+          access_token: credential.accessToken,
+        });
+
+        if (error) {
+          return {
+            message: formatSupabaseAuthErrorMessage(error.message),
+            userId: null,
+          };
+        }
+      }
+
+      if (credential.displayName || credential.givenName || credential.familyName) {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: {
+            display_name: credential.displayName,
+            full_name: credential.displayName,
+            given_name: credential.givenName,
+            family_name: credential.familyName,
+            avatar_url: credential.photoUrl,
+          },
+        });
+
+        if (metadataError) {
+          console.warn(
+            'Failed to persist Google profile metadata',
+            metadataError instanceof Error ? metadataError.message : String(metadataError),
+          );
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
+      return {
+        message: mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.',
+        userId: data.session?.user.id ?? null,
       };
-
-      const authResult =
-        mode === 'link' && typeof authApi.linkIdentity === 'function'
-          ? await authApi.linkIdentity({
-              provider: 'google',
-              options: {
-                redirectTo,
-                queryParams: {
-                  prompt: 'select_account',
-                },
-              },
-            })
-          : await supabase.auth.signInWithOAuth({
-              provider: 'google',
-              options: {
-                redirectTo,
-                queryParams: {
-                  prompt: 'select_account',
-                },
-              },
-            });
-
-      if (authResult.error) {
-        return formatSupabaseAuthErrorMessage(authResult.error.message);
-      }
-
-      if (!authResult.data?.url) {
-        return mode === 'link'
-          ? 'No se pudo abrir Google para vincularlo.'
-          : 'No se pudo iniciar Google.';
-      }
-
-      const result = await WebBrowser.openAuthSessionAsync(authResult.data.url, redirectTo);
-      const resultType = String(result.type);
-
-      if (resultType === 'cancel' || resultType === 'dismiss') {
-        return mode === 'link'
-          ? 'Vinculacion con Google cancelada.'
-          : 'Inicio con Google cancelado.';
-      }
-
-      if (resultType === 'success') {
-        const redirectUrl = 'url' in result && typeof result.url === 'string' ? result.url : null;
-        await applySessionFromUrl(redirectUrl);
-        return mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.';
-      }
-
-      return mode === 'link'
-        ? 'No se pudo completar la vinculacion con Google.'
-        : 'No se pudo completar el inicio con Google.';
     },
-    [applySessionFromUrl],
+    [],
   );
 
   const performAppleAuth = useCallback(
@@ -1027,10 +1050,10 @@ export function useSessionController(): SessionContextValue {
     }
   }, []);
 
-  const signInWithGoogle = useCallback(
-    async () => performGoogleOAuthFlow('sign-in'),
-    [performGoogleOAuthFlow],
-  );
+  const signInWithGoogle = useCallback(async () => {
+    const result = await performGoogleAuth('sign-in');
+    return result.message;
+  }, [performGoogleAuth]);
 
   const signInWithApple = useCallback(async () => {
     const result = await performAppleAuth('sign-in');
@@ -1499,13 +1522,13 @@ export function useSessionController(): SessionContextValue {
       return formatStepUpErrorMessage('vincular Google', biometricLabel, authResult.error);
     }
 
-    const oauthResult = await performGoogleOAuthFlow('link');
-    if (oauthResult === 'Google vinculado.') {
+    const googleResult = await performGoogleAuth('link');
+    if (googleResult.message === 'Google vinculado.') {
       await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
     }
 
-    return oauthResult;
-  }, [biometricLabel, deviceTrustState, performGoogleOAuthFlow, refreshAccountState, stepUpAuth]);
+    return googleResult.message;
+  }, [biometricLabel, deviceTrustState, performGoogleAuth, refreshAccountState, stepUpAuth]);
 
   const linkApple = useCallback(async () => {
     if (deviceTrustState !== 'trusted') {
@@ -1579,8 +1602,23 @@ export function useSessionController(): SessionContextValue {
         recentPasswordAuth,
         userId: expectedUserId,
       });
+      const method =
+        input?.method ??
+        (hasRecentPasswordAuth
+          ? 'password'
+          : linkedMethods.hasGoogle
+            ? 'google'
+            : linkedMethods.hasApple
+              ? 'apple'
+              : linkedMethods.hasEmailPassword
+                ? 'password'
+                : null);
 
-      if (linkedMethods.hasEmailPassword) {
+      if (method === 'password') {
+        if (!linkedMethods.hasEmailPassword) {
+          return 'Esta cuenta no tiene clave para revalidar el dispositivo.';
+        }
+
         if (!hasRecentPasswordAuth) {
           if (!sessionRef.current.user.email) {
             return 'No encontramos un correo para verificar esta cuenta.';
@@ -1608,26 +1646,37 @@ export function useSessionController(): SessionContextValue {
 
           setRecentPasswordAuth(createRecentPasswordAuth(expectedUserId));
         }
-      } else if (linkedMethods.hasGoogle) {
-        const result = await performGoogleOAuthFlow('sign-in');
-        if (result !== 'Sesion iniciada.') {
-          return result;
+      } else if (method === 'google') {
+        if (!linkedMethods.hasGoogle) {
+          return 'Google no esta vinculado a esta cuenta.';
+        }
+
+        const result = await performGoogleAuth('sign-in');
+        if (result.message !== 'Sesion iniciada.') {
+          return result.message;
         }
 
         const { data } = await supabase.auth.getSession();
-        if (data.session?.user.id !== expectedUserId) {
+        const reauthenticatedUserId = result.userId ?? data.session?.user.id ?? null;
+        if (reauthenticatedUserId !== expectedUserId) {
           await supabase.auth.signOut();
           clearSignedInState();
           setSessionStatus('signed_out');
           return 'Google abrio otra cuenta. Cerramos la sesion por seguridad.';
         }
-      } else if (linkedMethods.hasApple) {
+      } else if (method === 'apple') {
+        if (!linkedMethods.hasApple) {
+          return 'Apple no esta vinculado a esta cuenta.';
+        }
+
         const result = await performAppleAuth('sign-in');
         if (result.message !== 'Sesion iniciada.') {
           return result.message;
         }
 
-        if (result.userId !== expectedUserId) {
+        const { data } = await supabase.auth.getSession();
+        const reauthenticatedUserId = result.userId ?? data.session?.user.id ?? null;
+        if (reauthenticatedUserId !== expectedUserId) {
           await supabase.auth.signOut();
           clearSignedInState();
           setSessionStatus('signed_out');
@@ -1663,7 +1712,7 @@ export function useSessionController(): SessionContextValue {
       deviceTrustState,
       linkedMethods,
       performAppleAuth,
-      performGoogleOAuthFlow,
+      performGoogleAuth,
       recentPasswordAuth,
       refreshAccountState,
       setSessionStatus,

@@ -9,10 +9,6 @@ export type NotificationCategoryKey = 'all' | 'transactions' | 'friends' | 'remi
 
 export interface NotificationTarget {
   readonly href: Href;
-  readonly homeIntent?: {
-    readonly kind: 'open_invite_requests';
-    readonly tab: 'received' | 'sent';
-  };
 }
 
 export function parseActivityDomainParam(
@@ -145,11 +141,7 @@ export function pendingDetailHref(
 
   if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
     return {
-      href: '/home' as Href,
-      homeIntent: {
-        kind: 'open_invite_requests',
-        tab: inviteRequestTabForNotification(item),
-      },
+      href: `/people?requests=1&requestTab=${inviteRequestTabForNotification(item)}` as Href,
     };
   }
 

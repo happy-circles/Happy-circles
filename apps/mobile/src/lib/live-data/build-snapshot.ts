@@ -20,7 +20,8 @@ import type { AppSnapshot, LiveSnapshotRows } from './types';
 import { buildLiveSnapshotContext, groupBy } from './utils/context';
 import { periodRange } from './utils/dates';
 
-type BuildLiveSnapshotInput = Omit<LiveSnapshotRows, 'limits'> & {
+type BuildLiveSnapshotInput = Omit<LiveSnapshotRows, 'avatarSignedUrlsByPath' | 'limits'> & {
+  readonly avatarSignedUrlsByPath?: LiveSnapshotRows['avatarSignedUrlsByPath'];
   readonly currentUserId: string;
 };
 

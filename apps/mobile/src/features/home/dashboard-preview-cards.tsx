@@ -4,22 +4,20 @@ import type { Href } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
-import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import {
   dashboardStyles as styles,
   PEOPLE_TILE_AVATAR_SIZE,
 } from '@/features/home/dashboard-screen.styles';
-import { resolveAvatarUrl } from '@/lib/avatar';
 import { notificationViewKeyForItem } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import {
-  isConsolidatedTransactionItem,
   isCycleTransactionItem,
   transactionAmountIsVoided,
   transactionAmountLabel,
-  transactionCreatedByMetaLabel,
   transactionFocusId,
+  transactionMetaLabel,
+  transactionShouldSurfaceStatus,
   transactionStatusLabel,
   transactionStatusTone,
   transactionToneColor,
@@ -248,8 +246,12 @@ export function TransactionPreviewCard({
   const targetPanel: TransactionTargetPanel = isPending ? 'pending' : 'history';
   const href = transactionPersonHref(person, item, targetPanel);
   const amountLabel = compactTransactionAmountLabel(item);
-  const meta = transactionCreatedByMetaLabel(item, name);
+  const meta = transactionMetaLabel(item);
   const category = transactionVisualCategory(item);
+  const showStatus = transactionShouldSurfaceStatus(item, {
+    density: 'summary',
+    unread,
+  });
 
   return (
     <TransactionEventCard
@@ -264,7 +266,7 @@ export function TransactionPreviewCard({
       amountLabel={amountLabel}
       amountStruckThrough={transactionAmountIsVoided(item)}
       category={category}
-      categoryPlacement={isSystemTransaction ? 'none' : 'avatar'}
+      categoryPlacement="none"
       compact
       compactMetaLayout="inline"
       context=""
@@ -273,7 +275,7 @@ export function TransactionPreviewCard({
       onPress={onPress}
       pending={highlightPending}
       pendingHighlightColor={transactionToneColor(item)}
-      statusLabel={transactionStatusLabel(item)}
+      statusLabel={showStatus ? transactionStatusLabel(item) : null}
       statusTone={transactionStatusTone(item)}
       unread={unread}
     />

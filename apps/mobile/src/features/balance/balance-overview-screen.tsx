@@ -1,85 +1,34 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import type {
-  DimensionValue,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollView as ScrollViewType,
-} from 'react-native';
 
 import {
   BalanceDetail,
-  BalanceLensCarousel,
   CategoriesDetail,
   HappyCirclesDetail,
   PeopleDetail,
-  ProjectionDetail,
 } from '@/features/balance/balance-lens-carousel';
 import { balanceOverviewStyles as styles } from '@/features/balance/balance-overview-screen.styles';
 
 import type {
-  BalanceAnalyticsCategoryRowDto,
   BalanceAnalyticsLens,
   BalanceAnalyticsPeriod,
-  BalanceAnalyticsPeriodDto,
-  BalanceAnalyticsPersonRowDto,
 } from '@happy-circles/application';
 
-import { HappyCircleCard } from '@/components/happy-circle-card';
-import { HappyWaterfallChart } from '@/components/happy-waterfall-chart';
-import { ProjectionForecastCard } from '@/components/projection-forecast-card';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
-import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
-import { formatCop } from '@/lib/data';
-import { toneVisual } from '@/lib/direction-ui';
 import { useAppSnapshot } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
-import { theme } from '@/lib/theme';
-import { transactionCategoryLabel } from '@/lib/transaction-categories';
-import type { ProjectionChartFilter } from '@/lib/transaction-filters';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
-  FOCUS_OPTIONS,
-  amountTone,
-  balanceTone,
-  categoryFocusMeta,
-  categoryImpactAmount,
   categoryLensAmount,
-  comparisonCopy,
-  firstName,
-  focusIndex,
-  formatCompactCop,
-  formatHomeBalanceCop,
   isBalanceFocus,
-  periodScopeLabel,
-  personFocusMeta,
-  personImpactAmount,
   personLensAmount,
-  signedFormatCop,
-  signedFormatCompactCop,
-  transactionFilterHref,
   type BalanceFocus,
 } from './balance-helpers';
 import { AppText } from '@/components/app-text';
 
 export type { BalanceFocus } from './balance-helpers';
-
-const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
-  { label: 'Semana', value: 'week' },
-  { label: 'Mes', value: 'month' },
-  { label: 'Ano', value: 'year' },
-  { label: 'Todo', value: 'all' },
-];
-
-const LENS_OPTIONS: readonly SegmentedOption<BalanceAnalyticsLens>[] = [
-  { label: 'Balance', value: 'balance' },
-  { label: 'Debes', value: 'i_owe' },
-  { label: 'Te deben', value: 'owed_to_me' },
-];
 
 export interface BalanceOverviewScreenProps {
   readonly initialFocus?: string | null;
@@ -176,22 +125,6 @@ export function BalanceOverviewScreen({ initialFocus }: BalanceOverviewScreenPro
           period={period}
           sortedCategories={sortedCategories}
           sortedPeople={sortedPeople}
-        />
-      ) : null}
-
-      {activeFocus === 'projection' ? (
-        <ProjectionDetail
-          onSegmentPress={(filter) => pushRoute(router, transactionFilterHref(filter))}
-          overview={{
-            netBalanceMinor: overview.summary.netBalanceMinor,
-            projectedBalanceMinor: overview.projection.projectedNetBalanceMinor,
-            impactMinor: overview.projection.impactMinor,
-            pendingCount: overview.projection.pendingCount,
-            pendingIncomingMinor: overview.projection.pendingIncomingMinor,
-            pendingOutgoingMinor: overview.projection.pendingOutgoingMinor,
-            totalOwedToMeMinor: overview.summary.totalOwedToMeMinor,
-            totalIOweMinor: overview.summary.totalIOweMinor,
-          }}
         />
       ) : null}
 

@@ -18,6 +18,9 @@ const supabaseAnonKey = firstNonEmpty(
   env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 );
+const googleWebClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+const googleIosClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+const googleAndroidClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID);
 const appWebHost = (() => {
   try {
     return new URL(appWebOrigin).host;
@@ -25,6 +28,26 @@ const appWebHost = (() => {
     return 'app.happy-circles.com';
   }
 })();
+
+function resolveGoogleIosUrlScheme(clientId: string): string {
+  const suffix = '.apps.googleusercontent.com';
+
+  if (!clientId.endsWith(suffix)) {
+    return '';
+  }
+
+  return `com.googleusercontent.apps.${clientId.slice(0, -suffix.length)}`;
+}
+
+const googleIosUrlScheme = resolveGoogleIosUrlScheme(googleIosClientId);
+const googleSignInPlugin: [string, { readonly iosUrlScheme: string }] | null = googleIosUrlScheme
+  ? [
+      '@react-native-google-signin/google-signin',
+      {
+        iosUrlScheme: googleIosUrlScheme,
+      },
+    ]
+  : null;
 
 const config: ExpoConfig = {
   name: 'Happy Circles',
@@ -61,7 +84,8 @@ const config: ExpoConfig = {
     [
       'expo-contacts',
       {
-        contactsPermission: 'Happy Circles usa tus contactos para encontrar personas que ya conoces.',
+        contactsPermission:
+          'Happy Circles usa tus contactos para encontrar personas que ya conoces.',
       },
     ],
     [
@@ -76,6 +100,7 @@ const config: ExpoConfig = {
         experimentalLauncherActivity: false,
       },
     ],
+    ...(googleSignInPlugin ? [googleSignInPlugin] : []),
   ],
   experiments: {
     typedRoutes: true,
@@ -128,6 +153,9 @@ const config: ExpoConfig = {
     supabaseAnonKey,
     appWebOrigin,
     authRedirectMode,
+    googleWebClientId,
+    googleIosClientId,
+    googleAndroidClientId,
   },
 };
 

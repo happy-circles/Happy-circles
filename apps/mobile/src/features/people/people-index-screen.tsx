@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -10,11 +10,69 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { PersonRow } from '@/components/person-row';
 import { ScreenShell } from '@/components/screen-shell';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
+import { InviteRequestsSheet } from '@/features/home/dashboard-invite-requests-sheet';
+import {
+  parseInviteRequestsTabParam,
+  usePeopleInviteRequestsController,
+} from '@/features/people/use-people-invite-requests-controller';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { AppText } from '@/components/app-text';
+
+function inviteRequestsSummary(receivedCount: number, sentCount: number): string {
+  if (receivedCount > 0) {
+    return receivedCount === 1
+      ? '1 solicitud por revisar'
+      : `${receivedCount} solicitudes por revisar`;
+  }
+
+  return sentCount === 1 ? '1 solicitud enviada' : `${sentCount} solicitudes enviadas`;
+}
+
+function PeopleInviteRequestsEntry({
+  receivedCount,
+  sentCount,
+  onPress,
+}: {
+  readonly receivedCount: number;
+  readonly sentCount: number;
+  readonly onPress: () => void;
+}) {
+  const totalCount = receivedCount + sentCount;
+
+  if (totalCount === 0) {
+    return null;
+  }
+
+  return (
+    <Pressable
+      accessibilityLabel={`Solicitudes. ${inviteRequestsSummary(receivedCount, sentCount)}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.requestsEntry, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.requestsEntryIcon}>
+        <Ionicons color={theme.colors.primary} name="person-add-outline" size={19} />
+      </View>
+      <View style={styles.requestsEntryCopy}>
+        <AppText numberOfLines={1} style={styles.requestsEntryTitle}>
+          Solicitudes
+        </AppText>
+        <AppText numberOfLines={1} style={styles.requestsEntryDetail}>
+          {inviteRequestsSummary(receivedCount, sentCount)}
+        </AppText>
+      </View>
+      <View style={styles.requestsEntryCta}>
+        <AppText numberOfLines={1} style={styles.requestsEntryCtaText}>
+          Revisar
+        </AppText>
+        <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
+      </View>
+    </Pressable>
+  );
+}
 
 export function PeopleIndexScreen() {
   const params = useLocalSearchParams<{
@@ -22,13 +80,24 @@ export function PeopleIndexScreen() {
     amountMinor?: string;
     description?: string;
     direction?: string;
+    requests?: string;
+    requestTab?: string;
   }>();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const people = snapshotQuery.data?.dashboard.activePeople ?? [];
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
+  const inviteRequests = usePeopleInviteRequestsController({
+    accountInviteHistoryItems: snapshotQuery.data?.accountInviteHistoryItems ?? [],
+    accountInvitePendingItems: snapshotQuery.data?.accountInvitePendingItems ?? [],
+    friendshipHistoryItems: snapshotQuery.data?.friendshipHistoryItems ?? [],
+    friendshipPendingItems: snapshotQuery.data?.friendshipPendingItems ?? [],
+  });
+  const openInviteRequests = inviteRequests.open;
+  const preferredInviteTab = inviteRequests.preferredTab;
   const [personQuery, setPersonQuery] = useState('');
   const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
+  const handledRequestParamRef = useRef<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<{
     readonly imageUrl: string | null;
     readonly label: string;
@@ -65,6 +134,20 @@ export function PeopleIndexScreen() {
       setAddPersonSheetVisible(true);
     }
   }, [params.addPerson]);
+
+  useEffect(() => {
+    if (params.requests !== '1') {
+      return;
+    }
+
+    const requestKey = `${params.requests}:${params.requestTab ?? ''}`;
+    if (handledRequestParamRef.current === requestKey) {
+      return;
+    }
+
+    handledRequestParamRef.current = requestKey;
+    openInviteRequests(parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab);
+  }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab]);
 
   if (snapshotQuery.isLoading) {
     return (
@@ -117,6 +200,12 @@ export function PeopleIndexScreen() {
         </View>
       ) : null}
 
+      <PeopleInviteRequestsEntry
+        onPress={() => openInviteRequests()}
+        receivedCount={inviteRequests.receivedItems.length}
+        sentCount={inviteRequests.sentItems.length}
+      />
+
       {people.length === 0 ? (
         <EmptyState
           description={noActiveRelationshipsEmptyState.description}
@@ -155,6 +244,18 @@ export function PeopleIndexScreen() {
         onClose={() => setAddPersonSheetVisible(false)}
         transactionContext={transactionContext}
         visible={addPersonSheetVisible}
+      />
+      <InviteRequestsSheet
+        activeTab={inviteRequests.activeTab}
+        busyKey={inviteRequests.busyKey}
+        historyItems={inviteRequests.historyItems}
+        message={inviteRequests.message}
+        onAction={(item, action) => void inviteRequests.handleAction(item, action)}
+        onChangeTab={inviteRequests.setActiveTab}
+        onClose={inviteRequests.close}
+        receivedItems={inviteRequests.receivedItems}
+        sentItems={inviteRequests.sentItems}
+        visible={inviteRequests.visible}
       />
     </ScreenShell>
   );
@@ -200,5 +301,51 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: theme.spacing.sm,
+  },
+  requestsEntry: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 62,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  requestsEntryIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.pill,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  requestsEntryCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  requestsEntryTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  requestsEntryDetail: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
+  },
+  requestsEntryCta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+  },
+  requestsEntryCtaText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
   },
 });

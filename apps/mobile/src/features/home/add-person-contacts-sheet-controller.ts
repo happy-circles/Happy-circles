@@ -1,52 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Clipboard from 'expo-clipboard';
-import { useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { Alert, Linking, Platform, Share } from 'react-native';
+import { Platform } from 'react-native';
 
+import { useAddPersonContactPermissionActions } from '@/features/home/add-person-contact-permissions';
+import { useAddPersonOutreachActions } from '@/features/home/add-person-outreach-actions';
+import { useAddPersonQrActions } from '@/features/home/add-person-qr-actions';
 import {
   CONTACT_TARGET_RESOLUTION_LIMIT,
   buildContactSectionItems,
-  compareEnrichedContacts,
   getUnresolvedContactPhoneE164List,
-  isFreshQrDelivery,
   uniqueContactPhoneE164List,
   type AddPersonTransactionContext,
-  type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
 import {
   loadPeopleTargetResolutionCache,
   pruneExpiredPeopleTargetResolutionCache,
   savePeopleTargetResolutionsToCache,
 } from '@/features/home/people-target-resolution-cache';
-import { showBlockedActionAlert } from '@/lib/action-feedback';
 import {
   canReadContactsPermissionStatus,
   getContactsPermissionStatus,
-  presentLimitedContactsAccessPicker,
-  requestContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
 import {
-  type AccountInviteDeliveryResult,
-  type FriendshipInviteDeliveryResult,
-  type PeopleOutreachResult,
   type PeopleTargetResolution,
   useCreateExternalFriendshipInviteMutation,
   useCreatePeopleOutreachMutation,
   useResolvePeopleTargetsMutation,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
 import { useSession } from '@/providers/session-provider';
 import {
-  buildAccountInviteShareMessage,
-  buildAppInviteLink,
-  buildFriendshipInviteLink,
   CONTACTS_PAGE_SIZE,
-  extractInviteToken,
-  isAccountInviteDeliveryResult,
   type ContactCandidate,
-  type PendingContactSelection,
   readContactsPageFromDevice,
 } from '@/features/invites/people-outreach-utils';
 
@@ -74,14 +60,6 @@ export function useAddPersonContactsSheetController({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState('');
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerLocked, setScannerLocked] = useState(false);
-  const [scannerMessage, setScannerMessage] = useState<string | null>(null);
-  const [myQrVisible, setMyQrVisible] = useState(false);
-  const [myQrDelivery, setMyQrDelivery] = useState<FriendshipInviteDeliveryResult | null>(null);
-  const [myQrMessage, setMyQrMessage] = useState<string | null>(null);
-  const [pendingContactSelection, setPendingContactSelection] =
-    useState<PendingContactSelection | null>(null);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsScanComplete, setContactsScanComplete] = useState(false);
   const [contactsLoadedCount, setContactsLoadedCount] = useState(0);
@@ -104,28 +82,31 @@ export function useAddPersonContactsSheetController({
   const inAppContacts = contactSections.inAppContacts;
   const inviteContacts = contactSections.inviteContacts;
   const displayedContactsCount = inAppContacts.length + inviteContacts.length;
-  const myQrLink = isFreshQrDelivery(myQrDelivery)
-    ? buildFriendshipInviteLink(myQrDelivery.deliveryToken)
-    : null;
 
-  const pendingContactOptions = useMemo<readonly EnrichedContact[]>(
-    () =>
-      pendingContactSelection
-        ? pendingContactSelection.phoneOptions
-            .map((phoneOption) => ({
-              contact: {
-                alias: pendingContactSelection.alias,
-                contactId: pendingContactSelection.contactId,
-                phoneOptions: [phoneOption],
-                primaryPhone: phoneOption,
-                searchKey: '',
-              },
-              resolution: targetCache[phoneOption.phoneE164] ?? null,
-            }))
-            .sort(compareEnrichedContacts)
-        : [],
-    [pendingContactSelection, targetCache],
-  );
+  const {
+    handleBarcodeScanned,
+    handleOpenScanner,
+    handleRefreshMyQr,
+    handleShareMyQr,
+    handleShowMyQr,
+    myQrDelivery,
+    myQrLink,
+    myQrMessage,
+    myQrVisible,
+    resetQrStateOnClose,
+    scannerMessage,
+    scannerOpen,
+    setMyQrVisible,
+    setScannerOpen,
+  } = useAddPersonQrActions({
+    cameraPermission,
+    createExternalFriendshipInvite,
+    onClose,
+    requestCameraPermission,
+    router,
+    setBusyKey,
+    setMessage,
+  });
 
   const mergeTargetResolutions = useCallback((resolutions: readonly PeopleTargetResolution[]) => {
     if (resolutions.length === 0) {
@@ -159,6 +140,25 @@ export function useAddPersonContactsSheetController({
     },
     [mergeTargetResolutions, persistTargetResolutions],
   );
+
+  const {
+    handleContactPress,
+    handleCreateOutreach,
+    pendingContactOptions,
+    pendingContactSelection,
+    resetPendingContactSelection,
+    setPendingContactSelection,
+  } = useAddPersonOutreachActions({
+    busyKey,
+    createPeopleOutreach,
+    ensurePhoneStatuses,
+    mergeAndPersistTargetResolutions,
+    router,
+    setBusyKey,
+    setMessage,
+    targetCache,
+    transactionContext,
+  });
 
   useEffect(() => {
     resolvePeopleTargetsMutateRef.current = resolvePeopleTargets.mutateAsync;
@@ -397,6 +397,17 @@ export function useAddPersonContactsSheetController({
     }
   }, [enqueueResolutionPhones, mergeTargetResolutions, session.userId]);
 
+  const { handleExpandLimitedContactsAccess, requestContactsAccess } =
+    useAddPersonContactPermissionActions({
+      busyKey,
+      contactsPermissionStatus,
+      loadContacts,
+      setBusyKey,
+      setContacts,
+      setContactsPermissionStatus,
+      setMessage,
+    });
+
   useEffect(() => {
     if (!visible) {
       scanRunIdRef.current += 1;
@@ -405,19 +416,21 @@ export function useAddPersonContactsSheetController({
       inFlightResolutionSetRef.current.clear();
       visibleResolutionPhonesRef.current.clear();
       setContactsLoading(false);
-      setScannerOpen(false);
-      setScannerLocked(false);
-      setScannerMessage(null);
-      setMyQrVisible(false);
-      setMyQrMessage(null);
-      setPendingContactSelection(null);
+      resetQrStateOnClose();
+      resetPendingContactSelection();
       return;
     }
 
     setMessage(null);
     setSearchValue(initialSearchValue?.trim() ?? '');
     void loadContacts();
-  }, [initialSearchValue, loadContacts, visible]);
+  }, [
+    initialSearchValue,
+    loadContacts,
+    resetPendingContactSelection,
+    resetQrStateOnClose,
+    visible,
+  ]);
 
   useEffect(() => {
     if (!visible || !canReadContacts || contactResolutionWindow.length === 0) {
@@ -429,87 +442,6 @@ export function useAddPersonContactsSheetController({
     visibleResolutionPhonesRef.current = new Set(visiblePhones);
     enqueueResolutionPhones(visiblePhones, 'visible');
   }, [canReadContacts, contactResolutionWindow, enqueueResolutionPhones, visible]);
-
-  async function requestContactsAccess() {
-    if (busyKey) {
-      return;
-    }
-
-    setBusyKey('request-contacts');
-    setMessage(null);
-
-    try {
-      const nextStatus = await requestContactsPermissionStatus();
-      setContactsPermissionStatus(nextStatus);
-
-      if (!canReadContactsPermissionStatus(nextStatus)) {
-        setContacts([]);
-        setMessage(
-          nextStatus === 'denied'
-            ? 'Contactos bloqueados. Puedes activarlos en Ajustes.'
-            : 'Puedes seguir conectando en persona con QR.',
-        );
-        if (nextStatus === 'denied') {
-          openContactsSettings();
-        }
-        return;
-      }
-
-      setMessage(
-        nextStatus === 'limited'
-          ? 'Tu telefono compartio contactos limitados. Los estamos cargando.'
-          : 'Tu agenda se esta cargando.',
-      );
-      void loadContacts();
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.',
-      );
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  function openContactsSettings() {
-    Alert.alert(
-      'Permiso de contactos bloqueado',
-      'Abre Ajustes y permite contactos para encontrar personas desde tu agenda.',
-      [
-        { style: 'cancel', text: 'Ahora no' },
-        { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
-      ],
-    );
-  }
-
-  async function handleExpandLimitedContactsAccess() {
-    if (busyKey || contactsPermissionStatus !== 'limited') {
-      return;
-    }
-
-    setBusyKey('expand-contacts');
-    setMessage(null);
-
-    try {
-      await presentLimitedContactsAccessPicker();
-      const nextStatus = await getContactsPermissionStatus();
-      setContactsPermissionStatus(nextStatus);
-
-      if (!canReadContactsPermissionStatus(nextStatus)) {
-        setContacts([]);
-        setMessage('La agenda dejo de estar disponible. Puedes seguir con QR en persona.');
-        return;
-      }
-
-      setMessage('Actualizando la agenda compartida.');
-      void loadContacts();
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No se pudo ampliar el acceso a tus contactos.',
-      );
-    } finally {
-      setBusyKey(null);
-    }
-  }
 
   async function ensurePhoneStatuses(phoneE164List: readonly string[]) {
     const cachedResolutions = await loadPeopleTargetResolutionCache(session.userId, phoneE164List);
@@ -542,270 +474,6 @@ export function useAddPersonContactsSheetController({
     ) {
       await new Promise((resolve) => setTimeout(resolve, 80));
     }
-  }
-
-  async function shareAccountInviteLink(alias: string, delivery: AccountInviteDeliveryResult) {
-    const inviteLink = buildAppInviteLink(delivery.deliveryToken);
-    const shareMessage = buildAccountInviteShareMessage({
-      amountMinor: transactionContext?.amountMinor ?? null,
-      description: transactionContext?.description ?? null,
-      direction: transactionContext?.direction ?? null,
-      inviteLink,
-      inviteeAlias: alias,
-    });
-
-    try {
-      await Share.share({
-        message: shareMessage,
-        title: 'Invitacion a Happy Circles',
-      });
-      setMessage(`Listo. Ya puedes compartir el acceso privado con ${alias}.`);
-    } catch {
-      await Clipboard.setStringAsync(inviteLink);
-      setMessage(`No pudimos abrir compartir. Copiamos el link privado de ${alias}.`);
-    }
-  }
-
-  function updateCacheFromOutreach(
-    phoneE164: string,
-    alias: string,
-    response: PeopleOutreachResult,
-  ) {
-    let resolution: PeopleTargetResolution;
-
-    if (response.kind === 'already_related') {
-      resolution = {
-        accountInviteId: null,
-        accountInviteStatus: null,
-        avatarPath: null,
-        displayName: response.displayName ?? alias,
-        friendshipInviteId: null,
-        matchedUserId: response.matchedUserId,
-        phoneE164,
-        relationshipId: response.relationshipId ?? null,
-        status: 'already_related',
-      };
-      mergeAndPersistTargetResolutions([resolution]);
-      return;
-    }
-
-    if (response.kind === 'friendship') {
-      resolution = {
-        accountInviteId: null,
-        accountInviteStatus: null,
-        avatarPath: null,
-        displayName: response.displayName ?? alias,
-        friendshipInviteId: response.inviteId ?? null,
-        matchedUserId: response.matchedUserId,
-        phoneE164,
-        relationshipId: response.relationshipId ?? null,
-        status: 'pending_friendship',
-      };
-      mergeAndPersistTargetResolutions([resolution]);
-      return;
-    }
-
-    const accountInviteId =
-      isAccountInviteDeliveryResult(response.result) && typeof response.result.inviteId === 'string'
-        ? response.result.inviteId
-        : (response.inviteId ?? null);
-
-    resolution = {
-      accountInviteId,
-      accountInviteStatus: 'pending_activation',
-      avatarPath: null,
-      displayName: response.displayName ?? alias,
-      friendshipInviteId: null,
-      matchedUserId: response.matchedUserId,
-      phoneE164,
-      relationshipId: null,
-      status: 'pending_activation',
-    };
-    mergeAndPersistTargetResolutions([resolution]);
-  }
-
-  async function handleCreateOutreach(input: {
-    readonly alias: string;
-    readonly phoneE164: string;
-    readonly phoneLabel?: string | null;
-    readonly sourceContext: string;
-  }) {
-    if (busyKey) {
-      return;
-    }
-
-    setBusyKey(input.phoneE164);
-    setMessage(null);
-
-    try {
-      const response = await createPeopleOutreach.mutateAsync({
-        channel: 'remote',
-        intendedRecipientAlias: input.alias,
-        intendedRecipientPhoneE164: input.phoneE164,
-        intendedRecipientPhoneLabel: input.phoneLabel ?? undefined,
-        sourceContext: input.sourceContext,
-      });
-
-      updateCacheFromOutreach(input.phoneE164, input.alias, response);
-
-      if (response.kind === 'already_related') {
-        setMessage(`${input.alias} ya aparece en tus personas.`);
-        return;
-      }
-
-      if (response.kind === 'friendship') {
-        setMessage(
-          response.status === 'pending_friendship'
-            ? `${input.alias} ya tiene una solicitud pendiente.`
-            : `Enviamos una solicitud de amistad a ${input.alias}.`,
-        );
-        return;
-      }
-
-      if (!isAccountInviteDeliveryResult(response.result)) {
-        throw new Error('No pudimos preparar el link de acceso para este contacto.');
-      }
-
-      await shareAccountInviteLink(input.alias, response.result);
-    } catch (error) {
-      const failureMessage =
-        error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
-      setMessage(failureMessage);
-      showBlockedActionAlert(failureMessage, router);
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  async function handleContactPress(contact: ContactCandidate) {
-    if (contact.phoneOptions.length === 1) {
-      await handleCreateOutreach({
-        alias: contact.alias,
-        phoneE164: contact.primaryPhone.phoneE164,
-        phoneLabel: contact.primaryPhone.label,
-        sourceContext: 'home_add_contact_list',
-      });
-      return;
-    }
-
-    try {
-      await ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164));
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
-      );
-    }
-
-    setPendingContactSelection({
-      alias: contact.alias,
-      contactId: contact.contactId,
-      phoneOptions: contact.phoneOptions,
-    });
-  }
-
-  function navigateToInviteToken(rawValue: string) {
-    const token = extractInviteToken(rawValue);
-    if (!token) {
-      setMessage('Pega un link completo o un codigo valido de invitacion.');
-      return;
-    }
-
-    setScannerOpen(false);
-    onClose();
-    pushRoute(router, {
-      params: { token },
-      pathname: '/invite/[token]',
-    });
-  }
-
-  async function handleOpenScanner() {
-    setMessage(null);
-    setScannerMessage(null);
-    setMyQrVisible(false);
-
-    if (cameraPermission?.granted) {
-      setScannerLocked(false);
-      setScannerOpen(true);
-      return;
-    }
-
-    const permission = await requestCameraPermission();
-    if (!permission.granted) {
-      setMessage('Necesitamos permiso de camara para escanear QR.');
-      return;
-    }
-
-    setScannerLocked(false);
-    setScannerOpen(true);
-  }
-
-  async function handleShowMyQr() {
-    setMyQrVisible(true);
-    setScannerOpen(false);
-    setMessage(null);
-    setMyQrMessage(null);
-
-    if (isFreshQrDelivery(myQrDelivery)) {
-      return;
-    }
-
-    await handleRefreshMyQr();
-  }
-
-  async function handleRefreshMyQr() {
-    setBusyKey('my-qr');
-    setMyQrMessage(null);
-    try {
-      const delivery = await createExternalFriendshipInvite.mutateAsync({
-        channel: 'qr',
-        sourceContext: 'home_add_my_qr',
-      });
-      if (!delivery.deliveryToken) {
-        throw new Error('El servidor no devolvio un token para el QR.');
-      }
-      setMyQrDelivery(delivery);
-    } catch (error) {
-      const failureMessage = error instanceof Error ? error.message : 'No se pudo crear tu QR.';
-      setMyQrMessage(failureMessage);
-      showBlockedActionAlert(failureMessage, router);
-    } finally {
-      setBusyKey((current) => (current === 'my-qr' ? null : current));
-    }
-  }
-
-  async function handleShareMyQr() {
-    if (!myQrLink) {
-      return;
-    }
-
-    try {
-      await Share.share({
-        message: `Escanea o abre este link para conectar conmigo en Happy Circles: ${myQrLink}`,
-        title: 'Mi QR de Happy Circles',
-      });
-    } catch {
-      await Clipboard.setStringAsync(myQrLink);
-      setMyQrMessage('No pudimos abrir compartir. Copiamos tu link de QR.');
-    }
-  }
-
-  function handleBarcodeScanned(result: BarcodeScanningResult) {
-    if (scannerLocked) {
-      return;
-    }
-
-    const token = extractInviteToken(result.data);
-    if (!token) {
-      setScannerLocked(true);
-      setScannerMessage('Ese QR no parece ser una invitacion valida de Happy Circles.');
-      setTimeout(() => {
-        setScannerLocked(false);
-      }, 1200);
-      return;
-    }
-
-    setScannerLocked(true);
-    navigateToInviteToken(token);
   }
 
   return {

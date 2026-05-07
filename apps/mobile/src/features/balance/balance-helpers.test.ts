@@ -29,7 +29,6 @@ import {
   personImpactAmount,
   personLensAmount,
   signedFormatCompactCop,
-  transactionFilterHref,
 } from './balance-helpers';
 
 function person(value: Partial<BalanceAnalyticsPersonRowDto>): BalanceAnalyticsPersonRowDto {
@@ -71,9 +70,9 @@ describe('balance helpers', () => {
     expect(comparisonCopy(0.254, 'Abril')).toBe('Subio 25% frente a abril.');
     expect(comparisonCopy(-0.1, 'Abril')).toBe('Bajo 10% frente a abril.');
     expect(isBalanceFocus('categories')).toBe(true);
+    expect(isBalanceFocus('projection')).toBe(false);
     expect(isBalanceFocus('unknown')).toBe(false);
-    expect(focusIndex('categories')).toBe(3);
-    expect(transactionFilterHref('projection')).toBe('/transactions?filter=projection');
+    expect(focusIndex('categories')).toBe(2);
   });
 
   it('selects person and category amounts by lens', () => {

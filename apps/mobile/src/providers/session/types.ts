@@ -16,6 +16,7 @@ export type AccountAccessState = 'loading' | 'needs_invite' | 'needs_activation'
 export type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
 export type DeviceTrustState = 'loading' | 'unknown' | 'pending' | 'trusted' | 'revoked';
 export type IdentityProvider = 'email' | 'google' | 'apple' | 'phone' | 'unknown';
+export type TrustedDeviceAuthMethod = 'google' | 'apple' | 'password';
 export type SetupPermissionStatus =
   | 'loading'
   | ContactsPermissionStatus
@@ -89,6 +90,7 @@ export interface EmailOtpVerificationInput {
 }
 
 export interface TrustCurrentDeviceInput {
+  readonly method?: TrustedDeviceAuthMethod;
   readonly password?: string;
 }
 

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
@@ -14,6 +14,7 @@ import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { backOrReturnTo } from '@/lib/navigation';
+import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
@@ -36,6 +37,7 @@ import {
   useAppSnapshot,
 } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { transactionsScreenStyles as styles } from './transactions-screen-styles';
 import {
   normalizeTransactionCategory,
   transactionCategoryColor,
@@ -57,6 +59,7 @@ import {
   transactionAmountLabel,
   transactionContextLabel,
   transactionFocusId,
+  transactionShouldSurfaceStatus,
   transactionStatusLabel,
   transactionStatusTone,
   transactionTimeLabel,
@@ -262,7 +265,7 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
 }
 
 function shouldSurfacePendingStatus(item: ActivityItemDto): boolean {
-  return item.status === 'requires_you' || item.status === 'approved';
+  return transactionShouldSurfaceStatus(item, { density: 'list' });
 }
 
 function PendingTransactionCard({
@@ -488,7 +491,10 @@ export function TransactionsScreen() {
             <FilterPill
               key={option.value}
               label={option.label}
-              onPress={() => setActiveFilter(option.value)}
+              onPress={() => {
+                triggerAppSelectionHaptic();
+                setActiveFilter(option.value);
+              }}
               selected={activePrimaryFilter === option.value}
             />
           ))}
@@ -576,81 +582,3 @@ export function TransactionsScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  backButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  backButtonPressed: {
-    opacity: 0.68,
-  },
-  list: {
-    gap: theme.spacing.sm,
-  },
-  filterStack: {
-    gap: theme.spacing.xs,
-  },
-  categoryFilterChip: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  categoryFilterText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-  filterRail: {
-    gap: theme.spacing.xs,
-    paddingRight: theme.spacing.lg,
-  },
-  filterPill: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 7,
-  },
-  filterPillSelected: {
-    backgroundColor: theme.colors.primaryGhost,
-    borderColor: 'rgba(26, 39, 68, 0.22)',
-  },
-  filterPillPressed: {
-    opacity: 0.76,
-  },
-  filterPillText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
-  filterPillTextSelected: {
-    color: theme.colors.primary,
-  },
-  loadingState: {
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingVertical: theme.spacing.xl,
-  },
-  supportText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-});

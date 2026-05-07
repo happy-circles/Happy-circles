@@ -1,20 +1,21 @@
 import type {
   ActiveSettlementPreviewDto,
-  BalanceSettlementMetricsDto,
   PersonTimelineItemDto,
 } from '@happy-circles/application';
-import type { Database } from '@happy-circles/shared';
 import type {
   ActionableItem,
   InboxItemRow,
   SettlementDetailDecision,
   SettlementDetailDto,
-  SettlementMovement,
   SettlementParticipantRow,
   SettlementProposalRow,
 } from '../types';
-import type { AnalyticsRange } from '../utils/dates';
-import { computeChangeRatio, dateMs, formatRelativeLabel, isWithinRange } from '../utils/dates';
+import { formatRelativeLabel } from '../utils/dates';
+import {
+  parseSettlementMovements,
+  settlementProposalTotalAmount,
+  settlementSavedMovementsCount,
+} from './settlement-core';
 import { LIVE_DATA_CTA, LIVE_DATA_ROUTES } from '../presentation';
 import { formatCop } from '../../data';
 
@@ -30,40 +31,6 @@ export function normalizeSettlementDetailDecision(
   }
 
   return 'pending';
-}
-
-export function parseSettlementMovements(
-  value: Database['public']['Tables']['settlement_proposals']['Row']['movements_json'],
-) {
-  if (!Array.isArray(value)) {
-    return [] as SettlementMovement[];
-  }
-
-  return value.flatMap((entry) => {
-    if (Array.isArray(entry) || typeof entry !== 'object' || entry === null) {
-      return [];
-    }
-
-    const debtorUserId = entry['debtor_user_id'];
-    const creditorUserId = entry['creditor_user_id'];
-    const amountMinor = entry['amount_minor'];
-
-    if (
-      typeof debtorUserId === 'string' &&
-      typeof creditorUserId === 'string' &&
-      typeof amountMinor === 'number'
-    ) {
-      return [
-        {
-          debtor_user_id: debtorUserId,
-          creditor_user_id: creditorUserId,
-          amount_minor: amountMinor,
-        },
-      ];
-    }
-
-    return [];
-  });
 }
 
 export function buildPendingSettlementItems(
@@ -173,20 +140,6 @@ export function buildPendingSettlementItems(
   }
 
   return items;
-}
-
-export function settlementProposalTotalAmount(proposal: SettlementProposalRow): number {
-  return parseSettlementMovements(proposal.movements_json).reduce(
-    (total, movement) => total + movement.amount_minor,
-    0,
-  );
-}
-
-export function settlementSavedMovementsCount(
-  participantCount: number,
-  movementCount: number,
-): number {
-  return Math.max(participantCount - movementCount, 0);
 }
 
 export function settlementParticipantLabel(input: {
@@ -455,82 +408,5 @@ export function buildActiveSettlementPreview(input: {
     participantUserIds,
     participantLabels,
     participantDecisions,
-  };
-}
-
-export function buildSettlementMetrics(input: {
-  readonly proposals: readonly SettlementProposalRow[];
-  readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
-  readonly currentUserId: string;
-  readonly visibleCounterpartyUserIds: ReadonlySet<string>;
-  readonly names: Map<string, string>;
-  readonly activeProposal: ActiveSettlementPreviewDto | null;
-  readonly range: AnalyticsRange;
-}): BalanceSettlementMetricsDto {
-  const participatedProposals = input.proposals.filter((proposal) =>
-    (input.participantsByProposalId.get(proposal.id) ?? []).some(
-      (participant) => participant.participant_user_id === input.currentUserId,
-    ),
-  );
-  const relevantTimestamp = (proposal: SettlementProposalRow) =>
-    dateMs(proposal.executed_at ?? proposal.updated_at ?? proposal.created_at);
-  const currentExecuted = participatedProposals.filter((proposal) => {
-    if (proposal.status !== 'executed') {
-      return false;
-    }
-    const timeMs = relevantTimestamp(proposal);
-    return (
-      timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs)
-    );
-  });
-  const previousExecuted = participatedProposals.filter((proposal) => {
-    if (proposal.status !== 'executed') {
-      return false;
-    }
-    const timeMs = relevantTimestamp(proposal);
-    return (
-      timeMs !== null &&
-      isWithinRange(timeMs, input.range.previousStartMs, input.range.previousEndMs)
-    );
-  });
-  const currentRelevant = participatedProposals.filter((proposal) => {
-    const timeMs = relevantTimestamp(proposal);
-    return (
-      timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs)
-    );
-  });
-  const sumProposalTotal = (proposal: SettlementProposalRow) =>
-    settlementProposalTotalAmount(proposal);
-  const sumMovementCount = (proposal: SettlementProposalRow) =>
-    parseSettlementMovements(proposal.movements_json).length;
-
-  const resolvedMinor = currentExecuted.reduce(
-    (total, proposal) => total + sumProposalTotal(proposal),
-    0,
-  );
-  const previousResolvedMinor = previousExecuted.reduce(
-    (total, proposal) => total + sumProposalTotal(proposal),
-    0,
-  );
-  const movementCount = currentExecuted.reduce(
-    (total, proposal) => total + sumMovementCount(proposal),
-    0,
-  );
-  const savedMovementsCount = currentExecuted.reduce((total, proposal) => {
-    const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-    return total + settlementSavedMovementsCount(participants.length, sumMovementCount(proposal));
-  }, 0);
-
-  return {
-    activeCount: participatedProposals.filter(
-      (proposal) => proposal.status === 'pending_approvals' || proposal.status === 'approved',
-    ).length,
-    activeProposal: input.activeProposal,
-    resolvedMinor,
-    movementCount,
-    savedMovementsCount,
-    participatedCount: currentRelevant.length,
-    previousResolvedMinor,
-    changeRatio: computeChangeRatio(resolvedMinor, previousResolvedMinor),
   };
 }

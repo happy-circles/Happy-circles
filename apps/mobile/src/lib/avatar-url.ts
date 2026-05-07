@@ -2,7 +2,11 @@ function normalizeAvatarPath(path: string | null | undefined): string {
   return (path?.trim() ?? '').replace(/^\/+/, '');
 }
 
-function isRemoteUrl(value: string): boolean {
+function isDirectAvatarUri(value: string): boolean {
+  return /^(https?:|file:|content:|asset:|data:|blob:|ph:)/i.test(value);
+}
+
+function isVersionableRemoteUri(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
@@ -18,8 +22,8 @@ export function resolveAvatarUrl(
   const appendVersion = (value: string): string =>
     version ? `${value}${value.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}` : value;
 
-  if (isRemoteUrl(normalizedPath)) {
-    return appendVersion(normalizedPath);
+  if (isDirectAvatarUri(normalizedPath)) {
+    return isVersionableRemoteUri(normalizedPath) ? appendVersion(normalizedPath) : normalizedPath;
   }
 
   return normalizedPath;
@@ -30,5 +34,5 @@ export function normalizeStoredAvatarPath(path: string | null | undefined): stri
 }
 
 export function avatarPathIsRemoteUrl(value: string): boolean {
-  return isRemoteUrl(value);
+  return isDirectAvatarUri(value);
 }

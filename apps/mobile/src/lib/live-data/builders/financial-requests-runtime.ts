@@ -10,6 +10,14 @@ import type {
   TimelineEventDraft,
 } from '../types';
 import { formatRelativeLabel } from '../utils/dates';
+import {
+  buildRequestCreatedTitle,
+  buildRequestEventSubtitle,
+  buildRequestFlowLabelFromRequest,
+  buildRequestResolutionTitle,
+  requestToneForStatus,
+  userLabelForRequest,
+} from './financial-request-labels';
 import { requestDirectionForUser } from '../utils/money-and-direction';
 import {
   buildHistorySubtitle,
@@ -21,6 +29,10 @@ import {
 } from './relationship-history';
 import { normalizeTransactionCategory } from '../../transaction-categories';
 import { LIVE_DATA_CTA, LIVE_DATA_ROUTES } from '../presentation';
+import {
+  inferOriginRequestIdFromLedgerRow,
+  resolveRootRequestId,
+} from './financial-request-inference';
 
 export function buildPendingRequestImpactTitle(input: {
   readonly request: FinancialRequestRow;
@@ -153,253 +165,6 @@ export function buildPersonPendingRequest(input: {
       'Persona',
     ),
   };
-}
-
-export function userLabelForRequest(
-  userId: string | null | undefined,
-  currentUserId: string,
-  counterpartyName: string,
-  names: Map<string, string>,
-  fallback: string,
-): string {
-  if (!userId) {
-    return fallback;
-  }
-
-  return userId === currentUserId ? 'Tu' : (names.get(userId) ?? counterpartyName);
-}
-
-export function resolveRootRequestId(
-  requestId: string,
-  requestsById: ReadonlyMap<string, FinancialRequestRow>,
-): string {
-  let currentId = requestId;
-  let guard = 0;
-
-  while (guard < 20) {
-    const request = requestsById.get(currentId);
-    if (!request?.parent_request_id) {
-      return request?.id ?? currentId;
-    }
-
-    currentId = request.parent_request_id;
-    guard += 1;
-  }
-
-  return currentId;
-}
-
-export function normalizeComparableText(value: string | null | undefined): string | null {
-  const normalized = value?.trim().toLocaleLowerCase('es-CO');
-  return normalized && normalized.length > 0 ? normalized : null;
-}
-
-export function requestTypeFromAcceptanceSubtype(
-  subtype: RelationshipHistoryRow['subtype'],
-): FinancialRequestRow['request_type'] | null {
-  if (subtype === 'balance_increase_acceptance') {
-    return 'balance_increase';
-  }
-
-  if (subtype === 'transaction_reversal_acceptance') {
-    return 'transaction_reversal';
-  }
-
-  return null;
-}
-
-export function inferOriginRequestIdFromLedgerRow(input: {
-  readonly row: RelationshipHistoryRow;
-  readonly requests: readonly FinancialRequestRow[];
-  readonly requestsById: ReadonlyMap<string, FinancialRequestRow>;
-}): string | null {
-  const requestType = requestTypeFromAcceptanceSubtype(input.row.subtype);
-  if (!requestType) {
-    return null;
-  }
-
-  const happenedAt = Date.parse(input.row.happened_at);
-  if (Number.isNaN(happenedAt)) {
-    return null;
-  }
-
-  const normalizedDescription = normalizeComparableText(input.row.description);
-  const candidates = input.requests
-    .filter((request) => {
-      if (request.status !== 'accepted' || request.request_type !== requestType) {
-        return false;
-      }
-
-      if (request.amount_minor !== input.row.amount_minor) {
-        return false;
-      }
-
-      if (
-        request.debtor_user_id !== input.row.debtor_user_id ||
-        request.creditor_user_id !== input.row.creditor_user_id
-      ) {
-        return false;
-      }
-
-      const resolvedAt = Date.parse(
-        request.resolved_at ?? request.updated_at ?? request.created_at,
-      );
-      if (Number.isNaN(resolvedAt) || Math.abs(resolvedAt - happenedAt) > 60_000) {
-        return false;
-      }
-
-      const requestDescription = normalizeComparableText(request.description);
-      return !normalizedDescription || requestDescription === normalizedDescription;
-    })
-    .sort((left, right) => {
-      const leftResolvedAt = Date.parse(left.resolved_at ?? left.updated_at ?? left.created_at);
-      const rightResolvedAt = Date.parse(right.resolved_at ?? right.updated_at ?? right.created_at);
-      return Math.abs(leftResolvedAt - happenedAt) - Math.abs(rightResolvedAt - happenedAt);
-    });
-
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  return resolveRootRequestId(candidates[0].id, input.requestsById);
-}
-
-export function buildRequestFlowLabelFromRequest(
-  request: FinancialRequestRow,
-  currentUserId: string,
-  counterpartyName: string,
-  names: Map<string, string>,
-): string {
-  const creator = userLabelForRequest(
-    request.creator_user_id,
-    currentUserId,
-    counterpartyName,
-    names,
-    'Persona',
-  );
-  const responder = userLabelForRequest(
-    request.responder_user_id,
-    currentUserId,
-    counterpartyName,
-    names,
-    'La otra persona',
-  );
-
-  return `${creator} -> ${responder}`;
-}
-
-export function buildRequestCreatedTitle(
-  request: FinancialRequestRow,
-  currentUserId: string,
-  counterpartyName: string,
-  names: Map<string, string>,
-): string {
-  const creator = userLabelForRequest(
-    request.creator_user_id,
-    currentUserId,
-    counterpartyName,
-    names,
-    'Persona',
-  );
-
-  if (request.parent_request_id) {
-    return `${creator} propuso un nuevo monto`;
-  }
-
-  if (request.request_type === 'transaction_reversal') {
-    return `${creator} propuso ajustar el movimiento`;
-  }
-
-  return `${creator} propuso una ${requestDirectionForUser(request, currentUserId) === 'owes_me' ? 'entrada' : 'salida'}`;
-}
-
-export function buildRequestResolutionTitle(
-  request: FinancialRequestRow,
-  currentUserId: string,
-  counterpartyName: string,
-  names: Map<string, string>,
-): string | null {
-  const responder = userLabelForRequest(
-    request.responder_user_id,
-    currentUserId,
-    counterpartyName,
-    names,
-    'La otra persona',
-  );
-
-  if (request.status === 'accepted') {
-    if (request.parent_request_id) {
-      return `${responder} acepto el nuevo monto`;
-    }
-
-    if (request.request_type === 'transaction_reversal') {
-      return `${responder} acepto el ajuste`;
-    }
-
-    return `${responder} acepto la propuesta`;
-  }
-
-  if (request.status === 'rejected') {
-    if (request.parent_request_id) {
-      return `${responder} no acepto el nuevo monto`;
-    }
-
-    if (request.request_type === 'transaction_reversal') {
-      return `${responder} no acepto el ajuste`;
-    }
-
-    return `${responder} no acepto la propuesta`;
-  }
-
-  if (request.status === 'canceled') {
-    return 'La propuesta fue cancelada';
-  }
-
-  if (request.status === 'expired') {
-    return 'La propuesta expiro';
-  }
-
-  if (request.status === 'amended') {
-    return `${responder} propuso un nuevo monto`;
-  }
-
-  return null;
-}
-
-export function requestToneForStatus(
-  request: FinancialRequestRow,
-  currentUserId: string,
-  status: FinancialRequestRow['status'],
-): PersonTimelineItemDto['tone'] {
-  if (
-    status === 'rejected' ||
-    status === 'amended' ||
-    status === 'canceled' ||
-    status === 'expired'
-  ) {
-    return 'neutral';
-  }
-
-  if (request.creditor_user_id === currentUserId) {
-    return 'positive';
-  }
-
-  if (request.debtor_user_id === currentUserId) {
-    return 'negative';
-  }
-
-  return 'neutral';
-}
-
-export function buildRequestEventSubtitle(
-  flowLabel: string,
-  description: string | null,
-  happenedAt: string,
-  nowMs: number,
-): string {
-  return [flowLabel, description ?? 'Sin descripcion', formatRelativeLabel(happenedAt, nowMs)].join(
-    ' | ',
-  );
 }
 
 export function buildPersonTimeline(input: {

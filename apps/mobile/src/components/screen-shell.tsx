@@ -152,6 +152,7 @@ export function ScreenShell({
           onScroll={onScroll}
           refresh={refresh}
           scrollEventThrottle={scrollEventThrottle}
+          scrollEnabled={scrollEnabled}
           showsVerticalScrollIndicator={false}
         >
           {scrollBody}
