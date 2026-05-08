@@ -152,7 +152,7 @@ export function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status
   }
 
   if (item.status === 'amended') {
-    return 'Monto actualizado';
+    return 'Monto modificado';
   }
 
   if (item.status === 'accepted') {
@@ -217,4 +217,3 @@ export function historyCaseKey(
 
   return `event:${item.id}`;
 }
-

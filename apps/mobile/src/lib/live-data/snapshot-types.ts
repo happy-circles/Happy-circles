@@ -3,6 +3,7 @@ import type {
   BalanceAnalyticsDto,
   BalanceOverviewDto,
   DashboardDto,
+  HappyCircleScoreDto,
   PersonCardDto,
   PersonDetailDto,
 } from '@happy-circles/application';
@@ -20,6 +21,7 @@ import type {
   FriendshipInviteListItem,
   FriendshipInviteRow,
   FriendshipSummary,
+  HappyCircleScoreEventRow,
   InboxItemRow,
   NotificationViewRow,
   OpenDebtRow,
@@ -47,6 +49,7 @@ export interface AppSnapshot {
     readonly email: string;
     readonly avatarUrl: string | null;
   } | null;
+  readonly happyCircleScore: HappyCircleScoreDto;
   readonly friendshipPendingItems: readonly FriendshipInviteListItem[];
   readonly friendshipHistoryItems: readonly FriendshipInviteListItem[];
   readonly friendshipSummary: FriendshipSummary;
@@ -94,6 +97,7 @@ export interface LiveSnapshotRows {
   readonly accountInviteDeliveries: readonly AccountInviteDeliveryRow[];
   readonly settlementProposals: readonly SettlementProposalRow[];
   readonly settlementParticipants: readonly SettlementParticipantRow[];
+  readonly happyCircleScoreEvents: readonly HappyCircleScoreEventRow[];
   readonly notificationViews: readonly NotificationViewRow[];
   readonly auditEvents: readonly AuditEventRow[];
   readonly limits: LiveSnapshotLimits;

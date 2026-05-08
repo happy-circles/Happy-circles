@@ -47,6 +47,8 @@ export const transactionsScreenStyles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
     justifyContent: 'center',
     minHeight: 34,
     paddingHorizontal: theme.spacing.sm,

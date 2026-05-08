@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Pressable, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto } from '@happy-circles/application';
 
@@ -11,14 +11,12 @@ import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { SwipePager } from '@/components/swipe-pager';
 import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
@@ -81,6 +79,13 @@ import {
   type PendingActionKey,
   type PersonSegmentKey,
 } from './person-detail-helpers';
+import { PersonDetailSegmentTabs } from './person-detail-segment-tabs';
+import {
+  PersonDetailErrorState,
+  PersonDetailLoadingState,
+  PersonDetailMissingState,
+} from './person-detail-states';
+import { personDetailScreenStyles as styles } from './person-detail-screen.styles';
 import { AppText } from '@/components/app-text';
 
 export interface PersonDetailScreenProps {
@@ -104,8 +109,11 @@ interface AmendmentErrors {
   readonly description?: string;
 }
 
+const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
+
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -130,11 +138,33 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
   const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
+  const [focusedLandingActive, setFocusedLandingActive] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
   const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const topInset = Math.max(0, insets.top);
+  const bottomInset = Math.max(0, insets.bottom);
+  const screenContentStyle = useMemo(
+    () => [
+      styles.screenContent,
+      {
+        paddingBottom: Math.max(theme.spacing.sm, bottomInset + theme.spacing.sm),
+        paddingTop: topInset + theme.spacing.xs,
+      },
+    ],
+    [bottomInset, topInset],
+  );
   const pendingItems = person?.pendingItems ?? [];
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
+  const focusedPendingItemId = useMemo(() => {
+    if (focusCandidates.size === 0) {
+      return null;
+    }
+
+    return (
+      pendingItems.find((item) => matchesFocusedTransaction(item, focusCandidates))?.id ?? null
+    );
+  }, [focusCandidates, pendingItems]);
   const orderedPendingItems = useMemo(() => {
     if (focusCandidates.size === 0) {
       return pendingItems;
@@ -214,6 +244,37 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       )?.id ?? null
     );
   }, [focusCandidates, historyCases]);
+  const orderedHistoryCases = useMemo(() => {
+    if (!focusedHistoryCaseId) {
+      return historyCases;
+    }
+
+    const focusedCase = historyCases.find((itemCase) => itemCase.id === focusedHistoryCaseId);
+    if (!focusedCase) {
+      return historyCases;
+    }
+
+    return [
+      focusedCase,
+      ...historyCases.filter((itemCase) => itemCase.id !== focusedHistoryCaseId),
+    ];
+  }, [focusedHistoryCaseId, historyCases]);
+  const focusedLandingKey = focusedPendingItemId
+    ? `pending:${focusedPendingItemId}`
+    : focusedHistoryCaseId
+      ? `history:${focusedHistoryCaseId}`
+      : null;
+
+  useEffect(() => {
+    if (focusedPendingItemId) {
+      setPanelSegment('pending');
+      return;
+    }
+
+    if (focusedHistoryCaseId) {
+      setPanelSegment('history');
+    }
+  }, [focusedHistoryCaseId, focusedPendingItemId]);
 
   useEffect(() => {
     if (!focusedHistoryCaseId) {
@@ -229,10 +290,28 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
   }
 
-  function changePanelSegment(segment: PersonSegmentKey) {
+  const changePanelSegment = useCallback((segment: PersonSegmentKey) => {
     setVisualPanelSegment(segment);
     setPanelSegment(segment);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!focusItemId || !focusedLandingKey) {
+      setFocusedLandingActive(false);
+      return;
+    }
+
+    setFocusedLandingActive(true);
+    appHaptics.triggerAppSelectionHaptic();
+
+    const timeout = setTimeout(() => {
+      setFocusedLandingActive(false);
+    }, FOCUS_HIGHLIGHT_DURATION_MS);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [focusItemId, focusedLandingKey]);
 
   function showActionOverlay(nextOverlay: ActionOverlayState) {
     if (resultOverlayTimeoutRef.current) {
@@ -447,12 +526,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       {
         text: input.confirmLabel,
         style: 'destructive',
-        onPress: () => { appHaptics.triggerAppActionHaptic(); input.onConfirm(); },
+        onPress: () => {
+          appHaptics.triggerAppActionHaptic();
+          input.onConfirm();
+        },
       },
     ]);
   }
 
   function renderPendingItem(item: ActivityItemDto) {
+    const isFocused = focusedLandingActive && matchesFocusedTransaction(item, focusCandidates);
+
     if (item.kind === 'financial_request') {
       const financialRequestContent = buildFinancialRequestPendingContent(item);
       return (
@@ -470,6 +554,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           createdAtLabel={financialRequestContent.createdAtLabel}
           createdByLabel={financialRequestContent.createdByLabel}
           description={financialRequestContent.detail}
+          focused={isFocused}
           historySteps={item.pendingHistorySteps}
           key={item.id}
           amendmentAmountError={
@@ -533,6 +618,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             : (splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle)
         }
         eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : 'Pendiente'}
+        focused={isFocused}
         key={item.id}
         meta={
           item.kind === 'settlement_proposal'
@@ -564,7 +650,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 onPress={
                   busyKey
                     ? undefined
-                    : () => { appHaptics.triggerAppActionHaptic(); void handlePendingItemAction(item.id, item.kind, item.status, 'approve'); }
+                    : () => {
+                        appHaptics.triggerAppActionHaptic();
+                        void handlePendingItemAction(item.id, item.kind, item.status, 'approve');
+                      }
                 }
               />
             </View>
@@ -612,7 +701,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                             {
                               text: 'Completar',
                               style: 'destructive',
-                              onPress: () => { appHaptics.triggerAppActionHaptic(); void handlePendingItemAction(item.id, item.kind, item.status, 'execute'); },
+                              onPress: () => {
+                                appHaptics.triggerAppActionHaptic();
+                                void handlePendingItemAction(
+                                  item.id,
+                                  item.kind,
+                                  item.status,
+                                  'execute',
+                                );
+                              },
                             },
                           ],
                         );
@@ -626,124 +723,104 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }
 
+  function renderPanelSegmentContent(segment: PersonSegmentKey) {
+    if (segment === 'pending') {
+      return orderedPendingItems.length > 0 ? (
+        orderedPendingItems.map((item) => renderPendingItem(item))
+      ) : (
+        <EmptyState
+          description="Cuando haya algo pendiente con esta persona, aparecera aqui."
+          title="Nada pendiente"
+        />
+      );
+    }
+
+    if (orderedHistoryCases.length === 0) {
+      return (
+        <EmptyState
+          description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
+          title="Sin movimientos todavia"
+        />
+      );
+    }
+
+    return orderedHistoryCases.map((itemCase) => {
+      const isExpanded = expandedCaseIds[0] === itemCase.id;
+      const isFocused = focusedLandingActive && focusedHistoryCaseId === itemCase.id;
+      const latest = itemCase.latest;
+      const caseAmountLabel = historyStepAmountLabel(latest);
+      const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+      const caseTitle = friendlyHistoryStepLabel(latest);
+      const caseDescription = historyCardTitle(itemCase);
+
+      return (
+        <HistoryCaseCard
+          actorAvatarUrl={person?.avatarUrl ?? null}
+          amountLabel={caseAmountLabel}
+          category={historyCaseVisualCategory(itemCase)}
+          description={null}
+          eyebrow={person?.displayName ?? null}
+          focused={isFocused}
+          isCycleSnippet={itemCase.isCycleSnippet}
+          isExpanded={isExpanded}
+          key={itemCase.id}
+          meta={historyCaseMeta(itemCase)}
+          onToggle={() => toggleHistoryCase(itemCase.id)}
+          statusLabel={historyCaseStatusLabel(itemCase)}
+          statusTone={historyCaseStatusTone(itemCase)}
+          steps={itemCase.steps.map((step, index) => {
+            const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
+            const impact = historyImpactLabel(step);
+
+            return {
+              id: step.id,
+              title: friendlyHistoryStepLabel(step),
+              category: historyTimelineStepCategory(itemCase, step, index),
+              detail: historyTimelineStepDetailLabel(step),
+              amountLabel,
+              impact:
+                !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
+                  ? null
+                  : impact,
+              meta: historyStepMetaLabel(step),
+              tone: historyImpactTone(step) as HistoryCaseTone,
+            };
+          })}
+          title={caseDescription || caseTitle}
+          tone={caseTone}
+        />
+      );
+    });
+  }
+
   function renderPanelSegmentPage(segment: PersonSegmentKey) {
     return (
       <BrandedRefreshScrollView
         fillViewport
-        contentContainerStyle={styles.sheetScrollContent}
+        contentContainerStyle={styles.panelScrollContent}
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
         showsVerticalScrollIndicator={false}
+        style={styles.panelPageScroll}
       >
-        {segment === 'pending' ? (
-          orderedPendingItems.length > 0 ? (
-            orderedPendingItems.map((item) => renderPendingItem(item))
-          ) : (
-            <EmptyState
-              description="Cuando haya algo pendiente con esta persona, aparecera aqui."
-              title="Nada pendiente"
-            />
-          )
-        ) : historyCases.length === 0 ? (
-          <EmptyState
-            description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
-            title="Sin movimientos todavia"
-          />
-        ) : (
-          historyCases.map((itemCase) => {
-            const isExpanded = expandedCaseIds[0] === itemCase.id;
-            const latest = itemCase.latest;
-            const caseAmountLabel = historyStepAmountLabel(latest);
-            const caseTone = historyImpactTone(latest) as HistoryCaseTone;
-            const caseTitle = friendlyHistoryStepLabel(latest);
-            const caseDescription = historyCardTitle(itemCase);
-
-            return (
-              <HistoryCaseCard
-                amountLabel={caseAmountLabel}
-                category={historyCaseVisualCategory(itemCase)}
-                description={null}
-                eyebrow={person?.displayName ?? null}
-                isCycleSnippet={itemCase.isCycleSnippet}
-                isExpanded={isExpanded}
-                key={itemCase.id}
-                meta={historyCaseMeta(itemCase)}
-                onToggle={() => toggleHistoryCase(itemCase.id)}
-                statusLabel={historyCaseStatusLabel(itemCase)}
-                statusTone={historyCaseStatusTone(itemCase)}
-                steps={itemCase.steps.map((step, index) => {
-                  const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
-                  const impact = historyImpactLabel(step);
-
-                  return {
-                    id: step.id,
-                    title: friendlyHistoryStepLabel(step),
-                    category: historyTimelineStepCategory(itemCase, step, index),
-                    detail: historyTimelineStepDetailLabel(step),
-                    amountLabel,
-                    impact:
-                      !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
-                        ? null
-                        : impact,
-                    meta: historyStepMetaLabel(step),
-                    tone: historyImpactTone(step) as HistoryCaseTone,
-                  };
-                })}
-                title={caseDescription || caseTitle}
-                tone={caseTone}
-              />
-            );
-          })
-        )}
+        {renderPanelSegmentContent(segment)}
       </BrandedRefreshScrollView>
     );
   }
 
   if (snapshotQuery.isLoading) {
-    return (
-      <ScreenShell
-        headerVariant="plain"
-        largeTitle={false}
-        subtitle="Cargando esta relacion."
-        title="Persona"
-      >
-        <HappyCirclesMotion size={108} variant="loading" />
-        <AppText style={styles.supportText}>Estamos leyendo el saldo y el historial real.</AppText>
-      </ScreenShell>
-    );
+    return <PersonDetailLoadingState />;
   }
 
   if (snapshotQuery.error) {
-    return (
-      <ScreenShell
-        headerVariant="plain"
-        largeTitle={false}
-        refresh={refresh}
-        subtitle="No pudimos cargar esta relacion."
-        title="Persona"
-      >
-        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
-      </ScreenShell>
-    );
+    return <PersonDetailErrorState message={snapshotQuery.error.message} refresh={refresh} />;
   }
 
   if (!person) {
-    return (
-      <ScreenShell
-        headerVariant="plain"
-        largeTitle={false}
-        refresh={refresh}
-        subtitle="No encontramos esta relacion."
-        title="Persona"
-      >
-        <EmptyState
-          description="Prueba desde la lista principal de personas o confirma que la relacion exista en Supabase."
-          title="Sin relacion activa"
-        />
-      </ScreenShell>
-    );
+    return <PersonDetailMissingState refresh={refresh} />;
   }
 
+  const activePerson = person;
   const hasPendingItems = person.pendingCount > 0;
   const pendingLabel = `${person.pendingCount} pendiente${person.pendingCount > 1 ? 's' : ''}`;
   const isSettledBalance = person.netAmountMinor === 0;
@@ -769,17 +846,21 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const canRegisterTransactions = relationshipStatus !== 'pending_invite';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.layout}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+      <View style={screenContentStyle}>
         <View style={styles.fixedTop}>
           <View style={styles.heroBlock}>
             <Pressable
               onPress={() => setAvatarViewerVisible(true)}
               style={({ pressed }) => [styles.avatarButton, pressed ? styles.pressed : null]}
             >
-              <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={80} />
+              <AppAvatar
+                imageUrl={activePerson.avatarUrl ?? null}
+                label={activePerson.displayName}
+                size={80}
+              />
             </Pressable>
-            <AppText style={styles.contactFlatName}>{person.displayName}</AppText>
+            <AppText style={styles.contactFlatName}>{activePerson.displayName}</AppText>
             {!isSettledBalance ? (
               <AppText
                 style={[
@@ -826,13 +907,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             <View style={styles.quickActionRowFlat}>
               <DirectionPill
                 direction="i_owe"
-                onPress={() => pushRoute(router, buildPersonRegisterHref(person.userId, 'i_owe'))}
+                onPress={() =>
+                  pushRoute(router, buildPersonRegisterHref(activePerson.userId, 'i_owe'))
+                }
                 style={styles.quickActionPill}
               />
 
               <DirectionPill
                 direction="owes_me"
-                onPress={() => pushRoute(router, buildPersonRegisterHref(person.userId, 'owes_me'))}
+                onPress={() =>
+                  pushRoute(router, buildPersonRegisterHref(activePerson.userId, 'owes_me'))
+                }
                 style={styles.quickActionPill}
               />
             </View>
@@ -840,43 +925,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         </View>
 
         <View style={styles.panelArea}>
-          <View style={styles.tabBar}>
-            <Pressable
-              onPress={() => changePanelSegment('pending')}
-              style={({ pressed }) => [
-                styles.tabButton,
-                visualPanelSegment === 'pending' ? styles.tabButtonActive : null,
-                pressed ? styles.tabButtonPressed : null,
-              ]}
-            >
-              <AppText
-                style={[
-                  styles.tabLabel,
-                  visualPanelSegment === 'pending' ? styles.tabLabelActive : null,
-                ]}
-              >
-                Pendientes
-              </AppText>
-            </Pressable>
-            <View style={styles.tabDivider} />
-            <Pressable
-              onPress={() => changePanelSegment('history')}
-              style={({ pressed }) => [
-                styles.tabButton,
-                visualPanelSegment === 'history' ? styles.tabButtonActive : null,
-                pressed ? styles.tabButtonPressed : null,
-              ]}
-            >
-              <AppText
-                style={[
-                  styles.tabLabel,
-                  visualPanelSegment === 'history' ? styles.tabLabelActive : null,
-                ]}
-              >
-                Historial
-              </AppText>
-            </Pressable>
-          </View>
+          <PersonDetailSegmentTabs
+            onChange={changePanelSegment}
+            visualSegment={visualPanelSegment}
+          />
 
           {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
@@ -884,8 +936,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             accessibilityLabel="Paneles de la relacion"
             onChange={changePanelSegment}
             onPreviewChange={setVisualPanelSegment}
+            pageStyle={styles.panelPage}
             renderPage={(segment) => renderPanelSegmentPage(segment)}
-            style={styles.sheetScrollWrap}
+            style={styles.panelPager}
             value={panelSegment}
             values={PERSON_SEGMENT_KEYS}
           />
@@ -909,178 +962,3 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  layout: {
-    alignSelf: 'center',
-    flex: 1,
-    gap: theme.spacing.lg,
-    maxWidth: 560,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    width: '100%',
-  },
-  fixedTop: {
-    gap: theme.spacing.md,
-  },
-  heroBlock: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    position: 'relative',
-  },
-  avatarButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.82,
-  },
-  contactFlatName: {
-    color: theme.colors.text,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-    textAlign: 'center',
-  },
-  balanceSummary: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 22,
-    marginTop: 2,
-    maxWidth: '100%',
-    textAlign: 'center',
-  },
-  balanceSummaryAmount: {
-    fontSize: theme.typography.title2,
-    lineHeight: 30,
-    marginBottom: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
-  },
-  pendingHeroBadge: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.warningSoft,
-    borderRadius: theme.radius.pill,
-    flexDirection: 'row',
-    gap: 4,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 4,
-  },
-  pendingHeroBadgeText: {
-    color: theme.colors.warning,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    lineHeight: 13,
-  },
-  heroMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 5,
-    justifyContent: 'center',
-  },
-  heroMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  supportText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  quickActionRowFlat: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  quickActionPill: {
-    flex: 1,
-    maxWidth: 240,
-  },
-  panelArea: {
-    flex: 1,
-    minHeight: 0,
-    flexShrink: 1,
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
-  },
-  tabBar: {
-    alignItems: 'stretch',
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-  },
-  tabButton: {
-    alignItems: 'center',
-    flex: 1,
-    paddingBottom: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-  },
-  tabButtonActive: {
-    borderBottomColor: theme.colors.primary,
-    borderBottomWidth: 2,
-  },
-  tabButtonPressed: {
-    opacity: 0.88,
-  },
-  tabDivider: {
-    backgroundColor: theme.colors.hairline,
-    marginBottom: theme.spacing.sm,
-    width: StyleSheet.hairlineWidth,
-  },
-  tabLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  tabLabelActive: {
-    color: theme.colors.text,
-  },
-  sheetScrollWrap: {
-    flex: 1,
-    minHeight: 0,
-    flexShrink: 1,
-    position: 'relative',
-  },
-  sheetScrollContent: {
-    gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
-  },
-  pendingActionStack: {
-    gap: theme.spacing.xs,
-  },
-  pendingActionSlot: {
-    width: '100%',
-  },
-  inlineAction: {
-    paddingVertical: 2,
-  },
-  inlineActionPressed: {
-    opacity: 0.62,
-  },
-  inlineActionText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  inlineActionDangerText: {
-    color: theme.colors.danger,
-  },
-  neutral: {
-    color: theme.colors.textMuted,
-  },
-  danger: {
-    color: theme.colors.danger,
-  },
-});

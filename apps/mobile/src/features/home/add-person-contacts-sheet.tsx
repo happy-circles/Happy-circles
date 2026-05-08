@@ -1,11 +1,10 @@
 import { CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
 
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
 import { AppAvatar } from '@/components/app-avatar';
-import { AppTextInput } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import {
@@ -17,7 +16,10 @@ import {
   type AddPersonTransactionContext,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
-import { formatCop } from '@/lib/data';
+import {
+  AddPersonInPersonControls,
+  useAddPersonInPersonMorph,
+} from '@/features/home/add-person-in-person-controls';
 import { type PeopleTargetResolution } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
@@ -129,6 +131,7 @@ export function AddPersonContactsSheet({
     transactionContext,
     visible,
   });
+  const inPersonMorph = useAddPersonInPersonMorph(visible);
 
   function renderContactSection(title: string, items: readonly EnrichedContact[]) {
     if (items.length === 0) {
@@ -169,71 +172,29 @@ export function AddPersonContactsSheet({
               </Pressable>
             </View>
 
-            <View style={styles.inPersonBlock}>
-              <View style={styles.inPersonCopy}>
-                <AppText style={styles.inPersonTitle}>Conectar en persona</AppText>
-                <AppText style={styles.inPersonText}>Usa QR cuando ya estan juntos.</AppText>
-              </View>
-              <View style={styles.inPersonActions}>
-                <Pressable
-                  onPress={() => void handleOpenScanner()}
-                  style={({ pressed }) => [styles.qrActionButton, pressed ? styles.pressed : null]}
-                >
-                  <Ionicons color={theme.colors.text} name="camera-outline" size={18} />
-                  <AppText style={styles.qrActionText}>Escanear QR</AppText>
-                </Pressable>
-                <Pressable
-                  disabled={busyKey === 'my-qr'}
-                  onPress={() => void handleShowMyQr()}
-                  style={({ pressed }) => [
-                    styles.qrActionButton,
-                    styles.qrActionButtonPrimary,
-                    pressed ? styles.pressed : null,
-                    busyKey === 'my-qr' ? styles.disabled : null,
-                  ]}
-                >
-                  <Ionicons color={theme.colors.white} name="qr-code-outline" size={18} />
-                  <AppText style={[styles.qrActionText, styles.qrActionTextPrimary]}>
-                    {busyKey === 'my-qr' ? 'Creando...' : 'Mi QR'}
-                  </AppText>
-                </Pressable>
-              </View>
-            </View>
-
-            {transactionContext ? (
-              <View style={styles.contextBlock}>
-                <AppText style={styles.contextLabel}>Contexto</AppText>
-                <AppText style={styles.contextBody}>
-                  {transactionContext.direction === 'i_owe' ? 'Salida' : 'Entrada'} de{' '}
-                  {formatCop(transactionContext.amountMinor)}
-                  {transactionContext.description &&
-                  transactionContext.description.trim().length > 0
-                    ? ` por ${transactionContext.description.trim()}`
-                    : ''}
-                </AppText>
-              </View>
-            ) : null}
-
-            <View style={styles.searchWrap}>
-              <Ionicons color={theme.colors.textMuted} name="search-outline" size={18} />
-              <AppTextInput
-                autoCapitalize="words"
-                autoCorrect={false}
-                chrome="plain"
-                density="compact"
-                onChangeText={setSearchValue}
-                placeholder="Buscar en contactos"
-                placeholderTextColor={theme.colors.muted}
-                style={styles.searchInput}
-                value={searchValue}
-              />
-            </View>
+            <AddPersonInPersonControls
+              busyKey={busyKey}
+              morph={inPersonMorph}
+              onOpenScanner={() => void handleOpenScanner()}
+              onShowMyQr={() => void handleShowMyQr()}
+              searchValue={searchValue}
+              setSearchValue={setSearchValue}
+              transactionContext={transactionContext}
+            />
 
             {message ? <MessageBanner message={message} tone="neutral" /> : null}
 
-            <ScrollView
+            <Animated.ScrollView
+              ref={inPersonMorph.scrollViewRef}
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
+              onContentSizeChange={inPersonMorph.onContentSizeChange}
+              onLayout={inPersonMorph.onLayout}
+              onMomentumScrollEnd={inPersonMorph.onMomentumScrollEnd}
+              onScroll={inPersonMorph.onScroll}
+              onScrollBeginDrag={inPersonMorph.onScrollBeginDrag}
+              onScrollEndDrag={inPersonMorph.onScrollEndDrag}
+              scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
             >
               {canReadContacts ? (
@@ -295,7 +256,7 @@ export function AddPersonContactsSheet({
                   ) : null}
                 </View>
               )}
-            </ScrollView>
+            </Animated.ScrollView>
           </View>
 
           {scannerOpen ? (

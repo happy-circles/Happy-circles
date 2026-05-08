@@ -12,6 +12,10 @@ import {
 import type { StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio, StyleSheet, View } from 'react-native';
 
+import {
+  clearIdentityFlowScrollTarget,
+  upsertIdentityFlowScrollTarget,
+} from '@/lib/identity-flow-scroll';
 import { subscribeLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
 
 const LAUNCH_TARGET_MEASURE_FRAMES = 120;
@@ -241,10 +245,11 @@ export function LaunchIntroTargetView({
   const clearRegistration = useCallback(() => {
     unregisterRef.current?.();
     unregisterRef.current = null;
+    clearIdentityFlowScrollTarget(id);
     registeredMeasurementRef.current = null;
     registeredStableAtRef.current = null;
     registeredUpdatedAtRef.current = null;
-  }, []);
+  }, [id]);
 
   const resetMeasurementStability = useCallback(() => {
     latestMeasurementRef.current = null;
@@ -312,10 +317,7 @@ export function LaunchIntroTargetView({
           isRegisteredMeasurementStable && !shouldRefreshStableTimestamp
             ? (registeredUpdatedAtRef.current ?? measuredAt)
             : measuredAt;
-        registeredMeasurementRef.current = nextMeasurement;
-        registeredStableAtRef.current = stableAt;
-        registeredUpdatedAtRef.current = updatedAt;
-        unregisterRef.current = registerTarget({
+        const targetSnapshot = {
           avatarEditable,
           avatarFallbackBackgroundColor,
           avatarFallbackTextColor,
@@ -336,7 +338,12 @@ export function LaunchIntroTargetView({
           width: nextMeasurement.width,
           x: nextMeasurement.x,
           y: nextMeasurement.y,
-        });
+        };
+        registeredMeasurementRef.current = nextMeasurement;
+        registeredStableAtRef.current = stableAt;
+        registeredUpdatedAtRef.current = updatedAt;
+        upsertIdentityFlowScrollTarget(targetSnapshot);
+        unregisterRef.current = registerTarget(targetSnapshot);
       });
     });
   }, [

@@ -119,7 +119,7 @@ export function transactionAccentColor(item: ActivityItemDto): string {
   }
 
   if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return theme.colors.danger;
+    return theme.colors.warning;
   }
 
   if (item.tone === 'negative') {
@@ -139,7 +139,7 @@ export function transactionToneColor(item: ActivityItemDto): string {
   }
 
   if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return theme.colors.danger;
+    return theme.colors.warning;
   }
 
   if (item.tone === 'positive') {
@@ -233,7 +233,7 @@ export function transactionStatusLabel(item: ActivityItemDto): string | null {
   }
 
   if (item.status === 'amended') {
-    return 'Nuevo monto';
+    return 'Monto modificado';
   }
 
   if (item.status === 'pending') {
@@ -249,16 +249,24 @@ export function transactionStatusLabel(item: ActivityItemDto): string | null {
 
 export function transactionStatusTone(item: ActivityItemDto): TransactionStatusTone {
   if (isCycleTransactionItem(item)) {
-    if (item.status === 'rejected') {
+    if (item.status === 'rejected' || item.status === 'canceled') {
       return 'danger';
     }
 
-    if (item.status === 'stale') {
+    if (
+      item.status === 'expired' ||
+      item.status === 'stale' ||
+      item.status === 'waiting_other_side'
+    ) {
       return 'neutral';
     }
 
-    if (item.status === 'pending_approvals' || item.status === 'waiting_other_side') {
+    if (item.status === 'pending_approvals') {
       return 'warning';
+    }
+
+    if (item.status === 'executed' || item.status === 'posted') {
+      return 'success';
     }
 
     return 'cycle';
@@ -301,6 +309,7 @@ export function transactionShouldSurfaceStatus(
       item.status === 'waiting_other_side' ||
       item.status === 'approved' ||
       item.status === 'rejected' ||
+      item.status === 'amended' ||
       item.status === 'stale' ||
       item.status === 'expired' ||
       item.status === 'canceled'
@@ -314,6 +323,7 @@ export function transactionShouldSurfaceStatus(
       item.status === 'pending_approvals' ||
       item.status === 'approved' ||
       item.status === 'rejected' ||
+      item.status === 'amended' ||
       item.status === 'stale' ||
       item.status === 'expired' ||
       item.status === 'canceled'

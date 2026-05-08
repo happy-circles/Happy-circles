@@ -4,7 +4,12 @@ type RafCallback = (timestamp: number) => void;
 
 async function loadHomeEntryHandoff() {
   vi.resetModules();
-  return import('@/lib/home-entry-handoff');
+  const [handoff, remeasure] = await Promise.all([
+    import('@/lib/home-entry-handoff'),
+    import('@/lib/launch-target-remeasure'),
+  ]);
+
+  return { handoff, remeasure };
 }
 
 describe('home entry handoff coordinator', () => {
@@ -25,11 +30,15 @@ describe('home entry handoff coordinator', () => {
   });
 
   it('dedupes concurrent handoff preparation requests', async () => {
-    const handoff = await loadHomeEntryHandoff();
+    const { handoff, remeasure } = await loadHomeEntryHandoff();
     const requestIds: number[] = [];
+    let remeasureCount = 0;
     const unsubscribe = handoff.subscribeHomeEntryHandoff((request) => {
       requestIds.push(request.id);
       request.completeSourceCentering();
+    });
+    const unsubscribeRemeasure = remeasure.subscribeLaunchTargetRemeasure(() => {
+      remeasureCount += 1;
     });
 
     const firstRequest = handoff.beginHomeEntryHandoffAfterScrollReset();
@@ -39,11 +48,13 @@ describe('home entry handoff coordinator', () => {
     await Promise.all([firstRequest, secondRequest]);
 
     expect(requestIds).toEqual([1]);
+    expect(remeasureCount).toBe(1);
     unsubscribe();
+    unsubscribeRemeasure();
   });
 
   it('keeps the request pending until source centering settles or the guard resolves', async () => {
-    const handoff = await loadHomeEntryHandoff();
+    const { handoff } = await loadHomeEntryHandoff();
     let settled = false;
 
     const request = handoff.beginHomeEntryHandoff({ waitForSourceCentering: true });
@@ -61,7 +72,7 @@ describe('home entry handoff coordinator', () => {
   });
 
   it('publishes increasing home-ready versions', async () => {
-    const handoff = await loadHomeEntryHandoff();
+    const { handoff } = await loadHomeEntryHandoff();
     const versions: number[] = [];
     const unsubscribe = handoff.subscribeHomeEntryReady((version) => {
       versions.push(version);

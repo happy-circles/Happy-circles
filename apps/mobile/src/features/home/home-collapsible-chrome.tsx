@@ -1,13 +1,8 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { Link } from 'expo-router';
-import type {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  StyleProp,
-  ViewStyle,
-} from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import type { NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import {
   AccessibilityInfo,
   Animated,
@@ -22,15 +17,16 @@ import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { HappyCirclesOuterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 
-const HOME_CHROME_MORPH_START_Y = 8;
+const HOME_CHROME_MORPH_START_Y = 2;
 const HOME_CHROME_COMPACT_STATE_Y = 88;
 const HOME_CHROME_EXPANDED_STATE_Y = 18;
 const HOME_CHROME_COMPACT_PROGRESS = 0.82;
 const HOME_CHROME_EXPANDED_PROGRESS = 0.18;
 const HOME_CHROME_SCROLL_EXPAND_DISTANCE = 82;
-const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 132;
+const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 112;
 const HOME_CHROME_CONTENT_MAX_WIDTH = 560;
 const HOME_CHROME_PROFILE_BUTTON_SIZE = 48;
 const HOME_CHROME_AVATAR_SIZE = 40;
@@ -40,12 +36,15 @@ const HOME_CHROME_PROFILE_LEADING_OFFSET =
   (HOME_CHROME_PROFILE_BUTTON_SIZE - HOME_CHROME_AVATAR_SIZE) / 2;
 const HOME_CHROME_COMPACT_LOGO_SIZE = 78;
 const HOME_CHROME_EXPANDED_LOGO_SIZE = 60;
+const HOME_CHROME_EXPANDED_BRAND_WIDTH = 246;
+const HOME_CHROME_EXPANDED_ACTION_SIZE = 48;
 const HOME_CHROME_GLASS_COMPACT_SIZE = 92;
 const HOME_CHROME_GLASS_COMPACT_RADIUS = HOME_CHROME_GLASS_COMPACT_SIZE / 2;
 const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
+const HOME_CHROME_FAB_COMPACT_SIZE = HOME_CHROME_GLASS_EXPANDED_HEIGHT;
+const HOME_CHROME_FAB_EXPANDED_WIDTH = 136;
+const HOME_CHROME_FAB_RADIUS = HOME_CHROME_FAB_COMPACT_SIZE / 2;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
-const HOME_CHROME_FAB_EXIT_DISTANCE = 88;
-const HOME_CHROME_FAB_COLLAPSED_SIZE = HOME_CHROME_GLASS_COMPACT_SIZE;
 
 export const HOME_CHROME_EXPANDED_HEIGHT = 86;
 
@@ -143,7 +142,7 @@ function clampProgress(value: number) {
   return Math.min(1, Math.max(0, value));
 }
 
-export function useCollapsibleHomeChrome() {
+export function useCollapsibleHomeChrome(scrollTopInset = 0) {
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const progressValueRef = useRef(0);
@@ -180,7 +179,7 @@ export function useCollapsibleHomeChrome() {
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = Math.max(0, event.nativeEvent.contentOffset.y);
+      const y = Math.max(0, event.nativeEvent.contentOffset.y + scrollTopInset);
       const delta = y - lastYRef.current;
       lastYRef.current = y;
 
@@ -212,7 +211,7 @@ export function useCollapsibleHomeChrome() {
         setProgressValue(progressValueRef.current + delta / HOME_CHROME_SCROLL_COMPACT_DISTANCE);
       }
     },
-    [reducedMotion, setProgressValue],
+    [reducedMotion, scrollTopInset, setProgressValue],
   );
 
   return { isCompact, onScroll, progress };
@@ -306,6 +305,21 @@ export function HomeCollapsibleChrome({
     Math.max(0, width - theme.spacing.lg * 2),
   );
   const contentLeft = (width - contentWidth) / 2;
+  const expandedContentGap = contentWidth < 380 ? theme.spacing.xs : theme.spacing.md;
+  const expandedActionTrailingOffset =
+    contentWidth < 380 ? theme.spacing.xxs : HOME_CHROME_PROFILE_LEADING_OFFSET;
+  const expandedBrandMaxWidth = Math.min(
+    HOME_CHROME_EXPANDED_BRAND_WIDTH,
+    Math.max(
+      HOME_CHROME_EXPANDED_LOGO_SIZE,
+      contentWidth -
+        HOME_CHROME_PROFILE_BUTTON_SIZE -
+        HOME_CHROME_PROFILE_LEADING_OFFSET -
+        HOME_CHROME_EXPANDED_ACTION_SIZE -
+        expandedActionTrailingOffset -
+        expandedContentGap * 2,
+    ),
+  );
   const rowCenterY = topInset + HOME_CHROME_TOP_GAP + HOME_CHROME_EXPANDED_LOGO_SIZE / 2;
   const profileCenterX =
     contentLeft + HOME_CHROME_PROFILE_LEADING_OFFSET + HOME_CHROME_PROFILE_BUTTON_SIZE / 2;
@@ -333,37 +347,42 @@ export function HomeCollapsibleChrome({
     outputRange: [HOME_CHROME_GLASS_EXPANDED_HEIGHT / 2, HOME_CHROME_GLASS_COMPACT_RADIUS],
   });
   const expandedBrandOpacity = progress.interpolate({
-    inputRange: [0, 0.24, 0.58, 1],
-    outputRange: [1, 0.82, 0, 0],
+    inputRange: [0, 0.18, 0.62, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const expandedBrandClipWidth = progress.interpolate({
+    inputRange: [0, 0.04, 0.62, 1],
+    outputRange: [expandedBrandMaxWidth, expandedBrandMaxWidth, 0, 0],
   });
   const expandedBrandScale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.94],
+    inputRange: [0, 0.24, 1],
+    outputRange: [1, 0.98, 0.98],
   });
   const expandedBrandTranslateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -18],
+    inputRange: [0, 0.24, 1],
+    outputRange: [0, -3, -3],
   });
   const expandedBrandTranslateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -10],
+    inputRange: [0, 0.24, 1],
+    outputRange: [0, -1, -1],
   });
   const actionOpacity = progress.interpolate({
-    inputRange: [0, 0.18, 0.48, 1],
-    outputRange: [1, 0.72, 0, 0],
+    inputRange: [0, 0.08, 1],
+    outputRange: [1, 0, 0],
   });
   const actionScale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.84],
+    inputRange: [0, 0.16, 1],
+    outputRange: [1, 0.9, 0.9],
   });
   const actionTranslateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -24],
+    inputRange: [0, 0.16, 1],
+    outputRange: [0, -10, -10],
   });
   const actionTranslateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -4],
+    inputRange: [0, 0.16, 1],
+    outputRange: [0, -2, -2],
   });
+
   return (
     <View
       pointerEvents="box-none"
@@ -395,7 +414,7 @@ export function HomeCollapsibleChrome({
           },
         ]}
       >
-        <View style={styles.expandedContent}>
+        <View style={[styles.expandedContent, { gap: expandedContentGap }]}>
           <View style={styles.profileCluster}>
             <Link href="/profile" asChild>
               <Pressable
@@ -421,6 +440,7 @@ export function HomeCollapsibleChrome({
               styles.expandedBrand,
               {
                 opacity: expandedBrandOpacity,
+                width: expandedBrandMaxWidth,
                 transform: [
                   { translateX: expandedBrandTranslateX },
                   { translateY: expandedBrandTranslateY },
@@ -429,13 +449,18 @@ export function HomeCollapsibleChrome({
               },
             ]}
           >
-            <HeaderBrandTitle logoSize={60} titleSize={22} />
+            <Animated.View style={[styles.expandedBrandClip, { width: expandedBrandClipWidth }]}>
+              <View style={[styles.expandedBrandContent, { width: expandedBrandMaxWidth }]}>
+                <HeaderBrandTitle logoSize={60} titleSize={22} />
+              </View>
+            </Animated.View>
           </Animated.View>
           <Animated.View
             pointerEvents={isCompact ? 'none' : 'auto'}
             style={[
               styles.expandedAction,
               {
+                marginRight: expandedActionTrailingOffset,
                 opacity: actionOpacity,
                 transform: [
                   { translateX: actionTranslateX },
@@ -455,53 +480,73 @@ export function HomeCollapsibleChrome({
 
 export function HomeRegisterFab({
   bottomInset,
-  isCompact,
   progress,
 }: {
   readonly bottomInset: number;
   readonly isCompact: boolean;
   readonly progress: HomeChromeProgress;
 }) {
+  const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, windowWidth - theme.spacing.lg * 2),
   );
   const contentRight = Math.max(theme.spacing.lg, (windowWidth - contentWidth) / 2);
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.62, 1],
-    outputRange: [1, 1, 0],
+  const width = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [HOME_CHROME_FAB_EXPANDED_WIDTH, HOME_CHROME_FAB_COMPACT_SIZE],
   });
-  const translateY = progress.interpolate({
-    inputRange: [0, 0.58, 1],
-    outputRange: [0, 0, HOME_CHROME_FAB_EXIT_DISTANCE + bottomInset],
+  const labelOpacity = progress.interpolate({
+    inputRange: [0, 0.08, 1],
+    outputRange: [1, 0, 0],
+  });
+  const labelWidth = progress.interpolate({
+    inputRange: [0, 0.16, 1],
+    outputRange: [64, 0, 0],
+  });
+  const labelMarginLeft = progress.interpolate({
+    inputRange: [0, 0.16, 1],
+    outputRange: [6, 0, 0],
   });
 
   return (
     <Animated.View
-      pointerEvents={isCompact ? 'none' : 'box-none'}
+      pointerEvents="box-none"
       style={[
         styles.fabWrap,
         {
           bottom: 28 + bottomInset,
-          height: HOME_CHROME_FAB_COLLAPSED_SIZE,
-          opacity,
+          height: HOME_CHROME_FAB_COMPACT_SIZE,
           right: contentRight,
-          transform: [{ translateY }],
-          width: HOME_CHROME_FAB_COLLAPSED_SIZE,
+          width,
         },
       ]}
     >
-      <Link href="/register" asChild>
-        <Pressable
-          accessibilityLabel="Registrar movimiento"
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
+      <Pressable
+        accessibilityLabel="Registrar movimiento"
+        accessibilityRole="button"
+        onPress={() => pushRoute(router, '/register')}
+        style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
+      >
+        <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.035)" />
+        <Ionicons color={theme.colors.text} name="add" size={28} />
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.fabLabelWrap,
+            {
+              marginLeft: labelMarginLeft,
+              opacity: labelOpacity,
+              width: labelWidth,
+            },
+          ]}
         >
-          <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.035)" />
-          <Ionicons color={theme.colors.text} name="add" size={30} />
-        </Pressable>
-      </Link>
+          <AppText numberOfLines={1} style={styles.fabLabel}>
+            Registro
+          </AppText>
+        </Animated.View>
+      </Pressable>
     </Animated.View>
   );
 }
@@ -593,8 +638,15 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   expandedBrand: {
-    alignItems: 'center',
-    flex: 1,
+    alignItems: 'flex-start',
+    flexShrink: 0,
+    width: HOME_CHROME_EXPANDED_BRAND_WIDTH,
+  },
+  expandedBrandClip: {
+    overflow: 'hidden',
+  },
+  expandedBrandContent: {
+    width: HOME_CHROME_EXPANDED_BRAND_WIDTH,
   },
   expandedAction: {
     alignItems: 'center',
@@ -613,6 +665,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
     ...theme.shadow.card,
+  },
+  activityButtonActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: 'rgba(20, 30, 51, 0.12)',
   },
   activityBadge: {
     alignItems: 'center',
@@ -634,41 +690,44 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 12,
   },
-  activityButtonActive: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: 'rgba(20, 30, 51, 0.12)',
-  },
   fabWrap: {
     alignItems: 'center',
-    aspectRatio: 1,
-    borderRadius: HOME_CHROME_GLASS_COMPACT_RADIUS,
-    height: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    height: HOME_CHROME_FAB_COMPACT_SIZE,
     justifyContent: 'center',
-    maxHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    maxWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    minHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    minWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    maxHeight: HOME_CHROME_FAB_COMPACT_SIZE,
+    maxWidth: HOME_CHROME_FAB_EXPANDED_WIDTH,
+    minHeight: HOME_CHROME_FAB_COMPACT_SIZE,
+    minWidth: HOME_CHROME_FAB_COMPACT_SIZE,
     position: 'absolute',
-    width: HOME_CHROME_FAB_COLLAPSED_SIZE,
     zIndex: 42,
   },
   fab: {
     alignItems: 'center',
-    aspectRatio: 1,
     backgroundColor: fabGlassBackgroundColor,
     borderColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1.25,
-    borderRadius: HOME_CHROME_GLASS_COMPACT_RADIUS,
-    height: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    flexDirection: 'row',
+    height: HOME_CHROME_FAB_COMPACT_SIZE,
     justifyContent: 'center',
-    maxHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    maxWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    minHeight: HOME_CHROME_FAB_COLLAPSED_SIZE,
-    minWidth: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    maxHeight: HOME_CHROME_FAB_COMPACT_SIZE,
+    maxWidth: HOME_CHROME_FAB_EXPANDED_WIDTH,
+    minHeight: HOME_CHROME_FAB_COMPACT_SIZE,
+    minWidth: HOME_CHROME_FAB_COMPACT_SIZE,
     overflow: 'hidden',
     position: 'relative',
-    width: HOME_CHROME_FAB_COLLAPSED_SIZE,
+    width: '100%',
     ...liquidGlassPlatformStyle,
+  },
+  fabLabelWrap: {
+    overflow: 'hidden',
+  },
+  fabLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 17,
   },
   pressed: {
     opacity: 0.68,

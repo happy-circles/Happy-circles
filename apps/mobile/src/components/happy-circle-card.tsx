@@ -127,15 +127,20 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
           <View style={[styles.body, variant === 'compact' ? styles.bodyCompact : null]}>
             <View style={styles.metricsColumn}>
               <View style={styles.metricBlock}>
-                <AppText style={styles.metricEyebrow}>Valor a resolver</AppText>
+                <AppText style={styles.metricEyebrow}>Tu valor a resolver</AppText>
                 <AppText
                   style={[
                     styles.metricAmount,
                     variant === 'compact' ? styles.metricAmountCompact : null,
                   ]}
                 >
-                  {formatCop(proposal.totalAmountMinor)}
+                  {formatCop(proposal.personalAmountMinor)}
                 </AppText>
+                {proposal.personalAmountMinor !== proposal.totalAmountMinor ? (
+                  <AppText style={styles.metricSecondary}>
+                    Total del Circle: {formatCop(proposal.totalAmountMinor)}
+                  </AppText>
+                ) : null}
               </View>
               <AppText style={styles.approvalSummary}>
                 {approvedCount}/{proposal.participantCount} aprobadas
@@ -273,6 +278,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.title3,
     letterSpacing: -0.2,
     lineHeight: 24,
+  },
+  metricSecondary: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   approvalSummary: {
     color: theme.colors.success,

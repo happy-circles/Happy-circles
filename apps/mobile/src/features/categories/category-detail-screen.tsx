@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type {
   ActivityItemDto,
   BalanceAnalyticsCategoryRowDto,
   BalanceAnalyticsPeriod,
+  PersonCardDto,
 } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
@@ -18,7 +18,9 @@ import { SectionBlock } from '@/components/section-block';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
+import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { formatCop } from '@/lib/data';
+import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import {
@@ -34,13 +36,17 @@ import {
   isPendingTransactionItem,
   transactionAmountIsVoided,
   transactionAmountLabel,
-  transactionContextLabel,
-  transactionCreatedByMetaLabel,
+  transactionMetaLabel,
+  transactionShouldSurfaceStatus,
   transactionStatusLabel,
   transactionStatusTone,
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
+import {
+  transactionInitialsBackgroundColor,
+  transactionPersonForItem,
+} from '@/lib/transaction-people';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { AppText } from '@/components/app-text';
 
@@ -50,12 +56,6 @@ const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Ano', value: 'year' },
   { label: 'Todo', value: 'all' },
 ];
-
-function isBalanceAnalyticsPeriod(
-  value: string | null | undefined,
-): value is BalanceAnalyticsPeriod {
-  return value === 'week' || value === 'month' || value === 'year' || value === 'all';
-}
 
 function movementCountLabel(count: number): string {
   return `${count} movimiento${count === 1 ? '' : 's'}`;
@@ -92,17 +92,31 @@ function personHref(userId: string): Href {
   return `/person/${userId}` as Href;
 }
 
-function CategoryTransactionCard({ item }: { readonly item: ActivityItemDto }) {
+function CategoryTransactionCard({
+  item,
+  people,
+}: {
+  readonly item: ActivityItemDto;
+  readonly people: readonly PersonCardDto[];
+}) {
   const category = transactionVisualCategory(item);
   const isSystemTransaction = isCycleTransactionItem(item);
   const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
   const toneColor = transactionToneColor(item);
+  const person = transactionPersonForItem(people, item);
+  const fallbackPerson = {
+    displayName: actorLabel,
+    userId: person?.userId ?? item.id,
+  };
 
   return (
     <TransactionEventCard
       accentColor={toneColor}
+      actorAvatarUrl={isSystemTransaction ? null : (person?.avatarUrl ?? null)}
       actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-      actorFallbackColor={transactionCategoryColor(category)}
+      actorFallbackColor={
+        isSystemTransaction ? toneColor : transactionInitialsBackgroundColor(fallbackPerson)
+      }
       actorLabel={actorLabel}
       amountColor={toneColor}
       amountLabel={transactionAmountLabel(item)}
@@ -111,12 +125,16 @@ function CategoryTransactionCard({ item }: { readonly item: ActivityItemDto }) {
       categoryPlacement="none"
       compact
       compactMetaLayout="inline"
-      context={transactionContextLabel(item, actorLabel)}
+      context=""
       href={(item.href ?? '/transactions') as Href}
-      meta={transactionCreatedByMetaLabel(item, actorLabel)}
+      meta={transactionMetaLabel(item)}
       pending={isPendingTransactionItem(item)}
       pendingHighlightColor={toneColor}
-      statusLabel={transactionStatusLabel(item)}
+      statusLabel={
+        transactionShouldSurfaceStatus(item, { density: 'summary' })
+          ? transactionStatusLabel(item)
+          : null
+      }
       statusTone={transactionStatusTone(item)}
     />
   );
@@ -133,16 +151,10 @@ export function CategoryDetailScreen({
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
-  const initialSelectedPeriod = isBalanceAnalyticsPeriod(initialPeriod)
-    ? initialPeriod
-    : (analytics?.defaultPeriod ?? 'month');
-  const [period, setPeriod] = useState<BalanceAnalyticsPeriod>(initialSelectedPeriod);
-
-  useEffect(() => {
-    if (!isBalanceAnalyticsPeriod(initialPeriod) && analytics?.defaultPeriod) {
-      setPeriod(analytics.defaultPeriod);
-    }
-  }, [analytics?.defaultPeriod, initialPeriod]);
+  const [period, setPeriod] = useSyncedBalanceAnalyticsPeriod({
+    defaultPeriod: analytics?.defaultPeriod,
+    initialPeriod,
+  });
 
   if (snapshotQuery.error && !analytics) {
     return (
@@ -175,12 +187,15 @@ export function CategoryDetailScreen({
   const currentPeriod = analytics.periods[period];
   const categoryRow = rowForCategory(currentPeriod.categories, category);
   const sections = snapshotQuery.data?.activitySections ?? [];
+  const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const pendingItems = (sections.find((section) => section.key === 'pending')?.items ?? [])
     .filter(isPendingTransactionItem)
     .filter((item) => matchesCategory(item, category));
   const historyItems = (sections.find((section) => section.key === 'history')?.items ?? [])
     .filter(isConsolidatedTransactionItem)
+    .filter(isHistoryCaseItem)
     .filter((item) => matchesCategory(item, category));
+  const visibleHistoryItems = buildLatestHistoryCaseItems(historyItems);
   const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
   const color = transactionCategoryColor(category);
   const backgroundColor = transactionCategoryBackgroundColor(category);
@@ -289,17 +304,17 @@ export function CategoryDetailScreen({
         <SectionBlock title="Pendientes">
           <View style={styles.list}>
             {pendingItems.map((item) => (
-              <CategoryTransactionCard item={item} key={item.id} />
+              <CategoryTransactionCard item={item} key={item.id} people={people} />
             ))}
           </View>
         </SectionBlock>
       ) : null}
 
-      {historyItems.length > 0 ? (
+      {visibleHistoryItems.length > 0 ? (
         <SectionBlock title="Historial">
           <View style={styles.list}>
-            {historyItems.map((item) => (
-              <CategoryTransactionCard item={item} key={item.id} />
+            {visibleHistoryItems.map((item) => (
+              <CategoryTransactionCard item={item} key={item.id} people={people} />
             ))}
           </View>
         </SectionBlock>

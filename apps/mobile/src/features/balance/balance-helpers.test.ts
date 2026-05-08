@@ -24,6 +24,7 @@ import {
   focusIndex,
   formatCompactCop,
   formatHomeBalanceCop,
+  isBalanceAnalyticsPeriod,
   isBalanceFocus,
   personFocusMeta,
   personImpactAmount,
@@ -70,8 +71,11 @@ describe('balance helpers', () => {
     expect(comparisonCopy(0.254, 'Abril')).toBe('Subio 25% frente a abril.');
     expect(comparisonCopy(-0.1, 'Abril')).toBe('Bajo 10% frente a abril.');
     expect(isBalanceFocus('categories')).toBe(true);
+    expect(isBalanceFocus('circles')).toBe(true);
     expect(isBalanceFocus('projection')).toBe(false);
     expect(isBalanceFocus('unknown')).toBe(false);
+    expect(isBalanceAnalyticsPeriod('week')).toBe(true);
+    expect(isBalanceAnalyticsPeriod('quarter')).toBe(false);
     expect(focusIndex('categories')).toBe(2);
   });
 

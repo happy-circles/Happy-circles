@@ -1,8 +1,7 @@
 import {
+  prepareIdentityFlowTargetForHandoff,
   resetIdentityFlowScrollPosition,
-  resetIdentityFlowScrollPositionForHandoff,
 } from '@/lib/identity-flow-scroll';
-import { requestLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
 
 export interface HomeEntryHandoffRequest {
   readonly completeSourceCentering: () => void;
@@ -21,7 +20,6 @@ const listeners = new Set<HomeEntryHandoffListener>();
 const readyListeners = new Set<HomeEntryReadyListener>();
 const HOME_ENTRY_SOURCE_CENTER_FALLBACK_MS = 420;
 const HOME_ENTRY_SOURCE_CENTER_SETTLE_FRAMES = 2;
-const HOME_ENTRY_TARGET_REMEASURE_FRAMES = 8;
 let pendingHomeEntryHandoff: Promise<void> | null = null;
 
 function wait(ms: number) {
@@ -82,13 +80,7 @@ export async function beginHomeEntryHandoff(options?: {
 }
 
 async function runHomeEntryHandoffAfterScrollReset() {
-  await resetIdentityFlowScrollPositionForHandoff();
-
-  requestLaunchTargetRemeasure();
-  for (let frame = 0; frame < HOME_ENTRY_TARGET_REMEASURE_FRAMES; frame += 1) {
-    await waitForNextFrame();
-  }
-
+  await prepareIdentityFlowTargetForHandoff({ animated: true });
   await beginHomeEntryHandoff({ skipScrollReset: true, waitForSourceCentering: true });
 }
 

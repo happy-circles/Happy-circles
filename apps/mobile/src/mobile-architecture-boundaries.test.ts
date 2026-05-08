@@ -30,7 +30,6 @@ describe('mobile architecture boundaries', () => {
     const budgets = new Map<string, number>([
       ['providers/session-provider.tsx', 40],
       ['providers/session-runtime/session-controller.tsx', 2000],
-      ['features/balance/balance-overview-screen.tsx', 180],
       ['features/balance/balance-lens-carousel.tsx', 1020],
       ['features/home/dashboard-screen.tsx', 620],
       ['features/invites/account-invite-entry-screen.tsx', 60],

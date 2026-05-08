@@ -1,4 +1,8 @@
-import type { ActivityItemDto, PersonDetailDto, PersonTimelineItemDto } from '@happy-circles/application';
+import type {
+  ActivityItemDto,
+  PersonDetailDto,
+  PersonTimelineItemDto,
+} from '@happy-circles/application';
 
 import type {
   ActivityHistoryItem,
@@ -17,7 +21,6 @@ export type {
   HistoryStatusTone,
 } from './history-case-types';
 export * from './history-case-presentation';
-
 export function isHistoryCaseItem(item: ActivityItemDto): item is ActivityHistoryItem {
   return (
     item.kind === 'request' ||
@@ -85,6 +88,23 @@ export function buildHistoryCases<T extends HistoryCaseItem>(
     .sort((left, right) => compareHistoryItems(left.latest, right.latest));
 }
 
+export function buildLatestHistoryCaseItems<T extends HistoryCaseItem>(items: readonly T[]): T[] {
+  return buildHistoryCases(items).map((itemCase) => {
+    const firstHref = itemCase.steps.find((step) => step.href)?.href;
+    const firstCounterpartyLabel = itemCase.steps.find(
+      (step) => step.counterpartyLabel,
+    )?.counterpartyLabel;
+    const firstFlowLabel = itemCase.steps.find((step) => step.flowLabel)?.flowLabel;
+
+    return {
+      ...itemCase.latest,
+      href: itemCase.latest.href ?? firstHref,
+      counterpartyLabel: itemCase.latest.counterpartyLabel ?? firstCounterpartyLabel,
+      flowLabel: itemCase.latest.flowLabel ?? firstFlowLabel,
+    };
+  });
+}
+
 export function toHistoryFeedItem(
   item: PersonTimelineItemDto,
   counterpartyLabel?: string,
@@ -137,4 +157,3 @@ export function buildActivityHistoryItems(
     )
     .sort(compareHistoryItems);
 }
-

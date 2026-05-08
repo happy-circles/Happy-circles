@@ -2,17 +2,15 @@ import { formatCop } from './data';
 import type { HistoryCase, HistoryCaseItem, HistoryStatusTone } from './history-case-types';
 import {
   compactHistoryLabel,
-  createdByText,
   extractHistoryConcept,
-  firstNameLabel,
   historyCaseInviteCategory,
-  historyCreatorLabel,
   historyDirectionFromItem,
   historyItemVisualCategory,
   isInviteTrajectoryItem,
   splitHistorySubtitle,
 } from './history-case-helpers';
 import { historyStatusLabel, historyStatusTone } from './history-case-status';
+import { transactionCategoryLabel } from './transaction-categories';
 
 export { historyStatusLabel, historyStatusTone } from './history-case-status';
 
@@ -302,23 +300,35 @@ export function historyCaseStatusLabel<T extends HistoryCaseItem>(
     return historyStatusLabel(itemCase.latest.status);
   }
 
-  if (itemCase.latest.status === 'rejected') {
+  if (itemCase.latest.status === 'rejected' || itemCase.latest.status === 'canceled') {
     return 'No completado';
+  }
+
+  if (itemCase.latest.status === 'expired') {
+    return 'Expirado';
   }
 
   if (itemCase.latest.status === 'stale') {
     return 'Reemplazado';
   }
 
+  if (itemCase.latest.status === 'waiting_other_side') {
+    return 'Esperando aprobaciones';
+  }
+
   if (itemCase.latest.status === 'pending_approvals') {
-    return 'Pendiente';
+    return 'Necesita tu aprobacion';
   }
 
   if (itemCase.latest.status === 'approved') {
-    return 'Listo';
+    return 'Listo para completar';
   }
 
-  return 'Completado';
+  if (itemCase.latest.status === 'executed' || itemCase.latest.status === 'posted') {
+    return 'Completado';
+  }
+
+  return 'Happy Circle';
 }
 
 export function historyCaseStatusTone<T extends HistoryCaseItem>(
@@ -328,19 +338,24 @@ export function historyCaseStatusTone<T extends HistoryCaseItem>(
     return historyStatusTone(itemCase.latest.status);
   }
 
-  if (itemCase.latest.status === 'rejected') {
+  if (itemCase.latest.status === 'rejected' || itemCase.latest.status === 'canceled') {
     return 'danger';
   }
 
-  if (itemCase.latest.status === 'stale') {
+  if (
+    itemCase.latest.status === 'expired' ||
+    itemCase.latest.status === 'stale' ||
+    itemCase.latest.status === 'waiting_other_side'
+  ) {
     return 'neutral';
   }
 
-  if (
-    itemCase.latest.status === 'pending_approvals' ||
-    itemCase.latest.status === 'waiting_other_side'
-  ) {
+  if (itemCase.latest.status === 'pending_approvals') {
     return 'warning';
+  }
+
+  if (itemCase.latest.status === 'executed' || itemCase.latest.status === 'posted') {
+    return 'success';
   }
 
   return 'cycle';
@@ -395,12 +410,8 @@ export function historyTimelineStepAmountLabel<T extends HistoryCaseItem>(
 }
 
 export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
-  const fallbackCreator =
-    (itemCase.latest.counterpartyLabel
-      ? firstNameLabel(itemCase.latest.counterpartyLabel)
-      : null) || (itemCase.isCycleSnippet ? 'Happy Circle' : 'Usuario');
-  const creatorLabel = historyCreatorLabel(itemCase.latest, fallbackCreator);
   const timeLabel = itemCase.latest.happenedAtLabel ?? 'Reciente';
+  const category = historyItemVisualCategory(itemCase.latest);
 
-  return `${createdByText(creatorLabel)} · ${timeLabel}`;
+  return category ? `${timeLabel} | ${transactionCategoryLabel(category)}` : timeLabel;
 }

@@ -1,17 +1,26 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar } from '@/components/app-avatar';
+import { AppText } from '@/components/app-text';
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
+import { MessageBanner } from '@/components/message-banner';
 import { SwipePager } from '@/components/swipe-pager';
+import {
+  inviteRequestEmptyDescription,
+  inviteRequestEmptyTitle,
+  type InviteRequestItem,
+  type InviteRequestsTab,
+} from '@/features/home/dashboard-helpers';
+import { usePeopleInviteRequestsController } from '@/features/people/use-people-invite-requests-controller';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { formatCop } from '@/lib/data';
 import {
@@ -55,7 +64,8 @@ import {
   type NotificationCategoryKey,
   type NotificationTarget,
 } from './activity-helpers';
-import { AppText } from '@/components/app-text';
+import { ActivityInviteRequestCard } from './activity-invite-request-card';
+import { activityScreenStyles as styles } from './activity-screen.styles';
 
 interface PendingSnippetContent {
   readonly detail?: string;
@@ -155,6 +165,18 @@ const SETUP_REMINDER_WARNING_IDS = new Set([
   'local-biometrics-reminder',
   'local-device-trust-reminder',
 ]);
+
+function inviteRequestSectionTitle(tab: InviteRequestsTab, count: number): string {
+  if (tab === 'received') {
+    return count === 1 ? 'Recibida' : 'Recibidas';
+  }
+
+  if (tab === 'sent') {
+    return count === 1 ? 'Enviada' : 'Enviadas';
+  }
+
+  return 'Historial';
+}
 
 function avatarColorForLabel(label: string): string {
   let hash = 0;
@@ -646,6 +668,12 @@ export function ActivityScreen() {
     [allPendingItems, notificationViewedKeys],
   );
   const people = snapshotQuery.data?.people ?? [];
+  const inviteRequests = usePeopleInviteRequestsController({
+    accountInviteHistoryItems: snapshotQuery.data?.accountInviteHistoryItems ?? [],
+    accountInvitePendingItems: snapshotQuery.data?.accountInvitePendingItems ?? [],
+    friendshipHistoryItems: snapshotQuery.data?.friendshipHistoryItems ?? [],
+    friendshipPendingItems: snapshotQuery.data?.friendshipPendingItems ?? [],
+  });
   const categoryCounts = useMemo(() => {
     const counts: Record<NotificationCategoryKey, number> = {
       all: unviewedPendingItems.length,
@@ -659,8 +687,10 @@ export function ActivityScreen() {
       counts[category] += 1;
     }
 
+    counts.friends = Math.max(counts.friends, inviteRequests.requestCount);
+
     return counts;
-  }, [unviewedPendingItems]);
+  }, [inviteRequests.requestCount, unviewedPendingItems]);
 
   useEffect(() => {
     setVisualActiveCategory(activeCategory);
@@ -727,10 +757,12 @@ export function ActivityScreen() {
     actor: NotificationActor,
     content: NotificationActionCardContent,
     detailHref: NotificationTarget | null,
+    unread: boolean,
   ) {
     const card = (
       <ActivityItemCard
         accentColor={content.accentColor}
+        attentionDot
         compact
         key={item.id}
         leadingNode={
@@ -787,6 +819,7 @@ export function ActivityScreen() {
           ) : null
         }
         title={content.title}
+        unread={unread}
       />
     );
 
@@ -805,7 +838,7 @@ export function ActivityScreen() {
     );
   }
 
-  function renderSetupReminderCard(item: ActivityItemDto) {
+  function renderSetupReminderCard(item: ActivityItemDto, unread: boolean) {
     const category = notificationCategoryMeta(item);
     const detailHref = pendingDetailHref(item, people);
     const iconColor = SETUP_REMINDER_WARNING_IDS.has(item.id)
@@ -818,6 +851,7 @@ export function ActivityScreen() {
     const card = (
       <ActivityItemCard
         accentColor={iconColor}
+        attentionDot
         compact
         key={item.id}
         leadingNode={
@@ -833,6 +867,7 @@ export function ActivityScreen() {
           ) : null
         }
         title={item.title}
+        unread={unread}
       />
     );
 
@@ -851,13 +886,13 @@ export function ActivityScreen() {
     );
   }
 
-  function renderPendingCard(item: ActivityItemDto) {
+  function renderPendingCard(item: ActivityItemDto, unread: boolean) {
     const category = notificationCategoryMeta(item);
     const actor = notificationActorForItem(item, people);
     const detailHref = pendingDetailHref(item, people);
 
     if (notificationCategoryForItem(item) === 'reminders' && setupReminderStatusLabel(item)) {
-      return renderSetupReminderCard(item);
+      return renderSetupReminderCard(item, unread);
     }
 
     if (item.kind === 'financial_request') {
@@ -879,6 +914,7 @@ export function ActivityScreen() {
           title: financialRequestNotificationTitle(item),
         },
         detailHref,
+        unread,
       );
     }
 
@@ -907,6 +943,7 @@ export function ActivityScreen() {
           title: transactionNotificationTitle(item),
         },
         detailHref,
+        unread,
       );
     }
 
@@ -932,10 +969,72 @@ export function ActivityScreen() {
         title: inviteNotificationTitle(item),
       },
       detailHref,
+      unread,
+    );
+  }
+
+  function renderInviteRequestSection(tab: InviteRequestsTab, items: readonly InviteRequestItem[]) {
+    if (items.length === 0) {
+      return null;
+    }
+
+    return (
+      <NotificationSection
+        title={`${inviteRequestSectionTitle(tab, items.length)} (${items.length})`}
+      >
+        {items.map((item) => (
+          <ActivityInviteRequestCard
+            busyKey={inviteRequests.busyKey}
+            item={item}
+            key={`${tab}:${item.kind}:${item.inviteId}`}
+            onAction={(requestItem, action) =>
+              void inviteRequests.handleAction(requestItem, action)
+            }
+          />
+        ))}
+      </NotificationSection>
+    );
+  }
+
+  function renderFriendRequestsPage() {
+    const hasRequestContent =
+      inviteRequests.receivedItems.length > 0 ||
+      inviteRequests.sentItems.length > 0 ||
+      inviteRequests.historyItems.length > 0;
+
+    return (
+      <BrandedRefreshScrollView
+        fillViewport
+        contentContainerStyle={styles.sheetScrollContent}
+        keyboardShouldPersistTaps="handled"
+        refresh={refresh}
+        showsVerticalScrollIndicator={false}
+        style={styles.pageScroll}
+      >
+        {inviteRequests.message ? (
+          <MessageBanner message={inviteRequests.message} tone="neutral" />
+        ) : null}
+        {!hasRequestContent ? (
+          <EmptyState
+            description={inviteRequestEmptyDescription('received')}
+            title={inviteRequestEmptyTitle('received')}
+          />
+        ) : (
+          <>
+            {renderInviteRequestSection('received', inviteRequests.receivedItems)}
+            {renderInviteRequestSection('sent', inviteRequests.sentItems)}
+            {renderInviteRequestSection('history', inviteRequests.historyItems)}
+          </>
+        )}
+      </BrandedRefreshScrollView>
     );
   }
 
   function renderNotificationPage(categoryKey: NotificationCategoryKey) {
+    if (categoryKey === 'friends') {
+      return renderFriendRequestsPage();
+    }
+
     const categoryPendingItems = unviewedPendingItems.filter((item) =>
       matchesNotificationCategory(item, categoryKey),
     );
@@ -954,6 +1053,7 @@ export function ActivityScreen() {
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
         showsVerticalScrollIndicator={false}
+        style={styles.pageScroll}
       >
         {!hasNotifications ? (
           <EmptyState
@@ -974,12 +1074,12 @@ export function ActivityScreen() {
           <>
             {categoryPendingItems.length > 0 ? (
               <NotificationSection title="Pendientes">
-                {categoryPendingItems.map((item) => renderPendingCard(item))}
+                {categoryPendingItems.map((item) => renderPendingCard(item, true))}
               </NotificationSection>
             ) : null}
             {categoryReviewedItems.length > 0 ? (
               <NotificationSection title="Revisadas">
-                {categoryReviewedItems.map((item) => renderPendingCard(item))}
+                {categoryReviewedItems.map((item) => renderPendingCard(item, false))}
               </NotificationSection>
             ) : null}
           </>
@@ -1055,6 +1155,7 @@ export function ActivityScreen() {
               accessibilityLabel="Categorias de notificaciones"
               onChange={changeActiveCategory}
               onPreviewChange={setVisualActiveCategory}
+              pageStyle={styles.notificationPage}
               renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
               style={styles.sheetScrollWrap}
               value={activeCategory}
@@ -1066,184 +1167,3 @@ export function ActivityScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: theme.colors.overlay,
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdropTapTarget: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  layout: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radius.large,
-    borderTopRightRadius: theme.radius.large,
-    height: '88%',
-    maxHeight: '88%',
-    paddingBottom: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    width: '100%',
-  },
-  sheetContent: {
-    alignSelf: 'center',
-    flex: 1,
-    gap: theme.spacing.md,
-    maxWidth: 560,
-    minHeight: 0,
-    width: '100%',
-  },
-  fixedTop: {
-    gap: theme.spacing.xs,
-  },
-  heroRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  closeButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  heroTitle: {
-    color: theme.colors.text,
-    flex: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-  },
-  panelArea: {
-    flex: 1,
-    minHeight: 0,
-    flexShrink: 1,
-    gap: theme.spacing.md,
-  },
-  notificationTabs: {
-    alignItems: 'center',
-    borderBottomColor: theme.colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.md,
-    flexDirection: 'row',
-    minWidth: '100%',
-  },
-  notificationTabsScroll: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  notificationTab: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    minHeight: 42,
-    paddingBottom: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-  },
-  notificationTabActive: {
-    borderBottomColor: theme.colors.primary,
-    borderBottomWidth: 2,
-  },
-  tabButtonPressed: {
-    opacity: 0.88,
-  },
-  notificationTabLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  notificationTabLabelActive: {
-    color: theme.colors.text,
-    fontWeight: '800',
-  },
-  notificationTabBadge: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.danger,
-    borderRadius: theme.radius.pill,
-    height: 18,
-    justifyContent: 'center',
-    minWidth: 18,
-    paddingHorizontal: 5,
-  },
-  notificationTabBadgeText: {
-    color: theme.colors.white,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  sheetScrollWrap: {
-    flex: 1,
-    minHeight: 0,
-    flexShrink: 1,
-    position: 'relative',
-  },
-  sheetScrollContent: {
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
-  },
-  notificationSection: {
-    gap: theme.spacing.sm,
-  },
-  notificationSectionTitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  notificationSectionContent: {
-    gap: theme.spacing.sm,
-  },
-  notificationActionIconBubble: {
-    alignItems: 'center',
-    borderRadius: theme.radius.medium,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  notificationActionMeta: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  notificationActionSide: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'flex-end',
-    minWidth: 0,
-  },
-  notificationActionAmount: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  notificationActionAmountVoided: {
-    opacity: 0.72,
-    textDecorationLine: 'line-through',
-  },
-  supportText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    lineHeight: 22,
-  },
-  loadingMotion: {
-    alignItems: 'center',
-  },
-  loadingState: {
-    alignSelf: 'center',
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radius.large,
-    borderTopRightRadius: theme.radius.large,
-    padding: theme.spacing.lg,
-    width: '100%',
-  },
-});

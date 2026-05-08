@@ -1,7 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
-import type { Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import type {
   ActivityItemDto,
@@ -13,28 +11,19 @@ import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
-import { SurfaceCard } from '@/components/surface-card';
-import { TransactionEventCard } from '@/components/transaction-event-card';
-import { formatCop } from '@/lib/data';
+import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { useAppSnapshot } from '@/lib/live-data';
-import { theme } from '@/lib/theme';
 import { categoriesIndexScreenStyles as styles } from './categories-index-screen-styles';
 import {
-  transactionCategoryBackgroundColor,
-  transactionCategoryColor,
-  transactionCategoryIcon,
-  transactionCategoryLabel,
-} from '@/lib/transaction-categories';
+  ActiveCategoryPill,
+  CategoriesSummaryCard,
+  CategoryRow,
+  CategoryTransactionCard,
+} from './categories-index-cards';
+import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
+import { normalizeTransactionCategory } from '@/lib/transaction-categories';
 import {
   isConsolidatedTransactionItem,
-  isCycleTransactionItem,
-  transactionAmountIsVoided,
-  transactionAmountLabel,
-  transactionContextLabel,
-  transactionCreatedByMetaLabel,
-  transactionStatusLabel,
-  transactionStatusTone,
-  transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -47,62 +36,6 @@ const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Todo', value: 'all' },
 ];
 
-function amountToneStyle(amountMinor: number) {
-  if (amountMinor > 0) {
-    return styles.positive;
-  }
-
-  if (amountMinor < 0) {
-    return styles.negative;
-  }
-
-  return styles.neutral;
-}
-
-function movementCountLabel(count: number): string {
-  return `${count} movimiento${count === 1 ? '' : 's'}`;
-}
-
-function firstName(value: string): string {
-  const [name] = value.trim().split(/\s+/);
-
-  return name && name.length > 0 ? name : value;
-}
-
-function compactFirstNames(values: readonly string[]): string {
-  const names = Array.from(
-    new Set(
-      values
-        .map(firstName)
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0),
-    ),
-  );
-
-  if (names.length === 0) {
-    return 'Sin personas visibles';
-  }
-
-  const visibleNames = names.slice(0, 2);
-  const hiddenCount = names.length - visibleNames.length;
-
-  return hiddenCount > 0
-    ? `${visibleNames.join(', ')} y ${hiddenCount} mas`
-    : visibleNames.join(', ');
-}
-
-function signedFormatCop(amountMinor: number): string {
-  if (amountMinor > 0) {
-    return `+${formatCop(amountMinor)}`;
-  }
-
-  return formatCop(amountMinor);
-}
-
-function peoplePreviewLabel(row: BalanceAnalyticsCategoryRowDto): string {
-  return compactFirstNames(row.personLabels);
-}
-
 function matchesCategory(
   item: ActivityItemDto,
   category: BalanceAnalyticsCategoryRowDto['category'],
@@ -110,165 +43,29 @@ function matchesCategory(
   return transactionVisualCategory(item) === category;
 }
 
-function CategoryRow({
-  onPress,
-  row,
+export function CategoriesIndexScreen({
+  initialCategory,
+  initialPeriod,
 }: {
-  readonly onPress: () => void;
-  readonly row: BalanceAnalyticsCategoryRowDto;
+  readonly initialCategory?: string | null;
+  readonly initialPeriod?: string | null;
 }) {
-  const icon = transactionCategoryIcon(row.category) as keyof typeof Ionicons.glyphMap;
-  const color = transactionCategoryColor(row.category);
-  const backgroundColor = transactionCategoryBackgroundColor(row.category);
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [pressed ? styles.pressed : null]}>
-      <SurfaceCard
-        padding="md"
-        style={[
-          styles.categoryCard,
-          row.netMinor > 0 ? styles.cardPositive : null,
-          row.netMinor < 0 ? styles.cardNegative : null,
-        ]}
-      >
-        <View style={styles.leading}>
-          <View style={[styles.categoryIcon, { backgroundColor }]}>
-            <Ionicons color={color} name={icon} size={20} />
-          </View>
-          <View style={styles.categoryCopy}>
-            <AppText numberOfLines={1} style={styles.categoryTitle}>
-              {row.label}
-            </AppText>
-            <AppText numberOfLines={1} style={styles.categoryMeta}>
-              {peoplePreviewLabel(row)}
-            </AppText>
-          </View>
-        </View>
-
-        <View style={styles.trailing}>
-          <AppText style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</AppText>
-          <View style={styles.amountRow}>
-            <AppText numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
-              {formatCop(row.netMinor)}
-            </AppText>
-            <Ionicons color={theme.colors.textMuted} name="funnel-outline" size={15} />
-          </View>
-        </View>
-      </SurfaceCard>
-    </Pressable>
-  );
-}
-
-function CategoriesSummaryCard({
-  categoryCount,
-  movementCount,
-  totalMinor,
-  deltaMinor,
-  label,
-}: {
-  readonly categoryCount: number;
-  readonly movementCount: number;
-  readonly totalMinor: number;
-  readonly deltaMinor: number;
-  readonly label: string;
-}) {
-  return (
-    <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
-      <AppText style={styles.summaryEyebrow}>{label}</AppText>
-      <AppText
-        adjustsFontSizeToFit
-        minimumFontScale={0.78}
-        numberOfLines={1}
-        style={[styles.summaryAmount, amountToneStyle(totalMinor)]}
-      >
-        {formatCop(totalMinor)}
-      </AppText>
-      <AppText style={styles.summaryMeta}>
-        Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoria
-        {categoryCount === 1 ? '' : 's'} | {movementCountLabel(movementCount)}
-      </AppText>
-    </SurfaceCard>
-  );
-}
-
-function ActiveCategoryPill({
-  row,
-  fallbackCategory,
-  onClear,
-}: {
-  readonly row: BalanceAnalyticsCategoryRowDto | null;
-  readonly fallbackCategory: BalanceAnalyticsCategoryRowDto['category'];
-  readonly onClear: () => void;
-}) {
-  const category = row?.category ?? fallbackCategory;
-  const label = row?.label ?? transactionCategoryLabel(category);
-  const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
-  const color = transactionCategoryColor(category);
-  const backgroundColor = transactionCategoryBackgroundColor(category);
-
-  return (
-    <View style={styles.activeFilterWrap}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onClear}
-        style={({ pressed }) => [
-          styles.activeFilterPill,
-          { backgroundColor, borderColor: color },
-          pressed ? styles.pressed : null,
-        ]}
-      >
-        <Ionicons color={color} name={icon} size={16} />
-        <AppText numberOfLines={1} style={[styles.activeFilterText, { color }]}>
-          {label}
-        </AppText>
-        <Ionicons color={color} name="close" size={15} />
-      </Pressable>
-    </View>
-  );
-}
-
-function CategoryTransactionCard({ item }: { readonly item: ActivityItemDto }) {
-  const category = transactionVisualCategory(item);
-  const isSystemTransaction = isCycleTransactionItem(item);
-  const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
-  const toneColor = transactionToneColor(item);
-
-  return (
-    <TransactionEventCard
-      accentColor={toneColor}
-      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-      actorFallbackColor={transactionCategoryColor(category)}
-      actorLabel={actorLabel}
-      amountColor={toneColor}
-      amountLabel={transactionAmountLabel(item)}
-      amountStruckThrough={transactionAmountIsVoided(item)}
-      category={category}
-      categoryPlacement="none"
-      compact
-      compactMetaLayout="inline"
-      context={transactionContextLabel(item, actorLabel)}
-      href={(item.href ?? '/transactions') as Href}
-      meta={transactionCreatedByMetaLabel(item, actorLabel)}
-      statusLabel={transactionStatusLabel(item)}
-      statusTone={transactionStatusTone(item)}
-    />
-  );
-}
-
-export function CategoriesIndexScreen() {
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
-  const [period, setPeriod] = useState<BalanceAnalyticsPeriod>(analytics?.defaultPeriod ?? 'month');
+  const [period, setPeriod] = useSyncedBalanceAnalyticsPeriod({
+    defaultPeriod: analytics?.defaultPeriod,
+    initialPeriod,
+  });
   const [selectedCategory, setSelectedCategory] = useState<
     BalanceAnalyticsCategoryRowDto['category'] | null
-  >(null);
+  >(() => (initialCategory ? normalizeTransactionCategory(initialCategory) : null));
 
   useEffect(() => {
-    if (analytics?.defaultPeriod) {
-      setPeriod(analytics.defaultPeriod);
+    if (initialCategory) {
+      setSelectedCategory(normalizeTransactionCategory(initialCategory));
     }
-  }, [analytics?.defaultPeriod]);
+  }, [initialCategory]);
 
   if (snapshotQuery.error && !analytics) {
     return (
@@ -291,6 +88,7 @@ export function CategoriesIndexScreen() {
 
   const currentPeriod = analytics.periods[period];
   const summary = currentPeriod.summaries.balance;
+  const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const categories = [...currentPeriod.categories].sort((left, right) => {
     const amountDiff = Math.abs(right.netMinor) - Math.abs(left.netMinor);
     if (amountDiff !== 0) {
@@ -311,7 +109,9 @@ export function CategoriesIndexScreen() {
             ?.items ?? []
         )
           .filter(isConsolidatedTransactionItem)
+          .filter(isHistoryCaseItem)
           .filter((item) => matchesCategory(item, selectedCategory));
+  const visibleHistoryItems = buildLatestHistoryCaseItems(historyItems);
 
   return (
     <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Categorias">
@@ -320,6 +120,7 @@ export function CategoriesIndexScreen() {
         deltaMinor={summary.deltaMinor}
         label={currentPeriod.labels.current}
         movementCount={summary.movementCount}
+        topCategories={categories}
         totalMinor={summary.finalMinor}
       />
 
@@ -337,16 +138,23 @@ export function CategoriesIndexScreen() {
             onClear={() => setSelectedCategory(null)}
             row={selectedCategoryRow}
           />
+          {selectedCategoryRow ? (
+            <CategoryRow
+              actionIcon="checkmark-circle-outline"
+              onPress={() => setSelectedCategory(null)}
+              row={selectedCategoryRow}
+            />
+          ) : null}
 
-          {historyItems.length === 0 ? (
+          {visibleHistoryItems.length === 0 ? (
             <EmptyState
               description="No hay transacciones cerradas para esta categoria."
               title="Sin historial"
             />
           ) : (
             <View style={styles.list}>
-              {historyItems.map((item) => (
-                <CategoryTransactionCard item={item} key={item.id} />
+              {visibleHistoryItems.map((item) => (
+                <CategoryTransactionCard item={item} key={item.id} people={people} />
               ))}
             </View>
           )}

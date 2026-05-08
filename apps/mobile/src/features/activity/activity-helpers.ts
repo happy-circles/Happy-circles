@@ -141,7 +141,7 @@ export function pendingDetailHref(
 
   if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
     return {
-      href: `/people?requests=1&requestTab=${inviteRequestTabForNotification(item)}` as Href,
+      href: '/activity?category=friends' as Href,
     };
   }
 

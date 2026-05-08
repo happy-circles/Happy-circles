@@ -42,7 +42,7 @@ export function historyStatusLabel(status: string): string {
   }
 
   if (status === 'amended') {
-    return 'Nuevo monto';
+    return 'Monto modificado';
   }
 
   if (status === 'accepted') {

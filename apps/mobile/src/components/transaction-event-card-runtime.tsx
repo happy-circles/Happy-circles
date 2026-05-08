@@ -6,7 +6,9 @@ import { View } from 'react-native';
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
 import { CardPressable } from '@/components/card-shell';
-import { StatusChip, type StatusChipProps } from '@/components/status-chip';
+import { StatusFaceBadge } from '@/components/status-face-badge';
+import type { StatusChipProps } from '@/components/status-chip';
+import type { AppHapticFeedback } from '@/lib/app-haptics';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionEventCardStyles as styles } from './transaction-event-card-styles';
@@ -18,8 +20,6 @@ import {
 } from '@/lib/transaction-categories';
 import { AppText } from '@/components/app-text';
 
-const DEFAULT_PENDING_SURFACE_COLOR = '#fff9ed';
-const DEFAULT_PENDING_BORDER_COLOR = 'rgba(163, 95, 25, 0.14)';
 const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
 export interface TransactionEventCardProps extends PropsWithChildren {
@@ -40,6 +40,7 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly onContentPress?: () => void;
   readonly directionLabel?: string | null;
   readonly href?: Href;
+  readonly haptic?: AppHapticFeedback;
   readonly meta?: string | null;
   readonly onPress?: () => void;
   readonly pending?: boolean;
@@ -94,6 +95,7 @@ export function TransactionEventCard({
   contentHref,
   directionLabel,
   href,
+  haptic = 'none',
   meta,
   onContentPress,
   onPress,
@@ -122,14 +124,11 @@ export function TransactionEventCard({
   const resolvedBadgeBackgroundColor =
     badgeBackgroundColor ?? transactionCategoryBackgroundColor(safeCategory);
   const resolvedBadgeColor = badgeColor ?? transactionCategoryColor(safeCategory);
-  const pendingSurfaceColor = pendingHighlightColor
-    ? withAlpha(pendingHighlightColor, 0.1)
-    : DEFAULT_PENDING_SURFACE_COLOR;
-  const pendingBorderColor = pendingHighlightColor
-    ? withAlpha(pendingHighlightColor, 0.22)
-    : DEFAULT_PENDING_BORDER_COLOR;
+  const unreadSurfaceColor = withAlpha(pendingHighlightColor ?? accentColor, 0.1);
   const hasAction = Boolean(href || onPress);
   const hasContentAction = !hasAction && Boolean(contentHref || onContentPress);
+  const isStatusAvatar = actorAvatarVariant === 'system' && Boolean(statusLabel);
+  const avatarSize = compact ? 34 : 44;
 
   function handleContentPress() {
     if (onContentPress) {
@@ -178,16 +177,20 @@ export function TransactionEventCard({
 
   const leadingNode = (
     <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
-      <AppAvatar
-        fallbackBackgroundColor={actorFallbackColor}
-        fallbackTextColor={theme.colors.white}
-        imageUrl={actorAvatarUrl}
-        label={actorLabel}
-        rounded={false}
-        size={compact ? 34 : 44}
-        variant={actorAvatarVariant}
-      />
-      {categoryPlacement === 'avatar' ? (
+      {isStatusAvatar && statusLabel ? (
+        <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
+      ) : (
+        <AppAvatar
+          fallbackBackgroundColor={actorFallbackColor}
+          fallbackTextColor={theme.colors.white}
+          imageUrl={actorAvatarUrl}
+          label={actorLabel}
+          rounded={false}
+          size={avatarSize}
+          variant={actorAvatarVariant}
+        />
+      )}
+      {!isStatusAvatar && categoryPlacement === 'avatar' ? (
         <View
           style={[
             styles.categoryBadge,
@@ -340,20 +343,18 @@ export function TransactionEventCard({
   const card = (
     <ActivityItemCard
       accentColor={accentColor}
+      attentionDot={pending}
       compact={compact}
       leadingAccessibilityLabel={`Abrir perfil de ${actorLabel}`}
       leadingDisabled={!hasContentAction}
       leadingNode={leadingNode}
       metaNode={metaNode}
       onLeadingPress={hasContentAction ? handleContentPress : undefined}
-      pendingBorderColor={pending ? pendingBorderColor : undefined}
-      pendingSurfaceColor={pending ? pendingSurfaceColor : undefined}
       sideNode={sideNode}
       title={actorLabel}
-      titleAccessoryNode={
-        statusLabel ? <StatusChip compact iconOnly label={statusLabel} tone={statusTone} /> : null
-      }
+      titleAccessoryNode={null}
       unread={unread}
+      unreadSurfaceColor={unreadSurfaceColor}
       variant={variant}
     >
       {children}
@@ -363,13 +364,19 @@ export function TransactionEventCard({
   if (href) {
     return (
       <Link href={href} asChild>
-        <CardPressable style={styles.cardPressable}>{card}</CardPressable>
+        <CardPressable haptic={haptic} style={styles.cardPressable}>
+          {card}
+        </CardPressable>
       </Link>
     );
   }
 
   if (onPress) {
-    return <CardPressable onPress={onPress}>{card}</CardPressable>;
+    return (
+      <CardPressable haptic={haptic} onPress={onPress}>
+        {card}
+      </CardPressable>
+    );
   }
 
   return card;

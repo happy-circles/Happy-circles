@@ -24,6 +24,8 @@ import {
   isFreshQrDelivery,
   type EnrichedContact,
 } from './contacts-sheet-helpers';
+import { buildDashboardTransactionPreview } from './dashboard-transaction-preview';
+import type { ActivityItemDto } from '@happy-circles/application';
 
 function invite(value: Partial<InviteRequestItem>): InviteRequestItem {
   return {
@@ -108,8 +110,10 @@ describe('dashboard invite helpers', () => {
         }),
       ),
     ).toBe(false);
+    expect(balanceFocusHref('balance')).toBe('/transactions');
+    expect(balanceFocusHref('people')).toBe('/people?filter=movements');
     expect(balanceFocusHref('categories')).toBe('/categories');
-    expect(balanceFocusHref('settlements')).toBe('/balance?segment=settlements');
+    expect(balanceFocusHref('circles')).toBe('/circles');
   });
 });
 
@@ -142,5 +146,76 @@ describe('contact sheet helpers', () => {
         channel: 'qr',
       } as never),
     ).toBe(false);
+  });
+});
+
+describe('dashboard transaction preview', () => {
+  function activityItem(value: Partial<ActivityItemDto> & { readonly id: string }): ActivityItemDto {
+    const { id, ...overrides } = value;
+
+    return {
+      id,
+      kind: 'payment',
+      title: 'Movimiento',
+      subtitle: 'Ben | hoy',
+      status: 'posted',
+      amountMinor: 1000,
+      category: 'food_drinks',
+      counterpartyLabel: 'Ben',
+      happenedAt: '2026-05-01T12:00:00.000Z',
+      tone: 'positive',
+      ...overrides,
+    };
+  }
+
+  it('keeps pending previews ahead of date-sorted history', () => {
+    const unviewedPending = activityItem({
+      id: 'pending-new',
+      kind: 'financial_request',
+      status: 'requires_you',
+      title: 'Ben te pidio revisar',
+      happenedAt: undefined,
+    }) as ActivityItemDto & { readonly createdAt: string };
+    const viewedPending = activityItem({
+      id: 'pending-viewed',
+      kind: 'financial_request',
+      status: 'requires_you',
+      title: 'Carla te pidio revisar',
+      happenedAt: undefined,
+    }) as ActivityItemDto & { readonly createdAt: string };
+    const history = activityItem({
+      id: 'history-new',
+      happenedAt: '2026-05-04T12:00:00.000Z',
+      status: 'posted',
+    });
+    const olderHistory = activityItem({
+      id: 'history-old',
+      happenedAt: '2026-05-02T12:00:00.000Z',
+      status: 'posted',
+    });
+
+    Object.assign(unviewedPending, { createdAt: '2026-05-05T12:00:00.000Z' });
+    Object.assign(viewedPending, { createdAt: '2026-05-03T12:00:00.000Z' });
+
+    const preview = buildDashboardTransactionPreview({
+      historyItems: [olderHistory, history],
+      limit: 4,
+      notificationViewedKeys: new Set(['financial_request:pending-viewed:requires_you']),
+      pendingItems: [viewedPending, unviewedPending],
+    });
+
+    expect(
+      preview.visibleItems.map(({ highlightPending, isPending, item, unread }) => ({
+        highlightPending,
+        id: item.id,
+        isPending,
+        unread,
+      })),
+    ).toEqual([
+      { highlightPending: true, id: 'pending-new', isPending: true, unread: true },
+      { highlightPending: true, id: 'pending-viewed', isPending: true, unread: false },
+      { highlightPending: false, id: 'history-new', isPending: false, unread: false },
+      { highlightPending: false, id: 'history-old', isPending: false, unread: false },
+    ]);
   });
 });

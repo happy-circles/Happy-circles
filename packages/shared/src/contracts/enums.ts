@@ -161,10 +161,9 @@ export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
 
 export const ANALYTICS_SCREEN_NAMES = [
   'activity',
-  'advanced_audit',
   'auth',
-  'balance_analytics',
   'balance_overview',
+  'circles',
   'home',
   'invite',
   'join',

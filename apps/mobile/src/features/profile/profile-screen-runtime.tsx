@@ -1,6 +1,6 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ActionSheetIOS,
@@ -13,15 +13,17 @@ import {
   View,
 } from 'react-native';
 import type { ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
+import { AppText } from '@/components/app-text';
 import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
+import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
-import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { prepareAvatarImageForUpload } from '@/lib/avatar-image';
 import { presentLimitedContactsAccessPicker } from '@/lib/contacts-permissions';
 import {
@@ -36,6 +38,7 @@ import {
   useUpdateProfileAvatarMutation,
 } from '@/lib/live-data';
 import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
+import { pushRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import {
@@ -54,11 +57,8 @@ import {
   resolveContactsPermissionActionLabel,
   resolveContactsPermissionTone,
   resolveProfileFocusRequest,
-  type RowTone,
 } from './profile-helpers';
-import { AppText } from '@/components/app-text';
-
-type IoniconName = keyof typeof Ionicons.glyphMap;
+import { ProfileStatusRow } from './profile-status-row';
 
 const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
 const TERMS_URL = 'https://app.happy-circles.com/terms';
@@ -80,87 +80,18 @@ function triggerWarningHaptic() {
   triggerAppWarningHaptic();
 }
 
-function resolveRowTone(tone: RowTone) {
-  if (tone === 'success') {
-    return {
-      backgroundColor: theme.colors.successSoft,
-      color: theme.colors.success,
-    };
-  }
-
-  if (tone === 'danger') {
-    return {
-      backgroundColor: theme.colors.dangerSoft,
-      color: theme.colors.danger,
-    };
-  }
-
-  if (tone === 'primary') {
-    return {
-      backgroundColor: theme.colors.primarySoft,
-      color: theme.colors.primary,
-    };
-  }
-
-  return {
-    backgroundColor: theme.colors.surfaceSoft,
-    color: theme.colors.textMuted,
-  };
-}
-
-function rowStatusTone(tone: RowTone): StatusChipProps['tone'] {
-  if (tone === 'success') {
-    return 'success';
-  }
-
-  if (tone === 'danger') {
-    return 'danger';
-  }
-
-  if (tone === 'primary') {
-    return 'primary';
-  }
-
-  return 'neutral';
-}
-
-function ProfileStatusRow({
-  icon,
-  status,
-  subtitle,
-  title,
-  tone = 'muted',
-  trailing,
-}: {
-  readonly icon: IoniconName;
-  readonly status?: string;
-  readonly subtitle?: string;
-  readonly title: string;
-  readonly tone?: RowTone;
-  readonly trailing?: ReactNode;
-}) {
-  const visual = resolveRowTone(tone);
-
-  return (
-    <View style={styles.statusRow}>
-      <View style={[styles.statusIcon, { backgroundColor: visual.backgroundColor }]}>
-        <Ionicons color={visual.color} name={icon} size={20} />
-      </View>
-      <View style={styles.textWrap}>
-        <AppText style={styles.rowTitle}>{title}</AppText>
-        {subtitle ? <AppText style={styles.rowSubtitle}>{subtitle}</AppText> : null}
-      </View>
-      {trailing ??
-        (status ? <StatusChip compact label={status} tone={rowStatusTone(tone)} /> : null)}
-    </View>
-  );
-}
-
 export function ProfileScreen() {
   const params = useLocalSearchParams<{ focus?: string; section?: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
+  const topInset = Math.max(0, insets.top);
+  const profileContentContainerStyle = useMemo(
+    () => [styles.centeredContent, { paddingTop: topInset + theme.spacing.xs }],
+    [topInset],
+  );
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const avatarMutation = useUpdateProfileAvatarMutation();
@@ -201,6 +132,9 @@ export function ProfileScreen() {
   const accountEmailValue =
     currentUserProfile?.email ?? session.profile?.email ?? session.email ?? '';
   const accountEmail = accountEmailValue || 'Sin correo';
+  const happyCircleScore = snapshotQuery.data?.happyCircleScore ?? null;
+  const happyCircleFaces = happyCircleScore?.totalFaces ?? 0;
+  const happyCircleClosedCount = happyCircleScore?.closedCircleCount ?? 0;
   const reminderSummary = snapshotQuery.isLoading
     ? 'Calculando...'
     : pendingCount > 0
@@ -439,6 +373,11 @@ export function ProfileScreen() {
     } catch {
       setMessage(failureMessage);
     }
+  }
+
+  function openHappyFaces() {
+    triggerSelectionHaptic();
+    pushRoute(router, '/circles' as Href);
   }
 
   async function handleBiometrics(nextValue: boolean) {
@@ -716,7 +655,7 @@ export function ProfileScreen() {
 
   return (
     <ScreenShell
-      contentContainerStyle={styles.centeredContent}
+      contentContainerStyle={profileContentContainerStyle}
       contentWidthStyle={styles.contentWidth}
       headerLeading={<View style={styles.headerActionPlaceholder} />}
       headerSlot={
@@ -733,11 +672,20 @@ export function ProfileScreen() {
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
+      safeAreaEdges={['left', 'right']}
       scrollViewRef={scrollViewRef}
       title="Happy Circles"
       titleAlign="center"
     >
       <View style={styles.accountHeader}>
+        <View style={styles.profileScoreRow}>
+          <HappyFacesCounter
+            compact
+            closedCircleCount={happyCircleClosedCount}
+            onPress={openHappyFaces}
+            totalFaces={happyCircleFaces}
+          />
+        </View>
         <IdentityFlowIdentity
           avatarLabel={accountLabel}
           avatarUrl={profileAvatarUrl}
@@ -1298,6 +1246,7 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   centeredContent: {},
   contentWidth: {
+    gap: theme.spacing.sm,
     maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
   },
   headerActionPlaceholder: {
@@ -1313,22 +1262,25 @@ const styles = StyleSheet.create({
   },
   accountHeader: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    position: 'relative',
+    width: '100%',
+  },
+  profileScoreRow: {
+    alignItems: 'flex-start',
+    left: theme.spacing.xs,
+    position: 'absolute',
+    top: theme.spacing.xs,
+    width: '100%',
+    zIndex: 2,
   },
   accountCopy: {
     alignItems: 'center',
     gap: theme.spacing.xs,
     maxWidth: 340,
     width: '100%',
-  },
-  accountEyebrow: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   accountValue: {
     color: theme.colors.text,
@@ -1345,16 +1297,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sectionBlock: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.large,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
+    borderTopColor: theme.colors.hairline,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.md,
   },
   focusPanel: {
-    borderColor: theme.colors.primary,
-    ...theme.shadow.card,
+    backgroundColor: theme.colors.primaryGhost,
+    borderRadius: theme.radius.small,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -1384,25 +1335,6 @@ const styles = StyleSheet.create({
   accountDeletionBody: {
     flex: 1,
   },
-  statusRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
-    minHeight: 56,
-  },
-  statusIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  statusText: {
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
   rowPressed: {
     opacity: 0.72,
   },
@@ -1410,20 +1342,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.hairline,
     height: StyleSheet.hairlineWidth,
     width: '100%',
-  },
-  textWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  rowTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
-  },
-  rowSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
   },
   actionCluster: {
     gap: theme.spacing.sm,

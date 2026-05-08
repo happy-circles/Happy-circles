@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
 import {
   transactionShouldSurfaceStatus,
   transactionStatusLabel,
+  transactionStatusTone,
   transactionSummaryMetaLabel,
 } from './transaction-presentation';
 
@@ -63,6 +64,7 @@ describe('transaction presentation', () => {
       'pending_approvals',
       'approved',
       'rejected',
+      'amended',
       'stale',
       'expired',
       'canceled',
@@ -78,5 +80,23 @@ describe('transaction presentation', () => {
     expect(transactionStatusLabel(item({ status: 'waiting_other_side' }))).toBe(
       'Esperando respuesta',
     );
+    expect(transactionStatusLabel(item({ status: 'amended' }))).toBe('Monto modificado');
+  });
+
+  it('keeps happy circle avatar tones aligned to actionability', () => {
+    const circleItem = (status: ActivityItemDto['status']) =>
+      item({
+        category: 'cycle',
+        kind: 'settlement_proposal',
+        status,
+      });
+
+    expect(transactionStatusTone(circleItem('pending_approvals'))).toBe('warning');
+    expect(transactionStatusTone(circleItem('waiting_other_side'))).toBe('neutral');
+    expect(transactionStatusTone(circleItem('approved'))).toBe('cycle');
+    expect(transactionStatusTone(circleItem('executed'))).toBe('success');
+    expect(transactionStatusTone(circleItem('rejected'))).toBe('danger');
+    expect(transactionStatusTone(circleItem('stale'))).toBe('neutral');
+    expect(transactionStatusTone(circleItem('expired'))).toBe('neutral');
   });
 });

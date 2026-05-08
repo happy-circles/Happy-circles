@@ -211,6 +211,16 @@ const SETTLEMENT_PARTICIPANT_SELECT = [
   'created_at',
 ].join(', ');
 
+const HAPPY_CIRCLE_SCORE_EVENT_SELECT = [
+  'id',
+  'user_id',
+  'settlement_proposal_id',
+  'score_delta',
+  'participant_count',
+  'awarded_at',
+  'created_at',
+].join(', ');
+
 const NOTIFICATION_VIEW_SELECT = [
   'user_id',
   'notification_key',
@@ -419,6 +429,7 @@ Deno.serve((request) =>
       historicalAccountInvites,
       activeSettlementProposals,
       historicalSettlementProposals,
+      happyCircleScoreEvents,
       notificationViews,
       auditEvents,
     ] = await Promise.all([
@@ -506,6 +517,14 @@ Deno.serve((request) =>
           .order('updated_at', { ascending: false })
           .limit(LIMITS.settlementHistory),
         'settlement_proposal_history',
+      ),
+      expectRows<Record<string, unknown>>(
+        client
+          .from('happy_circle_score_events')
+          .select(HAPPY_CIRCLE_SCORE_EVENT_SELECT)
+          .eq('user_id', actorUserId)
+          .order('awarded_at', { ascending: false }),
+        'happy_circle_score_events',
       ),
       expectRows<Record<string, unknown>>(
         client
@@ -660,6 +679,7 @@ Deno.serve((request) =>
       accountInviteDeliveries,
       settlementProposals,
       settlementParticipants,
+      happyCircleScoreEvents,
       notificationViews,
       auditEvents,
       limits: LIMITS,

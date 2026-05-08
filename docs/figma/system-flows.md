@@ -53,28 +53,24 @@ flowchart TD
     E -->|"Si"| F["Exigir dispositivo confiable + stepUpAuth"]
     E -->|"No"| G["Actualizar user_profiles"]
     F --> G
-    G --> H["Mirroring auth.updateUser(data)"]
-    H --> I["refreshAccountState"]
-    I --> J{"Foto obligatoria?"}
-    J -->|"Si"| K["Ir a paso photo"]
-    J -->|"No, pero seguridad pendiente"| L["Ir a paso security"]
-    J -->|"No"| M["finishSetup -> pending invite o home"]
-    C -->|"photo"| N["Pedir permiso camara o galeria"]
-    N --> O["Subir archivo a Storage"]
-    O --> P["Actualizar user_profiles.avatar_path"]
-    P --> Q["refreshAccountState + invalidate snapshot"]
-    Q --> R{"Seguridad pendiente?"}
-    R -->|"Si"| L
-    R -->|"No"| M
-    C -->|"security"| S["Confiar dispositivo"]
-    S --> T["toggle biometria"]
-    T --> U["pedir permisos contactos/notificaciones"]
-    U --> M
+    G --> H{"Foto de perfil lista?"}
+    H -->|"No"| I["Pedir camara o galeria y subir avatar"]
+    H -->|"Si"| J["Mirroring auth.updateUser(data)"]
+    I --> K["Actualizar user_profiles.avatar_path"]
+    K --> J
+    J --> L["refreshAccountState"]
+    L --> M{"Seguridad pendiente?"}
+    M -->|"Si"| N["Ir a paso security"]
+    M -->|"No"| O["finishSetup -> pending invite o home"]
+    C -->|"security"| P["Confiar dispositivo"]
+    P --> Q["toggle biometria"]
+    Q --> R["pedir permisos contactos/notificaciones"]
+    R --> O
 ```
 
 Hechos del codigo:
 
-- `resolveSetupStep` decide entre `profile`, `photo` y `security` usando pasos pendientes y seguridad pendiente.
+- `resolveSetupStep` decide entre `email`, `profile` y `security`; la foto vive dentro del paso `profile`, no como ruta separada.
 - `completeProfile` escribe en `user_profiles` y luego hace mirror a `supabase.auth.updateUser({ data })`.
 - `useUpdateProfileAvatarMutation` sube imagen al bucket de avatar y persiste `avatar_path`.
 - `finishSetup` redirige a un pending invite si existe; si no, manda a `/home`.

@@ -16,22 +16,14 @@ import { useSession } from '@/providers/session-provider';
 
 function screenNameFromSegments(segments: readonly string[]): AnalyticsScreenName {
   const visibleSegments = segments.filter((segment) => !segment.startsWith('('));
-  const [first, second] = visibleSegments;
+  const [first] = visibleSegments;
 
   if (!first || first === 'index') {
     return 'home';
   }
 
-  if (first === 'advanced' && second === 'audit') {
-    return 'advanced_audit';
-  }
-
-  if (first === 'balance' && second === 'analytics') {
-    return 'balance_analytics';
-  }
-
-  if (first === 'balance') {
-    return 'balance_overview';
+  if (first === 'circles') {
+    return 'circles';
   }
 
   if (first === 'person') {

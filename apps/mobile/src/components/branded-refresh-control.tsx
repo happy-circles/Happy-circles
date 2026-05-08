@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useMemo } from 'react';
 import type { ScrollViewProps } from 'react-native';
 import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -10,6 +10,7 @@ const TRANSPARENT_REFRESH_COLOR = 'rgba(0, 0, 0, 0)';
 export interface BrandedRefreshProps {
   readonly label?: string;
   readonly nativeIndicatorVisible?: boolean;
+  readonly nativeIndicatorTopInset?: number;
   readonly onRefresh: () => void | Promise<void>;
   readonly progressViewOffset?: number;
   readonly refreshing: boolean;
@@ -26,6 +27,8 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
       alwaysBounceVertical,
       bounces,
       children,
+      contentInset,
+      contentOffset,
       fillViewport = false,
       keyboardDismissMode,
       onScroll,
@@ -49,6 +52,28 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
 
     const progressViewOffset = refresh?.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
     const nativeIndicatorVisible = refresh?.nativeIndicatorVisible !== false;
+    const iosNativeIndicatorTopInset =
+      Platform.OS === 'ios' ? (refresh?.nativeIndicatorTopInset ?? 0) : 0;
+    const resolvedContentInset = useMemo(
+      () =>
+        iosNativeIndicatorTopInset > 0
+          ? {
+              ...contentInset,
+              top: (contentInset?.top ?? 0) + iosNativeIndicatorTopInset,
+            }
+          : contentInset,
+      [contentInset, iosNativeIndicatorTopInset],
+    );
+    const resolvedContentOffset = useMemo(
+      () =>
+        iosNativeIndicatorTopInset > 0 && !contentOffset
+          ? {
+              x: 0,
+              y: -iosNativeIndicatorTopInset,
+            }
+          : contentOffset,
+      [contentOffset, iosNativeIndicatorTopInset],
+    );
     const nativeRefreshControl = refresh ? (
       <RefreshControl
         key={`refresh-control-${Math.round(progressViewOffset)}`}
@@ -80,6 +105,8 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
           {...props}
           alwaysBounceVertical={refreshEnabled ? true : alwaysBounceVertical}
           bounces={refreshEnabled ? true : bounces}
+          contentInset={resolvedContentInset}
+          contentOffset={resolvedContentOffset}
           keyboardDismissMode={
             keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
           }

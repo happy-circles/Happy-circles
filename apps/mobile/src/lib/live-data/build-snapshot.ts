@@ -7,10 +7,11 @@ import { buildAuditItems } from './builders/audit-events';
 import { buildBalanceAnalytics, buildBalanceProjection } from './builders/balance-analytics';
 import { buildPendingFinancialRequestItems } from './builders/financial-requests';
 import { buildFriendshipInviteItems } from './builders/friendship-invites';
+import { buildHappyCircleScore } from './builders/happy-circle-score';
 import { buildPeopleState } from './builders/people';
 import { isHistoryRowVisibleToCurrentUser } from './builders/relationship-history';
 import {
-  buildActiveSettlementPreview,
+  buildActiveSettlementPreviews,
   buildPendingSettlementItems,
   buildSettlementDetail,
   buildSettlementMetrics,
@@ -20,8 +21,12 @@ import type { AppSnapshot, LiveSnapshotRows } from './types';
 import { buildLiveSnapshotContext, groupBy } from './utils/context';
 import { periodRange } from './utils/dates';
 
-type BuildLiveSnapshotInput = Omit<LiveSnapshotRows, 'avatarSignedUrlsByPath' | 'limits'> & {
+type BuildLiveSnapshotInput = Omit<
+  LiveSnapshotRows,
+  'avatarSignedUrlsByPath' | 'happyCircleScoreEvents' | 'limits'
+> & {
   readonly avatarSignedUrlsByPath?: LiveSnapshotRows['avatarSignedUrlsByPath'];
+  readonly happyCircleScoreEvents?: LiveSnapshotRows['happyCircleScoreEvents'];
   readonly currentUserId: string;
 };
 
@@ -30,15 +35,11 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
   const snapshotNowMs = Number.isNaN(fetchedAtMs) ? 0 : fetchedAtMs;
   const snapshotNow = new Date(snapshotNowMs);
   const context = buildLiveSnapshotContext(input);
-  const notificationViewedKeys = new Set(
-    input.notificationViews.map((view) => view.notification_key),
-  );
+  const notificationViewedKeys = new Set(input.notificationViews.map((view) => view.notification_key));
   const history = input.history.filter((row) =>
     isHistoryRowVisibleToCurrentUser(row, input.currentUserId, context.visibleRelationshipIds),
   );
-  const openDebtsByRelationshipId = new Map(
-    input.openDebts.map((row) => [row.relationship_id, row]),
-  );
+  const openDebtsByRelationshipId = new Map(input.openDebts.map((row) => [row.relationship_id, row]));
   const requestsByRelationshipId = groupBy(input.financialRequests, (row) => row.relationship_id);
   const financialRequestsById = new Map(
     input.financialRequests.map((request) => [request.id, request]),
@@ -149,13 +150,14 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       ),
     ]),
   );
-  const activeProposal = buildActiveSettlementPreview({
+  const activeProposals = buildActiveSettlementPreviews({
     proposals: input.settlementProposals,
     participantsByProposalId: settlementParticipantsByProposalId,
     currentUserId: input.currentUserId,
     visibleCounterpartyUserIds: context.visibleCounterpartyUserIds,
     names: context.nameByUserId,
   });
+  const activeProposal = activeProposals[0] ?? null;
   const balanceOverview: BalanceOverviewDto = {
     updatedAt: input.fetchedAt,
     updatedAtLabel: 'Actualizado hace unos segundos',
@@ -172,6 +174,7 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       visibleCounterpartyUserIds: context.visibleCounterpartyUserIds,
       names: context.nameByUserId,
       activeProposal,
+      activeProposals,
       range: periodRange('all', snapshotNow),
     }),
   };
@@ -186,9 +189,11 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
     visibleCounterpartyUserIds: context.visibleCounterpartyUserIds,
     names: context.nameByUserId,
     activeProposal,
+    activeProposals,
     now: snapshotNow,
   });
   const currentUserProfileRow = context.profileByUserId.get(input.currentUserId);
+  const happyCircleScore = buildHappyCircleScore(input);
 
   return {
     dashboard: {
@@ -217,12 +222,10 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       ? {
           displayName: currentUserProfileRow.display_name,
           email: currentUserProfileRow.email,
-          avatarUrl: resolveAvatarUrl(
-            currentUserProfileRow.avatar_path,
-            currentUserProfileRow.updated_at,
-          ),
+          avatarUrl: resolveAvatarUrl(currentUserProfileRow.avatar_path, currentUserProfileRow.updated_at),
         }
       : null,
+    happyCircleScore,
     friendshipPendingItems: friendshipState.pendingItems,
     friendshipHistoryItems: friendshipState.historyItems,
     friendshipSummary: friendshipState.summary,

@@ -1,0 +1,236 @@
+import { StyleSheet } from 'react-native';
+
+import { theme } from '@/lib/theme';
+
+export const activityScreenStyles = StyleSheet.create({
+  safeArea: {
+    backgroundColor: theme.colors.overlay,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdropTapTarget: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  layout: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.large,
+    borderTopRightRadius: theme.radius.large,
+    height: '88%',
+    maxHeight: '88%',
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    width: '100%',
+  },
+  sheetContent: {
+    alignSelf: 'center',
+    flex: 1,
+    gap: theme.spacing.md,
+    maxWidth: 560,
+    minHeight: 0,
+    width: '100%',
+  },
+  fixedTop: {
+    gap: theme.spacing.xs,
+  },
+  heroRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  closeButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  heroTitle: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+  },
+  panelArea: {
+    flex: 1,
+    minHeight: 0,
+    flexShrink: 1,
+    gap: theme.spacing.md,
+  },
+  notificationTabs: {
+    alignItems: 'center',
+    borderBottomColor: theme.colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: theme.spacing.md,
+    flexDirection: 'row',
+    minWidth: '100%',
+  },
+  notificationTabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  notificationTab: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 42,
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  notificationTabActive: {
+    borderBottomColor: theme.colors.primary,
+    borderBottomWidth: 2,
+  },
+  tabButtonPressed: {
+    opacity: 0.88,
+  },
+  notificationTabLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  notificationTabLabelActive: {
+    color: theme.colors.text,
+    fontWeight: '800',
+  },
+  notificationTabBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.danger,
+    borderRadius: theme.radius.pill,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 5,
+  },
+  notificationTabBadgeText: {
+    color: theme.colors.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  sheetScrollWrap: {
+    flex: 1,
+    minHeight: 0,
+    flexShrink: 1,
+    position: 'relative',
+  },
+  notificationPage: {
+    backgroundColor: theme.colors.surface,
+    flex: 1,
+  },
+  pageScroll: {
+    backgroundColor: theme.colors.surface,
+    flex: 1,
+  },
+  sheetScrollContent: {
+    backgroundColor: theme.colors.surface,
+    flexGrow: 1,
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+  },
+  notificationSection: {
+    gap: theme.spacing.sm,
+  },
+  notificationSectionTitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  notificationSectionContent: {
+    gap: theme.spacing.sm,
+  },
+  notificationActionIconBubble: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  notificationActionMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  notificationActionSide: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+  },
+  notificationInviteSide: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+  },
+  notificationInviteActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+  },
+  notificationInviteIconButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  notificationInviteIconButtonPrimary: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: 'rgba(26, 39, 68, 0.14)',
+  },
+  notificationInviteIconButtonDanger: {
+    backgroundColor: theme.colors.dangerSoft,
+    borderColor: 'rgba(232, 96, 74, 0.18)',
+  },
+  notificationInviteDisabled: {
+    opacity: 0.5,
+  },
+  notificationInviteTypeIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  notificationActionAmount: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  notificationActionAmountVoided: {
+    opacity: 0.72,
+    textDecorationLine: 'line-through',
+  },
+  supportText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    lineHeight: 22,
+  },
+  loadingMotion: {
+    alignItems: 'center',
+  },
+  loadingState: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.large,
+    borderTopRightRadius: theme.radius.large,
+    gap: theme.spacing.sm,
+    height: '88%',
+    justifyContent: 'center',
+    maxHeight: '88%',
+    paddingHorizontal: theme.spacing.lg,
+    width: '100%',
+  },
+});

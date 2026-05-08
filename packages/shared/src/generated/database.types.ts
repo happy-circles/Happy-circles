@@ -785,6 +785,72 @@ export type Database = {
           },
         ]
       }
+      happy_circle_score_events: {
+        Row: {
+          awarded_at: string
+          created_at: string
+          id: string
+          participant_count: number
+          score_delta: number
+          settlement_proposal_id: string
+          user_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          created_at?: string
+          id?: string
+          participant_count: number
+          score_delta: number
+          settlement_proposal_id: string
+          user_id: string
+        }
+        Update: {
+          awarded_at?: string
+          created_at?: string
+          id?: string
+          participant_count?: number
+          score_delta?: number
+          settlement_proposal_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "happy_circle_score_events_settlement_proposal_id_fkey"
+            columns: ["settlement_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       friendship_invite_deliveries: {
         Row: {
           channel: Database["public"]["Enums"]["friendship_invite_channel"]
@@ -3394,6 +3460,10 @@ export type Database = {
       }
       apply_cycle_settlement_execution: {
         Args: { p_actor_user_id: string; p_proposal_id: string }
+        Returns: Json
+      }
+      award_happy_circle_score: {
+        Args: { p_proposal_id: string }
         Returns: Json
       }
       decide_cycle_settlement: {

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
+import { AppAvatar } from '@/components/app-avatar';
 import { CardTimeline, type CardTone, type CardTimelineStep } from '@/components/card-shell';
-import { TransactionSummaryRow } from '@/components/transaction-summary-row';
+import { StatusFaceBadge } from '@/components/status-face-badge';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { theme } from '@/lib/theme';
 import {
@@ -27,11 +28,14 @@ export interface HistoryCaseStepViewModel {
 }
 
 export interface HistoryCaseCardProps {
+  readonly actorFallbackColor?: string;
+  readonly actorAvatarUrl?: string | null;
   readonly eyebrow?: string | null;
   readonly category?: string | null;
   readonly title: string;
   readonly description?: string | null;
   readonly amountLabel?: string | null;
+  readonly focused?: boolean;
   readonly meta?: string | null;
   readonly statusLabel: string;
   readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
@@ -64,6 +68,8 @@ const historyCloseLayoutAnimation = {
   },
 };
 
+const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
+
 function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
   triggerAppSelectionHaptic();
   LayoutAnimation.configureNext(
@@ -72,21 +78,14 @@ function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
   onToggle();
 }
 
-function shouldSurfaceHistoryStatus(
-  statusTone: NonNullable<HistoryCaseCardProps['statusTone']>,
-  isExpanded: boolean,
-): boolean {
-  return (
-    isExpanded || statusTone === 'warning' || statusTone === 'danger' || statusTone === 'primary'
-  );
-}
-
 export function HistoryCaseCard({
+  actorFallbackColor,
+  actorAvatarUrl = null,
   eyebrow,
-  category,
   title,
   description,
   amountLabel,
+  focused = false,
   meta,
   statusLabel,
   statusTone = 'neutral',
@@ -103,9 +102,26 @@ export function HistoryCaseCard({
   const primaryLabel = eyebrow ?? (isCycleSnippet ? 'Happy Circle' : title);
   const detailTitle = primaryLabel !== title ? title : null;
   const showExpandedSummary = isExpanded && Boolean(detailTitle || description);
-  const surfaceStatusLabel = shouldSurfaceHistoryStatus(statusTone, isExpanded)
-    ? statusLabel
-    : null;
+  const avatarSize = 34;
+  const metaLabel = meta ? meta.replace(/\s*\|\s*/g, META_SEPARATOR) : null;
+  const leadingNode =
+    isCycleSnippet && statusLabel ? (
+      <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
+    ) : (
+      <AppAvatar
+        fallbackBackgroundColor={
+          isCycleSnippet
+            ? transactionCategoryColor('cycle')
+            : (actorFallbackColor ?? toneColor(tone))
+        }
+        fallbackTextColor={theme.colors.white}
+        imageUrl={isCycleSnippet ? null : actorAvatarUrl}
+        label={primaryLabel}
+        rounded={false}
+        size={avatarSize}
+        variant={isCycleSnippet ? 'system' : 'person'}
+      />
+    );
 
   return (
     <SurfaceCard
@@ -119,6 +135,7 @@ export function HistoryCaseCard({
         tone === 'cycle' ? styles.cardCycle : null,
         isCycleSnippet ? styles.cycleSnippet : null,
         tone === 'danger' ? styles.rejectedSnippet : null,
+        focused ? styles.cardFocused : null,
         isExpanded ? styles.cardExpanded : null,
         isExpanded && tone === 'positive' ? styles.cardExpandedPositive : null,
         isExpanded && tone === 'negative' ? styles.cardExpandedNegative : null,
@@ -128,20 +145,42 @@ export function HistoryCaseCard({
       variant={isCycleSnippet ? 'muted' : 'default'}
     >
       <Pressable
+        accessibilityLabel={[primaryLabel, displayAmountLabel, metaLabel].filter(Boolean).join(', ')}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: isExpanded }}
         onPress={() => animateHistoryToggle(isExpanded, onToggle)}
         style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
       >
-        <TransactionSummaryRow
-          amountColor={toneColor(tone)}
-          amountLabel={displayAmountLabel}
-          category={category}
-          chevron={isExpanded ? 'up' : 'forward'}
-          meta={meta}
-          showCategoryIcon={false}
-          statusLabel={surfaceStatusLabel}
-          statusTone={statusTone}
-          title={primaryLabel}
-        />
+        <View style={styles.headerRow}>
+          <View style={styles.avatarWrap}>{leadingNode}</View>
+          <View style={styles.headerCopy}>
+            <AppText numberOfLines={1} style={styles.headerTitle}>
+              {primaryLabel}
+            </AppText>
+            {metaLabel ? (
+              <AppText numberOfLines={1} style={styles.headerMeta}>
+                {metaLabel}
+              </AppText>
+            ) : null}
+          </View>
+          <View style={styles.headerSide}>
+            <View style={styles.amountRow}>
+              {displayAmountLabel ? (
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.headerAmount, { color: toneColor(tone) }]}
+                >
+                  {displayAmountLabel}
+                </AppText>
+              ) : null}
+              <Ionicons
+                color={theme.colors.textMuted}
+                name={isExpanded ? 'chevron-up' : 'chevron-forward'}
+                size={16}
+              />
+            </View>
+          </View>
+        </View>
       </Pressable>
 
       {isExpanded ? (
@@ -213,7 +252,7 @@ const toneStyles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   danger: {
-    color: theme.colors.danger,
+    color: theme.colors.warning,
   },
   cycle: {
     color: transactionCategoryColor('cycle'),
@@ -240,7 +279,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(249, 115, 22, 0.22)',
   },
   cardExpandedDanger: {
-    borderColor: 'rgba(232, 96, 74, 0.22)',
+    borderColor: 'rgba(249, 115, 22, 0.22)',
   },
   cardExpandedCycle: {
     borderColor: 'rgba(37, 99, 235, 0.2)',
@@ -251,8 +290,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
   },
   rejectedSnippet: {
-    backgroundColor: 'rgba(178, 67, 56, 0.07)',
-    borderColor: 'rgba(178, 67, 56, 0.18)',
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: 'rgba(249, 115, 22, 0.18)',
   },
   cardPositive: {
     borderLeftColor: theme.colors.success,
@@ -267,18 +306,72 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
   },
   cardDanger: {
-    borderLeftColor: theme.colors.danger,
+    borderLeftColor: theme.colors.warning,
     borderLeftWidth: 3,
   },
   cardCycle: {
     borderLeftColor: transactionCategoryColor('cycle'),
     borderLeftWidth: 3,
   },
+  cardFocused: {
+    backgroundColor: theme.colors.primaryGhost,
+    borderColor: 'rgba(26, 39, 68, 0.26)',
+    ...theme.shadow.card,
+  },
   header: {
     borderRadius: theme.radius.small,
   },
   headerPressed: {
     opacity: 0.94,
+  },
+  headerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  avatarWrap: {
+    height: 36,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 36,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  headerTitle: {
+    color: theme.colors.text,
+    flexShrink: 1,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  headerMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  headerSide: {
+    alignItems: 'flex-end',
+    gap: 3,
+    minWidth: 82,
+  },
+  amountRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
+    justifyContent: 'flex-end',
+    maxWidth: '100%',
+  },
+  headerAmount: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 18,
+    textAlign: 'right',
   },
   expandedContent: {
     gap: theme.spacing.sm,

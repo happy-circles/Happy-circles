@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Platform } from 'react-native';
 import {
   HOME_REGISTER_FAB_CLEARANCE,
   dashboardStyles as styles,
@@ -8,7 +9,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScreenShell } from '@/components/screen-shell';
-import { BalanceLensCarousel } from '@/features/balance/balance-overview-screen';
+import { BalanceLensCarousel } from '@/features/balance/balance-lens-carousel';
+import { usePreferredBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import {
   DashboardPeopleSection,
@@ -27,7 +29,7 @@ import {
   HomeRegisterFab,
   useCollapsibleHomeChrome,
 } from '@/features/home/home-collapsible-chrome';
-import { HomeNativeSyncIndicator } from '@/features/home/home-native-sync-indicator';
+import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { pushRoute } from '@/lib/navigation';
 import { notificationViewKeyForItem, useAppSnapshot } from '@/lib/live-data';
@@ -37,33 +39,32 @@ import { useSession } from '@/providers/session-provider';
 import type { ActivityItemDto } from '@happy-circles/application';
 import { AppText } from '@/components/app-text';
 
-const TRANSACTION_PREVIEW_LIMIT = 3;
+const TRANSACTION_PREVIEW_LIMIT = 15;
 const HOME_REFRESH_INDICATOR_CLEARANCE = theme.spacing.xl;
 const HOME_REFRESH_MINIMUM_VISIBLE_MS = 700;
-
 export function DashboardScreen() {
   const router = useRouter();
   const session = useSession();
   const insets = useSafeAreaInsets();
-  const homeChrome = useCollapsibleHomeChrome();
   const topInset = Math.max(0, insets.top);
   const homeChromeHeight = HOME_CHROME_EXPANDED_HEIGHT + topInset;
+  const homeRefreshInsetTop = Platform.OS === 'ios' ? homeChromeHeight : 0;
+  const homeChrome = useCollapsibleHomeChrome(homeRefreshInsetTop);
   const homeRefreshProgressOffset = homeChromeHeight + HOME_REFRESH_INDICATOR_CLEARANCE;
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery, {
     minimumVisibleMs: HOME_REFRESH_MINIMUM_VISIBLE_MS,
-    nativeIndicatorVisible: false,
+    nativeIndicatorTopInset: homeRefreshInsetTop,
     progressViewOffset: homeRefreshProgressOffset,
   });
-  const showNativeSyncIndicator =
-    refresh.refreshing ||
-    snapshotQuery.isRestoringCache ||
-    snapshotQuery.isLoading ||
-    snapshotQuery.isFetching;
   const dashboard = snapshotQuery.data?.dashboard;
   const balanceOverview = snapshotQuery.data?.balanceOverview ?? null;
   const balanceAnalytics = snapshotQuery.data?.balanceAnalytics ?? null;
+  const balancePeriod = usePreferredBalanceAnalyticsPeriod(balanceAnalytics?.defaultPeriod);
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
+  const happyCircleScore = snapshotQuery.data?.happyCircleScore ?? null;
+  const happyCircleFaces = happyCircleScore?.totalFaces ?? 0;
+  const happyCircleClosedCount = happyCircleScore?.closedCircleCount ?? 0;
   const [homeScrollEnabled, setHomeScrollEnabled] = useState(true);
   const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
@@ -86,6 +87,8 @@ export function DashboardScreen() {
   const transactionPreview = buildDashboardTransactionPreview({
     historyItems: historySection?.items ?? [],
     limit: TRANSACTION_PREVIEW_LIMIT,
+    notificationViewedKeys,
+    pendingItems: pendingSection?.items ?? [],
   });
   const accountSetupEligible =
     session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
@@ -125,13 +128,16 @@ export function DashboardScreen() {
   const homeContentContainerStyle = useMemo(
     () => ({
       paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom),
-      paddingTop: HOME_CHROME_EXPANDED_HEIGHT + Math.max(0, insets.top) + theme.spacing.lg,
+      paddingTop:
+        HOME_CHROME_EXPANDED_HEIGHT +
+        Math.max(0, insets.top) +
+        theme.spacing.lg -
+        homeRefreshInsetTop,
     }),
-    [insets.bottom, insets.top],
+    [homeRefreshInsetTop, insets.bottom, insets.top],
   );
   const homeChromeOverlay = (
     <>
-      <HomeNativeSyncIndicator top={homeChromeHeight} visible={showNativeSyncIndicator} />
       <HomeCollapsibleChrome
         avatarLabel={currentUserLabel}
         avatarUrl={currentUserProfile?.avatarUrl ?? null}
@@ -155,6 +161,11 @@ export function DashboardScreen() {
   function openTransactionPreviewItem(item: ActivityItemDto) {
     const person = transactionPersonForItem(dashboard?.activePeople ?? [], item);
     pushRoute(router, transactionPersonHref(person, item, 'history'));
+  }
+
+  function openHappyFaces() {
+    triggerAppSelectionHaptic();
+    pushRoute(router, '/circles' as Href);
   }
 
   useFocusEffect(
@@ -233,9 +244,16 @@ export function DashboardScreen() {
       {balanceOverview && balanceAnalytics ? (
         <BalanceLensCarousel
           analytics={balanceAnalytics}
+          happyFacesClosedCount={happyCircleClosedCount}
+          happyFacesTotal={happyCircleFaces}
+          onCategoryPress={(category, period) =>
+            pushRoute(router, `/categories?category=${category}&period=${period}` as Href)
+          }
           onFocusPress={(focus) => pushRoute(router, balanceFocusHref(focus))}
+          onHappyFacesPress={openHappyFaces}
           onSwipeInteractionChange={(isInteracting) => setHomeScrollEnabled(!isInteracting)}
           overview={balanceOverview}
+          period={balancePeriod}
         />
       ) : null}
 

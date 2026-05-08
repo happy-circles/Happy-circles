@@ -15,12 +15,28 @@ export interface SettlementParticipantDecisionDto {
   readonly decision: 'approved' | 'pending' | 'rejected';
 }
 
+export interface HappyCircleScoreAwardDto {
+  readonly id: string;
+  readonly settlementProposalId: string;
+  readonly scoreDelta: number;
+  readonly participantCount: number;
+  readonly awardedAt: string;
+}
+
+export interface HappyCircleScoreDto {
+  readonly totalFaces: number;
+  readonly closedCircleCount: number;
+  readonly recentAwards: readonly HappyCircleScoreAwardDto[];
+  readonly latestAward: HappyCircleScoreAwardDto | null;
+}
+
 export interface ActiveSettlementPreviewDto {
   readonly proposalId: string;
   readonly status: 'pending_approvals' | 'approved';
   readonly title: string;
   readonly subtitle: string;
   readonly totalAmountMinor: number;
+  readonly personalAmountMinor: number;
   readonly approvalsPending: number;
   readonly movementCount: number;
   readonly savedMovementsCount: number;
@@ -42,6 +58,7 @@ export interface BalanceProjectionDto {
 export interface BalanceSettlementMetricsDto {
   readonly activeCount: number;
   readonly activeProposal: ActiveSettlementPreviewDto | null;
+  readonly activeProposals: readonly ActiveSettlementPreviewDto[];
   readonly resolvedMinor: number;
   readonly movementCount: number;
   readonly savedMovementsCount: number;
@@ -188,6 +205,7 @@ export interface ActivityItemDto {
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
   readonly counterpartyLabel?: string;
+  readonly participantUserIds?: readonly string[];
   readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
   readonly kind:
     | 'financial_request'

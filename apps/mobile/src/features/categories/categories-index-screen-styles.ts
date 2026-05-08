@@ -3,17 +3,39 @@ import { StyleSheet } from 'react-native';
 import { theme } from '@/lib/theme';
 
 export const categoriesIndexScreenStyles = StyleSheet.create({
-  loadingState: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
+  loadingState: { alignItems: 'center', gap: theme.spacing.sm },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  summaryCard: {
-    gap: theme.spacing.xs,
+  summaryCard: { gap: theme.spacing.xs },
+  summaryVisualRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  summaryIconCluster: { alignItems: 'center', flexDirection: 'row', minHeight: 42 },
+  summaryCategoryOrb: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    marginRight: -7,
+    width: 34,
+  },
+  summaryFlowBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summaryFlowText: {
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
   },
   summaryEyebrow: {
     color: theme.colors.textMuted,
@@ -33,9 +55,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
-  activeFilterWrap: {
-    alignItems: 'flex-start',
-  },
+  activeFilterWrap: { alignItems: 'flex-start' },
   activeFilterPill: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
@@ -52,12 +72,8 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 18,
   },
-  list: {
-    gap: theme.spacing.sm,
-  },
-  pressed: {
-    opacity: 0.92,
-  },
+  list: { gap: theme.spacing.sm },
+  pressed: { opacity: 0.92 },
   categoryCard: {
     alignItems: 'center',
     borderLeftWidth: 3,
@@ -65,12 +81,8 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
-  cardPositive: {
-    borderLeftColor: theme.colors.success,
-  },
-  cardNegative: {
-    borderLeftColor: theme.colors.warning,
-  },
+  cardPositive: { borderLeftColor: theme.colors.success },
+  cardNegative: { borderLeftColor: theme.colors.warning },
   leading: {
     alignItems: 'center',
     flex: 1,
@@ -123,13 +135,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'right',
   },
-  positive: {
-    color: theme.colors.success,
-  },
-  negative: {
-    color: theme.colors.warning,
-  },
-  neutral: {
-    color: theme.colors.text,
-  },
+  positive: { color: theme.colors.success },
+  negative: { color: theme.colors.warning },
+  neutral: { color: theme.colors.text },
 });

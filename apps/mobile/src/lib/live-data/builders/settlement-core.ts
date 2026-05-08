@@ -43,6 +43,22 @@ export function settlementProposalTotalAmount(proposal: SettlementProposalRow): 
   );
 }
 
+export function settlementProposalParticipantAmount(
+  proposal: SettlementProposalRow,
+  participantUserId: string,
+): number {
+  return parseSettlementMovements(proposal.movements_json).reduce((total, movement) => {
+    if (
+      movement.debtor_user_id === participantUserId ||
+      movement.creditor_user_id === participantUserId
+    ) {
+      return total + movement.amount_minor;
+    }
+
+    return total;
+  }, 0);
+}
+
 export function settlementSavedMovementsCount(
   participantCount: number,
   movementCount: number,

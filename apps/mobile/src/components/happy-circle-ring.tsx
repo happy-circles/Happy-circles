@@ -6,7 +6,7 @@ import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
 
 const APPROVED_COLOR = theme.colors.success;
-const PENDING_COLOR = theme.colors.muted;
+const PENDING_COLOR = '#2563eb';
 const REJECTED_COLOR = theme.colors.warning;
 
 export type HappyCircleDecision = 'approved' | 'pending' | 'rejected';

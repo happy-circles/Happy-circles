@@ -128,9 +128,14 @@ export function useAppSnapshot() {
           return;
         }
 
+        const existingSnapshot = queryClient.getQueryData<AppSnapshot>(queryKey);
         if (cachedSnapshot) {
           hydrateSignedAvatarUrlCache(cachedSnapshot.avatarSignedUrlsByPath);
-          queryClient.setQueryData(queryKey, cachedSnapshot.snapshot, { updatedAt: 0 });
+          if (!existingSnapshot) {
+            queryClient.setQueryData(queryKey, cachedSnapshot.snapshot, {
+              updatedAt: Date.parse(cachedSnapshot.updatedAt) || 0,
+            });
+          }
           void prefetchCriticalAvatarImages(cachedSnapshot.snapshot, 700).catch(() => undefined);
         }
 
@@ -162,7 +167,7 @@ export function useAppSnapshot() {
 
   const query = useQuery({
     queryKey,
-    enabled: Boolean(userId) && cacheRestoreComplete,
+    enabled: Boolean(userId),
     queryFn: async ({ signal }) => {
       const snapshot = await fetchAppSnapshot(userId, signal);
       setHasLiveData(true);
@@ -173,7 +178,7 @@ export function useAppSnapshot() {
   return {
     ...query,
     hasLiveData,
-    isRestoringCache: Boolean(userId) && !cacheRestoreComplete,
+    isRestoringCache: Boolean(userId) && !query.data && !cacheRestoreComplete,
     isShowingCachedData: Boolean(query.data && cacheRestore.didRestore && !hasLiveData),
   };
 }

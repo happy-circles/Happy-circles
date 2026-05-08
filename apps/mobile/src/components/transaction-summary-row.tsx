@@ -10,6 +10,8 @@ import {
 } from '@/lib/transaction-categories';
 import { AppText } from '@/components/app-text';
 
+const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
+
 export type TransactionSummaryStatusTone =
   | 'primary'
   | 'success'
@@ -81,7 +83,7 @@ export function TransactionSummaryRow({
         </View>
         {meta ? (
           <AppText numberOfLines={1} style={styles.meta}>
-            {meta}
+            {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
           </AppText>
         ) : null}
       </View>

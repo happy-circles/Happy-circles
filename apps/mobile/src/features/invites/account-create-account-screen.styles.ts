@@ -98,6 +98,9 @@ export const accountCreateAccountStyles = StyleSheet.create({
     zIndex: 30,
     ...theme.shadow.floating,
   },
+  countryMenuSpacer: {
+    height: COUNTRY_MENU_HEIGHT + theme.spacing.xs,
+  },
   countryMenuScroll: {
     maxHeight: COUNTRY_MENU_HEIGHT,
   },

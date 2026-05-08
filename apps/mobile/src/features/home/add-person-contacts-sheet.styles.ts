@@ -52,6 +52,12 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     gap: theme.spacing.sm,
     padding: theme.spacing.sm,
   },
+  inPersonCollapseSlot: {
+    overflow: 'hidden',
+  },
+  contactControlsStack: {
+    minWidth: 0,
+  },
   inPersonCopy: {
     gap: 2,
   },
@@ -113,6 +119,9 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   qrActionTextPrimary: {
     color: theme.colors.white,
   },
+  qrActionLabelClip: {
+    overflow: 'hidden',
+  },
   searchWrap: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceMuted,
@@ -124,10 +133,33 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: theme.spacing.sm,
   },
+  searchWrapSpaced: {
+    marginTop: theme.spacing.md,
+  },
   searchInput: {
     flex: 1,
     minWidth: 0,
     paddingHorizontal: 0,
+  },
+  compactQrActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    overflow: 'hidden',
+  },
+  compactQrButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  compactQrButtonPrimary: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   sheetContent: {
     gap: theme.spacing.md,

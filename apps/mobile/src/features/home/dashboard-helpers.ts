@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 import type { AccountInviteListItem, FriendshipInviteListItem } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
-import type { BalanceFocus } from '@/features/balance/balance-overview-screen';
+import type { BalanceFocus } from '@/features/balance/balance-helpers';
 
 export type InviteRequestsTab = 'received' | 'sent' | 'history';
 export type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel';
@@ -18,18 +18,18 @@ export const INVITE_REQUEST_TABS: readonly InviteRequestsTab[] = ['received', 's
 
 export function balanceFocusHref(focus: BalanceFocus): Href {
   if (focus === 'balance') {
-    return '/balance' as Href;
+    return '/transactions' as Href;
   }
 
   if (focus === 'people') {
-    return '/people' as Href;
+    return '/people?filter=movements' as Href;
   }
 
   if (focus === 'categories') {
     return '/categories' as Href;
   }
 
-  return `/balance?segment=${focus}` as Href;
+  return '/circles' as Href;
 }
 
 export function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {

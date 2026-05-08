@@ -1,7 +1,11 @@
 import type { ActivityItemDto } from '@happy-circles/application';
 
 import { buildHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
-import { isConsolidatedTransactionItem } from '@/lib/transaction-presentation';
+import { notificationViewKeyForItem } from '@/lib/live-data/builders/notifications';
+import {
+  isConsolidatedTransactionItem,
+  isPendingTransactionItem,
+} from '@/lib/transaction-presentation';
 
 export interface DashboardTransactionPreviewItem {
   readonly highlightPending: boolean;
@@ -17,23 +21,69 @@ export interface DashboardTransactionPreview {
 export function buildDashboardTransactionPreview({
   historyItems,
   limit,
+  notificationViewedKeys,
+  pendingItems,
 }: {
   readonly historyItems: readonly ActivityItemDto[];
   readonly limit: number;
+  readonly notificationViewedKeys: ReadonlySet<string>;
+  readonly pendingItems: readonly ActivityItemDto[];
 }): DashboardTransactionPreview {
-  const recentTransactionItems = buildHistoryCases(
+  const pendingTransactionItems = pendingItems.filter(isPendingTransactionItem);
+  const recentHistoryItems = buildHistoryCases(
     historyItems.filter(isConsolidatedTransactionItem).filter(isHistoryCaseItem),
   )
-    .map((itemCase) => itemCase.latest)
+    .map((itemCase) => itemCase.latest);
+  const visibleItems = [
+    ...pendingTransactionItems.map((item) => ({
+      highlightPending: true,
+      isPending: true,
+      item,
+      unread: !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+    })),
+    ...recentHistoryItems.map((item) => ({
+      highlightPending: false,
+      isPending: false,
+      item,
+      unread: false,
+    })),
+  ]
+    .sort(comparePreviewItems)
     .slice(0, limit);
-  const visibleItems = recentTransactionItems.map((item) => ({
-    highlightPending: false,
-    isPending: false,
-    item,
-    unread: false,
-  }));
 
   return {
     visibleItems,
   };
+}
+
+function comparePreviewItems(
+  left: DashboardTransactionPreviewItem,
+  right: DashboardTransactionPreviewItem,
+): number {
+  if (left.isPending !== right.isPending) {
+    return left.isPending ? -1 : 1;
+  }
+
+  const timeDiff = previewTimeMs(right.item) - previewTimeMs(left.item);
+  if (timeDiff !== 0) {
+    return timeDiff;
+  }
+
+  return right.item.id.localeCompare(left.item.id);
+}
+
+function previewTimeMs(item: ActivityItemDto): number {
+  const createdAt = readStringField(item, 'createdAt');
+  const timestamp = Date.parse(item.happenedAt ?? createdAt ?? '');
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function readStringField(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === 'string' && field.trim().length > 0 ? field : null;
 }

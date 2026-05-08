@@ -20,9 +20,17 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import type { KeyboardEvent, ScrollView, StyleProp, ViewStyle } from 'react-native';
+import type {
+  KeyboardEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { AppText } from '@/components/app-text';
 import {
   AppTextInput,
   getCurrentlyFocusedTextInput,
@@ -36,14 +44,22 @@ import {
 import { LaunchIntroTargetView } from '@/components/launch-intro-presence';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell, type ScreenShellProps } from '@/components/screen-shell';
-import { registerIdentityFlowScrollView } from '@/lib/identity-flow-scroll';
+import {
+  registerIdentityFlowScrollView,
+  scrollIdentityFlowToTop,
+  updateIdentityFlowScrollMetrics,
+  type IdentityFlowTransitionScrollPolicy,
+} from '@/lib/identity-flow-scroll';
 import { theme } from '@/lib/theme';
 import {
   resolveIdentityFlowLayout,
   type IdentityFlowCenterLayout,
   type IdentityFlowIdentityPosition,
 } from './identity-flow-helpers';
-import { AppText } from '@/components/app-text';
+import {
+  resolveFieldVisual,
+  type IdentityFlowFieldStatus,
+} from './identity-flow-field-visual';
 
 export const IDENTITY_FLOW_CONTENT_MAX_WIDTH = 460;
 export const IDENTITY_FLOW_STAGE_SIZE = 208;
@@ -66,9 +82,9 @@ const IDENTITY_FLOW_KEYBOARD_FIELD_GAP = theme.spacing.md;
 const IDENTITY_FLOW_KEYBOARD_FALLBACK_SHIFT_RATIO = 0.28;
 const IDENTITY_FLOW_KEYBOARD_MIN_SHIFT = 104;
 
-export type IdentityFlowFieldStatus = 'danger' | 'idle' | 'success' | 'warning';
 export type IdentityFlowCenterFaceSize = 'large' | 'small';
 export type { IdentityFlowCenterLayout, IdentityFlowIdentityPosition };
+export type { IdentityFlowFieldStatus };
 
 type MeasurableFocusedInput = {
   measureInWindow?: (
@@ -77,37 +93,6 @@ type MeasurableFocusedInput = {
 };
 
 const IdentityFlowKeyboardAvoidanceContext = createContext<(() => void) | null>(null);
-
-function resolveFieldVisual(status: IdentityFlowFieldStatus) {
-  if (status === 'success') {
-    return {
-      backgroundColor: theme.colors.successSoft,
-      borderColor: theme.colors.border,
-      color: theme.colors.success,
-      panelColor: 'rgba(61, 186, 110, 0.08)',
-    };
-  }
-
-  if (status === 'danger' || status === 'warning') {
-    const color = status === 'warning' ? theme.colors.warning : theme.colors.danger;
-    const panelColor =
-      status === 'warning' ? 'rgba(249, 115, 22, 0.08)' : 'rgba(232, 96, 74, 0.08)';
-
-    return {
-      backgroundColor: status === 'warning' ? theme.colors.warningSoft : theme.colors.dangerSoft,
-      borderColor: color,
-      color,
-      panelColor,
-    };
-  }
-
-  return {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
-    color: theme.colors.primary,
-    panelColor: theme.colors.primaryGhost,
-  };
-}
 
 interface IdentityFlowScreenProps extends Pick<
   ScreenShellProps,
@@ -125,6 +110,7 @@ interface IdentityFlowScreenProps extends Pick<
   readonly identityPosition?: IdentityFlowIdentityPosition;
   readonly keyboardVerticalOffset?: number;
   readonly message?: ReactNode;
+  readonly transitionScrollPolicy?: IdentityFlowTransitionScrollPolicy;
 }
 
 export function IdentityFlowScreen({
@@ -145,6 +131,7 @@ export function IdentityFlowScreen({
   refresh,
   scrollEnabled = true,
   scrollViewRef,
+  transitionScrollPolicy = 'preserve',
 }: IdentityFlowScreenProps) {
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const keyboardTranslateY = useRef(new Animated.Value(0)).current;
@@ -260,6 +247,16 @@ export function IdentityFlowScreen({
     requestAnimationFrame(() => adjustKeyboardForFocusedInput());
   }, [adjustKeyboardForFocusedInput]);
 
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateIdentityFlowScrollMetrics({
+        scrollY: event.nativeEvent.contentOffset.y,
+        viewportHeight: windowHeight,
+      });
+    },
+    [windowHeight],
+  );
+
   useEffect(() => {
     lockedBodyHeightRef.current = 0;
     setBodyHeight(0);
@@ -267,16 +264,23 @@ export function IdentityFlowScreen({
   }, [windowHeight, windowWidth]);
 
   useEffect(() => {
-    if (!scrollEnabled || !contentTransitionKey) {
+    updateIdentityFlowScrollMetrics({ viewportHeight: windowHeight });
+  }, [windowHeight]);
+
+  useEffect(() => {
+    if (!scrollEnabled || !contentTransitionKey || transitionScrollPolicy !== 'reset-top') {
       return;
     }
 
     requestAnimationFrame(() => {
-      activeScrollViewRef.current?.scrollTo({ animated: false, y: 0 });
+      scrollIdentityFlowToTop({ animated: false });
     });
-  }, [activeScrollViewRef, contentTransitionKey, scrollEnabled]);
+  }, [contentTransitionKey, scrollEnabled, transitionScrollPolicy]);
 
-  useEffect(() => registerIdentityFlowScrollView(activeScrollViewRef), [activeScrollViewRef]);
+  useEffect(
+    () => registerIdentityFlowScrollView(activeScrollViewRef, { viewportHeight: windowHeight }),
+    [activeScrollViewRef, windowHeight],
+  );
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -329,6 +333,8 @@ export function IdentityFlowScreen({
           largeTitle={false}
           overlay={overlay}
           refresh={refresh}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           scrollEnabled={scrollEnabled}
           scrollViewRef={activeScrollViewRef}
           title={IDENTITY_FLOW_HEADER_TITLE}

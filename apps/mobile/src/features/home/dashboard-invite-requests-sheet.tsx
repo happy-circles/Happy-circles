@@ -64,7 +64,7 @@ function InviteRequestTabButton({
   );
 }
 
-function InviteRequestRow({
+export function InviteRequestRow({
   item,
   busyKey,
   onAction,

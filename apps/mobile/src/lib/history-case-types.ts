@@ -14,6 +14,7 @@ export interface HistoryCaseItem {
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
   readonly detail?: string;
+  readonly href?: string;
   readonly happenedAt?: string;
   readonly happenedAtLabel?: string;
   readonly originRequestId?: string | null;
@@ -39,4 +40,3 @@ export type ComparableHistoryItem = {
   readonly status: string;
   readonly happenedAt?: string;
 };
-

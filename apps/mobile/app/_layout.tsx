@@ -1937,8 +1937,8 @@ function RootNavigator() {
             presentation: 'transparentModal',
           }}
         />
-        <Stack.Screen name="balance/index" dangerouslySingular />
         <Stack.Screen name="categories" dangerouslySingular />
+        <Stack.Screen name="circles" dangerouslySingular />
         <Stack.Screen name="category/[category]" dangerouslySingular />
         <Stack.Screen name="invite/[token]" dangerouslySingular options={{ animation: 'none' }} />
         <Stack.Screen

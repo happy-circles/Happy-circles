@@ -41,6 +41,7 @@ import type {
   FinancialRequestRow,
   FriendshipInviteDeliveryRow,
   FriendshipInviteRow,
+  HappyCircleScoreEventRow,
   NotificationViewRow,
   OpenDebtRow,
   RelationshipRow,
@@ -252,6 +253,21 @@ function settlementParticipant(value: Partial<SettlementParticipantRow>): Settle
   });
 }
 
+function happyCircleScoreEvent(
+  value: Partial<HappyCircleScoreEventRow>,
+): HappyCircleScoreEventRow {
+  return row<HappyCircleScoreEventRow>({
+    id: 'score-event-1',
+    user_id: ACTOR_ID,
+    settlement_proposal_id: 'settlement-1',
+    score_delta: 4,
+    participant_count: 4,
+    awarded_at: NOW,
+    created_at: NOW,
+    ...value,
+  });
+}
+
 function notificationView(notificationKey: string): NotificationViewRow {
   return row<NotificationViewRow>({
     user_id: ACTOR_ID,
@@ -280,6 +296,7 @@ function baseInput(overrides: Partial<SnapshotInput> = {}): SnapshotInput {
     inboxItems: [],
     settlementProposals: [],
     settlementParticipants: [],
+    happyCircleScoreEvents: [],
     notificationViews: [],
     auditEvents: [],
     fetchedAt: NOW,
@@ -302,6 +319,25 @@ describe('buildLiveSnapshot', () => {
       netBalanceMinor: 0,
       totalIOweMinor: 0,
       totalOwedToMeMinor: 0,
+    });
+    expect(snapshot.happyCircleScore).toEqual({
+      totalFaces: 0,
+      closedCircleCount: 0,
+      recentAwards: [],
+      latestAward: null,
+    });
+  });
+
+  it('keeps older snapshot payloads without score events compatible', () => {
+    const olderPayload = { ...baseInput() };
+    delete olderPayload.happyCircleScoreEvents;
+    const snapshot = buildLiveSnapshot(olderPayload);
+
+    expect(snapshot.happyCircleScore).toEqual({
+      totalFaces: 0,
+      closedCircleCount: 0,
+      recentAwards: [],
+      latestAward: null,
     });
   });
 
@@ -467,10 +503,29 @@ describe('buildLiveSnapshot', () => {
       baseInput({
         profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
         relationships: [relationship()],
-        settlementProposals: [settlementProposal({})],
+        settlementProposals: [
+          settlementProposal({}),
+          settlementProposal({
+            id: 'settlement-2',
+            status: 'pending_approvals',
+            updated_at: '2026-05-05T12:01:00.000Z',
+          }),
+        ],
         settlementParticipants: [
           settlementParticipant({ participant_user_id: ACTOR_ID }),
           settlementParticipant({ participant_user_id: FRIEND_ID }),
+          settlementParticipant({
+            id: 'participant-2-actor',
+            settlement_proposal_id: 'settlement-2',
+            participant_user_id: ACTOR_ID,
+            decision: 'pending',
+            decided_at: null,
+          }),
+          settlementParticipant({
+            id: 'participant-2-friend',
+            settlement_proposal_id: 'settlement-2',
+            participant_user_id: FRIEND_ID,
+          }),
         ],
       }),
     );
@@ -478,8 +533,12 @@ describe('buildLiveSnapshot', () => {
     expect(snapshot.balanceOverview.resolution.activeProposal).toMatchObject({
       proposalId: 'settlement-1',
       status: 'approved',
+      personalAmountMinor: 2500,
       totalAmountMinor: 2500,
     });
+    expect(
+      snapshot.balanceOverview.resolution.activeProposals.map((proposal) => proposal.proposalId),
+    ).toEqual(['settlement-1', 'settlement-2']);
     expect(snapshot.settlementsById['settlement-1']).toMatchObject({
       status: 'approved',
       participants: ['Tu', 'Ben'],
@@ -489,6 +548,49 @@ describe('buildLiveSnapshot', () => {
       status: 'approved',
       ctaLabel: 'Completar',
     });
+  });
+
+  it('summarizes private happy circle score events for the current user', () => {
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        happyCircleScoreEvents: [
+          happyCircleScoreEvent({
+            id: 'score-event-old',
+            settlement_proposal_id: 'settlement-old',
+            score_delta: 3,
+            participant_count: 3,
+            awarded_at: '2026-05-04T12:00:00.000Z',
+          }),
+          happyCircleScoreEvent({
+            id: 'score-event-new',
+            settlement_proposal_id: 'settlement-new',
+            score_delta: 4,
+            participant_count: 4,
+            awarded_at: '2026-05-05T12:00:00.000Z',
+          }),
+          happyCircleScoreEvent({
+            id: 'score-event-other',
+            user_id: FRIEND_ID,
+            settlement_proposal_id: 'settlement-other',
+            score_delta: 9,
+            participant_count: 9,
+          }),
+        ],
+      }),
+    );
+
+    expect(snapshot.happyCircleScore.totalFaces).toBe(7);
+    expect(snapshot.happyCircleScore.closedCircleCount).toBe(2);
+    expect(snapshot.happyCircleScore.latestAward).toMatchObject({
+      id: 'score-event-new',
+      settlementProposalId: 'settlement-new',
+      scoreDelta: 4,
+      participantCount: 4,
+    });
+    expect(snapshot.happyCircleScore.recentAwards.map((award) => award.id)).toEqual([
+      'score-event-new',
+      'score-event-old',
+    ]);
   });
 
   it('keeps audit events bounded at the builder surface', () => {

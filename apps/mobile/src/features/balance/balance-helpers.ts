@@ -8,7 +8,7 @@ import type {
 import { formatCop } from '@/lib/data';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
 
-export type BalanceFocus = 'balance' | 'people' | 'categories' | 'settlements';
+export type BalanceFocus = 'balance' | 'people' | 'categories' | 'circles';
 export type BalanceFocusIconName =
   | 'wallet-outline'
   | 'people-outline'
@@ -21,20 +21,30 @@ export type FocusOption = {
   readonly icon: BalanceFocusIconName;
 };
 
+export const DEFAULT_BALANCE_ANALYTICS_PERIOD: BalanceAnalyticsPeriod = 'month';
+
+const BALANCE_ANALYTICS_PERIODS: readonly BalanceAnalyticsPeriod[] = [
+  'week',
+  'month',
+  'year',
+  'all',
+];
+
 export const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Balance', value: 'balance', icon: 'wallet-outline' },
   { label: 'Personas', value: 'people', icon: 'people-outline' },
   { label: 'Categorias', value: 'categories', icon: 'pricetags-outline' },
-  { label: 'Happy Circles', value: 'settlements', icon: 'happy-outline' },
+  { label: 'Happy Circles', value: 'circles', icon: 'happy-outline' },
 ];
 
 export function isBalanceFocus(value: string | null | undefined): value is BalanceFocus {
-  return (
-    value === 'balance' ||
-    value === 'people' ||
-    value === 'categories' ||
-    value === 'settlements'
-  );
+  return value === 'balance' || value === 'people' || value === 'categories' || value === 'circles';
+}
+
+export function isBalanceAnalyticsPeriod(
+  value: string | null | undefined,
+): value is BalanceAnalyticsPeriod {
+  return BALANCE_ANALYTICS_PERIODS.includes(value as BalanceAnalyticsPeriod);
 }
 
 export function balanceTone(amountMinor: number): 'positive' | 'negative' | 'neutral' {

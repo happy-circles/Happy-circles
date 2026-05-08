@@ -162,8 +162,8 @@ Flujos del primer lote:
 
 - `Onboarding / Setup Account / Profile`
 - `Onboarding / Setup Account / Profile Error`
-- `Onboarding / Setup Account / Photo`
-- `Onboarding / Setup Account / Photo Permission`
+- `Onboarding / Setup Account / Profile Photo Missing`
+- `Onboarding / Setup Account / Profile Photo Permission`
 - `Onboarding / Setup Account / Security`
 - `Onboarding / Setup Account / Security Trusted`
 
@@ -213,7 +213,7 @@ El primer prototipo es `click-through`, sin microinteracciones complejas.
 
 Recorridos minimos:
 
-1. `/join?mode=sign-in` -> `/setup-account?step=profile` -> `/setup-account?step=photo` -> `/setup-account?step=security` -> `/home`
+1. `/join?mode=sign-in` -> `/setup-account?step=profile` -> `/setup-account?step=security` -> `/home`
 2. `/home` -> `/people?addPerson=1` -> `share remote invite`
 3. `/invite/[token]` -> `claim` o `review`
 4. `/home` -> `/profile`

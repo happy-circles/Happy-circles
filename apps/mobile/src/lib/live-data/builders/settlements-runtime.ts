@@ -1,7 +1,4 @@
-import type {
-  ActiveSettlementPreviewDto,
-  PersonTimelineItemDto,
-} from '@happy-circles/application';
+import type { ActiveSettlementPreviewDto, PersonTimelineItemDto } from '@happy-circles/application';
 import type {
   ActionableItem,
   InboxItemRow,
@@ -13,6 +10,7 @@ import type {
 import { formatRelativeLabel } from '../utils/dates';
 import {
   parseSettlementMovements,
+  settlementProposalParticipantAmount,
   settlementProposalTotalAmount,
   settlementSavedMovementsCount,
 } from './settlement-core';
@@ -345,13 +343,13 @@ export function buildSettlementDetail(
   };
 }
 
-export function buildActiveSettlementPreview(input: {
+export function buildActiveSettlementPreviews(input: {
   readonly proposals: readonly SettlementProposalRow[];
   readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
   readonly currentUserId: string;
   readonly visibleCounterpartyUserIds: ReadonlySet<string>;
   readonly names: Map<string, string>;
-}): ActiveSettlementPreviewDto | null {
+}): readonly ActiveSettlementPreviewDto[] {
   const activeProposals = input.proposals
     .filter((proposal) => proposal.status === 'pending_approvals' || proposal.status === 'approved')
     .filter((proposal) =>
@@ -369,44 +367,42 @@ export function buildActiveSettlementPreview(input: {
       return Date.parse(right.updated_at) - Date.parse(left.updated_at);
     });
 
-  const proposal = activeProposals[0];
-  if (!proposal) {
-    return null;
-  }
+  return activeProposals.map((proposal) => {
+    const participants = input.participantsByProposalId.get(proposal.id) ?? [];
+    const participantUserIds = participants.map((participant) => participant.participant_user_id);
+    const participantLabels = buildSettlementParticipantLabels({
+      participantUserIds,
+      currentUserId: input.currentUserId,
+      visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+      names: input.names,
+    });
+    const approvalsPending = participants.filter(
+      (participant) => participant.decision === 'pending',
+    ).length;
+    const movementCount = parseSettlementMovements(proposal.movements_json).length;
+    const participantDecisions = participants.map((participant, index) => ({
+      userId: participant.participant_user_id,
+      label: participantLabels[index] ?? 'Persona',
+      decision: normalizeSettlementDetailDecision(participant.decision),
+    }));
 
-  const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-  const participantUserIds = participants.map((participant) => participant.participant_user_id);
-  const participantLabels = buildSettlementParticipantLabels({
-    participantUserIds,
-    currentUserId: input.currentUserId,
-    visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
-    names: input.names,
+    return {
+      proposalId: proposal.id,
+      status: proposal.status === 'approved' ? 'approved' : 'pending_approvals',
+      title: proposal.status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
+      subtitle:
+        proposal.status === 'approved'
+          ? `Con ${summarizeSettlementParticipants(participantLabels)} se completara automaticamente.`
+          : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`,
+      totalAmountMinor: settlementProposalTotalAmount(proposal),
+      personalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
+      approvalsPending,
+      movementCount,
+      savedMovementsCount: settlementSavedMovementsCount(participants.length, movementCount),
+      participantCount: participants.length,
+      participantUserIds,
+      participantLabels,
+      participantDecisions,
+    };
   });
-  const approvalsPending = participants.filter(
-    (participant) => participant.decision === 'pending',
-  ).length;
-  const movementCount = parseSettlementMovements(proposal.movements_json).length;
-  const participantDecisions = participants.map((participant, index) => ({
-    userId: participant.participant_user_id,
-    label: participantLabels[index] ?? 'Persona',
-    decision: normalizeSettlementDetailDecision(participant.decision),
-  }));
-
-  return {
-    proposalId: proposal.id,
-    status: proposal.status === 'approved' ? 'approved' : 'pending_approvals',
-    title: proposal.status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
-    subtitle:
-      proposal.status === 'approved'
-        ? `Con ${summarizeSettlementParticipants(participantLabels)} se completara automaticamente.`
-        : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`,
-    totalAmountMinor: settlementProposalTotalAmount(proposal),
-    approvalsPending,
-    movementCount,
-    savedMovementsCount: settlementSavedMovementsCount(participants.length, movementCount),
-    participantCount: participants.length,
-    participantUserIds,
-    participantLabels,
-    participantDecisions,
-  };
 }

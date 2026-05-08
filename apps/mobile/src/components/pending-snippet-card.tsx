@@ -9,6 +9,8 @@ import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 import { AppText } from '@/components/app-text';
 
+const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
+
 type PendingSnippetVariant = 'default' | 'muted' | 'accent' | 'elevated';
 type PendingSnippetTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 type PendingSnippetAmountTone = 'positive' | 'negative' | 'neutral' | 'danger';
@@ -24,6 +26,7 @@ export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly detail?: string | null;
   readonly meta?: string | null;
   readonly helperText?: string | null;
+  readonly focused?: boolean;
   readonly variant?: PendingSnippetVariant;
   readonly tone?: PendingSnippetTone;
   readonly padding?: PendingSnippetPadding;
@@ -41,6 +44,7 @@ export function PendingSnippetCard({
   detail,
   meta,
   helperText,
+  focused = false,
   variant = 'default',
   tone = 'neutral',
   padding = 'md',
@@ -72,7 +76,9 @@ export function PendingSnippetCard({
         </AppText>
       ) : null}
       {detail ? <AppText style={styles.detail}>{detail}</AppText> : null}
-      {meta ? <AppText style={styles.meta}>{meta}</AppText> : null}
+      {meta ? (
+        <AppText style={styles.meta}>{meta.replace(/\s*\|\s*/g, META_SEPARATOR)}</AppText>
+      ) : null}
       {helperText ? <AppText style={styles.helper}>{helperText}</AppText> : null}
     </>
   );
@@ -87,6 +93,7 @@ export function PendingSnippetCard({
         tone === 'neutral' ? styles.cardNeutral : null,
         tone === 'danger' ? styles.cardDanger : null,
         tone === 'cycle' ? styles.cardCycle : null,
+        focused ? styles.cardFocused : null,
         style,
       ]}
       padding={padding}
@@ -196,5 +203,10 @@ const styles = StyleSheet.create({
   cardCycle: {
     borderLeftColor: transactionCategoryColor('cycle'),
     borderLeftWidth: 3,
+  },
+  cardFocused: {
+    backgroundColor: theme.colors.primaryGhost,
+    borderColor: 'rgba(26, 39, 68, 0.26)',
+    ...theme.shadow.card,
   },
 });

@@ -42,6 +42,7 @@ export interface PendingFinancialRequestCardProps {
   readonly amountMinor: number;
   readonly createdByLabel: string;
   readonly createdAtLabel: string;
+  readonly focused?: boolean;
   readonly historySteps?: readonly PendingFinancialRequestHistoryStep[];
   readonly busyAccept?: boolean;
   readonly busyReject?: boolean;
@@ -186,6 +187,7 @@ export function PendingFinancialRequestCard({
   amountMinor,
   createdByLabel,
   createdAtLabel,
+  focused = false,
   historySteps = [],
   busyAccept = false,
   busyReject = false,
@@ -209,7 +211,6 @@ export function PendingFinancialRequestCard({
   const safeCategory = isUserTransactionCategory(category)
     ? category
     : DEFAULT_TRANSACTION_CATEGORY;
-  const createdByText = createdByLabel === 'Tu' ? 'Creado por ti' : `Creado por ${createdByLabel}`;
   const visibleHistorySteps = historySteps.length > 1 ? historySteps : [];
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const currentHistoryStep = visibleHistorySteps[visibleHistorySteps.length - 1] ?? null;
@@ -225,7 +226,8 @@ export function PendingFinancialRequestCard({
       amountTone={amountTone}
       detail={description}
       eyebrow={`Pendiente con ${counterpartyName}`}
-      meta={`${createdByText} | ${createdAtLabel} · ${transactionCategoryLabel(safeCategory)}`}
+      focused={focused}
+      meta={`${createdAtLabel} | ${transactionCategoryLabel(safeCategory)}`}
       onPress={onPress}
       padding="sm"
       statusLabel={

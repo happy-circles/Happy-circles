@@ -385,6 +385,7 @@ export function buildBalanceAnalytics(input: {
   readonly visibleCounterpartyUserIds: ReadonlySet<string>;
   readonly names: Map<string, string>;
   readonly activeProposal: ActiveSettlementPreviewDto | null;
+  readonly activeProposals: readonly ActiveSettlementPreviewDto[];
   readonly now: Date;
 }): BalanceAnalyticsDto {
   const events = buildAnalyticsEvents({
@@ -444,6 +445,7 @@ export function buildBalanceAnalytics(input: {
           visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
           names: input.names,
           activeProposal: input.activeProposal,
+          activeProposals: input.activeProposals,
           range,
         });
 

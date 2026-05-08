@@ -1,4 +1,7 @@
-import type { ActiveSettlementPreviewDto, BalanceSettlementMetricsDto } from '@happy-circles/application';
+import type {
+  ActiveSettlementPreviewDto,
+  BalanceSettlementMetricsDto,
+} from '@happy-circles/application';
 
 import type { SettlementParticipantRow, SettlementProposalRow } from '../types';
 import type { AnalyticsRange } from '../utils/dates';
@@ -16,6 +19,7 @@ export function buildSettlementMetrics(input: {
   readonly visibleCounterpartyUserIds: ReadonlySet<string>;
   readonly names: Map<string, string>;
   readonly activeProposal: ActiveSettlementPreviewDto | null;
+  readonly activeProposals: readonly ActiveSettlementPreviewDto[];
   readonly range: AnalyticsRange;
 }): BalanceSettlementMetricsDto {
   const participatedProposals = input.proposals.filter((proposal) =>
@@ -77,6 +81,7 @@ export function buildSettlementMetrics(input: {
       (proposal) => proposal.status === 'pending_approvals' || proposal.status === 'approved',
     ).length,
     activeProposal: input.activeProposal,
+    activeProposals: input.activeProposals,
     resolvedMinor,
     movementCount,
     savedMovementsCount,

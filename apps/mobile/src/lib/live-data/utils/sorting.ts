@@ -97,6 +97,7 @@ export function actionableItemToActivityItem(item: ActionableItem): ActivityItem
     amountMinor: item.amountMinor,
     category: item.category,
     counterpartyLabel: item.counterpartyLabel,
+    participantUserIds: item.participantUserIds,
     tone: item.tone,
     pendingHistorySteps: item.pendingHistorySteps,
   };

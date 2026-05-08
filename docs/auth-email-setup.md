@@ -119,7 +119,7 @@ The app invokes it from `apps/mobile/src/providers/session-provider.tsx` only wh
 
 - The user is signed in.
 - The email is confirmed.
-- Required setup steps are complete: profile, phone, photo.
+- Required profile requirements are complete: name, phone, photo.
 - The device is trusted.
 - The account access state is `active`.
 

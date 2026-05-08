@@ -45,6 +45,8 @@ export type AccountInviteDeliveryRow = NonNullFields<
   'channel' | 'created_at' | 'id' | 'invite_id' | 'status'
 >;
 export type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
+export type HappyCircleScoreEventRow =
+  Database['public']['Tables']['happy_circle_score_events']['Row'];
 export type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
 export type SettlementProposalRow = Database['public']['Tables']['settlement_proposals']['Row'];
 export type SettlementParticipantRow =

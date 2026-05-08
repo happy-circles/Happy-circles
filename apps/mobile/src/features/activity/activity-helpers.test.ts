@@ -88,7 +88,7 @@ describe('activity helpers', () => {
         [],
       ),
     ).toEqual({
-      href: '/people?requests=1&requestTab=sent',
+      href: '/activity?category=friends',
     });
     expect(
       pendingDetailHref(

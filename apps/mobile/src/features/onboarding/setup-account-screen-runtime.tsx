@@ -1,5 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -15,6 +14,7 @@ import {
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
+import { AppText } from '@/components/app-text';
 import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import {
   IdentityFlowField,
@@ -60,65 +60,9 @@ import {
   resolveSetupAccountRouteParams,
   resolveTrustMethodLabel,
   validateSetupProfile,
-  type SecurityTone,
 } from './setup-account-helpers';
-import { AppText } from '@/components/app-text';
-
-type IoniconName = keyof typeof Ionicons.glyphMap;
-
-function resolveSecurityTone(tone: SecurityTone) {
-  if (tone === 'success') {
-    return {
-      backgroundColor: theme.colors.successSoft,
-      color: theme.colors.success,
-    };
-  }
-
-  if (tone === 'danger') {
-    return {
-      backgroundColor: theme.colors.dangerSoft,
-      color: theme.colors.danger,
-    };
-  }
-
-  return {
-    backgroundColor: theme.colors.surfaceSoft,
-    color: theme.colors.textMuted,
-  };
-}
-
-function SecurityStatusRow({
-  icon,
-  status,
-  subtitle,
-  title,
-  tone,
-  trailing,
-}: {
-  readonly icon: IoniconName;
-  readonly status?: string;
-  readonly subtitle?: string;
-  readonly title: string;
-  readonly tone: SecurityTone;
-  readonly trailing?: ReactNode;
-}) {
-  const visual = resolveSecurityTone(tone);
-
-  return (
-    <View style={styles.securityRow}>
-      <View style={[styles.securityIcon, { backgroundColor: visual.backgroundColor }]}>
-        <Ionicons color={visual.color} name={icon} size={20} />
-      </View>
-      <View style={styles.sectionCopy}>
-        <AppText style={styles.readOnlyTitle}>{title}</AppText>
-        {subtitle ? <AppText style={styles.readOnlySubtitle}>{subtitle}</AppText> : null}
-      </View>
-      {trailing ?? (
-        <AppText style={[styles.securityStatus, { color: visual.color }]}>{status}</AppText>
-      )}
-    </View>
-  );
-}
+import { SetupProfilePhotoRequirement } from './setup-profile-photo-requirement';
+import { SecurityStatusRow } from './setup-security-status-row';
 
 export function SetupAccountScreen() {
   const router = useRouter();
@@ -692,49 +636,11 @@ export function SetupAccountScreen() {
 
       <View style={styles.setupContent}>
         {!securityOnlyMode && !editPhoneMode ? (
-          <View
-            style={[
-              styles.photoRequirement,
-              hasSavedPhoto ? styles.photoRequirementReady : styles.photoRequirementMissing,
-            ]}
-          >
-            <View
-              style={[
-                styles.photoRequirementIcon,
-                hasSavedPhoto
-                  ? styles.photoRequirementIconReady
-                  : styles.photoRequirementIconMissing,
-              ]}
-            >
-              <Ionicons
-                color={hasSavedPhoto ? theme.colors.success : theme.colors.textMuted}
-                name={hasSavedPhoto ? 'checkmark' : 'camera'}
-                size={18}
-              />
-            </View>
-            <View style={styles.photoRequirementCopy}>
-              <AppText style={styles.photoRequirementTitle}>Foto de perfil</AppText>
-              <AppText style={styles.photoRequirementSubtitle}>
-                {hasSavedPhoto
-                  ? 'Lista para que tus circulos te reconozcan.'
-                  : 'Opcional; puedes agregarla ahora o despues.'}
-              </AppText>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              disabled={avatarMutation.isPending}
-              onPress={openAvatarOptions}
-              style={({ pressed }) => [
-                styles.photoRequirementAction,
-                pressed && !avatarMutation.isPending ? styles.pressed : null,
-                avatarMutation.isPending ? styles.disabledAction : null,
-              ]}
-            >
-              <AppText style={styles.photoRequirementActionText}>
-                {hasSavedPhoto ? 'Cambiar' : 'Agregar'}
-              </AppText>
-            </Pressable>
-          </View>
+          <SetupProfilePhotoRequirement
+            disabled={avatarMutation.isPending}
+            hasSavedPhoto={hasSavedPhoto}
+            onPress={openAvatarOptions}
+          />
         ) : null}
 
         {!securityOnlyMode ? (
@@ -1112,67 +1018,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     paddingTop: theme.spacing.md,
   },
-  photoRequirement: {
-    alignItems: 'center',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  photoRequirementMissing: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-  },
-  photoRequirementReady: {
-    backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(61, 186, 110, 0.2)',
-  },
-  photoRequirementIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  photoRequirementIconMissing: {
-    backgroundColor: theme.colors.surface,
-  },
-  photoRequirementIconReady: {
-    backgroundColor: theme.colors.surface,
-  },
-  photoRequirementCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  photoRequirementTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-  },
-  photoRequirementSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  photoRequirementAction: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.small,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 76,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  photoRequirementActionText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
   disabledAction: {
     opacity: 0.58,
   },
@@ -1244,25 +1089,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: '800',
   },
-  securityRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
-    minHeight: 56,
-  },
-  securityIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  securityStatus: {
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
   securityList: {
     gap: theme.spacing.md,
   },
@@ -1286,16 +1112,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.caption,
     fontWeight: '800',
-  },
-  readOnlyTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  readOnlySubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
   },
   helperText: {
     color: theme.colors.textMuted,

@@ -5,7 +5,7 @@ import { resolveAvatarUrl } from '../avatar-url';
 import type { AppSnapshot } from './types';
 
 const SNAPSHOT_CACHE_DB_NAME = 'happy-circles-app-cache.db';
-const SNAPSHOT_CACHE_SCHEMA_VERSION = 1;
+const SNAPSHOT_CACHE_SCHEMA_VERSION = 2;
 
 interface CachedAppSnapshotRow {
   readonly avatar_signed_urls_json: string | null;
@@ -67,6 +67,7 @@ function reviveAppSnapshot(value: unknown): AppSnapshot | null {
     !isRecord(value.balanceAnalytics) ||
     !Array.isArray(value.people) ||
     !isRecord(value.peopleById) ||
+    !isRecord(value.happyCircleScore) ||
     !Array.isArray(value.friendshipPendingItems) ||
     !Array.isArray(value.friendshipHistoryItems) ||
     !isRecord(value.friendshipSummary) ||

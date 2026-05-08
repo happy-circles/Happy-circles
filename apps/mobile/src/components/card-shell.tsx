@@ -59,6 +59,7 @@ export function CardPressable({
 
 export interface AppCardShellProps extends PropsWithChildren {
   readonly accentColor?: string;
+  readonly attentionDot?: boolean;
   readonly compact?: boolean;
   readonly contextNode?: ReactNode;
   readonly leadingAccessibilityLabel?: string;
@@ -69,8 +70,6 @@ export interface AppCardShellProps extends PropsWithChildren {
   readonly metaNode?: ReactNode;
   readonly onLeadingPress?: () => void;
   readonly padding?: SurfaceCardPadding;
-  readonly pendingBorderColor?: string;
-  readonly pendingSurfaceColor?: string;
   readonly sideNode?: ReactNode;
   readonly statusLabel?: string | null;
   readonly statusTone?: StatusChipProps['tone'];
@@ -78,11 +77,13 @@ export interface AppCardShellProps extends PropsWithChildren {
   readonly title: ReactNode;
   readonly titleAccessoryNode?: ReactNode;
   readonly unread?: boolean;
+  readonly unreadSurfaceColor?: string;
   readonly variant?: SurfaceCardVariant;
 }
 
 export function AppCardShell({
   accentColor,
+  attentionDot = false,
   children,
   compact = false,
   contextNode,
@@ -94,8 +95,6 @@ export function AppCardShell({
   metaNode,
   onLeadingPress,
   padding,
-  pendingBorderColor,
-  pendingSurfaceColor,
   sideNode,
   statusLabel,
   statusTone = 'neutral',
@@ -103,10 +102,12 @@ export function AppCardShell({
   title,
   titleAccessoryNode,
   unread = false,
+  unreadSurfaceColor,
   variant = 'default',
 }: AppCardShellProps) {
-  const hasPendingTreatment = Boolean(pendingSurfaceColor || pendingBorderColor);
   const hasLeadingAction = Boolean(onLeadingPress);
+  const unreadTintColor =
+    unreadSurfaceColor ?? (accentColor ? withAlpha(accentColor, 0.1) : theme.colors.primaryGhost);
   const leadingContent = (
     <>
       {leadingNode}
@@ -140,17 +141,20 @@ export function AppCardShell({
         styles.card,
         compact ? styles.cardCompact : null,
         accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 3 } : null,
-        hasPendingTreatment
-          ? [
-              styles.pendingCard,
-              pendingSurfaceColor ? { backgroundColor: pendingSurfaceColor } : null,
-              pendingBorderColor ? { borderColor: pendingBorderColor } : null,
-            ]
-          : null,
         style,
       ]}
       variant={variant}
     >
+      {unread ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.unreadSurfaceFilm,
+            compact ? styles.unreadSurfaceFilmCompact : null,
+            { backgroundColor: unreadTintColor },
+          ]}
+        />
+      ) : null}
       <View style={[styles.body, compact ? styles.bodyCompact : null]}>
         {hasLeadingAction ? (
           <CardPressable
@@ -172,10 +176,31 @@ export function AppCardShell({
           <View style={[styles.side, compact ? styles.sideCompact : null]}>{sideNode}</View>
         ) : null}
       </View>
-      {unread ? <View pointerEvents="none" style={styles.unreadCornerDot} /> : null}
+      {attentionDot ? <View pointerEvents="none" style={styles.pendingCornerDot} /> : null}
       {children ? <View style={styles.footer}>{children}</View> : null}
     </SurfaceCard>
   );
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const normalized = color.trim();
+  const compactHexMatch = normalized.match(/^#([\da-f]{3})$/i);
+  if (compactHexMatch) {
+    const [r, g, b] = compactHexMatch[1].split('').map((entry) => entry + entry);
+    return withAlpha(`#${r}${g}${b}`, alpha);
+  }
+
+  const hexMatch = normalized.match(/^#([\da-f]{6})$/i);
+  if (!hexMatch) {
+    return color;
+  }
+
+  const rawHex = hexMatch[1];
+  const red = Number.parseInt(rawHex.slice(0, 2), 16);
+  const green = Number.parseInt(rawHex.slice(2, 4), 16);
+  const blue = Number.parseInt(rawHex.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 export interface CardTimelineStep {
@@ -278,10 +303,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.medium,
     minHeight: 68,
   },
-  pendingCard: {
-    backgroundColor: '#fff9ed',
-    borderColor: 'rgba(163, 95, 25, 0.14)',
-  },
   body: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -336,7 +357,18 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 82,
   },
-  unreadCornerDot: {
+  unreadSurfaceFilm: {
+    borderRadius: theme.radius.large,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  unreadSurfaceFilmCompact: {
+    borderRadius: theme.radius.medium,
+  },
+  pendingCornerDot: {
     backgroundColor: '#2f80ed',
     borderRadius: theme.radius.pill,
     height: 9,
@@ -382,7 +414,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.textMuted,
   },
   timelineMarkerDanger: {
-    backgroundColor: theme.colors.danger,
+    backgroundColor: theme.colors.warning,
   },
   timelineMarkerCycle: {
     backgroundColor: '#2563eb',
@@ -447,7 +479,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   timelineTextDanger: {
-    color: theme.colors.danger,
+    color: theme.colors.warning,
   },
   timelineTextCycle: {
     color: '#2563eb',

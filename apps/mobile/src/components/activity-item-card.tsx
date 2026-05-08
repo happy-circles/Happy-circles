@@ -7,6 +7,7 @@ type ActivityItemCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
 
 export interface ActivityItemCardProps extends PropsWithChildren {
   readonly accentColor: string;
+  readonly attentionDot?: boolean;
   readonly compact?: boolean;
   readonly contextNode?: ReactNode;
   readonly leadingAccessibilityLabel?: string;
@@ -15,18 +16,18 @@ export interface ActivityItemCardProps extends PropsWithChildren {
   readonly leadingNode: ReactNode;
   readonly metaNode?: ReactNode;
   readonly onLeadingPress?: () => void;
-  readonly pendingBorderColor?: string;
-  readonly pendingSurfaceColor?: string;
   readonly sideNode?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
   readonly title: string;
   readonly titleAccessoryNode?: ReactNode;
   readonly unread?: boolean;
+  readonly unreadSurfaceColor?: string;
   readonly variant?: ActivityItemCardVariant;
 }
 
 export function ActivityItemCard({
   accentColor,
+  attentionDot = false,
   children,
   compact = false,
   contextNode,
@@ -36,18 +37,18 @@ export function ActivityItemCard({
   leadingNode,
   metaNode,
   onLeadingPress,
-  pendingBorderColor,
-  pendingSurfaceColor,
   sideNode,
   style,
   title,
   titleAccessoryNode,
   unread = false,
+  unreadSurfaceColor,
   variant = 'default',
 }: ActivityItemCardProps) {
   return (
     <AppCardShell
       accentColor={accentColor}
+      attentionDot={attentionDot}
       compact={compact}
       contextNode={contextNode}
       leadingAccessibilityLabel={leadingAccessibilityLabel}
@@ -56,13 +57,12 @@ export function ActivityItemCard({
       leadingNode={leadingNode}
       metaNode={metaNode}
       onLeadingPress={onLeadingPress}
-      pendingBorderColor={pendingBorderColor}
-      pendingSurfaceColor={pendingSurfaceColor}
       sideNode={sideNode}
       style={style}
       title={title}
       titleAccessoryNode={titleAccessoryNode}
       unread={unread}
+      unreadSurfaceColor={unreadSurfaceColor}
       variant={variant}
     >
       {children}

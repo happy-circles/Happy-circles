@@ -1,20 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-native';
+import { View } from 'react-native';
 
 import {
-  IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowIdentity,
   IdentityFlowLogoCopy,
-  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
-  IdentityFlowSecondaryAction,
-  IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
-import { OtpCodeInput } from '@/components/otp-code-input';
 import { PrimaryAction } from '@/components/primary-action';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
@@ -30,7 +24,6 @@ import { returnToRoute } from '@/lib/navigation';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
-import { theme } from '@/lib/theme';
 import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
 import { useSession } from '@/providers/session-provider';
 import {
@@ -43,7 +36,6 @@ import {
   ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE,
   ACCOUNT_CREATED_SETUP_MESSAGE,
   ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE,
-  countryFlag,
   formatCreateAccountValidationMessage,
   isValidEmail,
   isValidPassword,
@@ -52,23 +44,9 @@ import {
   type FieldName,
   type FieldStatus,
 } from './account-create-account-helpers';
-import { AppText } from '@/components/app-text';
-
-const COUNTRY_OPTION_HEIGHT = 42;
-const COUNTRY_MENU_VISIBLE_OPTIONS = 4;
-const COUNTRY_MENU_HEIGHT = COUNTRY_OPTION_HEIGHT * COUNTRY_MENU_VISIBLE_OPTIONS;
-const COUNTRY_MENU_CONTENT_HEIGHT = COUNTRY_OPTION_HEIGHT * COUNTRY_OPTIONS.length;
-const COUNTRY_MENU_MAX_SCROLL_Y = Math.max(COUNTRY_MENU_CONTENT_HEIGHT - COUNTRY_MENU_HEIGHT, 1);
-const COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT = Math.min(
-  COUNTRY_MENU_HEIGHT,
-  Math.max(
-    36,
-    Math.round((COUNTRY_MENU_HEIGHT / COUNTRY_MENU_CONTENT_HEIGHT) * COUNTRY_MENU_HEIGHT),
-  ),
-);
-const COUNTRY_MENU_SCROLLBAR_TRAVEL = COUNTRY_MENU_HEIGHT - COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT;
-const countryMenuScrollWebStyle =
-  Platform.OS === 'web' ? ({ overscrollBehavior: 'contain' } as unknown as ViewStyle) : null;
+import { AccountCreateAccountEmailForm } from './account-create-account-email-form';
+import { AccountCreateAccountSocialOptions } from './account-create-account-social-options';
+import { AccountCreateAccountVerificationForm } from './account-create-account-verification-form';
 
 export function AccountCreateAccountScreen() {
   const params = useLocalSearchParams<{ preview?: string | string[]; token?: string | string[] }>();
@@ -110,10 +88,6 @@ export function AccountCreateAccountScreen() {
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
-  const countryMenuScrollbarTop = Math.min(
-    COUNTRY_MENU_SCROLLBAR_TRAVEL,
-    (countryMenuScrollY / COUNTRY_MENU_MAX_SCROLL_Y) * COUNTRY_MENU_SCROLLBAR_TRAVEL,
-  );
   const emailValid = isValidEmail(email);
   const phoneValid = isValidPhoneNumber(phoneNationalNumber);
   const passwordValid = isValidPassword(password);
@@ -409,7 +383,7 @@ export function AccountCreateAccountScreen() {
     <IdentityFlowScreen
       contentTransitionKey={contentTransitionKey}
       identity={<IdentityFlowIdentity centerFaceSize="small" state={tokenState} variant="status" />}
-      identityPosition="top"
+      identityPosition={canCreateAccount && !pendingVerificationEmail && !showEmailPasswordFallback && !message ? 'center' : 'top'}
       message={
         message ? (
           <MessageBanner message={message} tone={resolveCreateAccountMessageTone(message)} />
@@ -450,293 +424,60 @@ export function AccountCreateAccountScreen() {
       ) : null}
 
       {pendingVerificationEmail ? (
-        <IdentityFlowForm>
-          <IdentityFlowLogoCopy
-            subtitle={`Enviamos el enlace y el codigo a ${pendingVerificationEmail}.`}
-            title="Confirma tu correo"
-          />
-
-          <IdentityFlowField
-            error={
-              verificationCode.length > 0 && !verificationCodeValid ? 'Debe tener 8 digitos.' : null
-            }
-            icon="keypad"
-            label="Codigo"
-            status={
-              verificationCode.length === 0 ? 'idle' : verificationCodeValid ? 'success' : 'danger'
-            }
-          >
-            <OtpCodeInput
-              disabled={verificationBusy || resendBusy}
-              hasError={verificationCode.length > 0 && !verificationCodeValid}
-              onChangeText={setVerificationCode}
-              value={verificationCode}
-            />
-          </IdentityFlowField>
-
-          <IdentityFlowPrimaryAction
-            disabled={verificationBusy || resendBusy}
-            icon="checkmark"
-            label={verificationBusy ? 'Confirmando...' : 'Confirmar correo'}
-            loading={verificationBusy}
-            onPress={
-              verificationBusy || resendBusy ? undefined : () => void handleVerifyEmailCode()
-            }
-          />
-
-          <View style={styles.verificationActions}>
-            <IdentityFlowSecondaryAction
-              disabled={verificationBusy || resendBusy}
-              icon="mail"
-              label={resendBusy ? 'Enviando...' : 'Reenviar codigo'}
-              onPress={
-                verificationBusy || resendBusy ? undefined : () => void handleResendEmailCode()
-              }
-            />
-            <IdentityFlowSecondaryAction
-              disabled={verificationBusy || resendBusy}
-              icon="log-in-outline"
-              label="Ya confirme el enlace"
-              onPress={
-                verificationBusy || resendBusy
-                  ? undefined
-                  : () => void handleContinueAfterEmailLink()
-              }
-            />
-            <IdentityFlowSecondaryAction
-              disabled={verificationBusy || resendBusy}
-              icon="create-outline"
-              label="Editar correo"
-              onPress={() => {
-                setPendingVerificationEmail(null);
-                setVerificationCode('');
-                setMessage(null);
-              }}
-            />
-          </View>
-        </IdentityFlowForm>
+        <AccountCreateAccountVerificationForm
+          onContinueAfterEmailLink={() => void handleContinueAfterEmailLink()}
+          onEditEmail={() => {
+            setPendingVerificationEmail(null);
+            setVerificationCode('');
+            setMessage(null);
+          }}
+          onResendEmailCode={() => void handleResendEmailCode()}
+          onVerifyEmailCode={() => void handleVerifyEmailCode()}
+          pendingVerificationEmail={pendingVerificationEmail}
+          resendBusy={resendBusy}
+          setVerificationCode={setVerificationCode}
+          verificationBusy={verificationBusy}
+          verificationCode={verificationCode}
+          verificationCodeValid={verificationCodeValid}
+        />
       ) : null}
 
       {canCreateAccount && !pendingVerificationEmail ? (
         <IdentityFlowForm>
-          <View style={styles.socialProviderStack}>
-            {session.appleSignInAvailable ? (
-              <Pressable
-                disabled={authBusy}
-                onPress={authBusy ? undefined : () => void handleSocialCreate('apple')}
-                style={({ pressed }) => [
-                  styles.socialProviderButton,
-                  styles.socialProviderButtonApple,
-                  pressed && !authBusy ? styles.pressed : null,
-                  authBusy ? styles.disabledAction : null,
-                ]}
-              >
-                <Ionicons color="#ffffff" name="logo-apple" size={18} />
-                <AppText style={styles.socialProviderButtonTextApple}>
-                  {socialBusyProvider === 'apple' ? 'Abriendo Apple...' : 'Continuar con Apple'}
-                </AppText>
-              </Pressable>
-            ) : null}
-
-            <Pressable
-              disabled={authBusy}
-              onPress={authBusy ? undefined : () => void handleSocialCreate('google')}
-              style={({ pressed }) => [
-                styles.socialProviderButton,
-                styles.socialProviderButtonGoogle,
-                pressed && !authBusy ? styles.pressed : null,
-                authBusy ? styles.disabledAction : null,
-              ]}
-            >
-              <Ionicons color={theme.colors.brandGreen} name="logo-google" size={18} />
-              <AppText style={styles.socialProviderButtonTextGoogle}>
-                {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
-              </AppText>
-            </Pressable>
-          </View>
-
-          <IdentityFlowSecondaryAction
-            disabled={authBusy}
-            icon={showEmailPasswordFallback ? 'chevron-up' : 'mail'}
-            label={
-              showEmailPasswordFallback ? 'Ocultar correo y contrasena' : 'Usar correo y contrasena'
-            }
-            onPress={() => {
+          <AccountCreateAccountSocialOptions
+            appleSignInAvailable={session.appleSignInAvailable}
+            authBusy={authBusy}
+            onSocialCreate={(provider) => void handleSocialCreate(provider)}
+            onToggleEmailPassword={() => {
               triggerIdentitySelectionHaptic();
               setShowEmailPasswordFallback((open) => !open);
             }}
+            showEmailPasswordFallback={showEmailPasswordFallback}
+            socialBusyProvider={socialBusyProvider}
           />
 
           {showEmailPasswordFallback ? (
-            <View style={styles.emailPasswordFallback}>
-              <IdentityFlowField
-                error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
-                icon="mail"
-                label="Correo"
-                status={
-                  emailStatus === 'invalid'
-                    ? 'danger'
-                    : emailStatus === 'valid'
-                      ? 'success'
-                      : 'idle'
-                }
-              >
-                <IdentityFlowTextInput
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  onBlur={() => markFieldTouched('email')}
-                  onChangeText={setEmail}
-                  placeholder="tu@correo.com"
-                  placeholderTextColor={theme.colors.muted}
-                  value={email}
-                />
-              </IdentityFlowField>
-
-              <IdentityFlowField
-                error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
-                icon="lock-closed"
-                label="Contrasena"
-                status={
-                  passwordStatus === 'invalid'
-                    ? 'danger'
-                    : passwordStatus === 'valid'
-                      ? 'success'
-                      : 'idle'
-                }
-              >
-                <IdentityFlowTextInput
-                  autoCapitalize="none"
-                  autoComplete="password"
-                  onBlur={() => markFieldTouched('password')}
-                  onChangeText={setPassword}
-                  placeholder="Tu contrasena"
-                  placeholderTextColor={theme.colors.muted}
-                  secureTextEntry
-                  value={password}
-                />
-              </IdentityFlowField>
-
-              <IdentityFlowField
-                error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : null}
-                icon="call"
-                label="Celular"
-                status={
-                  phoneStatus === 'invalid'
-                    ? 'danger'
-                    : phoneStatus === 'valid'
-                      ? 'success'
-                      : 'idle'
-                }
-              >
-                <View style={styles.phoneField}>
-                  <View style={styles.phoneRow}>
-                    <Pressable
-                      onPress={() => {
-                        triggerIdentitySelectionHaptic();
-                        setCountryMenuOpen((value) => !value);
-                      }}
-                      style={({ pressed }) => [
-                        styles.callingCodeBox,
-                        pressed ? styles.pressed : null,
-                      ]}
-                    >
-                      <AppText style={styles.countryFlag}>
-                        {countryFlag(selectedCountry.iso2)}
-                      </AppText>
-                      <AppText style={styles.callingCodeText}>
-                        {selectedCountry.callingCode}
-                      </AppText>
-                      <Ionicons color={theme.colors.brandGreen} name="chevron-down" size={13} />
-                    </Pressable>
-
-                    <IdentityFlowTextInput
-                      keyboardType="phone-pad"
-                      onBlur={() => markFieldTouched('phone')}
-                      onChangeText={setPhoneNationalNumber}
-                      onFocus={() => setCountryMenuOpen(false)}
-                      placeholder="3001234567"
-                      placeholderTextColor={theme.colors.muted}
-                      style={styles.phoneInput}
-                      value={phoneNationalNumber}
-                    />
-                  </View>
-
-                  {countryMenuOpen ? (
-                    <View style={styles.countryMenu}>
-                      <ScrollView
-                        bounces={false}
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                        onMoveShouldSetResponder={() => true}
-                        onScroll={(event) =>
-                          setCountryMenuScrollY(event.nativeEvent.contentOffset.y)
-                        }
-                        onStartShouldSetResponder={() => true}
-                        scrollEventThrottle={16}
-                        showsVerticalScrollIndicator={false}
-                        style={[styles.countryMenuScroll, countryMenuScrollWebStyle]}
-                      >
-                        {COUNTRY_OPTIONS.map((country, index) => {
-                          const selected = country.iso2 === selectedCountry.iso2;
-
-                          return (
-                            <Pressable
-                              key={country.iso2}
-                              onPress={() => {
-                                triggerIdentitySelectionHaptic();
-                                setCountryIso(country.iso2);
-                                setCountryMenuOpen(false);
-                              }}
-                              style={[
-                                styles.countryOption,
-                                selected ? styles.countryOptionSelected : null,
-                                index === COUNTRY_OPTIONS.length - 1
-                                  ? styles.countryOptionLast
-                                  : null,
-                              ]}
-                            >
-                              <View style={styles.countryOptionLabel}>
-                                <AppText style={styles.countryFlag}>
-                                  {countryFlag(country.iso2)}
-                                </AppText>
-                                <AppText style={styles.countryLabel}>{country.label}</AppText>
-                              </View>
-                              <AppText
-                                style={[
-                                  styles.countryCode,
-                                  selected ? styles.countryCodeSelected : null,
-                                ]}
-                              >
-                                {country.callingCode}
-                              </AppText>
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
-                      <View pointerEvents="none" style={styles.countryMenuScrollbarTrack}>
-                        <View
-                          style={[
-                            styles.countryMenuScrollbarThumb,
-                            {
-                              height: COUNTRY_MENU_SCROLLBAR_THUMB_HEIGHT,
-                              transform: [{ translateY: countryMenuScrollbarTop }],
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-              </IdentityFlowField>
-
-              <IdentityFlowPrimaryAction
-                disabled={authBusy}
-                label={busy ? 'Creando...' : 'Crear con correo'}
-                loading={busy}
-                onPress={authBusy ? undefined : () => void handleSubmit()}
-              />
-            </View>
+            <AccountCreateAccountEmailForm
+              authBusy={authBusy}
+              busy={busy}
+              countryIso={countryIso}
+              countryMenuOpen={countryMenuOpen}
+              countryMenuScrollY={countryMenuScrollY}
+              email={email}
+              emailStatus={emailStatus}
+              markFieldTouched={markFieldTouched}
+              onSubmit={() => void handleSubmit()}
+              password={password}
+              passwordStatus={passwordStatus}
+              phoneNationalNumber={phoneNationalNumber}
+              phoneStatus={phoneStatus}
+              setCountryIso={setCountryIso}
+              setCountryMenuOpen={setCountryMenuOpen}
+              setCountryMenuScrollY={setCountryMenuScrollY}
+              setEmail={setEmail}
+              setPassword={setPassword}
+              setPhoneNationalNumber={setPhoneNationalNumber}
+            />
           ) : null}
         </IdentityFlowForm>
       ) : null}

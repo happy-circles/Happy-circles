@@ -48,4 +48,50 @@ describe('identity flow helpers', () => {
       topIdentityY: 52,
     });
   });
+
+  it('keeps form-forward layouts top-aligned after measurement is ready', () => {
+    expect(
+      resolveIdentityFlowLayout({
+        bodyHeight: 600,
+        centerLayout: 'balanced',
+        hasMessage: true,
+        identityPosition: 'top',
+        layoutReady: true,
+        stageSize: 208,
+        topOffset: 40,
+        verticalGap: 8,
+      }),
+    ).toEqual({
+      centerContentY: 376,
+      centerIdentityY: 160,
+      isCenterIdentity: false,
+      resolvedIdentityPosition: 'top',
+      shouldReserveMessageSlot: true,
+      topContentY: 256,
+      topIdentityY: 40,
+    });
+  });
+
+  it('uses a more compact center for short compact identity states', () => {
+    expect(
+      resolveIdentityFlowLayout({
+        bodyHeight: 600,
+        centerLayout: 'compact',
+        hasMessage: true,
+        identityPosition: 'center',
+        layoutReady: true,
+        stageSize: 160,
+        topOffset: 52,
+        verticalGap: 20,
+      }),
+    ).toEqual({
+      centerContentY: 292,
+      centerIdentityY: 112,
+      isCenterIdentity: true,
+      resolvedIdentityPosition: 'center',
+      shouldReserveMessageSlot: true,
+      topContentY: 232,
+      topIdentityY: 52,
+    });
+  });
 });

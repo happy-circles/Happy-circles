@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import type { Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
@@ -12,15 +11,16 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { TransactionEventCard } from '@/components/transaction-event-card';
 import { backOrReturnTo } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
+  type HistoryCase,
   type HistoryCaseItem,
   historyCardTitle,
   historyCaseEyebrow,
+  historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
   historyCaseVisualCategory,
@@ -52,22 +52,13 @@ import {
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   isConsolidatedTransactionItem,
-  isCycleTransactionItem,
   isNoBalanceTransactionStatus,
   isPendingTransactionItem,
-  transactionAmountIsVoided,
-  transactionAmountLabel,
-  transactionContextLabel,
-  transactionFocusId,
-  transactionShouldSurfaceStatus,
-  transactionStatusLabel,
-  transactionStatusTone,
-  transactionTimeLabel,
-  transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
+import { PendingTransactionCard } from './transactions-pending-card';
 
 const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
 
@@ -199,42 +190,6 @@ function personIdFromHref(href: string | undefined): string | null {
   }
 }
 
-function transactionPersonForItem(
-  people: readonly PersonCardDto[],
-  item: ActivityItemDto,
-): PersonCardDto | undefined {
-  const hrefPersonId = personIdFromHref(item.href);
-  if (hrefPersonId) {
-    const matchedPerson = people.find((person) => person.userId === hrefPersonId);
-    if (matchedPerson) {
-      return matchedPerson;
-    }
-  }
-
-  return people.find((person) => person.displayName === item.counterpartyLabel);
-}
-
-function transactionDetailHref(
-  people: readonly PersonCardDto[],
-  item: ActivityItemDto,
-  panel: 'pending' | 'history',
-): Href {
-  if (item.kind === 'settlement_proposal') {
-    return `/settlements/${item.id}` as Href;
-  }
-
-  const matchedPerson = transactionPersonForItem(people, item);
-  const personId = matchedPerson?.userId ?? personIdFromHref(item.href);
-
-  if (!personId) {
-    return (item.href ?? '/transactions') as Href;
-  }
-
-  return `/person/${personId}?panel=${panel}&focus=${encodeURIComponent(
-    transactionFocusId(item),
-  )}` as Href;
-}
-
 function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
   const normalizedKind: HistoryCaseItem['kind'] =
     item.kind === 'settlement'
@@ -253,6 +208,7 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
     flowLabel: item.flowLabel,
     happenedAt: item.happenedAt,
     happenedAtLabel: item.happenedAtLabel,
+    href: item.href,
     id: item.id,
     kind: normalizedKind,
     originRequestId: item.originRequestId,
@@ -264,55 +220,30 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
   };
 }
 
-function shouldSurfacePendingStatus(item: ActivityItemDto): boolean {
-  return transactionShouldSurfaceStatus(item, { density: 'list' });
-}
+function transactionPersonForHistoryCase(
+  people: readonly PersonCardDto[],
+  itemCase: Pick<HistoryCase<HistoryCaseItem>, 'latest'>,
+): PersonCardDto | undefined {
+  const hrefPersonId = personIdFromHref(itemCase.latest.href);
+  if (hrefPersonId) {
+    const matchedPerson = people.find((person) => person.userId === hrefPersonId);
+    if (matchedPerson) {
+      return matchedPerson;
+    }
+  }
 
-function PendingTransactionCard({
-  item,
-  people,
-}: {
-  readonly item: ActivityItemDto;
-  readonly people: readonly PersonCardDto[];
-}) {
-  const isSystemTransaction = isCycleTransactionItem(item);
-  const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
-  const matchedPerson = transactionPersonForItem(people, item);
-  const fallbackPerson = {
-    displayName: actorLabel,
-    userId: matchedPerson?.userId ?? item.id,
-  };
-
-  return (
-    <TransactionEventCard
-      accentColor={transactionToneColor(item)}
-      actorAvatarUrl={isSystemTransaction ? null : (matchedPerson?.avatarUrl ?? null)}
-      actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-      actorFallbackColor={
-        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
-      }
-      actorLabel={actorLabel}
-      amountColor={transactionToneColor(item)}
-      amountLabel={transactionAmountLabel(item)}
-      amountStruckThrough={transactionAmountIsVoided(item)}
-      category={transactionVisualCategory(item)}
-      categoryPlacement="none"
-      compact
-      compactMetaLayout="inline"
-      context={transactionContextLabel(item, actorLabel)}
-      href={transactionDetailHref(people, item, 'pending')}
-      meta={transactionTimeLabel(item)}
-      statusLabel={shouldSurfacePendingStatus(item) ? transactionStatusLabel(item) : null}
-      statusTone={transactionStatusTone(item)}
-    />
-  );
+  return people.find((person) => person.displayName === itemCase.latest.counterpartyLabel);
 }
 
 function FilterPill({
+  icon,
+  iconColor,
   label,
   onPress,
   selected,
 }: {
+  readonly icon?: keyof typeof Ionicons.glyphMap;
+  readonly iconColor?: string;
   readonly label: string;
   readonly onPress: () => void;
   readonly selected: boolean;
@@ -326,6 +257,13 @@ function FilterPill({
         pressed ? styles.filterPillPressed : null,
       ]}
     >
+      {icon ? (
+        <Ionicons
+          color={selected ? (iconColor ?? theme.colors.primary) : theme.colors.textMuted}
+          name={icon}
+          size={14}
+        />
+      ) : null}
       <AppText style={[styles.filterPillText, selected ? styles.filterPillTextSelected : null]}>
         {label}
       </AppText>
@@ -347,6 +285,7 @@ export function TransactionsScreen() {
     ? searchParams.category[0]
     : searchParams.category;
   const categoryFilter = rawCategory ? normalizeTransactionCategory(rawCategory) : null;
+  const circleFilterSelected = categoryFilter === 'cycle';
   const [activeFilter, setActiveFilter] = useState<TransactionRootFilter>(initialFilter);
   const [expandedCaseIds, setExpandedCaseIds] = useState<readonly string[]>([]);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
@@ -433,6 +372,21 @@ export function TransactionsScreen() {
     setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
   }
 
+  function selectPrimaryFilter(filter: (typeof PRIMARY_FILTER_OPTIONS)[number]['value']) {
+    triggerAppSelectionHaptic();
+    setActiveFilter(filter);
+
+    if (circleFilterSelected) {
+      router.setParams({ category: undefined });
+    }
+  }
+
+  function selectCircleFilter() {
+    triggerAppSelectionHaptic();
+    setActiveFilter('all');
+    router.setParams({ category: 'cycle', filter: undefined });
+  }
+
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell
@@ -491,15 +445,19 @@ export function TransactionsScreen() {
             <FilterPill
               key={option.value}
               label={option.label}
-              onPress={() => {
-                triggerAppSelectionHaptic();
-                setActiveFilter(option.value);
-              }}
-              selected={activePrimaryFilter === option.value}
+              onPress={() => selectPrimaryFilter(option.value)}
+              selected={!circleFilterSelected && activePrimaryFilter === option.value}
             />
           ))}
+          <FilterPill
+            icon="happy-outline"
+            iconColor={transactionCategoryColor('cycle')}
+            label="Circles"
+            onPress={selectCircleFilter}
+            selected={circleFilterSelected}
+          />
         </ScrollView>
-        {categoryFilter ? (
+        {categoryFilter && !circleFilterSelected ? (
           <View style={styles.categoryFilterChip}>
             <Ionicons
               color={transactionCategoryColor(categoryFilter)}
@@ -524,7 +482,12 @@ export function TransactionsScreen() {
         <SectionBlock title="Pendientes">
           <View style={styles.list}>
             {visiblePendingTransactionItems.map((item) => (
-              <PendingTransactionCard item={item} key={item.id} people={people} />
+              <PendingTransactionCard
+                item={item}
+                key={item.id}
+                people={people}
+                unread={!notificationViewedKeys.has(notificationViewKeyForItem(item))}
+              />
             ))}
           </View>
         </SectionBlock>
@@ -539,17 +502,29 @@ export function TransactionsScreen() {
               const caseTone = historyImpactTone(latest) as HistoryCaseTone;
               const caseTitle = friendlyHistoryStepLabel(latest);
               const caseDescription = historyCardTitle(itemCase);
+              const caseEyebrow = historyCaseEyebrow(itemCase);
+              const historyPerson = transactionPersonForHistoryCase(people, itemCase);
+              const fallbackPerson = {
+                displayName: caseEyebrow ?? latest.counterpartyLabel ?? 'Persona',
+                userId: historyPerson?.userId ?? itemCase.id,
+              };
 
               return (
                 <HistoryCaseCard
+                  actorAvatarUrl={
+                    itemCase.isCycleSnippet ? null : (historyPerson?.avatarUrl ?? null)
+                  }
+                  actorFallbackColor={
+                    itemCase.isCycleSnippet ? undefined : initialsBackgroundColor(fallbackPerson)
+                  }
                   amountLabel={caseAmountLabel}
                   category={historyCaseVisualCategory(itemCase)}
                   description={null}
-                  eyebrow={historyCaseEyebrow(itemCase)}
+                  eyebrow={caseEyebrow}
                   isCycleSnippet={itemCase.isCycleSnippet}
                   isExpanded={expandedCaseIds[0] === itemCase.id}
                   key={itemCase.id}
-                  meta={latest.happenedAtLabel ?? null}
+                  meta={historyCaseMeta(itemCase)}
                   onToggle={() => toggleHistoryCase(itemCase.id)}
                   statusLabel={historyCaseStatusLabel(itemCase)}
                   statusTone={historyCaseStatusTone(itemCase)}

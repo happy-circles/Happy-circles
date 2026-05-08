@@ -11,6 +11,7 @@ interface SnapshotRefreshTarget {
 interface SnapshotRefreshOptions {
   readonly minimumVisibleMs?: number;
   readonly nativeIndicatorVisible?: boolean;
+  readonly nativeIndicatorTopInset?: number;
   readonly progressViewOffset?: number;
 }
 
@@ -70,10 +71,17 @@ export function useSnapshotRefresh(
     () => ({
       label: 'Sincronizando',
       nativeIndicatorVisible: options.nativeIndicatorVisible,
+      nativeIndicatorTopInset: options.nativeIndicatorTopInset,
       onRefresh,
       progressViewOffset: options.progressViewOffset,
       refreshing,
     }),
-    [onRefresh, options.nativeIndicatorVisible, options.progressViewOffset, refreshing],
+    [
+      onRefresh,
+      options.nativeIndicatorTopInset,
+      options.nativeIndicatorVisible,
+      options.progressViewOffset,
+      refreshing,
+    ],
   );
 }
