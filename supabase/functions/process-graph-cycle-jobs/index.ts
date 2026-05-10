@@ -91,14 +91,6 @@ Deno.serve((request) => {
         ? body.workerId.trim()
         : `edge-worker-${crypto.randomUUID()}`;
     const results: unknown[] = [];
-    const { error: requeueError } = await client.rpc('requeue_stale_graph_cycle_jobs', {
-      p_limit: 50,
-      p_timeout_seconds: 300,
-    });
-
-    if (requeueError) {
-      throw requeueError;
-    }
 
     for (let index = 0; index < limit; index += 1) {
       const { data: claimedData, error: claimError } = await client.rpc('claim_graph_cycle_job', {

@@ -17,6 +17,7 @@ export default tseslint.config(
       'apps/mobile/scripts/**/*.mjs',
       'apps/landing/next.config.mjs',
       'eslint.config.mjs',
+      'packages/shared/src/generated/database.types.ts',
       'prettier.config.cjs',
       'scripts/**/*.mjs',
       'vitest.config.ts',

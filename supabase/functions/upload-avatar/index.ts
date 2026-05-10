@@ -184,6 +184,7 @@ Deno.serve(async (request) => {
 
     const avatarPath = `${actorUserId}/${crypto.randomUUID()}.${detectedType.extension}`;
     const uploadResult = await client.storage.from(AVATAR_BUCKET).upload(avatarPath, bytes, {
+      cacheControl: '604800',
       contentType: detectedType.mimeType,
       upsert: false,
     });

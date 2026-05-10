@@ -128,6 +128,15 @@ pnpm test:supabase
 
 Important: do not run `npx expo ...` from the repository root. This is a pnpm monorepo and the Expo app lives in `apps/mobile`.
 
+Supabase usage helpers:
+
+```bash
+pnpm supabase:usage
+pnpm supabase:cron:graph-cycle -- --apply
+pnpm supabase:cleanup:avatars
+pnpm supabase:cleanup:avatars -- --apply
+```
+
 ## Environment
 
 Start from the checked-in examples:
@@ -158,6 +167,12 @@ Landing and app-link variables:
 Backend worker variable:
 
 - `GRAPH_CYCLE_WORKER_SECRET`
+
+Operational Supabase script variables:
+
+- `SUPABASE_PROJECT_REF`
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_SERVICE_ROLE_KEY` only for deleting orphaned Storage objects with `--apply`
 
 Production deployments must set `GRAPH_CYCLE_WORKER_SECRET`; the graph-cycle worker intentionally returns an operational error and processes no jobs when the secret is missing.
 

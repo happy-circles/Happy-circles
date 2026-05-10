@@ -6,11 +6,16 @@ import { fileURLToPath } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const isWindows = process.platform === 'win32';
 const pnpmCommand = 'pnpm';
+const nodeOptions = [process.env.NODE_OPTIONS, '--use-system-ca'].filter(Boolean).join(' ');
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: rootDir,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_OPTIONS: nodeOptions,
+    },
     shell: isWindows,
     stdio: 'inherit',
     ...options,
@@ -25,6 +30,10 @@ function capture(command, args) {
   const result = spawnSync(command, args, {
     cwd: rootDir,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_OPTIONS: nodeOptions,
+    },
     shell: isWindows,
   });
 

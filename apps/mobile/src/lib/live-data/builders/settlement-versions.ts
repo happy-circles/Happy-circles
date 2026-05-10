@@ -71,7 +71,8 @@ function settlementVersionDetail(input: {
     return 'Esta version expiro antes de completarse.';
   }
 
-  return `Estado: ${input.proposal.status}.${versionSuffix}`;
+  const status: string = input.proposal.status;
+  return `Estado: ${status}.${versionSuffix}`;
 }
 
 export function buildSettlementVersionTimeline(input: {

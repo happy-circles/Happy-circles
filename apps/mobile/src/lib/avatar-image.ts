@@ -1,7 +1,7 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 
 const AVATAR_UPLOAD_MAX_SIZE = 512;
-const AVATAR_UPLOAD_COMPRESSION = 0.82;
+const AVATAR_UPLOAD_COMPRESSION = 0.78;
 
 interface PickedAvatarImage {
   readonly height?: number | null;

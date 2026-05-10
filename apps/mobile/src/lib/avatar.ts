@@ -4,8 +4,8 @@ import { avatarPathIsRemoteUrl, normalizeStoredAvatarPath } from './avatar-url';
 import { supabase } from './supabase';
 
 export const AVATAR_BUCKET = 'avatars';
-const SIGNED_URL_TTL_SECONDS = 60 * 60;
-const SIGNED_URL_REFRESH_MARGIN_MS = 60 * 1000;
+const SIGNED_URL_TTL_SECONDS = 24 * 60 * 60;
+const SIGNED_URL_REFRESH_MARGIN_MS = 15 * 60 * 1000;
 
 interface CachedSignedAvatarUrl {
   readonly expiresAt: number;
@@ -161,11 +161,7 @@ export async function resolveSignedAvatarUrls(
   paths: readonly (string | null | undefined)[],
 ): Promise<readonly string[]> {
   const uniquePaths = Array.from(
-    new Set(
-      paths
-        .map((path) => normalizeStoredAvatarPath(path))
-        .filter((path) => path.length > 0),
-    ),
+    new Set(paths.map((path) => normalizeStoredAvatarPath(path)).filter((path) => path.length > 0)),
   );
   const resolvedUrls = await Promise.all(uniquePaths.map(resolveSignedAvatarUrl));
 

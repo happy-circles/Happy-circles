@@ -71,14 +71,15 @@ function readStoredQueue(): readonly unknown[] {
 }
 
 function fetchJsonBodies(): readonly Record<string, unknown>[] {
-  return mocks.fetch.mock.calls.map(([, init]) =>
-    JSON.parse((init as { readonly body: string }).body) as Record<string, unknown>,
+  return mocks.fetch.mock.calls.map(
+    ([, init]) => JSON.parse((init as { readonly body: string }).body) as Record<string, unknown>,
   );
 }
 
 describe('analytics-client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     mocks.storage.clear();
     vi.stubGlobal('fetch', mocks.fetch);
     mocks.getSession.mockResolvedValue({ data: { session: { access_token: 'access-token' } } });
@@ -121,13 +122,13 @@ describe('analytics-client', () => {
     await flushProductAnalyticsEvents();
 
     const bodies = fetchJsonBodies();
-    expect((bodies[0]?.clientSession as { readonly clientSessionId?: unknown }).clientSessionId).toBe(
-      'mobile-session:test',
-    );
+    expect(
+      (bodies[0]?.clientSession as { readonly clientSessionId?: unknown }).clientSessionId,
+    ).toBe('mobile-session:test');
     expect(bodies[0]?.events).toEqual([]);
-    expect((bodies[1]?.clientSession as { readonly clientSessionId?: unknown }).clientSessionId).toBe(
-      'mobile-session:test',
-    );
+    expect(
+      (bodies[1]?.clientSession as { readonly clientSessionId?: unknown }).clientSessionId,
+    ).toBe('mobile-session:test');
     expect(bodies[1]?.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ eventName: 'screen_viewed' }),
@@ -210,5 +211,52 @@ describe('analytics-client', () => {
     expect(eventBatches[1]).toHaveLength(5);
     expect(JSON.stringify(eventBatches)).not.toContain('old-screen-event');
     expect(readStoredQueue()).toHaveLength(0);
+  });
+
+  it('debounces event flushes while a session is active', async () => {
+    vi.useFakeTimers();
+
+    await startProductAnalyticsSession({
+      appVersion: '1.0.0',
+      clientSessionId: 'mobile-session:test',
+      deviceId: 'device-1',
+      platform: 'ios',
+      startedAt: new Date().toISOString(),
+    });
+
+    await recordProductEvent({
+      eventName: 'screen_viewed',
+      metadata: { route: 'home' },
+      screenName: 'home',
+    });
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('flushes immediately and clears the pending debounce when requested', async () => {
+    vi.useFakeTimers();
+
+    await startProductAnalyticsSession({
+      appVersion: '1.0.0',
+      clientSessionId: 'mobile-session:test',
+      deviceId: 'device-1',
+      platform: 'ios',
+      startedAt: new Date().toISOString(),
+    });
+
+    await recordProductEvent({
+      eventName: 'app_backgrounded',
+      metadata: { route: 'home' },
+      screenName: 'home',
+    });
+    await flushProductAnalyticsEvents();
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
 });

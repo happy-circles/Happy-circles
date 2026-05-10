@@ -7,6 +7,7 @@ import type { AnalyticsScreenName } from '@happy-circles/shared';
 import {
   createAnalyticsClientSessionId,
   flushProductAnalyticsEvents,
+  recordProductEvent,
   recordProductEventSafe,
   resetProductAnalyticsSession,
   startProductAnalyticsSession,
@@ -160,11 +161,13 @@ export function ProductAnalyticsBridge() {
       }
 
       if (nextState === 'background' || nextState === 'inactive') {
-        recordProductEventSafe({
+        void recordProductEvent({
           eventName: 'app_backgrounded',
           screenName,
           metadata: { route },
-        });
+        })
+          .then(() => flushProductAnalyticsEvents())
+          .catch(() => undefined);
       }
     });
 

@@ -25,6 +25,9 @@
     "lint": "pnpm exec eslint .",
     "format": "pnpm exec prettier --write .",
     "security:check": "node ./scripts/security-check.mjs",
+    "supabase:cleanup:avatars": "node --use-system-ca ./scripts/cleanup-orphaned-avatars.mjs",
+    "supabase:cron:graph-cycle": "node --use-system-ca ./scripts/update-graph-cycle-cron.mjs",
+    "supabase:usage": "node --use-system-ca ./scripts/supabase-usage-report.mjs",
     "test": "pnpm exec vitest run",
     "test:supabase": "node ./scripts/run-supabase-tests.mjs",
     "typecheck": "pnpm -r typecheck"

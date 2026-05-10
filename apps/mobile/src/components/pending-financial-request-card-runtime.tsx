@@ -185,7 +185,6 @@ export function PendingFinancialRequestCard({
   description,
   category = DEFAULT_TRANSACTION_CATEGORY,
   amountMinor,
-  createdByLabel,
   createdAtLabel,
   focused = false,
   historySteps = [],

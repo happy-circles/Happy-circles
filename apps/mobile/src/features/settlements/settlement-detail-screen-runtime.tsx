@@ -35,6 +35,7 @@ import {
   type SettlementDetailMovementDto,
   type SettlementDetailParticipantDto,
 } from '@/lib/live-data';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { settlementDetailScreenStyles as styles } from './settlement-detail-screen-styles';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
@@ -526,7 +527,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
               label="Ver nueva version"
               onPress={() => {
                 triggerAppSelectionHaptic();
-                router.push(`/settlements/${replacementProposalId}`);
+                pushRoute(router, `/settlements/${replacementProposalId}`);
               }}
               variant="secondary"
             />

@@ -19,6 +19,7 @@ const ANALYTICS_QUEUE_STORAGE_KEY = 'happy-circles.analytics.queue.v1';
 const ANALYTICS_QUEUE_MAX_EVENTS = 100;
 const ANALYTICS_QUEUE_BATCH_SIZE = 20;
 const ANALYTICS_QUEUE_TTL_MS = 72 * 60 * 60 * 1000;
+const ANALYTICS_FLUSH_DEBOUNCE_MS = 5_000;
 
 interface StartAnalyticsSessionInput {
   readonly clientSessionId: string;
@@ -37,6 +38,7 @@ interface RecordProductEventInput {
 let activeAnalyticsSessionId: string | null = null;
 let activeAnalyticsClientSession: StartAnalyticsSessionPayload | null = null;
 let flushInFlight: Promise<void> | null = null;
+let scheduledFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function createRandomId(prefix: string): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -74,7 +76,7 @@ async function getCurrentAccessToken(): Promise<string | null> {
 }
 
 async function invokeAnalyticsFunction<TResult>(
-  functionName: 'analytics-ingest' | 'record-product-event' | 'start-app-session',
+  functionName: 'analytics-ingest',
   payload: Record<string, unknown>,
 ): Promise<TResult> {
   const accessToken = await getCurrentAccessToken();
@@ -119,9 +121,12 @@ export function createAnalyticsClientSessionId(): string {
 export function resetProductAnalyticsSession() {
   activeAnalyticsSessionId = null;
   activeAnalyticsClientSession = null;
+  clearScheduledAnalyticsFlush();
 }
 
-function trimQueue(events: readonly ProductAnalyticsEventPayload[]): ProductAnalyticsEventPayload[] {
+function trimQueue(
+  events: readonly ProductAnalyticsEventPayload[],
+): ProductAnalyticsEventPayload[] {
   const cutoff = Date.now() - ANALYTICS_QUEUE_TTL_MS;
 
   return events
@@ -177,10 +182,32 @@ async function invokeAnalyticsIngest(
   return invokeAnalyticsFunction('analytics-ingest', payload);
 }
 
+function clearScheduledAnalyticsFlush(): void {
+  if (!scheduledFlushTimer) {
+    return;
+  }
+
+  clearTimeout(scheduledFlushTimer);
+  scheduledFlushTimer = null;
+}
+
+function scheduleAnalyticsFlush(): void {
+  if (scheduledFlushTimer) {
+    return;
+  }
+
+  scheduledFlushTimer = setTimeout(() => {
+    scheduledFlushTimer = null;
+    void flushProductAnalyticsEvents().catch(() => undefined);
+  }, ANALYTICS_FLUSH_DEBOUNCE_MS);
+}
+
 export function flushProductAnalyticsEvents(): Promise<void> {
   if (!supabase || !activeAnalyticsClientSession) {
     return Promise.resolve();
   }
+
+  clearScheduledAnalyticsFlush();
 
   if (flushInFlight) {
     return flushInFlight;
@@ -241,7 +268,7 @@ export async function recordProductEvent(input: RecordProductEventInput): Promis
   await enqueueAnalyticsEvent(payload);
 
   if (activeAnalyticsSessionId) {
-    void flushProductAnalyticsEvents().catch(() => undefined);
+    scheduleAnalyticsFlush();
   }
 }
 

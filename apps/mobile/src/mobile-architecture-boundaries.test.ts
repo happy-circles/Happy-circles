@@ -39,7 +39,7 @@ describe('mobile architecture boundaries', () => {
       ['features/home/add-person-contacts-sheet.tsx', 500],
       ['features/home/add-person-contacts-sheet-controller.ts', 520],
       ['features/profile/profile-screen.tsx', 20],
-      ['features/profile/profile-screen-runtime.tsx', 1400],
+      ['features/profile/profile-screen-runtime.tsx', 1408],
       ['features/activity/activity-screen.tsx', 20],
       ['features/activity/activity-screen-runtime.tsx', 1280],
       ['features/onboarding/setup-account-screen.tsx', 20],

@@ -10,7 +10,7 @@ const LIMITS = {
   notificationViews: 1000,
 } as const;
 
-const AVATAR_SIGNED_URL_TTL_SECONDS = 60 * 60;
+const AVATAR_SIGNED_URL_TTL_SECONDS = 24 * 60 * 60;
 const ACTIVE_FRIENDSHIP_INVITE_STATUSES = [
   'pending_recipient',
   'pending_claim',

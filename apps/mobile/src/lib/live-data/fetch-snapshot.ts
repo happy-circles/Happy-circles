@@ -47,11 +47,9 @@ async function fetchLiveSnapshot(
       currentUserId,
     });
     void prefetchCriticalAvatarImages(snapshot).catch(() => undefined);
-    void persistCachedAppSnapshot(
-      currentUserId,
-      snapshot,
-      rows.avatarSignedUrlsByPath,
-    ).catch(() => undefined);
+    void persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(
+      () => undefined,
+    );
 
     return snapshot;
   } catch (error) {
@@ -168,6 +166,7 @@ export function useAppSnapshot() {
   const query = useQuery({
     queryKey,
     enabled: Boolean(userId),
+    staleTime: 60_000,
     queryFn: async ({ signal }) => {
       const snapshot = await fetchAppSnapshot(userId, signal);
       setHasLiveData(true);
