@@ -68,6 +68,9 @@ verify_jwt = true
 [functions.record-product-event]
 verify_jwt = true
 
+[functions.analytics-ingest]
+verify_jwt = true
+
 [functions.report-client-error]
 verify_jwt = true
 

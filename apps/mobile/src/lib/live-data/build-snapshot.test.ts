@@ -234,6 +234,11 @@ function settlementProposal(value: Partial<SettlementProposalRow>): SettlementPr
     anchor_user_high_id: FRIEND_ID,
     currency_code: 'COP',
     source_graph_cycle_job_id: null,
+    happy_circle_case_id: null,
+    version_number: null,
+    replaces_proposal_id: null,
+    replaced_by_proposal_id: null,
+    stale_reason: null,
     created_at: NOW,
     updated_at: NOW,
     executed_at: null,
@@ -253,9 +258,7 @@ function settlementParticipant(value: Partial<SettlementParticipantRow>): Settle
   });
 }
 
-function happyCircleScoreEvent(
-  value: Partial<HappyCircleScoreEventRow>,
-): HappyCircleScoreEventRow {
+function happyCircleScoreEvent(value: Partial<HappyCircleScoreEventRow>): HappyCircleScoreEventRow {
   return row<HappyCircleScoreEventRow>({
     id: 'score-event-1',
     user_id: ACTOR_ID,
@@ -548,6 +551,81 @@ describe('buildLiveSnapshot', () => {
       status: 'approved',
       ctaLabel: 'Completar',
     });
+  });
+
+  it('groups happy circle versions into one current active proposal and a detail timeline', () => {
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
+        relationships: [relationship()],
+        settlementProposals: [
+          settlementProposal({
+            id: 'settlement-v1',
+            status: 'stale',
+            happy_circle_case_id: 'case-1',
+            version_number: 1,
+            replaced_by_proposal_id: 'settlement-v2',
+            stale_reason: 'balance_changed',
+            updated_at: '2026-05-05T12:01:00.000Z',
+          }),
+          settlementProposal({
+            id: 'settlement-v2',
+            status: 'pending_approvals',
+            happy_circle_case_id: 'case-1',
+            version_number: 2,
+            replaces_proposal_id: 'settlement-v1',
+            graph_snapshot_hash: 'hash-2',
+            updated_at: '2026-05-05T12:02:00.000Z',
+          }),
+        ],
+        settlementParticipants: [
+          settlementParticipant({
+            id: 'participant-v1-actor',
+            settlement_proposal_id: 'settlement-v1',
+            participant_user_id: ACTOR_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-v1-friend',
+            settlement_proposal_id: 'settlement-v1',
+            participant_user_id: FRIEND_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-v2-actor',
+            settlement_proposal_id: 'settlement-v2',
+            participant_user_id: ACTOR_ID,
+            decision: 'pending',
+            decided_at: null,
+          }),
+          settlementParticipant({
+            id: 'participant-v2-friend',
+            settlement_proposal_id: 'settlement-v2',
+            participant_user_id: FRIEND_ID,
+            decision: 'pending',
+            decided_at: null,
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      snapshot.balanceOverview.resolution.activeProposals.map((proposal) => proposal.proposalId),
+    ).toEqual(['settlement-v2']);
+    expect(snapshot.settlementsById['settlement-v2']?.timeline).toMatchObject([
+      {
+        proposalId: 'settlement-v1',
+        versionNumber: 1,
+        status: 'stale',
+        replacedByProposalId: 'settlement-v2',
+        detail: 'Fue reemplazada porque los saldos cambiaron.',
+      },
+      {
+        proposalId: 'settlement-v2',
+        versionNumber: 2,
+        status: 'pending_approvals',
+        replacesProposalId: 'settlement-v1',
+        isCurrent: true,
+      },
+    ]);
   });
 
   it('summarizes private happy circle score events for the current user', () => {

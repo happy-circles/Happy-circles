@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import type { Href } from 'expo-router';
 
 import { triggerIdentityWarningHaptic } from './identity-flow-haptics';
+import { triggerAppErrorHaptic, triggerAppSuccessHaptic } from './app-haptics';
 import { buildSetupAccountHref } from './setup-account';
 
 interface AlertNavigation {
@@ -14,6 +15,66 @@ export interface SnackbarState {
   readonly message: string | null;
   readonly tone: 'success' | 'danger' | 'neutral';
 }
+
+export type ActionFeedbackVariant = 'loading' | 'success' | 'danger';
+
+export type BlockingActionKey =
+  | 'createMovement'
+  | 'acceptFinancialRequest'
+  | 'approveSettlement'
+  | 'executeSettlement'
+  | 'requestAccountDeletion';
+
+export interface BlockingActionFeedbackCopy {
+  readonly message?: string;
+  readonly title: string;
+}
+
+interface ActionFeedbackOverlayCopy extends BlockingActionFeedbackCopy {
+  readonly variant: ActionFeedbackVariant;
+}
+
+export interface ActionFeedbackResult extends BlockingActionFeedbackCopy {
+  readonly durationMs?: number;
+  readonly haptic?: 'error' | 'none' | 'success';
+  readonly variant?: Exclude<ActionFeedbackVariant, 'loading'>;
+}
+
+export interface ActionFeedbackOverlayProps {
+  readonly message?: string;
+  readonly title: string;
+  readonly variant: ActionFeedbackVariant;
+  readonly visible: boolean;
+}
+
+export interface ActionFeedbackOverlayOptions {
+  readonly delayMs?: number;
+  readonly resultDurationMs?: number;
+}
+
+// Blocking overlays are reserved for financial/account actions where leaving mid-flight is risky.
+export const BLOCKING_ACTION_FEEDBACK: Record<BlockingActionKey, BlockingActionFeedbackCopy> = {
+  acceptFinancialRequest: {
+    message: 'Propuesta',
+    title: 'Aceptando',
+  },
+  approveSettlement: {
+    message: 'Happy Circle',
+    title: 'Aprobando',
+  },
+  createMovement: {
+    message: 'Movimiento',
+    title: 'Guardando',
+  },
+  executeSettlement: {
+    message: 'Happy Circle',
+    title: 'Completando',
+  },
+  requestAccountDeletion: {
+    message: 'Cuenta',
+    title: 'Eliminando',
+  },
+};
 
 interface BlockedActionResolution {
   readonly title: string;
@@ -110,6 +171,104 @@ export function useDelayedBusy(active: boolean, delayMs = 350) {
   }, [active, delayMs]);
 
   return visible;
+}
+
+export function useActionFeedbackOverlay({
+  delayMs = 350,
+  resultDurationMs = 1400,
+}: ActionFeedbackOverlayOptions = {}) {
+  const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultResolveRef = useRef<(() => void) | null>(null);
+  const [busyActionKey, setBusyActionKey] = useState<BlockingActionKey | null>(null);
+  const [resultOverlay, setResultOverlay] = useState<ActionFeedbackOverlayCopy | null>(null);
+  const showBusyOverlay = useDelayedBusy(Boolean(busyActionKey), delayMs);
+
+  const clearResultTimeout = useCallback(() => {
+    if (resultOverlayTimeoutRef.current) {
+      clearTimeout(resultOverlayTimeoutRef.current);
+      resultOverlayTimeoutRef.current = null;
+    }
+
+    if (resultResolveRef.current) {
+      resultResolveRef.current();
+      resultResolveRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearResultTimeout(), [clearResultTimeout]);
+
+  const clear = useCallback(() => {
+    clearResultTimeout();
+    setBusyActionKey(null);
+    setResultOverlay(null);
+  }, [clearResultTimeout]);
+
+  const showResult = useCallback(
+    (nextResult: ActionFeedbackResult) => {
+      clearResultTimeout();
+      setBusyActionKey(null);
+      const nextVariant = nextResult.variant ?? 'success';
+
+      if (nextResult.haptic !== 'none') {
+        if (nextResult.haptic === 'error' || nextVariant === 'danger') {
+          triggerAppErrorHaptic();
+        } else {
+          triggerAppSuccessHaptic();
+        }
+      }
+
+      setResultOverlay({
+        message: nextResult.message,
+        title: nextResult.title,
+        variant: nextVariant,
+      });
+
+      return new Promise<void>((resolve) => {
+        resultResolveRef.current = resolve;
+        resultOverlayTimeoutRef.current = setTimeout(() => {
+          setResultOverlay(null);
+          resultOverlayTimeoutRef.current = null;
+          resultResolveRef.current = null;
+          resolve();
+        }, nextResult.durationMs ?? (nextVariant === 'danger' ? 2200 : resultDurationMs));
+      });
+    },
+    [clearResultTimeout, resultDurationMs],
+  );
+
+  const runBlockingAction = useCallback(
+    async <Result,>(
+      actionKey: BlockingActionKey,
+      action: () => Promise<Result>,
+    ): Promise<Result> => {
+      clearResultTimeout();
+      setResultOverlay(null);
+      setBusyActionKey(actionKey);
+
+      try {
+        return await action();
+      } finally {
+        setBusyActionKey(null);
+      }
+    },
+    [clearResultTimeout],
+  );
+
+  const loadingCopy = busyActionKey ? BLOCKING_ACTION_FEEDBACK[busyActionKey] : null;
+  const overlayCopy = resultOverlay ?? loadingCopy;
+  const overlayProps: ActionFeedbackOverlayProps = {
+    message: overlayCopy?.message,
+    title: overlayCopy?.title ?? 'Procesando accion',
+    variant: resultOverlay?.variant ?? 'loading',
+    visible: Boolean(resultOverlay) || showBusyOverlay,
+  };
+
+  return {
+    clear,
+    overlayProps,
+    runBlockingAction,
+    showResult,
+  };
 }
 
 function resolveBlockedAction(

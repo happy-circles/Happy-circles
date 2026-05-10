@@ -1,3 +1,5 @@
+import { triggerAppSuccessHaptic } from './app-haptics';
+
 type GlobalFeedbackTone = 'success' | 'neutral';
 
 export interface GlobalFeedbackPayload {
@@ -19,5 +21,9 @@ export function subscribeGlobalFeedback(listener: GlobalFeedbackListener) {
 }
 
 export function showGlobalFeedback(payload: GlobalFeedbackPayload) {
+  if (payload.tone === 'success' || !payload.tone) {
+    triggerAppSuccessHaptic();
+  }
+
   listeners.forEach((listener) => listener(payload));
 }

@@ -1,3 +1,25 @@
+export {
+  ANALYTICS_EVENT_CATALOG,
+  ANALYTICS_EVENT_FAMILIES,
+  ANALYTICS_EVENT_KINDS,
+  ANALYTICS_EVENT_NAMES,
+  ANALYTICS_FEATURE_KEYS,
+  ANALYTICS_METADATA_KEYS,
+  ANALYTICS_SCREEN_NAMES,
+  getAllowedAnalyticsMetadataKeys,
+  getAnalyticsEventCatalogEntry,
+  isAnalyticsMetadataKeyAllowed,
+} from './analytics';
+export type {
+  AnalyticsEventFamily,
+  AnalyticsEventCatalogEntry,
+  AnalyticsEventKind,
+  AnalyticsEventName,
+  AnalyticsFeatureKey,
+  AnalyticsMetadataKey,
+  AnalyticsScreenName,
+} from './analytics';
+
 export const CURRENCY_CODE = 'COP' as const;
 
 export type CurrencyCode = typeof CURRENCY_CODE;
@@ -52,6 +74,16 @@ export const PROPOSAL_STATUSES = [
 ] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
+export const HAPPY_CIRCLE_CASE_STATUSES = ['active', 'completed', 'closed'] as const;
+export type HappyCircleCaseStatus = (typeof HAPPY_CIRCLE_CASE_STATUSES)[number];
+
+export const SETTLEMENT_STALE_REASONS = [
+  'balance_changed',
+  'related_execution_changed_balance',
+  'participant_set_changed',
+] as const;
+export type SettlementStaleReason = (typeof SETTLEMENT_STALE_REASONS)[number];
+
 export const PARTICIPANT_DECISIONS = ['pending', 'approved', 'rejected'] as const;
 export type ParticipantDecision = (typeof PARTICIPANT_DECISIONS)[number];
 
@@ -103,6 +135,7 @@ export const AUDIT_ENTITY_TYPES = [
   'relationship',
   'financial_request',
   'ledger_transaction',
+  'happy_circle_case',
   'settlement_proposal',
   'settlement_execution',
   'user_profile',
@@ -138,46 +171,15 @@ export const AUDIT_EVENT_NAMES = [
   'settlement_approved',
   'settlement_rejected',
   'settlement_executed',
+  'happy_circle_case.created',
+  'happy_circle_case.version_created',
+  'happy_circle_case.version_replaced',
+  'happy_circle_case.version_stale',
+  'happy_circle_case.version_approved',
+  'happy_circle_case.version_executed',
   'account_deletion_completed',
 ] as const;
 export type AuditEventName = (typeof AUDIT_EVENT_NAMES)[number];
-
-export const ANALYTICS_EVENT_NAMES = [
-  'app_opened',
-  'app_backgrounded',
-  'screen_viewed',
-  'registration_started',
-  'registration_completed',
-  'financial_request_started',
-  'financial_request_created',
-  'financial_request_accepted',
-  'friendship_invite_created',
-  'friendship_invite_accepted',
-  'settlement_proposal_viewed',
-  'settlement_proposal_approved',
-  'settlement_executed',
-] as const;
-export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
-
-export const ANALYTICS_SCREEN_NAMES = [
-  'activity',
-  'auth',
-  'balance_overview',
-  'circles',
-  'home',
-  'invite',
-  'join',
-  'people',
-  'person_detail',
-  'profile',
-  'register',
-  'reset_password',
-  'setup_account',
-  'settlement_detail',
-  'transactions',
-  'unknown',
-] as const;
-export type AnalyticsScreenName = (typeof ANALYTICS_SCREEN_NAMES)[number];
 
 export const SUPPORT_ERROR_KINDS = [
   'edge_function',

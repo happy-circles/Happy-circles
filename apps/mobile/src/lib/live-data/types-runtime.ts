@@ -5,6 +5,7 @@ import type {
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import type { Database, TransactionCategory } from '@happy-circles/shared';
+import type { SettlementVersionTimelineItemDto } from './settlement-version-types';
 
 export type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
 export type NonNullFields<T, K extends keyof T> = Omit<T, K> & {
@@ -129,6 +130,12 @@ export interface TimelineEventDraft {
 
 export interface SettlementDetailDto {
   readonly id: string;
+  readonly happyCircleCaseId: string | null;
+  readonly versionNumber: number | null;
+  readonly isCurrentVersion: boolean;
+  readonly replacesProposalId: string | null;
+  readonly replacedByProposalId: string | null;
+  readonly staleReason: string | null;
   readonly status: string;
   readonly snapshotHash: string;
   readonly participants: readonly string[];
@@ -138,6 +145,7 @@ export interface SettlementDetailDto {
   readonly movements: readonly string[];
   readonly impactLines: readonly string[];
   readonly explainers: readonly string[];
+  readonly timeline: readonly SettlementVersionTimelineItemDto[];
 }
 
 export interface AccountDeletionRequestResult {

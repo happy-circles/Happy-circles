@@ -84,6 +84,21 @@ export function DashboardScreen() {
 
     return keys;
   }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
+  const newCircleProposalIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const item of pendingSection?.items ?? []) {
+      if (
+        item.kind === 'settlement_proposal' &&
+        item.category === 'cycle' &&
+        !notificationViewedKeys.has(notificationViewKeyForItem(item))
+      ) {
+        ids.add(item.originSettlementProposalId ?? item.id);
+      }
+    }
+
+    return ids;
+  }, [notificationViewedKeys, pendingSection?.items]);
   const transactionPreview = buildDashboardTransactionPreview({
     historyItems: historySection?.items ?? [],
     limit: TRANSACTION_PREVIEW_LIMIT,
@@ -244,8 +259,10 @@ export function DashboardScreen() {
       {balanceOverview && balanceAnalytics ? (
         <BalanceLensCarousel
           analytics={balanceAnalytics}
+          currentUserId={session.userId}
           happyFacesClosedCount={happyCircleClosedCount}
           happyFacesTotal={happyCircleFaces}
+          newCircleProposalIds={newCircleProposalIds}
           onCategoryPress={(category, period) =>
             pushRoute(router, `/categories?category=${category}&period=${period}` as Href)
           }

@@ -23,6 +23,7 @@ import {
   TRANSACTION_CATEGORIES,
   TRANSACTION_SOURCE_TYPES,
   TRANSACTION_TYPES,
+  isAnalyticsMetadataKeyAllowed,
 } from './enums';
 
 export const uuidSchema = z.string().uuid();
@@ -94,13 +95,49 @@ export const startAppSessionSchema = z.object({
   startedAt: z.string().datetime({ offset: true }),
 });
 
-export const recordProductEventSchema = z.object({
+function validateAnalyticsMetadataForEvent(
+  value: {
+    readonly eventName: z.infer<typeof analyticsEventNameSchema>;
+    readonly metadata: z.infer<typeof analyticsMetadataSchema>;
+  },
+  context: z.RefinementCtx,
+): void {
+  for (const key of Object.keys(value.metadata)) {
+    if (!isAnalyticsMetadataKeyAllowed(value.eventName, key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Metadata key ${key} is not allowed for ${value.eventName}.`,
+        path: ['metadata', key],
+      });
+    }
+  }
+}
+
+const productAnalyticsEventBaseSchema = z.object({
   clientEventId: z.string().trim().min(8).max(180),
-  sessionId: uuidSchema,
   eventName: analyticsEventNameSchema,
   occurredAt: z.string().datetime({ offset: true }),
   screenName: analyticsScreenNameSchema.nullable().optional(),
   metadata: analyticsMetadataSchema.default({}),
+});
+
+export const productAnalyticsEventSchema = productAnalyticsEventBaseSchema.superRefine(
+  (value, context) => {
+    validateAnalyticsMetadataForEvent(value, context);
+  },
+);
+
+export const recordProductEventSchema = productAnalyticsEventBaseSchema
+  .extend({
+    sessionId: uuidSchema,
+  })
+  .superRefine((value, context) => {
+    validateAnalyticsMetadataForEvent(value, context);
+  });
+
+export const ingestProductAnalyticsSchema = z.object({
+  clientSession: startAppSessionSchema,
+  events: z.array(productAnalyticsEventSchema).max(20).default([]),
 });
 
 export const supportErrorMetadataSchema = z

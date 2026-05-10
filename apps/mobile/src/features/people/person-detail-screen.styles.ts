@@ -126,7 +126,6 @@ export const personDetailScreenStyles = StyleSheet.create({
   panelScrollContent: {
     flexGrow: 1,
     gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
   },
   tabBar: {
     alignItems: 'stretch',

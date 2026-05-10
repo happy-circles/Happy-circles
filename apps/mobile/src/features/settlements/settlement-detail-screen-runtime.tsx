@@ -14,13 +14,16 @@ import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
-import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import {
+  showBlockedActionAlert,
+  useActionFeedbackOverlay,
+  useFeedbackSnackbar,
+} from '@/lib/action-feedback';
 import { recordProductEventSafe } from '@/lib/analytics-client';
 import {
   triggerAppActionHaptic,
   triggerAppErrorHaptic,
   triggerAppSelectionHaptic,
-  triggerAppSuccessHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
@@ -38,22 +41,15 @@ import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
+import { CardTimeline, type CardTone } from '@/components/card-shell';
 
 export interface SettlementDetailScreenProps {
   readonly proposalId: string;
 }
 
-const RESULT_OVERLAY_DURATION_MS = 2200;
-
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
-}
-
-interface ActionOverlayState {
-  readonly message?: string;
-  readonly title: string;
-  readonly variant: 'success' | 'danger';
 }
 
 function readResultStatus(value: unknown): string | null {
@@ -71,6 +67,26 @@ function readNestedStatus(value: unknown, key: string): string | null {
   }
 
   return readResultStatus((value as Record<string, unknown>)[key]);
+}
+
+function versionTimelineTone(status: string): CardTone {
+  if (status === 'executed') {
+    return 'success';
+  }
+
+  if (status === 'approved') {
+    return 'cycle';
+  }
+
+  if (status === 'pending_approvals') {
+    return 'warning';
+  }
+
+  if (status === 'rejected') {
+    return 'danger';
+  }
+
+  return 'neutral';
 }
 
 function orderParticipantsForCircle(
@@ -320,12 +336,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
-  const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [graphFocused, setGraphFocused] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
-  const showBusyOverlay = useDelayedBusy(Boolean(busyAction));
+  const actionFeedback = useActionFeedbackOverlay();
   const viewedProposalIdRef = useRef<string | null>(null);
-  const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const settlement = snapshotQuery.data?.settlementsById[proposalId] ?? null;
 
@@ -342,58 +356,34 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     });
   }, [proposalId, settlement?.status]);
 
-  useEffect(
-    () => () => {
-      if (resultOverlayTimeoutRef.current) {
-        clearTimeout(resultOverlayTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  function showActionOverlay(nextOverlay: ActionOverlayState) {
-    if (resultOverlayTimeoutRef.current) {
-      clearTimeout(resultOverlayTimeoutRef.current);
-    }
-
-    setActionOverlay(nextOverlay);
-
-    return new Promise<void>((resolve) => {
-      resultOverlayTimeoutRef.current = setTimeout(() => {
-        setActionOverlay(null);
-        resultOverlayTimeoutRef.current = null;
-        resolve();
-      }, RESULT_OVERLAY_DURATION_MS);
-    });
-  }
-
   async function handleAction(action: 'approve' | 'reject') {
     triggerAppActionHaptic();
     setBusyAction(action);
     setBanner(null);
-    setActionOverlay(null);
+    actionFeedback.clear();
 
     try {
       if (action === 'approve') {
-        const response = await approveSettlement.mutateAsync(proposalId);
+        const response = await actionFeedback.runBlockingAction('approveSettlement', () =>
+          approveSettlement.mutateAsync(proposalId),
+        );
         const nextStatus = readResultStatus(response);
         if (nextStatus === 'stale') {
           triggerAppWarningHaptic();
           setBanner({
-            message: 'Este Circle fue reemplazado porque el grafo cambio.',
+            message: 'Esta version fue reemplazada porque los saldos cambiaron.',
             tone: 'warning',
           });
         } else {
-          triggerAppSuccessHaptic();
           const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
-          await showActionOverlay({
+          await actionFeedback.showResult({
             message:
               nextStatus === 'executed'
                 ? nextAutoCycleStatus === 'queued'
-                  ? 'La transaccion quedo confirmada. Estamos buscando el siguiente en segundo plano.'
-                  : 'La transaccion quedo confirmada.'
-                : 'Tu aprobacion quedo registrada.',
-            title: nextStatus === 'executed' ? 'Happy Circle completado' : 'Decision guardada',
+                  ? 'Siguiente Circle'
+                  : 'Happy Circle completado'
+                : 'Decision guardada',
+            title: 'Listo',
             variant: 'success',
           });
         }
@@ -403,7 +393,6 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         showSnackbar('Happy Circle no aprobado.', 'neutral');
       }
     } catch (error) {
-      triggerAppErrorHaptic();
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la accion.';
       if (
@@ -419,11 +408,16 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         return;
       }
 
-      await showActionOverlay({
-        message: nextMessage,
-        title: 'No se pudo completar',
-        variant: 'danger',
-      });
+      if (action === 'approve') {
+        await actionFeedback.showResult({
+          message: 'Intenta nuevamente',
+          title: 'No se pudo',
+          variant: 'danger',
+        });
+      } else {
+        triggerAppErrorHaptic();
+        showSnackbar(nextMessage, 'danger');
+      }
     } finally {
       setBusyAction(null);
     }
@@ -489,6 +483,16 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     status: settlement.status,
   });
   const summaryText = presentation.summary;
+  const replacementProposalId = settlement.replacedByProposalId;
+  const versionTimelineSteps = settlement.timeline.map((item) => ({
+    id: item.proposalId,
+    title: item.title,
+    detail: item.detail,
+    amountLabel: formatCop(item.amountMinor),
+    meta: item.isCurrent ? 'Version actual' : null,
+    tone: versionTimelineTone(item.status),
+  }));
+
   return (
     <ScreenShell
       eyebrow="Happy Circle"
@@ -503,12 +507,31 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
       <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
-        <StatusChip
-          label={presentation.label}
-          tone={presentation.tone}
-        />
+        <StatusChip label={presentation.label} tone={presentation.tone} />
         <AppText style={styles.summaryTitle}>Que pasa con este Happy Circle</AppText>
         <AppText style={styles.summaryBody}>{summaryText}</AppText>
+      </SurfaceCard>
+
+      <SurfaceCard padding="lg" style={styles.timelineCard} variant="elevated">
+        <View style={styles.timelineHeader}>
+          <AppText style={styles.timelineTitle}>Historial de versiones</AppText>
+          <AppText style={styles.timelineSubtitle}>
+            Cada cambio de saldos crea una version nueva que necesita aprobacion.
+          </AppText>
+        </View>
+        <CardTimeline steps={versionTimelineSteps} />
+        {replacementProposalId ? (
+          <View style={styles.replacementAction}>
+            <PrimaryAction
+              label="Ver nueva version"
+              onPress={() => {
+                triggerAppSelectionHaptic();
+                router.push(`/settlements/${replacementProposalId}`);
+              }}
+              variant="secondary"
+            />
+          </View>
+        ) : null}
       </SurfaceCard>
 
       <SurfaceCard padding="lg" style={styles.circleGraphCard} variant="elevated">
@@ -591,14 +614,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           </View>
         </View>
       ) : null}
-      <LoadingOverlay
-        message={
-          actionOverlay?.message ?? 'No salgas de esta pantalla mientras registramos la decision.'
-        }
-        title={actionOverlay?.title ?? 'Procesando transaccion'}
-        variant={actionOverlay?.variant ?? 'loading'}
-        visible={showBusyOverlay || Boolean(actionOverlay)}
-      />
+      <LoadingOverlay {...actionFeedback.overlayProps} />
     </ScreenShell>
   );
 }

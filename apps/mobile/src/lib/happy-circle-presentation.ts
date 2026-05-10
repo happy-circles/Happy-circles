@@ -86,7 +86,7 @@ export function resolveHappyCirclePresentation({
       actionability: 'closed',
       key: 'stale',
       label: 'Reemplazado',
-      summary: 'Este Circle fue reemplazado por cambios nuevos.',
+      summary: 'Esta version fue reemplazada porque los saldos cambiaron.',
       tone: 'neutral',
     };
   }

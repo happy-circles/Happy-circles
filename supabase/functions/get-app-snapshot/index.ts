@@ -192,6 +192,11 @@ const SETTLEMENT_PROPOSAL_SELECT = [
   'anchor_user_high_id',
   'currency_code',
   'source_graph_cycle_job_id',
+  'happy_circle_case_id',
+  'version_number',
+  'replaces_proposal_id',
+  'replaced_by_proposal_id',
+  'stale_reason',
   'created_at',
   'updated_at',
   'executed_at',
@@ -248,10 +253,7 @@ type QueryResult<T> = {
   readonly error: { readonly message: string } | null;
 };
 
-async function expectRows<T>(
-  query: PromiseLike<QueryResult<T>>,
-  label: string,
-): Promise<T[]> {
+async function expectRows<T>(query: PromiseLike<QueryResult<T>>, label: string): Promise<T[]> {
   const { data, error } = await query;
   if (error) {
     throw new Error(`${label}: ${error.message}`);
@@ -562,10 +564,7 @@ Deno.serve((request) =>
     const friendshipInviteIds = friendshipInvites.map((invite) => invite.id);
     const accountInviteIds = accountInvites.map((invite) => invite.id);
 
-    const [
-      friendshipInviteDeliveries,
-      accountInviteDeliveries,
-    ] = await Promise.all([
+    const [friendshipInviteDeliveries, accountInviteDeliveries] = await Promise.all([
       friendshipInviteIds.length === 0
         ? Promise.resolve([])
         : expectRows<Record<string, unknown>>(
@@ -588,9 +587,32 @@ Deno.serve((request) =>
           ),
     ]);
 
-    const settlementProposals = mergeRowsById(
-      activeSettlementProposals as { readonly id: string }[],
-      historicalSettlementProposals as { readonly id: string }[],
+    let settlementProposals = mergeRowsById(
+      activeSettlementProposals as (Record<string, unknown> & { readonly id: string })[],
+      historicalSettlementProposals as (Record<string, unknown> & { readonly id: string })[],
+    );
+    const settlementCaseIds = Array.from(
+      new Set(
+        settlementProposals
+          .map((proposal) => proposal.happy_circle_case_id)
+          .filter((caseId): caseId is string => typeof caseId === 'string' && caseId.length > 0),
+      ),
+    );
+    const caseSettlementProposals =
+      settlementCaseIds.length === 0
+        ? []
+        : await expectRows<Record<string, unknown>>(
+            client
+              .from('settlement_proposals')
+              .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
+              .eq('settlement_proposal_participants.participant_user_id', actorUserId)
+              .in('happy_circle_case_id', settlementCaseIds)
+              .order('version_number', { ascending: true }),
+            'settlement_proposal_versions',
+          );
+    settlementProposals = mergeRowsById(
+      settlementProposals,
+      caseSettlementProposals as (Record<string, unknown> & { readonly id: string })[],
     );
     const settlementProposalIds = settlementProposals.map((proposal) => proposal.id);
     const settlementParticipants =
@@ -626,7 +648,12 @@ Deno.serve((request) =>
     }
 
     for (const invite of friendshipInvites) {
-      addIds(visibleUserIds, invite.inviter_user_id, invite.target_user_id, invite.claimant_user_id);
+      addIds(
+        visibleUserIds,
+        invite.inviter_user_id,
+        invite.target_user_id,
+        invite.claimant_user_id,
+      );
     }
 
     for (const delivery of friendshipInviteDeliveries) {

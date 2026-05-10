@@ -8,7 +8,6 @@ export type PersonSegmentKey = 'pending' | 'history';
 export type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
 
 export const PERSON_SEGMENT_KEYS: readonly PersonSegmentKey[] = ['pending', 'history'];
-export const RESULT_OVERLAY_DURATION_MS = 2200;
 
 export function readResultStatus(value: unknown): string | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

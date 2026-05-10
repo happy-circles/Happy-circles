@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
 import { HappyCircleRing, happyCircleDecisionColor } from '@/components/happy-circle-ring';
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { PrimaryAction } from '@/components/primary-action';
 import { StatusChip } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
@@ -16,10 +17,11 @@ import {
   triggerAppActionHaptic,
   triggerAppErrorHaptic,
   triggerAppSelectionHaptic,
-  triggerAppSuccessHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
 import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation';
+import { showBlockedActionAlert, useActionFeedbackOverlay } from '@/lib/action-feedback';
+import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useApproveSettlementMutation, useRejectSettlementMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
@@ -51,9 +53,11 @@ export interface HappyCircleCardProps {
 }
 
 export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardProps) {
+  const router = useRouter();
   const session = useSession();
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
+  const actionFeedback = useActionFeedbackOverlay();
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
 
   const ringSize = variant === 'full' ? 168 : 118;
@@ -80,17 +84,53 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
   async function handleAction(action: 'approve' | 'reject') {
     triggerAppActionHaptic();
     setBusyAction(action);
+    actionFeedback.clear();
+
     try {
       if (action === 'approve') {
-        await approveSettlement.mutateAsync(proposal.proposalId);
-        triggerAppSuccessHaptic();
+        await actionFeedback.runBlockingAction('approveSettlement', () =>
+          approveSettlement.mutateAsync(proposal.proposalId),
+        );
+        await actionFeedback.showResult({
+          message: 'Decision guardada',
+          title: 'Listo',
+          variant: 'success',
+        });
       } else {
         await rejectSettlement.mutateAsync(proposal.proposalId);
         triggerAppWarningHaptic();
+        showGlobalFeedback({
+          message: 'No se aplicara ningun movimiento desde este Circle.',
+          title: 'Happy Circle no aprobado',
+          tone: 'neutral',
+        });
       }
-    } catch {
-      triggerAppErrorHaptic();
-      // Errors handled globally or ignored for this simplified inline view
+    } catch (error) {
+      const nextMessage =
+        error instanceof Error ? error.message : 'No se pudo completar la accion.';
+      if (
+        showBlockedActionAlert(nextMessage, router, {
+          hasEmailPassword: session.linkedMethods.hasEmailPassword,
+          profile: {
+            displayName: session.profile?.display_name ?? null,
+            avatarPath: session.profile?.avatar_path ?? null,
+            phoneE164: session.profile?.phone_e164 ?? null,
+          },
+        })
+      ) {
+        return;
+      }
+
+      if (action === 'approve') {
+        await actionFeedback.showResult({
+          message: 'Intenta nuevamente',
+          title: 'No se pudo',
+          variant: 'danger',
+        });
+      } else {
+        triggerAppErrorHaptic();
+        Alert.alert('No se pudo completar', nextMessage);
+      }
     } finally {
       setBusyAction(null);
     }
@@ -200,6 +240,7 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
           />
         </View>
       ) : null}
+      <LoadingOverlay {...actionFeedback.overlayProps} />
     </SurfaceCard>
   );
 }

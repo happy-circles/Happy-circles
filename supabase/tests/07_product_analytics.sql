@@ -147,7 +147,7 @@ begin
         metadata_json ? 'email'
         or metadata_json ? 'nested'
         or metadata_json ->> 'route' <> 'home'
-        or metadata_json ->> 'category' <> 'food_drinks'
+        or metadata_json ? 'category'
       )
   ) then
     raise exception 'expected product event metadata to be sanitized';

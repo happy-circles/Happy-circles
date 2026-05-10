@@ -3,8 +3,10 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
+  readonly loop?: boolean;
   readonly onChange: (value: T) => void;
   readonly onInteractionStateChange?: (isInteracting: boolean) => void;
+  readonly onProgressChange?: (progress: SwipePagerProgress<T>) => void;
   readonly onPreviewChange?: (value: T) => void;
   readonly pageStyle?: StyleProp<ViewStyle>;
   readonly renderPage: (value: T, index: number) => ReactNode;
@@ -14,6 +16,12 @@ export interface SwipePagerProps<T extends string> {
   readonly values: readonly T[];
 }
 
+export type SwipePagerProgress<T extends string> = {
+  readonly from: T;
+  readonly progress: number;
+  readonly to: T;
+};
+
 function clampIndex(index: number, maxIndex: number): number {
   return Math.min(Math.max(index, 0), Math.max(maxIndex, 0));
 }
@@ -21,6 +29,7 @@ function clampIndex(index: number, maxIndex: number): number {
 export function SwipePager<T extends string>({
   accessibilityLabel,
   onInteractionStateChange,
+  onProgressChange,
   onPreviewChange,
   pageStyle,
   renderPage,
@@ -38,8 +47,9 @@ export function SwipePager<T extends string>({
   useEffect(() => {
     if (activeValue) {
       onPreviewChange?.(activeValue);
+      onProgressChange?.({ from: activeValue, progress: 0, to: activeValue });
     }
-  }, [activeValue, onPreviewChange]);
+  }, [activeValue, onPreviewChange, onProgressChange]);
 
   return (
     <View accessibilityLabel={accessibilityLabel} style={[styles.root, style]}>

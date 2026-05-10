@@ -13,7 +13,7 @@ import { isHistoryRowVisibleToCurrentUser } from './builders/relationship-histor
 import {
   buildActiveSettlementPreviews,
   buildPendingSettlementItems,
-  buildSettlementDetail,
+  buildSettlementDetailsById,
   buildSettlementMetrics,
 } from './builders/settlements';
 import { buildActivitySections, LIVE_DATA_ROUTES } from './presentation';
@@ -35,11 +35,15 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
   const snapshotNowMs = Number.isNaN(fetchedAtMs) ? 0 : fetchedAtMs;
   const snapshotNow = new Date(snapshotNowMs);
   const context = buildLiveSnapshotContext(input);
-  const notificationViewedKeys = new Set(input.notificationViews.map((view) => view.notification_key));
+  const notificationViewedKeys = new Set(
+    input.notificationViews.map((view) => view.notification_key),
+  );
   const history = input.history.filter((row) =>
     isHistoryRowVisibleToCurrentUser(row, input.currentUserId, context.visibleRelationshipIds),
   );
-  const openDebtsByRelationshipId = new Map(input.openDebts.map((row) => [row.relationship_id, row]));
+  const openDebtsByRelationshipId = new Map(
+    input.openDebts.map((row) => [row.relationship_id, row]),
+  );
   const requestsByRelationshipId = groupBy(input.financialRequests, (row) => row.relationship_id);
   const financialRequestsById = new Map(
     input.financialRequests.map((request) => [request.id, request]),
@@ -138,18 +142,13 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       totalOwedToMeMinor: 0,
     },
   );
-  const settlementsById = Object.fromEntries(
-    input.settlementProposals.map((proposal) => [
-      proposal.id,
-      buildSettlementDetail(
-        proposal,
-        settlementParticipantsByProposalId.get(proposal.id) ?? [],
-        context.nameByUserId,
-        input.currentUserId,
-        context.visibleCounterpartyUserIds,
-      ),
-    ]),
-  );
+  const settlementsById = buildSettlementDetailsById({
+    proposals: input.settlementProposals,
+    participantsByProposalId: settlementParticipantsByProposalId,
+    names: context.nameByUserId,
+    currentUserId: input.currentUserId,
+    visibleCounterpartyUserIds: context.visibleCounterpartyUserIds,
+  });
   const activeProposals = buildActiveSettlementPreviews({
     proposals: input.settlementProposals,
     participantsByProposalId: settlementParticipantsByProposalId,
@@ -222,7 +221,10 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       ? {
           displayName: currentUserProfileRow.display_name,
           email: currentUserProfileRow.email,
-          avatarUrl: resolveAvatarUrl(currentUserProfileRow.avatar_path, currentUserProfileRow.updated_at),
+          avatarUrl: resolveAvatarUrl(
+            currentUserProfileRow.avatar_path,
+            currentUserProfileRow.updated_at,
+          ),
         }
       : null,
     happyCircleScore,

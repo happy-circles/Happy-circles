@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
@@ -19,7 +19,11 @@ import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { Snackbar } from '@/components/snackbar';
 import { SwipePager } from '@/components/swipe-pager';
-import { showBlockedActionAlert, useDelayedBusy, useFeedbackSnackbar } from '@/lib/action-feedback';
+import {
+  showBlockedActionAlert,
+  useActionFeedbackOverlay,
+  useFeedbackSnackbar,
+} from '@/lib/action-feedback';
 import * as appHaptics from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
 import {
@@ -65,7 +69,6 @@ import {
 import { useSession } from '@/providers/session-provider';
 import {
   PERSON_SEGMENT_KEYS,
-  RESULT_OVERLAY_DURATION_MS,
   buildFinancialRequestPendingContent,
   buildFocusCandidates,
   buildPersonRegisterHref,
@@ -96,12 +99,6 @@ export interface PersonDetailScreenProps {
 interface BannerState {
   readonly message: string;
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
-}
-
-interface ActionOverlayState {
-  readonly message?: string;
-  readonly title: string;
-  readonly variant: 'success' | 'danger';
 }
 
 interface AmendmentErrors {
@@ -136,23 +133,19 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
   const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
-  const [actionOverlay, setActionOverlay] = useState<ActionOverlayState | null>(null);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const [focusedLandingActive, setFocusedLandingActive] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
-  const showBusyOverlay = useDelayedBusy(Boolean(busyKey));
-  const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actionFeedback = useActionFeedbackOverlay();
   const topInset = Math.max(0, insets.top);
-  const bottomInset = Math.max(0, insets.bottom);
   const screenContentStyle = useMemo(
     () => [
       styles.screenContent,
       {
-        paddingBottom: Math.max(theme.spacing.sm, bottomInset + theme.spacing.sm),
         paddingTop: topInset + theme.spacing.xs,
       },
     ],
-    [bottomInset, topInset],
+    [topInset],
   );
   const pendingItems = person?.pendingItems ?? [];
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
@@ -184,15 +177,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   useEffect(() => {
     setVisualPanelSegment(panelSegment);
   }, [panelSegment]);
-
-  useEffect(
-    () => () => {
-      if (resultOverlayTimeoutRef.current) {
-        clearTimeout(resultOverlayTimeoutRef.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     if (!activeAmendmentItemId || !pendingItems.some((item) => item.id === activeAmendmentItemId)) {
@@ -313,22 +297,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     };
   }, [focusItemId, focusedLandingKey]);
 
-  function showActionOverlay(nextOverlay: ActionOverlayState) {
-    if (resultOverlayTimeoutRef.current) {
-      clearTimeout(resultOverlayTimeoutRef.current);
-    }
-
-    setActionOverlay(nextOverlay);
-
-    return new Promise<void>((resolve) => {
-      resultOverlayTimeoutRef.current = setTimeout(() => {
-        setActionOverlay(null);
-        resultOverlayTimeoutRef.current = null;
-        resolve();
-      }, RESULT_OVERLAY_DURATION_MS);
-    });
-  }
-
   function toggleAmendment(item: ActivityItemDto) {
     appHaptics.triggerAppSelectionHaptic();
     if (activeAmendmentItemId === item.id) {
@@ -419,22 +387,28 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     action: PendingActionKey,
   ) {
     const key = `${itemId}:${action}`;
+    const blockingActionKey =
+      kind === 'financial_request' && action === 'accept'
+        ? 'acceptFinancialRequest'
+        : kind === 'settlement_proposal' && status === 'pending_approvals' && action === 'approve'
+          ? 'approveSettlement'
+          : kind === 'settlement_proposal' && status === 'approved' && action === 'execute'
+            ? 'executeSettlement'
+            : null;
     setBusyKey(key);
     setBanner(null);
-    setActionOverlay(null);
+    actionFeedback.clear();
 
     try {
       if (kind === 'financial_request') {
         if (action === 'accept') {
-          const response = await acceptRequest.mutateAsync(itemId);
+          const response = await actionFeedback.runBlockingAction('acceptFinancialRequest', () =>
+            acceptRequest.mutateAsync(itemId),
+          );
           const autoCycleStatus = readNestedStatus(response, 'autoCycleJob');
-          appHaptics.triggerAppSuccessHaptic();
-          await showActionOverlay({
-            message:
-              autoCycleStatus === 'queued'
-                ? 'Estamos buscando Happy Circles en segundo plano.'
-                : 'La transaccion quedo confirmada.',
-            title: 'Propuesta aceptada',
+          await actionFeedback.showResult({
+            message: autoCycleStatus === 'queued' ? 'Buscando Circle' : 'Propuesta aceptada',
+            title: 'Listo',
             variant: 'success',
           });
         } else {
@@ -447,22 +421,20 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
       if (kind === 'settlement_proposal' && status === 'pending_approvals') {
         if (action === 'approve') {
-          const response = await approveSettlement.mutateAsync(itemId);
+          const response = await actionFeedback.runBlockingAction('approveSettlement', () =>
+            approveSettlement.mutateAsync(itemId),
+          );
           const nextStatus = readResultStatus(response);
           if (nextStatus === 'stale') {
             appHaptics.triggerAppWarningHaptic();
             setBanner({
-              message: 'La propuesta quedo obsoleta porque el grafo cambio.',
+              message: 'Esta version fue reemplazada porque los saldos cambiaron.',
               tone: 'warning',
             });
           } else {
-            appHaptics.triggerAppSuccessHaptic();
-            await showActionOverlay({
-              message:
-                nextStatus === 'approved'
-                  ? 'Todos aceptaron. El Happy Circle quedo listo.'
-                  : 'Tu aprobacion quedo registrada.',
-              title: 'Decision guardada',
+            await actionFeedback.showResult({
+              message: nextStatus === 'approved' ? 'Happy Circle listo' : 'Decision guardada',
+              title: 'Listo',
               variant: 'success',
             });
           }
@@ -475,20 +447,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       }
 
       if (kind === 'settlement_proposal' && status === 'approved' && action === 'execute') {
-        const response = await executeSettlement.mutateAsync(itemId);
+        const response = await actionFeedback.runBlockingAction('executeSettlement', () =>
+          executeSettlement.mutateAsync(itemId),
+        );
         const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
-        appHaptics.triggerAppSuccessHaptic();
-        await showActionOverlay({
-          message:
-            nextStatus === 'queued'
-              ? 'Estamos buscando el siguiente en segundo plano.'
-              : 'La transaccion quedo confirmada.',
-          title: 'Happy Circle completado',
+        await actionFeedback.showResult({
+          message: nextStatus === 'queued' ? 'Siguiente Circle' : 'Happy Circle completado',
+          title: 'Listo',
           variant: 'success',
         });
       }
     } catch (error) {
-      appHaptics.triggerAppErrorHaptic();
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la accion.';
       if (
@@ -504,11 +473,19 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         return;
       }
 
-      await showActionOverlay({
-        message: nextMessage,
-        title: 'No se pudo completar',
-        variant: 'danger',
-      });
+      if (blockingActionKey) {
+        await actionFeedback.showResult({
+          message: 'Intenta nuevamente',
+          title: 'No se pudo',
+          variant: 'danger',
+        });
+      } else {
+        appHaptics.triggerAppErrorHaptic();
+        setBanner({
+          message: nextMessage,
+          tone: 'danger',
+        });
+      }
     } finally {
       setBusyKey(null);
     }
@@ -945,14 +922,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         </View>
       </View>
       <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
-      <LoadingOverlay
-        message={
-          actionOverlay?.message ?? 'No cierres esta pantalla mientras registramos la respuesta.'
-        }
-        title={actionOverlay?.title ?? 'Procesando transaccion'}
-        variant={actionOverlay?.variant ?? 'loading'}
-        visible={showBusyOverlay || Boolean(actionOverlay)}
-      />
+      <LoadingOverlay {...actionFeedback.overlayProps} />
       <AvatarViewerModal
         imageUrl={person.avatarUrl ?? null}
         label={person.displayName}

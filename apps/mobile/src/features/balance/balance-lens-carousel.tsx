@@ -22,7 +22,7 @@ import {
   SettlementsFocusCard,
 } from './balance-lens-focus-cards';
 
-const FOCUS_VALUES: readonly BalanceFocus[] = ['balance', 'categories', 'circles'];
+const FOCUS_VALUES: readonly BalanceFocus[] = ['categories', 'balance', 'circles'];
 const CAROUSEL_FOCUS_OPTIONS: readonly FocusOption[] = FOCUS_VALUES.map((value) => {
   const option = FOCUS_OPTIONS.find((candidate) => candidate.value === value);
   if (!option) {
@@ -78,10 +78,12 @@ type BalanceCarouselAnalytics = {
 
 export function BalanceLensCarousel({
   analytics,
+  currentUserId,
   happyFacesClosedCount,
   happyFacesTotal,
   initialFocus = 'balance',
   lens = 'balance',
+  newCircleProposalIds,
   onCategoryPress,
   onFocusPress,
   onHappyFacesPress,
@@ -91,10 +93,12 @@ export function BalanceLensCarousel({
   swipeEnabled = true,
 }: {
   readonly analytics: BalanceCarouselAnalytics;
+  readonly currentUserId?: string | null;
   readonly happyFacesClosedCount?: number;
   readonly happyFacesTotal?: number;
   readonly initialFocus?: BalanceFocus;
   readonly lens?: BalanceAnalyticsLens;
+  readonly newCircleProposalIds?: ReadonlySet<string>;
   readonly onCategoryPress?: (
     category: BalanceAnalyticsCategoryRowDto['category'],
     period: BalanceAnalyticsPeriod,
@@ -200,11 +204,12 @@ export function BalanceLensCarousel({
     return renderPageContent(
       focus,
       <SettlementsFocusCard
-        activeCount={currentPeriod.settlements.activeCount}
+        activeProposals={currentPeriod.settlements.activeProposals}
         changeRatio={currentPeriod.settlements.changeRatio}
-        movementCount={currentPeriod.settlements.movementCount}
+        closedCircleCount={happyFacesClosedCount}
+        currentUserId={currentUserId}
+        newCircleProposalIds={newCircleProposalIds}
         resolvedMinor={currentPeriod.settlements.resolvedMinor}
-        savedMovementsCount={currentPeriod.settlements.savedMovementsCount}
       />,
     );
   }

@@ -30,7 +30,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { ScreenFinalAction } from '@/components/screen-final-action';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
-import { showBlockedActionAlert, useDelayedBusy } from '@/lib/action-feedback';
+import { showBlockedActionAlert, useActionFeedbackOverlay } from '@/lib/action-feedback';
 import { formatCop } from '@/lib/data';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { showGlobalFeedback } from '@/lib/global-feedback';
@@ -146,7 +146,7 @@ export function RegisterFlowScreen() {
     description: { height: 0, y: 0 },
   });
   const completedSaveRef = useRef(false);
-  const showBusyOverlay = useDelayedBusy(createRequest.isPending);
+  const actionFeedback = useActionFeedbackOverlay();
 
   const allPeople = snapshotQuery.data?.people ?? [];
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
@@ -441,14 +441,16 @@ export function RegisterFlowScreen() {
 
     try {
       setBanner(null);
-      await createRequest.mutateAsync({
-        responderUserId: personId,
-        debtorUserId,
-        creditorUserId,
-        amountMinor,
-        category,
-        description: description.trim(),
-      });
+      await actionFeedback.runBlockingAction('createMovement', () =>
+        createRequest.mutateAsync({
+          responderUserId: personId,
+          debtorUserId,
+          creditorUserId,
+          amountMinor,
+          category,
+          description: description.trim(),
+        }),
+      );
 
       setAmount('');
       setCategory(DEFAULT_TRANSACTION_CATEGORY);
@@ -485,6 +487,11 @@ export function RegisterFlowScreen() {
       setBanner({
         message: nextMessage,
         tone: 'danger',
+      });
+      await actionFeedback.showResult({
+        message: 'Intenta nuevamente',
+        title: 'No se pudo',
+        variant: 'danger',
       });
     }
   }
@@ -854,7 +861,7 @@ export function RegisterFlowScreen() {
         ) : null}
       </View>
 
-      <LoadingOverlay title="Guardando movimiento" visible={showBusyOverlay} />
+      <LoadingOverlay {...actionFeedback.overlayProps} />
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
         currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}

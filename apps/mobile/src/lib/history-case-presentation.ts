@@ -63,7 +63,7 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
     }
 
     if (item.status === 'stale') {
-      return 'Este Circle fue reemplazado';
+      return 'Version reemplazada por saldos nuevos';
     }
 
     return 'Completaste un Circle!';
@@ -171,7 +171,7 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
     }
 
     if (item.status === 'stale') {
-      return 'Este Circle fue reemplazado';
+      return 'Version reemplazada';
     }
 
     if (item.status === 'posted' || item.status === 'executed') {
@@ -228,7 +228,7 @@ export function historyCaseImpactLabel<T extends HistoryCaseItem>(
   }
 
   if (itemCase.latest.status === 'stale') {
-    return 'Este Circle fue reemplazado';
+    return 'Version reemplazada por saldos nuevos';
   }
 
   return 'Completaste un Circle!';
@@ -268,7 +268,7 @@ export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCas
     }
 
     if (itemCase.latest.status === 'stale') {
-      return 'Happy Circle reemplazado';
+      return 'Version reemplazada';
     }
 
     return 'Happy Circle completado';

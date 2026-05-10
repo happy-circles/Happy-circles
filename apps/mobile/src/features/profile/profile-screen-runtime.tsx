@@ -21,6 +21,7 @@ import { AppText } from '@/components/app-text';
 import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
@@ -32,6 +33,7 @@ import {
   triggerAppSuccessHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
+import { useActionFeedbackOverlay } from '@/lib/action-feedback';
 import {
   useAppSnapshot,
   useRequestAccountDeletionMutation,
@@ -96,6 +98,7 @@ export function ProfileScreen() {
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const avatarMutation = useUpdateProfileAvatarMutation();
   const accountDeletionMutation = useRequestAccountDeletionMutation();
+  const actionFeedback = useActionFeedbackOverlay();
 
   const [message, setMessage] = useState<string | null>(null);
   const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
@@ -604,21 +607,38 @@ export function ProfileScreen() {
   }
 
   async function handleRequestAccountDeletion() {
-    await runAction('request-account-deletion', async () => {
-      if (!session.isTrustedDevice) {
-        throw new Error('Valida este dispositivo antes de eliminar tu cuenta.');
-      }
+    triggerImpactHaptic();
+    setBusyAction('request-account-deletion');
+    setMessage(null);
+    actionFeedback.clear();
 
-      const authResult = await session.stepUpAuth(true);
-      if (!authResult.success) {
-        throw new Error(formatStepUpFailure(authResult.error, session.biometricLabel));
-      }
+    try {
+      await actionFeedback.runBlockingAction('requestAccountDeletion', async () => {
+        if (!session.isTrustedDevice) {
+          throw new Error('Valida este dispositivo antes de eliminar tu cuenta.');
+        }
 
-      await accountDeletionMutation.mutateAsync();
-      await session.signOut();
+        const authResult = await session.stepUpAuth(true);
+        if (!authResult.success) {
+          throw new Error(formatStepUpFailure(authResult.error, session.biometricLabel));
+        }
 
-      return 'Tu cuenta fue eliminada. Conservamos solo el ledger y auditoria minima para integridad financiera.';
-    });
+        await accountDeletionMutation.mutateAsync();
+        triggerSuccessHaptic();
+        await session.signOut();
+      });
+    } catch (error) {
+      const failureMessage =
+        error instanceof Error ? error.message : 'No se pudo eliminar tu cuenta.';
+      setMessage(failureMessage);
+      await actionFeedback.showResult({
+        message: 'Intenta nuevamente',
+        title: 'No se pudo',
+        variant: 'danger',
+      });
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   function confirmAccountDeletion() {
@@ -1239,6 +1259,7 @@ export function ProfileScreen() {
         onClose={() => setAvatarViewerVisible(false)}
         visible={avatarViewerVisible}
       />
+      <LoadingOverlay {...actionFeedback.overlayProps} />
     </ScreenShell>
   );
 }

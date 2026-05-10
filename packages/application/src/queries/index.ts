@@ -32,6 +32,12 @@ export interface HappyCircleScoreDto {
 
 export interface ActiveSettlementPreviewDto {
   readonly proposalId: string;
+  readonly happyCircleCaseId: string | null;
+  readonly versionNumber: number | null;
+  readonly isCurrentVersion: boolean;
+  readonly replacesProposalId: string | null;
+  readonly replacedByProposalId: string | null;
+  readonly staleReason: string | null;
   readonly status: 'pending_approvals' | 'approved';
   readonly title: string;
   readonly subtitle: string;

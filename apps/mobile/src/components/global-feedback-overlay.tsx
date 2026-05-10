@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { type GlobalFeedbackPayload, subscribeGlobalFeedback } from '@/lib/global-feedback';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
@@ -11,9 +12,11 @@ const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlobalFeedbackOverlay() {
   const [feedback, setFeedback] = useState<GlobalFeedbackPayload | null>(null);
+  const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.96)).current;
+  const translateY = useRef(new Animated.Value(-12)).current;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSuccess = feedback?.tone === 'success' || !feedback?.tone;
 
   useEffect(
     () =>
@@ -24,7 +27,7 @@ export function GlobalFeedbackOverlay() {
 
         setFeedback(nextFeedback);
         opacity.setValue(0);
-        scale.setValue(0.96);
+        translateY.setValue(-12);
 
         Animated.parallel([
           Animated.timing(opacity, {
@@ -33,22 +36,30 @@ export function GlobalFeedbackOverlay() {
             toValue: 1,
             useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
-          Animated.spring(scale, {
-            damping: 16,
-            mass: 0.8,
-            stiffness: 180,
-            toValue: 1,
+          Animated.spring(translateY, {
+            damping: 18,
+            mass: 0.72,
+            stiffness: 190,
+            toValue: 0,
             useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
         ]).start();
 
         timeoutRef.current = setTimeout(() => {
-          Animated.timing(opacity, {
-            duration: 180,
-            easing: Easing.in(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-          }).start(({ finished }) => {
+          Animated.parallel([
+            Animated.timing(opacity, {
+              duration: 180,
+              easing: Easing.in(Easing.cubic),
+              toValue: 0,
+              useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+            }),
+            Animated.timing(translateY, {
+              duration: 180,
+              easing: Easing.in(Easing.cubic),
+              toValue: -8,
+              useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+            }),
+          ]).start(({ finished }) => {
             if (finished) {
               setFeedback(null);
             }
@@ -56,7 +67,7 @@ export function GlobalFeedbackOverlay() {
           timeoutRef.current = null;
         }, VISIBLE_MS);
       }),
-    [opacity, scale],
+    [opacity, translateY],
   );
 
   useEffect(
@@ -73,15 +84,24 @@ export function GlobalFeedbackOverlay() {
   }
 
   return (
-    <View pointerEvents="none" style={styles.host}>
-      <Animated.View style={[styles.card, { opacity, transform: [{ scale }] }]}>
-        <HappyCirclesMotion
-          size={112}
-          variant={feedback.tone === 'success' || !feedback.tone ? 'success' : 'idle'}
-        />
+    <View pointerEvents="none" style={[styles.host, { top: insets.top + theme.spacing.md }]}>
+      <Animated.View style={[styles.card, { opacity, transform: [{ translateY }] }]}>
+        <View style={[styles.iconShell, isSuccess ? styles.iconShellSuccess : null]}>
+          <Ionicons
+            color={isSuccess ? theme.colors.success : theme.colors.textMuted}
+            name={isSuccess ? 'checkmark' : 'information'}
+            size={22}
+          />
+        </View>
         <View style={styles.copy}>
-          <AppText style={styles.title}>{feedback.title}</AppText>
-          {feedback.message ? <AppText style={styles.message}>{feedback.message}</AppText> : null}
+          <AppText numberOfLines={1} style={styles.title}>
+            {feedback.title}
+          </AppText>
+          {feedback.message ? (
+            <AppText numberOfLines={1} style={styles.message}>
+              {feedback.message}
+            </AppText>
+          ) : null}
         </View>
       </Animated.View>
     </View>
@@ -91,43 +111,54 @@ export function GlobalFeedbackOverlay() {
 const styles = StyleSheet.create({
   host: {
     alignItems: 'center',
-    bottom: 0,
-    justifyContent: 'center',
     left: 0,
     paddingHorizontal: theme.spacing.lg,
     position: 'absolute',
     right: 0,
-    top: 0,
     zIndex: 80,
   },
   card: {
     alignItems: 'center',
+    alignSelf: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.large,
+    borderRadius: theme.radius.medium,
     borderWidth: 1,
+    flexDirection: 'row',
     gap: theme.spacing.sm,
     maxWidth: 340,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.lg,
+    minHeight: 72,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
     width: '100%',
     ...theme.shadow.floating,
   },
   copy: {
-    gap: theme.spacing.xs,
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  iconShell: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  iconShellSuccess: {
+    backgroundColor: theme.colors.successSoft,
   },
   message: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '600',
     lineHeight: 18,
-    textAlign: 'center',
   },
   title: {
     color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 20,
-    textAlign: 'center',
   },
 });

@@ -6,6 +6,7 @@ import type { AnalyticsScreenName } from '@happy-circles/shared';
 
 import {
   createAnalyticsClientSessionId,
+  flushProductAnalyticsEvents,
   recordProductEventSafe,
   resetProductAnalyticsSession,
   startProductAnalyticsSession,
@@ -154,6 +155,10 @@ export function ProductAnalyticsBridge() {
     }
 
     const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void flushProductAnalyticsEvents().catch(() => undefined);
+      }
+
       if (nextState === 'background' || nextState === 'inactive') {
         recordProductEventSafe({
           eventName: 'app_backgrounded',

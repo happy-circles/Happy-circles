@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
 export type Json =
   | string
   | number
@@ -8,33 +7,78 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          metadata_json: Json
+          processed_at: string
+          requested_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          metadata_json?: Json
+          processed_at?: string
+          requested_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          metadata_json?: Json
+          processed_at?: string
+          requested_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_invite_deliveries: {
         Row: {
           activation_completed_at: string | null
@@ -785,72 +829,6 @@ export type Database = {
           },
         ]
       }
-      happy_circle_score_events: {
-        Row: {
-          awarded_at: string
-          created_at: string
-          id: string
-          participant_count: number
-          score_delta: number
-          settlement_proposal_id: string
-          user_id: string
-        }
-        Insert: {
-          awarded_at?: string
-          created_at?: string
-          id?: string
-          participant_count: number
-          score_delta: number
-          settlement_proposal_id: string
-          user_id: string
-        }
-        Update: {
-          awarded_at?: string
-          created_at?: string
-          id?: string
-          participant_count?: number
-          score_delta?: number
-          settlement_proposal_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "happy_circle_score_events_settlement_proposal_id_fkey"
-            columns: ["settlement_proposal_id"]
-            isOneToOne: false
-            referencedRelation: "settlement_proposals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "happy_circle_score_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "happy_circle_score_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_balance_summary"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "happy_circle_score_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_private"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "happy_circle_score_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_visible"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       friendship_invite_deliveries: {
         Row: {
           channel: Database["public"]["Enums"]["friendship_invite_channel"]
@@ -1286,6 +1264,206 @@ export type Database = {
           },
         ]
       }
+      happy_circle_cases: {
+        Row: {
+          anchor_user_high_id: string
+          anchor_user_low_id: string
+          completed_at: string | null
+          created_at: string
+          created_by_user_id: string
+          currency_code: string
+          current_proposal_id: string | null
+          id: string
+          participant_set_hash: string
+          status: Database["public"]["Enums"]["happy_circle_case_status"]
+          updated_at: string
+        }
+        Insert: {
+          anchor_user_high_id: string
+          anchor_user_low_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by_user_id: string
+          currency_code?: string
+          current_proposal_id?: string | null
+          id?: string
+          participant_set_hash: string
+          status?: Database["public"]["Enums"]["happy_circle_case_status"]
+          updated_at?: string
+        }
+        Update: {
+          anchor_user_high_id?: string
+          anchor_user_low_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by_user_id?: string
+          currency_code?: string
+          current_proposal_id?: string | null
+          id?: string
+          participant_set_hash?: string
+          status?: Database["public"]["Enums"]["happy_circle_case_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_high_id_fkey"
+            columns: ["anchor_user_high_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_high_id_fkey"
+            columns: ["anchor_user_high_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_high_id_fkey"
+            columns: ["anchor_user_high_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_high_id_fkey"
+            columns: ["anchor_user_high_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_low_id_fkey"
+            columns: ["anchor_user_low_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_low_id_fkey"
+            columns: ["anchor_user_low_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_low_id_fkey"
+            columns: ["anchor_user_low_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_anchor_user_low_id_fkey"
+            columns: ["anchor_user_low_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_cases_current_proposal_id_fkey"
+            columns: ["current_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      happy_circle_score_events: {
+        Row: {
+          awarded_at: string
+          created_at: string
+          id: string
+          participant_count: number
+          score_delta: number
+          settlement_proposal_id: string
+          user_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          created_at?: string
+          id?: string
+          participant_count: number
+          score_delta: number
+          settlement_proposal_id: string
+          user_id: string
+        }
+        Update: {
+          awarded_at?: string
+          created_at?: string
+          id?: string
+          participant_count?: number
+          score_delta?: number
+          settlement_proposal_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "happy_circle_score_events_settlement_proposal_id_fkey"
+            columns: ["settlement_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "happy_circle_score_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       idempotency_keys: {
         Row: {
           actor_user_id: string
@@ -1563,6 +1741,68 @@ export type Database = {
           },
         ]
       }
+      notification_views: {
+        Row: {
+          created_at: string
+          notification_key: string
+          notification_kind: string
+          notification_status: string
+          source_item_id: string
+          updated_at: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          created_at?: string
+          notification_key: string
+          notification_kind: string
+          notification_status: string
+          source_item_id: string
+          updated_at?: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          created_at?: string
+          notification_key?: string
+          notification_kind?: string
+          notification_status?: string
+          source_item_id?: string
+          updated_at?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pair_net_edges_cache: {
         Row: {
           amount_minor: number
@@ -1794,154 +2034,6 @@ export type Database = {
           },
           {
             foreignKeyName: "product_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_visible"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      support_error_reports: {
-        Row: {
-          app_version: string | null
-          created_at: string
-          error_code: string | null
-          error_message: string
-          fatal: boolean
-          function_name: string | null
-          id: string
-          kind: string
-          metadata_json: Json
-          occurred_at: string
-          platform: string
-          request_id: string | null
-          route: string | null
-          screen_name: string | null
-          support_id: string
-          user_id: string
-        }
-        Insert: {
-          app_version?: string | null
-          created_at?: string
-          error_code?: string | null
-          error_message: string
-          fatal?: boolean
-          function_name?: string | null
-          id?: string
-          kind: string
-          metadata_json?: Json
-          occurred_at: string
-          platform: string
-          request_id?: string | null
-          route?: string | null
-          screen_name?: string | null
-          support_id: string
-          user_id: string
-        }
-        Update: {
-          app_version?: string | null
-          created_at?: string
-          error_code?: string | null
-          error_message?: string
-          fatal?: boolean
-          function_name?: string | null
-          id?: string
-          kind?: string
-          metadata_json?: Json
-          occurred_at?: string
-          platform?: string
-          request_id?: string | null
-          route?: string | null
-          screen_name?: string | null
-          support_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "support_error_reports_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "support_error_reports_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_balance_summary"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "support_error_reports_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_private"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "support_error_reports_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_visible"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notification_views: {
-        Row: {
-          created_at: string
-          notification_key: string
-          notification_kind: string
-          notification_status: string
-          source_item_id: string
-          updated_at: string
-          user_id: string
-          viewed_at: string
-        }
-        Insert: {
-          created_at?: string
-          notification_key: string
-          notification_kind: string
-          notification_status: string
-          source_item_id: string
-          updated_at?: string
-          user_id: string
-          viewed_at?: string
-        }
-        Update: {
-          created_at?: string
-          notification_key?: string
-          notification_kind?: string
-          notification_status?: string
-          source_item_id?: string
-          updated_at?: string
-          user_id?: string
-          viewed_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notification_views_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notification_views_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_balance_summary"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "notification_views_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "v_user_profiles_private"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notification_views_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "v_user_profiles_visible"
@@ -2187,11 +2279,18 @@ export type Database = {
           executed_at: string | null
           graph_snapshot: Json
           graph_snapshot_hash: string
+          happy_circle_case_id: string | null
           id: string
           movements_json: Json
+          replaced_by_proposal_id: string | null
+          replaces_proposal_id: string | null
           source_graph_cycle_job_id: string | null
+          stale_reason:
+            | Database["public"]["Enums"]["settlement_stale_reason"]
+            | null
           status: Database["public"]["Enums"]["settlement_proposal_status"]
           updated_at: string
+          version_number: number | null
         }
         Insert: {
           anchor_user_high_id?: string | null
@@ -2202,11 +2301,18 @@ export type Database = {
           executed_at?: string | null
           graph_snapshot: Json
           graph_snapshot_hash: string
+          happy_circle_case_id?: string | null
           id?: string
           movements_json: Json
+          replaced_by_proposal_id?: string | null
+          replaces_proposal_id?: string | null
           source_graph_cycle_job_id?: string | null
+          stale_reason?:
+            | Database["public"]["Enums"]["settlement_stale_reason"]
+            | null
           status?: Database["public"]["Enums"]["settlement_proposal_status"]
           updated_at?: string
+          version_number?: number | null
         }
         Update: {
           anchor_user_high_id?: string | null
@@ -2217,11 +2323,18 @@ export type Database = {
           executed_at?: string | null
           graph_snapshot?: Json
           graph_snapshot_hash?: string
+          happy_circle_case_id?: string | null
           id?: string
           movements_json?: Json
+          replaced_by_proposal_id?: string | null
+          replaces_proposal_id?: string | null
           source_graph_cycle_job_id?: string | null
+          stale_reason?:
+            | Database["public"]["Enums"]["settlement_stale_reason"]
+            | null
           status?: Database["public"]["Enums"]["settlement_proposal_status"]
           updated_at?: string
+          version_number?: number | null
         }
         Relationships: [
           {
@@ -2309,10 +2422,117 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "settlement_proposals_happy_circle_case_id_fkey"
+            columns: ["happy_circle_case_id"]
+            isOneToOne: false
+            referencedRelation: "happy_circle_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_proposals_replaced_by_proposal_id_fkey"
+            columns: ["replaced_by_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_proposals_replaces_proposal_id_fkey"
+            columns: ["replaces_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "settlement_proposals_source_graph_cycle_job_id_fkey"
             columns: ["source_graph_cycle_job_id"]
             isOneToOne: false
             referencedRelation: "graph_cycle_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_error_reports: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string
+          fatal: boolean
+          function_name: string | null
+          id: string
+          kind: string
+          metadata_json: Json
+          occurred_at: string
+          platform: string
+          request_id: string | null
+          route: string | null
+          screen_name: string | null
+          support_id: string
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message: string
+          fatal?: boolean
+          function_name?: string | null
+          id?: string
+          kind: string
+          metadata_json?: Json
+          occurred_at: string
+          platform: string
+          request_id?: string | null
+          route?: string | null
+          screen_name?: string | null
+          support_id: string
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string
+          fatal?: boolean
+          function_name?: string | null
+          id?: string
+          kind?: string
+          metadata_json?: Json
+          occurred_at?: string
+          platform?: string
+          request_id?: string | null
+          route?: string | null
+          screen_name?: string | null
+          support_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_error_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
             referencedColumns: ["id"]
           },
         ]
@@ -2395,16 +2615,22 @@ export type Database = {
           activated_via_account_invite_id: string | null
           avatar_path: string | null
           created_at: string
+          deleted_at: string | null
+          deletion_requested_at: string | null
           display_name: string
           email: string
           id: string
           invited_by_user_id: string | null
+          onboarding_completed_at: string | null
           phone_country_calling_code: string | null
           phone_country_iso2: string | null
           phone_e164: string | null
           phone_national_number: string | null
           phone_verified_at: string | null
           updated_at: string
+          welcome_email_last_error: string | null
+          welcome_email_queued_at: string | null
+          welcome_email_sent_at: string | null
         }
         Insert: {
           account_access_state?: Database["public"]["Enums"]["account_access_state"]
@@ -2412,16 +2638,22 @@ export type Database = {
           activated_via_account_invite_id?: string | null
           avatar_path?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deletion_requested_at?: string | null
           display_name: string
           email: string
           id: string
           invited_by_user_id?: string | null
+          onboarding_completed_at?: string | null
           phone_country_calling_code?: string | null
           phone_country_iso2?: string | null
           phone_e164?: string | null
           phone_national_number?: string | null
           phone_verified_at?: string | null
           updated_at?: string
+          welcome_email_last_error?: string | null
+          welcome_email_queued_at?: string | null
+          welcome_email_sent_at?: string | null
         }
         Update: {
           account_access_state?: Database["public"]["Enums"]["account_access_state"]
@@ -2429,16 +2661,22 @@ export type Database = {
           activated_via_account_invite_id?: string | null
           avatar_path?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deletion_requested_at?: string | null
           display_name?: string
           email?: string
           id?: string
           invited_by_user_id?: string | null
+          onboarding_completed_at?: string | null
           phone_country_calling_code?: string | null
           phone_country_iso2?: string | null
           phone_e164?: string | null
           phone_national_number?: string | null
           phone_verified_at?: string | null
           updated_at?: string
+          welcome_email_last_error?: string | null
+          welcome_email_queued_at?: string | null
+          welcome_email_sent_at?: string | null
         }
         Relationships: [
           {
@@ -3339,12 +3577,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      apply_cycle_settlement_execution: {
+        Args: { p_actor_user_id: string; p_proposal_id: string }
+        Returns: Json
+      }
       assert_request_actor: {
         Args: { p_actor_user_id: string }
         Returns: undefined
       }
+      auth_email_exists: { Args: { p_email: string }; Returns: boolean }
+      award_happy_circle_score: {
+        Args: { p_proposal_id: string }
+        Returns: Json
+      }
       build_friendship_claimant_snapshot: {
         Args: { p_user_id: string }
+        Returns: Json
+      }
+      cancel_account_invite: {
+        Args: {
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_invite_id: string
+        }
         Returns: Json
       }
       cancel_friendship_invite: {
@@ -3355,11 +3610,12 @@ export type Database = {
         }
         Returns: Json
       }
-      cancel_account_invite: {
+      claim_account_invite_for_registration_hash: {
         Args: {
-          p_actor_user_id: string
-          p_idempotency_key: string
-          p_invite_id: string
+          p_delivery_token_hash: string
+          p_email: string
+          p_phone_e164: string
+          p_user_id: string
         }
         Returns: Json
       }
@@ -3372,6 +3628,13 @@ export type Database = {
         Returns: Json
       }
       claim_graph_cycle_job: { Args: { p_worker_id?: string }; Returns: Json }
+      claim_welcome_email_delivery: {
+        Args: { p_actor_user_id: string }
+        Returns: {
+          display_name: string
+          email: string
+        }[]
+      }
       complete_graph_cycle_job: {
         Args: { p_job_id: string; p_result_json: Json; p_worker_id: string }
         Returns: Json
@@ -3393,6 +3656,10 @@ export type Database = {
         Returns: string
       }
       compute_graph_snapshot_hash: { Args: never; Returns: string }
+      compute_happy_circle_participant_set_hash: {
+        Args: { p_participant_user_ids: string[] }
+        Returns: string
+      }
       create_account_invite: {
         Args: {
           p_actor_user_id: string
@@ -3457,14 +3724,6 @@ export type Database = {
       current_user_is_settlement_participant: {
         Args: { p_settlement_proposal_id: string }
         Returns: boolean
-      }
-      apply_cycle_settlement_execution: {
-        Args: { p_actor_user_id: string; p_proposal_id: string }
-        Returns: Json
-      }
-      award_happy_circle_score: {
-        Args: { p_proposal_id: string }
-        Returns: Json
       }
       decide_cycle_settlement: {
         Args: {
@@ -3545,6 +3804,7 @@ export type Database = {
       generate_short_token: { Args: { p_bytes?: number }; Returns: string }
       get_account_invite_preview_public: {
         Args: {
+          p_actor_user_id?: string
           p_client_fingerprint_hash?: string
           p_delivery_token: string
           p_record_app_open?: boolean
@@ -3577,6 +3837,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      mark_happy_circle_proposal_stale: {
+        Args: {
+          p_actor_user_id: string
+          p_proposal_id: string
+          p_reason?: Database["public"]["Enums"]["settlement_stale_reason"]
+        }
+        Returns: undefined
+      }
       mark_outdated_settlement_proposals_stale: {
         Args: { p_current_graph_snapshot_hash: string }
         Returns: number
@@ -3584,6 +3852,10 @@ export type Database = {
       mark_touched_settlement_proposals_stale: {
         Args: { p_touched_user_ids: string[] }
         Returns: number
+      }
+      mark_welcome_email_sent: {
+        Args: { p_actor_user_id: string }
+        Returns: undefined
       }
       mask_email_value: { Args: { p_email: string }; Returns: string }
       mask_phone_value: { Args: { p_phone: string }; Returns: string }
@@ -3624,19 +3896,19 @@ export type Database = {
       record_support_error_report: {
         Args: {
           p_actor_user_id: string
-          p_support_id: string
-          p_kind: string
-          p_request_id?: string
+          p_app_version?: string
           p_error_code?: string
           p_error_message?: string
-          p_function_name?: string
-          p_screen_name?: string
-          p_route?: string
-          p_platform?: string
-          p_app_version?: string
           p_fatal?: boolean
-          p_occurred_at?: string
+          p_function_name?: string
+          p_kind: string
           p_metadata_json?: Json
+          p_occurred_at?: string
+          p_platform?: string
+          p_request_id?: string
+          p_route?: string
+          p_screen_name?: string
+          p_support_id: string
         }
         Returns: string
       }
@@ -3653,10 +3925,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      requeue_stale_graph_cycle_jobs: {
-        Args: { p_limit?: number; p_timeout_seconds?: number }
-        Returns: Json
-      }
       reject_financial_request: {
         Args: {
           p_actor_user_id: string
@@ -3665,7 +3933,18 @@ export type Database = {
         }
         Returns: Json
       }
-      reset_demo_data: { Args: never; Returns: Json }
+      release_welcome_email_delivery: {
+        Args: { p_actor_user_id: string; p_error: string }
+        Returns: undefined
+      }
+      request_account_deletion: {
+        Args: { p_actor_user_id: string; p_idempotency_key: string }
+        Returns: Json
+      }
+      requeue_stale_graph_cycle_jobs: {
+        Args: { p_limit?: number; p_timeout_seconds?: number }
+        Returns: Json
+      }
       resolve_people_targets: {
         Args: { p_actor_user_id: string; p_phone_e164_list: string[] }
         Returns: Json
@@ -3705,7 +3984,6 @@ export type Database = {
         Args: { p_metadata_json: Json }
         Returns: Json
       }
-      seed_demo_data: { Args: never; Returns: Json }
       start_app_session: {
         Args: {
           p_actor_user_id: string
@@ -3732,7 +4010,6 @@ export type Database = {
         }
         Returns: Json
       }
-      trust_demo_devices: { Args: never; Returns: Json }
     }
     Enums: {
       account_access_state: "needs_invite" | "needs_activation" | "active"
@@ -3771,6 +4048,7 @@ export type Database = {
         | "completed"
         | "failed"
         | "superseded"
+      happy_circle_case_status: "active" | "completed" | "closed"
       ledger_account_kind: "receivable" | "payable"
       ledger_entry_side: "debit" | "credit"
       ledger_source_type: "user" | "system"
@@ -3795,6 +4073,10 @@ export type Database = {
         | "stale"
         | "executed"
         | "expired"
+      settlement_stale_reason:
+        | "balance_changed"
+        | "related_execution_changed_balance"
+        | "participant_set_changed"
       transaction_category:
         | "food_drinks"
         | "transport"
@@ -3902,101 +4184,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      iceberg_namespaces: {
-        Row: {
-          bucket_name: string
-          catalog_id: string
-          created_at: string
-          id: string
-          metadata: Json
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          bucket_name: string
-          catalog_id: string
-          created_at?: string
-          id?: string
-          metadata?: Json
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          bucket_name?: string
-          catalog_id?: string
-          created_at?: string
-          id?: string
-          metadata?: Json
-          name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "iceberg_namespaces_catalog_id_fkey"
-            columns: ["catalog_id"]
-            isOneToOne: false
-            referencedRelation: "buckets_analytics"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      iceberg_tables: {
-        Row: {
-          bucket_name: string
-          catalog_id: string
-          created_at: string
-          id: string
-          location: string
-          name: string
-          namespace_id: string
-          remote_table_id: string | null
-          shard_id: string | null
-          shard_key: string | null
-          updated_at: string
-        }
-        Insert: {
-          bucket_name: string
-          catalog_id: string
-          created_at?: string
-          id?: string
-          location: string
-          name: string
-          namespace_id: string
-          remote_table_id?: string | null
-          shard_id?: string | null
-          shard_key?: string | null
-          updated_at?: string
-        }
-        Update: {
-          bucket_name?: string
-          catalog_id?: string
-          created_at?: string
-          id?: string
-          location?: string
-          name?: string
-          namespace_id?: string
-          remote_table_id?: string | null
-          shard_id?: string | null
-          shard_key?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "iceberg_tables_catalog_id_fkey"
-            columns: ["catalog_id"]
-            isOneToOne: false
-            referencedRelation: "buckets_analytics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "iceberg_tables_namespace_id_fkey"
-            columns: ["namespace_id"]
-            isOneToOne: false
-            referencedRelation: "iceberg_namespaces"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       migrations: {
         Row: {
@@ -4473,9 +4660,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       account_access_state: ["needs_invite", "needs_activation", "active"],
@@ -4519,6 +4703,7 @@ export const Constants = {
         "failed",
         "superseded",
       ],
+      happy_circle_case_status: ["active", "completed", "closed"],
       ledger_account_kind: ["receivable", "payable"],
       ledger_entry_side: ["debit", "credit"],
       ledger_source_type: ["user", "system"],
@@ -4545,6 +4730,11 @@ export const Constants = {
         "stale",
         "executed",
         "expired",
+      ],
+      settlement_stale_reason: [
+        "balance_changed",
+        "related_execution_changed_balance",
+        "participant_set_changed",
       ],
       transaction_category: [
         "food_drinks",

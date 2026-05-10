@@ -20,6 +20,7 @@ export type {
   SettlementDetailDto,
   SettlementDetailMovementDto,
   SettlementDetailParticipantDto,
+  SettlementVersionTimelineItemDto,
 } from './types';
 export { useAppSnapshot } from './fetch-snapshot';
 export { notificationViewKeyForItem } from './builders/notifications';

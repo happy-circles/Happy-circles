@@ -373,7 +373,7 @@ export function useSessionController(): SessionContextValue {
           client
             .from('user_profiles')
             .select(
-              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at',
+              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at, deleted_at, deletion_requested_at, onboarding_completed_at, welcome_email_last_error, welcome_email_queued_at, welcome_email_sent_at',
             )
             .eq('id', nextSession.user.id)
             .single(),

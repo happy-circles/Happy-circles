@@ -507,7 +507,7 @@ function settlementNotificationTitle(item: ActivityItemDto): string {
   }
 
   if (item.status === 'stale') {
-    return 'Happy Circle reemplazado';
+    return 'Version reemplazada';
   }
 
   return 'Revisa este Happy Circle';

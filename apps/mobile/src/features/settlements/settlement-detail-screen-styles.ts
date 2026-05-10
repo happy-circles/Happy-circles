@@ -23,6 +23,27 @@ export const settlementDetailScreenStyles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },
+  timelineCard: {
+    borderLeftColor: theme.colors.border,
+    borderLeftWidth: 3,
+  },
+  timelineHeader: {
+    gap: 2,
+  },
+  timelineTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  timelineSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    lineHeight: 18,
+  },
+  replacementAction: {
+    marginTop: theme.spacing.sm,
+  },
   circleGraphCard: {
     borderLeftColor: transactionCategoryColor('cycle'),
     borderLeftWidth: 3,

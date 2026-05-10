@@ -412,7 +412,7 @@ export function transactionContextLabel(item: ActivityItemDto, actorLabel: strin
     }
 
     if (item.status === 'stale') {
-      return 'Este Circle fue reemplazado';
+      return 'Esta version fue reemplazada porque los saldos cambiaron';
     }
 
     if (item.status === 'pending_approvals') {
