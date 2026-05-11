@@ -122,6 +122,10 @@ export interface TimelineEventDraft {
   readonly sourceLabel: string;
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
   readonly flowLabel?: string;
   readonly detail?: string;
   readonly happenedAt: string;
@@ -445,6 +449,11 @@ export interface ActionableItem {
   readonly href: PendingActionDto['href'];
   readonly amountMinor?: PendingActionDto['amountMinor'];
   readonly category?: TransactionCategory;
+  readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
   readonly counterpartyLabel?: string;
   readonly tone?: ActivityItemDto['tone'];
   readonly participantUserIds?: readonly string[];

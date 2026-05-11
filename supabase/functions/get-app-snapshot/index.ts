@@ -253,6 +253,13 @@ type QueryResult<T> = {
   readonly error: { readonly message: string } | null;
 };
 
+type SignedAvatarBatchRow = {
+  readonly error?: string | null;
+  readonly path?: string | null;
+  readonly signedUrl?: string | null;
+  readonly signedURL?: string | null;
+};
+
 async function expectRows<T>(query: PromiseLike<QueryResult<T>>, label: string): Promise<T[]> {
   const { data, error } = await query;
   if (error) {
@@ -326,29 +333,38 @@ async function createSignedAvatarUrlsByPath(
   }
 
   const expiresAt = new Date(Date.now() + AVATAR_SIGNED_URL_TTL_SECONDS * 1000).toISOString();
-  const entries = await Promise.all(
-    avatarPaths.map(async (path) => {
-      const { data, error } = await client.storage
-        .from('avatars')
-        .createSignedUrl(path, AVATAR_SIGNED_URL_TTL_SECONDS);
+  const { data, error } = await client.storage
+    .from('avatars')
+    .createSignedUrls(avatarPaths, AVATAR_SIGNED_URL_TTL_SECONDS);
 
-      if (error || !data?.signedUrl) {
-        console.error('avatar_signed_url_error', {
-          message: error?.message ?? 'missing signed url',
-          path,
-        });
-        return null;
-      }
+  if (error || !data) {
+    console.error('avatar_signed_urls_error', {
+      message: error?.message ?? 'missing signed urls',
+      pathCount: avatarPaths.length,
+    });
+    return {};
+  }
 
-      return [
-        path,
-        {
-          expiresAt,
-          url: data.signedUrl,
-        },
-      ] as const;
-    }),
-  );
+  const entries = (data as readonly SignedAvatarBatchRow[]).map((row, index) => {
+    const path = normalizeAvatarPath(row.path ?? avatarPaths[index]);
+    const signedUrl = row.signedUrl ?? row.signedURL ?? null;
+
+    if (row.error || !path || !signedUrl) {
+      console.error('avatar_signed_url_error', {
+        message: row.error ?? 'missing signed url',
+        path: path ?? avatarPaths[index] ?? 'unknown',
+      });
+      return null;
+    }
+
+    return [
+      path,
+      {
+        expiresAt,
+        url: signedUrl,
+      },
+    ] as const;
+  });
 
   return Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry));
 }

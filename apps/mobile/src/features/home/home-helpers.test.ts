@@ -150,7 +150,9 @@ describe('contact sheet helpers', () => {
 });
 
 describe('dashboard transaction preview', () => {
-  function activityItem(value: Partial<ActivityItemDto> & { readonly id: string }): ActivityItemDto {
+  function activityItem(
+    value: Partial<ActivityItemDto> & { readonly id: string },
+  ): ActivityItemDto {
     const { id, ...overrides } = value;
 
     return {
@@ -217,5 +219,35 @@ describe('dashboard transaction preview', () => {
       { highlightPending: false, id: 'history-new', isPending: false, unread: false },
       { highlightPending: false, id: 'history-old', isPending: false, unread: false },
     ]);
+  });
+
+  it('does not show a replaced happy circle history item next to its active version', () => {
+    const pendingCircle = activityItem({
+      happyCircleCaseId: 'case-1',
+      id: 'settlement-v2',
+      kind: 'settlement_proposal',
+      originSettlementProposalId: 'settlement-v2',
+      replacesProposalId: 'settlement-v1',
+      status: 'pending_approvals',
+    }) as ActivityItemDto & { readonly createdAt: string };
+    const staleCircle = activityItem({
+      happyCircleCaseId: 'case-1',
+      id: 'settlement-v1:stale',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-v1',
+      replacedByProposalId: 'settlement-v2',
+      status: 'stale',
+    });
+
+    Object.assign(pendingCircle, { createdAt: '2026-05-05T12:00:00.000Z' });
+
+    const preview = buildDashboardTransactionPreview({
+      historyItems: [staleCircle],
+      limit: 4,
+      notificationViewedKeys: new Set(),
+      pendingItems: [pendingCircle],
+    });
+
+    expect(preview.visibleItems.map(({ item }) => item.id)).toEqual(['settlement-v2']);
   });
 });

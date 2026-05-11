@@ -30,9 +30,20 @@ export function buildDashboardTransactionPreview({
   readonly pendingItems: readonly ActivityItemDto[];
 }): DashboardTransactionPreview {
   const pendingTransactionItems = pendingItems.filter(isPendingTransactionItem);
+  const pendingHappyCircleCaseIds = new Set(
+    pendingTransactionItems.flatMap((item) =>
+      item.kind === 'settlement_proposal' && item.happyCircleCaseId ? [item.happyCircleCaseId] : [],
+    ),
+  );
   const recentHistoryItems = buildHistoryCases(
     historyItems.filter(isConsolidatedTransactionItem).filter(isHistoryCaseItem),
   )
+    .filter(
+      (itemCase) =>
+        itemCase.latest.status !== 'stale' ||
+        !itemCase.latest.happyCircleCaseId ||
+        !pendingHappyCircleCaseIds.has(itemCase.latest.happyCircleCaseId),
+    )
     .map((itemCase) => itemCase.latest);
   const visibleItems = [
     ...pendingTransactionItems.map((item) => ({

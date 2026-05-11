@@ -130,7 +130,9 @@ export function historyCaseInviteCategory<T extends HistoryCaseItem>(
   return 'friendship';
 }
 
-export function compactHistoryLabel(item: Pick<HistoryCaseItem, 'kind' | 'status' | 'detail'>): string {
+export function compactHistoryLabel(
+  item: Pick<HistoryCaseItem, 'kind' | 'status' | 'detail'>,
+): string {
   if (item.kind === 'friendship_invite') {
     return 'Invitacion';
   }
@@ -205,8 +207,15 @@ export function historyDirectionFromItem(item: HistoryCaseItem): HistoryDirectio
 }
 
 export function historyCaseKey(
-  item: Pick<HistoryCaseItem, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
+  item: Pick<
+    HistoryCaseItem,
+    'id' | 'originRequestId' | 'originSettlementProposalId' | 'happyCircleCaseId'
+  >,
 ): string {
+  if (item.happyCircleCaseId) {
+    return `happy_circle_case:${item.happyCircleCaseId}`;
+  }
+
   if (item.originSettlementProposalId) {
     return `settlement:${item.originSettlementProposalId}`;
   }

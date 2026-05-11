@@ -36,6 +36,29 @@ import {
   transactionPersonForItem,
 } from '@/lib/transaction-people';
 
+export type CategoryInsightTone = 'positive' | 'negative' | 'pending' | 'neutral' | 'cycle';
+
+export interface CategoryInsightRow {
+  readonly metricLabel: string;
+  readonly row: BalanceAnalyticsCategoryRowDto;
+  readonly score: number;
+  readonly tone: CategoryInsightTone;
+}
+
+const PODIUM_VISUAL_ORDER = [2, 1, 3] as const;
+
+type PodiumRank = (typeof PODIUM_VISUAL_ORDER)[number];
+
+type CategoryPodiumVisualItem = {
+  readonly displayRank: PodiumRank | null;
+  readonly insight: CategoryInsightRow | null;
+  readonly isDimmed: boolean;
+  readonly isFocused: boolean;
+  readonly isOutsideRanking: boolean;
+  readonly key: string;
+  readonly visualPlace: PodiumRank;
+};
+
 function amountToneStyle(amountMinor: number) {
   if (amountMinor > 0) {
     return styles.positive;
@@ -46,6 +69,66 @@ function amountToneStyle(amountMinor: number) {
   }
 
   return styles.neutral;
+}
+
+function toneStyle(tone: CategoryInsightTone) {
+  if (tone === 'positive') {
+    return styles.positive;
+  }
+
+  if (tone === 'negative') {
+    return styles.negative;
+  }
+
+  if (tone === 'pending') {
+    return styles.pending;
+  }
+
+  if (tone === 'cycle') {
+    return styles.cycle;
+  }
+
+  return styles.neutral;
+}
+
+function toneColor(tone: CategoryInsightTone): string {
+  if (tone === 'positive') {
+    return theme.colors.success;
+  }
+
+  if (tone === 'negative') {
+    return theme.colors.warning;
+  }
+
+  if (tone === 'pending') {
+    return '#ca8a04';
+  }
+
+  if (tone === 'cycle') {
+    return '#2563eb';
+  }
+
+  return theme.colors.primary;
+}
+
+function toneSoftColor(tone: CategoryInsightTone): string {
+  if (tone === 'positive') {
+    return theme.colors.successSoft;
+  }
+
+  if (tone === 'negative') {
+    return theme.colors.warningSoft;
+  }
+
+  if (tone === 'pending') {
+    return '#fef3c7';
+  }
+
+  if (tone === 'cycle') {
+    return '#eaf1ff';
+  }
+
+  return theme.colors.primarySoft;
 }
 
 function movementCountLabel(count: number): string {
@@ -76,16 +159,8 @@ function compactFirstNames(values: readonly string[]): string {
   const hiddenCount = names.length - visibleNames.length;
 
   return hiddenCount > 0
-    ? `${visibleNames.join(', ')} y ${hiddenCount} mas`
+    ? `${visibleNames.join(', ')} y ${hiddenCount} más`
     : visibleNames.join(', ');
-}
-
-function signedFormatCop(amountMinor: number): string {
-  if (amountMinor > 0) {
-    return `+${formatCop(amountMinor)}`;
-  }
-
-  return formatCop(amountMinor);
 }
 
 function peoplePreviewLabel(row: BalanceAnalyticsCategoryRowDto): string {
@@ -96,22 +171,104 @@ function categoryMetaLabel(row: BalanceAnalyticsCategoryRowDto): string {
   return `${peoplePreviewLabel(row)} | ${movementCountLabel(row.movementCount)}`;
 }
 
+function podiumStepStyleForPlace(place: PodiumRank) {
+  if (place === 1) {
+    return styles.podiumStepFirst;
+  }
+
+  if (place === 2) {
+    return styles.podiumStepSecond;
+  }
+
+  return styles.podiumStepThird;
+}
+
+function categoryPodiumVisualItems(
+  ranking: readonly CategoryInsightRow[],
+  selectedInsight: CategoryInsightRow | null,
+): readonly CategoryPodiumVisualItem[] {
+  const categoriesByRank = new Map<PodiumRank, CategoryInsightRow>();
+
+  ranking.slice(0, 3).forEach((insight, index) => {
+    categoriesByRank.set((index + 1) as PodiumRank, insight);
+  });
+
+  if (!selectedInsight) {
+    return PODIUM_VISUAL_ORDER.map((rank) => ({
+      displayRank: rank,
+      insight: categoriesByRank.get(rank) ?? null,
+      isDimmed: false,
+      isFocused: false,
+      isOutsideRanking: false,
+      key: categoriesByRank.get(rank)?.row.key ?? `empty-${rank}`,
+      visualPlace: rank,
+    }));
+  }
+
+  const selectedRank =
+    PODIUM_VISUAL_ORDER.find(
+      (rank) => categoriesByRank.get(rank)?.row.category === selectedInsight.row.category,
+    ) ?? null;
+  const contextItems = ([1, 2, 3] as const)
+    .filter((rank) => rank !== selectedRank)
+    .map((rank) => ({ displayRank: rank, insight: categoriesByRank.get(rank) ?? null }))
+    .filter((item) => item.insight?.row.category !== selectedInsight.row.category);
+  const leftContext = contextItems[0] ?? null;
+  const rightContext = contextItems[1] ?? null;
+
+  return [
+    {
+      displayRank: leftContext?.displayRank ?? 2,
+      insight: leftContext?.insight ?? null,
+      isDimmed: true,
+      isFocused: false,
+      isOutsideRanking: false,
+      key: leftContext?.insight?.row.key ?? 'empty-left',
+      visualPlace: 2,
+    },
+    {
+      displayRank: selectedRank,
+      insight: selectedInsight,
+      isDimmed: false,
+      isFocused: true,
+      isOutsideRanking: selectedRank === null,
+      key: selectedInsight.row.key,
+      visualPlace: 1,
+    },
+    {
+      displayRank: rightContext?.displayRank ?? 3,
+      insight: rightContext?.insight ?? null,
+      isDimmed: true,
+      isFocused: false,
+      isOutsideRanking: false,
+      key: rightContext?.insight?.row.key ?? 'empty-right',
+      visualPlace: 3,
+    },
+  ];
+}
+
 export function CategoryRow({
   actionIcon = 'funnel-outline',
+  metricLabel,
+  metricTone,
   onPress,
   row,
 }: {
   readonly actionIcon?: keyof typeof Ionicons.glyphMap;
+  readonly metricLabel?: string;
+  readonly metricTone?: CategoryInsightTone;
   readonly onPress: () => void;
   readonly row: BalanceAnalyticsCategoryRowDto;
 }) {
   const icon = transactionCategoryIcon(row.category) as keyof typeof Ionicons.glyphMap;
   const color = transactionCategoryColor(row.category);
   const backgroundColor = transactionCategoryBackgroundColor(row.category);
+  const resolvedMetricLabel = metricLabel ?? formatCop(row.netMinor);
+  const resolvedMetricStyle = metricTone ? toneStyle(metricTone) : amountToneStyle(row.netMinor);
 
   return (
     <Pressable
-      accessibilityLabel={`${row.label}. ${categoryMetaLabel(row)}. ${formatCop(row.netMinor)}`}
+      accessibilityLabel={`${row.label}. ${categoryMetaLabel(row)}. ${resolvedMetricLabel}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [pressed ? styles.pressed : null]}
@@ -136,9 +293,9 @@ export function CategoryRow({
             adjustsFontSizeToFit
             minimumFontScale={0.78}
             numberOfLines={1}
-            style={[styles.amount, amountToneStyle(row.netMinor)]}
+            style={[styles.amount, resolvedMetricStyle]}
           >
-            {formatCop(row.netMinor)}
+            {resolvedMetricLabel}
           </AppText>
           <Ionicons color={theme.colors.textMuted} name={actionIcon} size={15} />
         </View>
@@ -147,68 +304,183 @@ export function CategoryRow({
   );
 }
 
-export function CategoriesSummaryCard({
-  categoryCount,
-  movementCount,
-  topCategories,
-  totalMinor,
-  deltaMinor,
-  label,
+export function CategoriesPodiumCard({
+  onSelectCategory,
+  ranking,
+  selectedCategory,
+  selectedInsight,
 }: {
-  readonly categoryCount: number;
-  readonly movementCount: number;
-  readonly topCategories: readonly BalanceAnalyticsCategoryRowDto[];
-  readonly totalMinor: number;
-  readonly deltaMinor: number;
-  readonly label: string;
+  readonly onSelectCategory: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
+  readonly ranking: readonly CategoryInsightRow[];
+  readonly selectedCategory: BalanceAnalyticsCategoryRowDto['category'] | null;
+  readonly selectedInsight: CategoryInsightRow | null;
 }) {
+  const podiumItems = categoryPodiumVisualItems(ranking, selectedInsight);
+
   return (
-    <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
-      <View style={styles.summaryVisualRow}>
-        <View style={styles.summaryIconCluster}>
-          {topCategories.slice(0, 4).map((row) => {
-            const icon = transactionCategoryIcon(row.category) as keyof typeof Ionicons.glyphMap;
-            const color = transactionCategoryColor(row.category);
-            const backgroundColor = transactionCategoryBackgroundColor(row.category);
+    <View style={styles.insightModule}>
+      <View style={styles.insightBody}>
+        <View style={styles.podiumRow}>
+          {podiumItems.map((item) => {
+            const {
+              displayRank,
+              insight,
+              isDimmed,
+              isFocused,
+              isOutsideRanking,
+              key,
+              visualPlace,
+            } = item;
+            const stepStyle = podiumStepStyleForPlace(visualPlace);
+            const rankLabel = displayRank === null ? 'Filtro' : String(displayRank);
+
+            if (!insight) {
+              return (
+                <View
+                  accessibilityLabel={`Puesto ${displayRank ?? visualPlace} esperando historial`}
+                  accessible
+                  key={key}
+                  style={[
+                    styles.podiumSlot,
+                    visualPlace === 1 ? styles.podiumSlotFirst : null,
+                    isDimmed ? styles.podiumSlotDimmed : null,
+                  ]}
+                >
+                  <View style={styles.podiumIconWrap}>
+                    <View
+                      style={[
+                        styles.podiumRankMedal,
+                        styles.podiumRankMedalEmpty,
+                        visualPlace === 1 ? styles.podiumRankMedalFirst : null,
+                      ]}
+                    >
+                      <AppText
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.68}
+                        numberOfLines={1}
+                        style={styles.podiumRankMedalTextEmpty}
+                      >
+                        {rankLabel}
+                      </AppText>
+                    </View>
+                    <View style={[styles.podiumIconRing, styles.podiumIconRingEmpty]}>
+                      <View
+                        style={[
+                          styles.emptyPodiumIcon,
+                          visualPlace === 1 ? styles.emptyPodiumIconFirst : null,
+                        ]}
+                      >
+                        <Ionicons
+                          color={theme.colors.textMuted}
+                          name="hourglass-outline"
+                          size={visualPlace === 1 ? 21 : 18}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                  <View style={[styles.podiumStep, styles.podiumStepEmpty, stepStyle]}>
+                    <AppText numberOfLines={1} style={styles.podiumNameEmpty}>
+                      Esperando
+                    </AppText>
+                  </View>
+                </View>
+              );
+            }
+
+            const categoryIcon = transactionCategoryIcon(
+              insight.row.category,
+            ) as keyof typeof Ionicons.glyphMap;
+            const color = toneColor(insight.tone);
+            const softColor = toneSoftColor(insight.tone);
+            const categoryColor = transactionCategoryColor(insight.row.category);
+            const categoryBackground = transactionCategoryBackgroundColor(insight.row.category);
+            const selected = insight.row.category === selectedCategory;
 
             return (
-              <View
-                key={row.key}
-                style={[styles.summaryCategoryOrb, { backgroundColor, borderColor: color }]}
+              <Pressable
+                accessibilityLabel={`Filtrar movimientos de ${insight.row.label}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                key={key}
+                onPress={() => onSelectCategory(insight.row.category)}
+                style={({ pressed }) => [
+                  styles.podiumSlot,
+                  visualPlace === 1 ? styles.podiumSlotFirst : null,
+                  isFocused ? styles.podiumSlotFocused : null,
+                  isDimmed ? styles.podiumSlotDimmed : null,
+                  selected && !isFocused ? styles.podiumSlotSelected : null,
+                  pressed ? styles.pressed : null,
+                ]}
               >
-                <Ionicons color={color} name={icon} size={16} />
-              </View>
+                <View style={styles.podiumIconWrap}>
+                  <View
+                    style={[
+                      styles.podiumRankMedal,
+                      visualPlace === 1 ? styles.podiumRankMedalFirst : null,
+                      { backgroundColor: softColor, borderColor: color },
+                    ]}
+                  >
+                    <AppText
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.68}
+                      numberOfLines={1}
+                      style={[
+                        styles.podiumRankMedalText,
+                        isOutsideRanking ? styles.podiumRankMedalTextFilter : null,
+                        { color },
+                      ]}
+                    >
+                      {rankLabel}
+                    </AppText>
+                  </View>
+                  <View
+                    style={[
+                      styles.podiumIconRing,
+                      isFocused ? styles.podiumIconRingFocused : null,
+                      { borderColor: color },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.podiumCategoryIcon,
+                        visualPlace === 1 ? styles.podiumCategoryIconFirst : null,
+                        { backgroundColor: categoryBackground },
+                      ]}
+                    >
+                      <Ionicons
+                        color={categoryColor}
+                        name={categoryIcon}
+                        size={visualPlace === 1 ? 24 : 20}
+                      />
+                    </View>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.podiumStep,
+                    stepStyle,
+                    isFocused ? styles.podiumStepFocused : null,
+                    { backgroundColor: softColor, borderColor: color },
+                  ]}
+                >
+                  <AppText numberOfLines={1} style={styles.podiumName}>
+                    {insight.row.label}
+                  </AppText>
+                  <AppText
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
+                    numberOfLines={1}
+                    style={[styles.podiumStepMetric, { color }]}
+                  >
+                    {insight.metricLabel}
+                  </AppText>
+                </View>
+              </Pressable>
             );
           })}
         </View>
-        <View style={styles.summaryFlowBadge}>
-          <Ionicons
-            color={totalMinor >= 0 ? theme.colors.success : theme.colors.warning}
-            name={totalMinor >= 0 ? 'trending-up-outline' : 'trending-down-outline'}
-            size={15}
-          />
-          <AppText
-            numberOfLines={1}
-            style={[styles.summaryFlowText, totalMinor >= 0 ? styles.positive : styles.negative]}
-          >
-            Balance
-          </AppText>
-        </View>
       </View>
-      <AppText style={styles.summaryEyebrow}>{label}</AppText>
-      <AppText
-        adjustsFontSizeToFit
-        minimumFontScale={0.78}
-        numberOfLines={1}
-        style={[styles.summaryAmount, amountToneStyle(totalMinor)]}
-      >
-        {formatCop(totalMinor)}
-      </AppText>
-      <AppText style={styles.summaryMeta}>
-        Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoría
-        {categoryCount === 1 ? '' : 's'} | {movementCountLabel(movementCount)}
-      </AppText>
-    </SurfaceCard>
+    </View>
   );
 }
 

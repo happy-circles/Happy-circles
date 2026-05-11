@@ -7,6 +7,7 @@ import type {
   ActionableItem,
   FinancialRequestRow,
   RelationshipHistoryRow,
+  SettlementProposalRow,
   TimelineEventDraft,
 } from '../types';
 import { formatRelativeLabel } from '../utils/dates';
@@ -173,6 +174,7 @@ export function buildPersonTimeline(input: {
   readonly currentUserId: string;
   readonly counterpartyName: string;
   readonly names: Map<string, string>;
+  readonly settlementProposalsById?: ReadonlyMap<string, SettlementProposalRow>;
   readonly nowMs: number;
 }): PersonTimelineItemDto[] {
   const requestById = new Map(input.requests.map((request) => [request.id, request]));
@@ -279,6 +281,11 @@ export function buildPersonTimeline(input: {
           requestsById: requestById,
         });
 
+    const originSettlementProposalId = row.origin_settlement_proposal_id ?? undefined;
+    const settlementProposal = originSettlementProposalId
+      ? input.settlementProposalsById?.get(originSettlementProposalId)
+      : undefined;
+
     drafts.push({
       id: row.item_id,
       title: buildTimelineStepTitle(row, input.currentUserId, input.counterpartyName, input.names),
@@ -297,7 +304,11 @@ export function buildPersonTimeline(input: {
       sourceType: sourceTypeForRow(row),
       sourceLabel: sourceTypeForRow(row) === 'system' ? 'Sistema' : 'Usuario',
       originRequestId: originRequestId ?? row.item_id,
-      originSettlementProposalId: row.origin_settlement_proposal_id ?? undefined,
+      originSettlementProposalId,
+      happyCircleCaseId: settlementProposal?.happy_circle_case_id ?? undefined,
+      replacesProposalId: settlementProposal?.replaces_proposal_id ?? undefined,
+      replacedByProposalId: settlementProposal?.replaced_by_proposal_id ?? undefined,
+      staleReason: settlementProposal?.stale_reason ?? undefined,
       flowLabel: buildMovementFlowLabel(row, input.names) ?? undefined,
       detail: row.description ?? undefined,
       happenedAt: row.happened_at,
@@ -332,6 +343,10 @@ export function buildPersonTimeline(input: {
         sourceLabel: event.sourceLabel,
         originRequestId: event.originRequestId,
         originSettlementProposalId: event.originSettlementProposalId,
+        happyCircleCaseId: event.happyCircleCaseId,
+        replacesProposalId: event.replacesProposalId,
+        replacedByProposalId: event.replacedByProposalId,
+        staleReason: event.staleReason,
         flowLabel: event.flowLabel,
         detail: event.detail,
         happenedAt: event.happenedAt,

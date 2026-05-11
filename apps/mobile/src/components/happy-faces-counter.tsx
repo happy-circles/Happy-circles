@@ -8,7 +8,7 @@ import { theme } from '@/lib/theme';
 type HappyFacesCounterProps = {
   closedCircleCount: number;
   compact?: boolean;
-  onPress: () => void;
+  onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   totalFaces: number;
 };
@@ -30,13 +30,13 @@ export function HappyFacesCounter({
   return (
     <Pressable
       accessibilityLabel={`${faceLabel} caritas felices acumuladas`}
-      accessibilityRole="button"
+      accessibilityRole={onPress ? 'button' : undefined}
       onPress={onPress}
       style={({ pressed }) => [
         styles.root,
         compact ? styles.compact : null,
         hasFaces ? styles.active : null,
-        pressed ? styles.pressed : null,
+        pressed && onPress ? styles.pressed : null,
         style,
       ]}
     >

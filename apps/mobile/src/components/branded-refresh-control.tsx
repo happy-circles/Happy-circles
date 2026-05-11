@@ -21,6 +21,44 @@ export interface BrandedRefreshScrollViewProps extends Omit<ScrollViewProps, 're
   readonly refresh?: BrandedRefreshProps;
 }
 
+export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRefreshProps }) {
+  function handleRefresh() {
+    if (refresh.refreshing) {
+      return;
+    }
+
+    void Promise.resolve(refresh.onRefresh()).catch(() => undefined);
+  }
+
+  const progressViewOffset = refresh.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
+  const nativeIndicatorVisible = refresh.nativeIndicatorVisible !== false;
+
+  return (
+    <RefreshControl
+      key={`refresh-control-${Math.round(progressViewOffset)}`}
+      colors={
+        nativeIndicatorVisible
+          ? [theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]
+          : [TRANSPARENT_REFRESH_COLOR]
+      }
+      enabled
+      onRefresh={handleRefresh}
+      progressBackgroundColor={
+        nativeIndicatorVisible ? theme.colors.surface : TRANSPARENT_REFRESH_COLOR
+      }
+      progressViewOffset={progressViewOffset}
+      refreshing={refresh.refreshing}
+      tintColor={nativeIndicatorVisible ? theme.colors.primary : TRANSPARENT_REFRESH_COLOR}
+      title={
+        Platform.OS === 'ios' && nativeIndicatorVisible
+          ? (refresh.label ?? 'Sincronizando')
+          : undefined
+      }
+      titleColor={nativeIndicatorVisible ? theme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
+    />
+  );
+}
+
 export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScrollViewProps>(
   function BrandedRefreshScrollView(
     {
@@ -42,16 +80,7 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
   ) {
     const refreshEnabled = Boolean(refresh);
 
-    function handleRefresh() {
-      if (!refresh || refresh.refreshing) {
-        return;
-      }
-
-      void Promise.resolve(refresh.onRefresh()).catch(() => undefined);
-    }
-
     const progressViewOffset = refresh?.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
-    const nativeIndicatorVisible = refresh?.nativeIndicatorVisible !== false;
     const iosNativeIndicatorTopInset =
       Platform.OS === 'ios' ? (refresh?.nativeIndicatorTopInset ?? 0) : 0;
     const resolvedContentInset = useMemo(
@@ -74,30 +103,7 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
           : contentOffset,
       [contentOffset, iosNativeIndicatorTopInset],
     );
-    const nativeRefreshControl = refresh ? (
-      <RefreshControl
-        key={`refresh-control-${Math.round(progressViewOffset)}`}
-        colors={
-          nativeIndicatorVisible
-            ? [theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]
-            : [TRANSPARENT_REFRESH_COLOR]
-        }
-        enabled
-        onRefresh={handleRefresh}
-        progressBackgroundColor={
-          nativeIndicatorVisible ? theme.colors.surface : TRANSPARENT_REFRESH_COLOR
-        }
-        progressViewOffset={progressViewOffset}
-        refreshing={refresh.refreshing}
-        tintColor={nativeIndicatorVisible ? theme.colors.primary : TRANSPARENT_REFRESH_COLOR}
-        title={
-          Platform.OS === 'ios' && nativeIndicatorVisible
-            ? (refresh.label ?? 'Sincronizando')
-            : undefined
-        }
-        titleColor={nativeIndicatorVisible ? theme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
-      />
-    ) : undefined;
+    const nativeRefreshControl = refresh ? <BrandedRefreshControl refresh={refresh} /> : undefined;
 
     return (
       <View style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}>

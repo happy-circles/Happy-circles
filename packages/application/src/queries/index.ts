@@ -180,6 +180,11 @@ export interface PendingActionDto {
   readonly href: string;
   readonly amountMinor?: number;
   readonly category?: TransactionCategory;
+  readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
 }
 
 export interface PendingRequestHistoryStepDto {
@@ -210,6 +215,10 @@ export interface ActivityItemDto {
   readonly flowLabel?: string;
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
   readonly counterpartyLabel?: string;
   readonly participantUserIds?: readonly string[];
   readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
@@ -248,6 +257,10 @@ export interface PersonTimelineItemDto {
   readonly sourceLabel: string;
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
   readonly flowLabel?: string;
   readonly detail?: string;
   readonly happenedAt?: string;

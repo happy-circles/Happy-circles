@@ -52,6 +52,9 @@ export function buildPeopleState(input: {
   readonly peopleById: Record<string, LivePersonDetailDto>;
   readonly relationshipPeopleById: Record<string, PersonDetailDto>;
 } {
+  const settlementProposalsById = new Map(
+    input.settlementProposals.map((proposal) => [proposal.id, proposal]),
+  );
   const people = Array.from(input.relationshipsByCounterpartyId.entries())
     .map(([counterpartyUserId, relationship]): PersonCardDto => {
       const requests = input.requestsByRelationshipId.get(relationship.id) ?? [];
@@ -150,6 +153,7 @@ export function buildPeopleState(input: {
           currentUserId: input.currentUserId,
           counterpartyName: person.displayName,
           names: input.names,
+          settlementProposalsById,
           nowMs: input.nowMs,
         }),
         ...buildSettlementProposalHistoryTimelineItems({

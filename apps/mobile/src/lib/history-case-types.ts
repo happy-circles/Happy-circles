@@ -19,6 +19,10 @@ export interface HistoryCaseItem {
   readonly happenedAtLabel?: string;
   readonly originRequestId?: string | null;
   readonly originSettlementProposalId?: string | null;
+  readonly happyCircleCaseId?: string | null;
+  readonly replacesProposalId?: string | null;
+  readonly replacedByProposalId?: string | null;
+  readonly staleReason?: string | null;
   readonly counterpartyLabel?: string;
 }
 

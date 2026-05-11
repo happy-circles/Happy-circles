@@ -71,6 +71,36 @@ describe('history case grouping', () => {
     ).toEqual(['ledger-b']);
   });
 
+  it('collapses replaced happy circle versions under the same case', () => {
+    const staleProposal = item({
+      happenedAt: '2026-05-05T12:00:00.000Z',
+      happyCircleCaseId: 'case-1',
+      id: 'settlement-v1:stale',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-v1',
+      replacedByProposalId: 'settlement-v2',
+      status: 'stale',
+    });
+    const postedMovement = item({
+      happenedAt: '2026-05-05T12:01:00.000Z',
+      happyCircleCaseId: 'case-1',
+      id: 'ledger-v2',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-v2',
+      replacesProposalId: 'settlement-v1',
+      status: 'posted',
+    });
+
+    const cases = buildHistoryCases([staleProposal, postedMovement]);
+
+    expect(cases).toHaveLength(1);
+    expect(cases[0]?.id).toBe('happy_circle_case:case-1');
+    expect(cases[0]?.steps.map((step) => step.id)).toEqual(['settlement-v1:stale', 'ledger-v2']);
+    expect(
+      buildLatestHistoryCaseItems([staleProposal, postedMovement]).map((step) => step.id),
+    ).toEqual(['ledger-v2']);
+  });
+
   it('keeps person metadata when the latest ledger step has less display data', () => {
     const request = item({
       counterpartyLabel: 'Ana Ruiz',

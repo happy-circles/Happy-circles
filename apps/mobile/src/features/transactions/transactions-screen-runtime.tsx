@@ -208,11 +208,15 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
     flowLabel: item.flowLabel,
     happenedAt: item.happenedAt,
     happenedAtLabel: item.happenedAtLabel,
+    happyCircleCaseId: item.happyCircleCaseId,
     href: item.href,
     id: item.id,
     kind: normalizedKind,
     originRequestId: item.originRequestId,
     originSettlementProposalId: item.originSettlementProposalId,
+    replacedByProposalId: item.replacedByProposalId,
+    replacesProposalId: item.replacesProposalId,
+    staleReason: item.staleReason,
     status: item.status,
     subtitle: item.subtitle,
     title: item.title,
@@ -312,20 +316,47 @@ export function TransactionsScreen() {
       ),
     [notificationViewedKeys, pendingTransactionItems],
   );
-  const visiblePendingTransactionItems = pendingTransactionItems.filter(
-    (item) =>
-      matchesPendingFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
+  const visiblePendingTransactionItems = useMemo(
+    () =>
+      pendingTransactionItems.filter(
+        (item) =>
+          matchesPendingFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
+      ),
+    [activeFilter, categoryFilter, pendingTransactionItems],
   );
-  const historyTransactionItems = (historySection?.items ?? [])
-    .filter(isConsolidatedTransactionItem)
-    .filter(
-      (item) =>
-        matchesHistoryFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
-    );
+  const visiblePendingHappyCircleCaseIds = useMemo(
+    () =>
+      new Set(
+        visiblePendingTransactionItems.flatMap((item) =>
+          item.kind === 'settlement_proposal' && item.happyCircleCaseId
+            ? [item.happyCircleCaseId]
+            : [],
+        ),
+      ),
+    [visiblePendingTransactionItems],
+  );
+  const historyTransactionItems = useMemo(
+    () =>
+      (historySection?.items ?? [])
+        .filter(isConsolidatedTransactionItem)
+        .filter(
+          (item) =>
+            matchesHistoryFilter(item, activeFilter) && matchesCategoryFilter(item, categoryFilter),
+        ),
+    [activeFilter, categoryFilter, historySection?.items],
+  );
   const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const historyCases = useMemo(
-    () => buildHistoryCases(historyTransactionItems.map((item) => activityHistoryCaseItem(item))),
-    [historyTransactionItems],
+    () =>
+      buildHistoryCases(
+        historyTransactionItems.map((item) => activityHistoryCaseItem(item)),
+      ).filter(
+        (itemCase) =>
+          itemCase.latest.status !== 'stale' ||
+          !itemCase.latest.happyCircleCaseId ||
+          !visiblePendingHappyCircleCaseIds.has(itemCase.latest.happyCircleCaseId),
+      ),
+    [historyTransactionItems, visiblePendingHappyCircleCaseIds],
   );
   const hasVisibleTransactions =
     visiblePendingTransactionItems.length > 0 || historyCases.length > 0;
