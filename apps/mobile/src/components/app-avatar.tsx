@@ -6,7 +6,12 @@ import {
   HappyCirclesCenterSvg,
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
-import { buildAvatarLabel, useResolvedAvatarUrl } from '@/lib/avatar';
+import {
+  buildAvatarLabel,
+  isAvatarImageReady,
+  rememberAvatarImageReady,
+  useResolvedAvatarUrl,
+} from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
 
@@ -37,14 +42,15 @@ export function AppAvatar({
   const radius = rounded ? size / 2 : Math.max(theme.radius.small, size * 0.28);
   const avatarLabel = buildAvatarLabel(label);
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
+  const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
   const [hasImageError, setHasImageError] = useState(false);
-  const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isImageLoaded, setIsImageLoaded] = useState(initialImageReady);
   const hasImageSource = Boolean(imageUrl?.trim());
 
   useEffect(() => {
     setHasImageError(false);
-    setIsImageLoaded(false);
-  }, [resolvedImageUrl]);
+    setIsImageLoaded(isAvatarImageReady(imageUrl, resolvedImageUrl));
+  }, [imageUrl, resolvedImageUrl]);
 
   const isSystemAvatar = variant === 'system';
   const canShowImage = Boolean(
@@ -97,7 +103,10 @@ export function AppAvatar({
                 setHasImageError(true);
                 setIsImageLoaded(false);
               }}
-              onLoad={() => setIsImageLoaded(true)}
+              onLoad={() => {
+                rememberAvatarImageReady(imageUrl, resolvedImageUrl);
+                setIsImageLoaded(true);
+              }}
               recyclingKey={resolvedImageUrl}
               source={resolvedImageUrl}
               style={[
@@ -109,7 +118,7 @@ export function AppAvatar({
                   width: size,
                 },
               ]}
-              transition={120}
+              transition={isImageLoaded ? 0 : 120}
             />
           ) : null}
         </>

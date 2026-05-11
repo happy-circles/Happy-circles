@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 export const AVATAR_BUCKET = 'avatars';
 const SIGNED_URL_TTL_SECONDS = 24 * 60 * 60;
 const SIGNED_URL_REFRESH_MARGIN_MS = 15 * 60 * 1000;
+const MAX_READY_AVATAR_IMAGE_KEYS = 512;
 
 interface CachedSignedAvatarUrl {
   readonly expiresAt: number;
@@ -26,6 +27,27 @@ interface ResolvedAvatarUrlState {
 
 const signedAvatarUrlCache = new Map<string, CachedSignedAvatarUrl>();
 const signedAvatarUrlRequests = new Map<string, Promise<CachedSignedAvatarUrl | null>>();
+const readyAvatarImageKeys = new Set<string>();
+
+function avatarImageReadyKey(source: string | null | undefined): string {
+  return normalizeStoredAvatarPath(source);
+}
+
+function addReadyAvatarImageKey(key: string): void {
+  if (!key) {
+    return;
+  }
+
+  readyAvatarImageKeys.add(key);
+
+  while (readyAvatarImageKeys.size > MAX_READY_AVATAR_IMAGE_KEYS) {
+    const oldestKey = readyAvatarImageKeys.values().next().value;
+    if (typeof oldestKey !== 'string') {
+      return;
+    }
+    readyAvatarImageKeys.delete(oldestKey);
+  }
+}
 
 function cachedSignedAvatarUrl(path: string): CachedSignedAvatarUrl | null {
   const cached = signedAvatarUrlCache.get(path);
@@ -91,6 +113,31 @@ export function buildAvatarLabel(value: string | null | undefined): string {
   const normalized = value?.trim() ?? '';
   const firstCharacter = normalized.charAt(0);
   return firstCharacter ? firstCharacter.toUpperCase() : '?';
+}
+
+export function isAvatarImageReady(
+  source: string | null | undefined,
+  resolvedUrl?: string | null,
+): boolean {
+  const sourceKey = avatarImageReadyKey(source);
+  const resolvedUrlKey = avatarImageReadyKey(resolvedUrl);
+
+  return Boolean(
+    (sourceKey && readyAvatarImageKeys.has(sourceKey)) ||
+    (resolvedUrlKey && readyAvatarImageKeys.has(resolvedUrlKey)),
+  );
+}
+
+export function rememberAvatarImageReady(
+  source: string | null | undefined,
+  resolvedUrl?: string | null,
+): void {
+  addReadyAvatarImageKey(avatarImageReadyKey(source));
+  addReadyAvatarImageKey(avatarImageReadyKey(resolvedUrl));
+}
+
+export function clearAvatarImageReadyCacheForTests(): void {
+  readyAvatarImageKeys.clear();
 }
 
 export { resolveAvatarUrl } from './avatar-url';

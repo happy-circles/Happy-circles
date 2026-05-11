@@ -13,6 +13,7 @@ import {
 } from '../snapshot-cache';
 import type { AccountDeletionRequestResult } from '../types';
 import type { AppSnapshot } from '../types';
+import { prefetchAvatarPaths } from '../../avatar-prefetch';
 import { uploadAvatar } from './avatar-upload';
 import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 
@@ -41,6 +42,7 @@ export function useUpdateProfileAvatarMutation() {
         void updateCachedSnapshotCurrentUserAvatar(userId, avatarPath).catch(() => undefined);
       }
 
+      await prefetchAvatarPaths([avatarPath], { timeoutMs: 700 }).catch(() => false);
       await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
       await invalidateAppSnapshot();
     },

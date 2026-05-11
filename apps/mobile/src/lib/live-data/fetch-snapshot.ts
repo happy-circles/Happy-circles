@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useSession } from '@/providers/session-provider';
 import { hydrateSignedAvatarUrlCache } from '../avatar';
-import { prefetchCriticalAvatarImages } from '../avatar-prefetch';
+import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '../avatar-prefetch';
 import { reportAndCreateSupportError } from '../support-errors';
 import { buildLiveSnapshot } from './build-snapshot';
 import { createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
@@ -47,6 +47,7 @@ async function fetchLiveSnapshot(
       currentUserId,
     });
     void prefetchCriticalAvatarImages(snapshot).catch(() => undefined);
+    scheduleDeferredAvatarPrefetch(snapshot);
     void persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(
       () => undefined,
     );
@@ -135,6 +136,7 @@ export function useAppSnapshot() {
             });
           }
           void prefetchCriticalAvatarImages(cachedSnapshot.snapshot, 700).catch(() => undefined);
+          scheduleDeferredAvatarPrefetch(cachedSnapshot.snapshot);
         }
 
         setCacheRestore({

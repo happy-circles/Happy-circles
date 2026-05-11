@@ -310,6 +310,80 @@ export type Database = {
           },
         ]
       }
+      analytics_daily_event_facts: {
+        Row: {
+          created_at: string
+          event_count: number
+          event_family: string
+          event_kind: string
+          event_name: string
+          fact_date: string
+          feature_key: string
+          updated_at: string
+          user_count: number
+        }
+        Insert: {
+          created_at?: string
+          event_count?: number
+          event_family: string
+          event_kind: string
+          event_name: string
+          fact_date: string
+          feature_key: string
+          updated_at?: string
+          user_count?: number
+        }
+        Update: {
+          created_at?: string
+          event_count?: number
+          event_family?: string
+          event_kind?: string
+          event_name?: string
+          fact_date?: string
+          feature_key?: string
+          updated_at?: string
+          user_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_daily_event_facts_event_name_fkey"
+            columns: ["event_name"]
+            isOneToOne: false
+            referencedRelation: "analytics_event_catalog"
+            referencedColumns: ["event_name"]
+          },
+        ]
+      }
+      analytics_daily_feature_facts: {
+        Row: {
+          core_action_count: number
+          created_at: string
+          event_count: number
+          fact_date: string
+          feature_key: string
+          updated_at: string
+          user_count: number
+        }
+        Insert: {
+          core_action_count?: number
+          created_at?: string
+          event_count?: number
+          fact_date: string
+          feature_key: string
+          updated_at?: string
+          user_count?: number
+        }
+        Update: {
+          core_action_count?: number
+          created_at?: string
+          event_count?: number
+          fact_date?: string
+          feature_key?: string
+          updated_at?: string
+          user_count?: number
+        }
+        Relationships: []
+      }
       analytics_daily_product_facts: {
         Row: {
           account_invites_accepted_count: number
@@ -381,45 +455,84 @@ export type Database = {
       }
       analytics_daily_user_facts: {
         Row: {
+          core_action_count: number
           created_at: string
           event_count: number
           fact_date: string
+          financial_request_accepted_count: number
+          financial_request_created_count: number
+          financial_request_started_count: number
           first_seen_at: string | null
+          friendship_invite_accepted_count: number
+          friendship_invite_created_count: number
           is_active: boolean
           last_seen_at: string | null
           latest_app_version: string | null
           latest_platform: string | null
           screen_view_count: number
           session_count: number
+          settlement_executed_count: number
+          settlement_proposal_approved_count: number
+          settlement_proposal_viewed_count: number
+          total_session_seconds: number
           updated_at: string
+          used_financial_requests: boolean
+          used_invites: boolean
+          used_settlements: boolean
           user_id: string
         }
         Insert: {
+          core_action_count?: number
           created_at?: string
           event_count?: number
           fact_date: string
+          financial_request_accepted_count?: number
+          financial_request_created_count?: number
+          financial_request_started_count?: number
           first_seen_at?: string | null
+          friendship_invite_accepted_count?: number
+          friendship_invite_created_count?: number
           is_active?: boolean
           last_seen_at?: string | null
           latest_app_version?: string | null
           latest_platform?: string | null
           screen_view_count?: number
           session_count?: number
+          settlement_executed_count?: number
+          settlement_proposal_approved_count?: number
+          settlement_proposal_viewed_count?: number
+          total_session_seconds?: number
           updated_at?: string
+          used_financial_requests?: boolean
+          used_invites?: boolean
+          used_settlements?: boolean
           user_id: string
         }
         Update: {
+          core_action_count?: number
           created_at?: string
           event_count?: number
           fact_date?: string
+          financial_request_accepted_count?: number
+          financial_request_created_count?: number
+          financial_request_started_count?: number
           first_seen_at?: string | null
+          friendship_invite_accepted_count?: number
+          friendship_invite_created_count?: number
           is_active?: boolean
           last_seen_at?: string | null
           latest_app_version?: string | null
           latest_platform?: string | null
           screen_view_count?: number
           session_count?: number
+          settlement_executed_count?: number
+          settlement_proposal_approved_count?: number
+          settlement_proposal_viewed_count?: number
+          total_session_seconds?: number
           updated_at?: string
+          used_financial_requests?: boolean
+          used_invites?: boolean
+          used_settlements?: boolean
           user_id?: string
         }
         Relationships: [
@@ -455,27 +568,141 @@ export type Database = {
       }
       analytics_event_catalog: {
         Row: {
+          allowed_metadata_keys: string[]
           created_at: string
+          deprecated_at: string | null
           description: string
+          event_family: string
+          event_kind: string
           event_name: string
+          feature_key: string
           is_active: boolean
           updated_at: string
         }
         Insert: {
+          allowed_metadata_keys?: string[]
           created_at?: string
+          deprecated_at?: string | null
           description: string
+          event_family?: string
+          event_kind?: string
           event_name: string
+          feature_key?: string
           is_active?: boolean
           updated_at?: string
         }
         Update: {
+          allowed_metadata_keys?: string[]
           created_at?: string
+          deprecated_at?: string | null
           description?: string
+          event_family?: string
+          event_kind?: string
           event_name?: string
+          feature_key?: string
           is_active?: boolean
           updated_at?: string
         }
         Relationships: []
+      }
+      analytics_user_lifecycle_facts: {
+        Row: {
+          activated_at: string | null
+          activation_source: string | null
+          created_at: string
+          first_accepted_transaction_at: string | null
+          first_active_at: string | null
+          first_financial_request_at: string | null
+          first_relationship_at: string | null
+          first_settlement_event_at: string | null
+          invited_by_user_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activated_at?: string | null
+          activation_source?: string | null
+          created_at: string
+          first_accepted_transaction_at?: string | null
+          first_active_at?: string | null
+          first_financial_request_at?: string | null
+          first_relationship_at?: string | null
+          first_settlement_event_at?: string | null
+          invited_by_user_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activated_at?: string | null
+          activation_source?: string | null
+          created_at?: string
+          first_accepted_transaction_at?: string | null
+          first_active_at?: string | null
+          first_financial_request_at?: string | null
+          first_relationship_at?: string | null
+          first_settlement_event_at?: string | null
+          invited_by_user_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_user_lifecycle_facts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       app_sessions: {
         Row: {
@@ -2953,6 +3180,179 @@ export type Database = {
           },
         ]
       }
+      v_analytics_activation_funnel: {
+        Row: {
+          conversion_rate: number | null
+          stage_key: string | null
+          stage_order: number | null
+          user_count: number | null
+        }
+        Relationships: []
+      }
+      v_analytics_active_usage: {
+        Row: {
+          dau: number | null
+          event_count: number | null
+          fact_date: string | null
+          mau: number | null
+          screen_view_count: number | null
+          session_count: number | null
+          stickiness: number | null
+          wau: number | null
+        }
+        Insert: {
+          dau?: number | null
+          event_count?: number | null
+          fact_date?: string | null
+          mau?: never
+          screen_view_count?: number | null
+          session_count?: number | null
+          stickiness?: never
+          wau?: never
+        }
+        Update: {
+          dau?: number | null
+          event_count?: number | null
+          fact_date?: string | null
+          mau?: never
+          screen_view_count?: number | null
+          session_count?: number | null
+          stickiness?: never
+          wau?: never
+        }
+        Relationships: []
+      }
+      v_analytics_engagement_depth: {
+        Row: {
+          active_user_count: number | null
+          avg_core_actions_per_active_user: number | null
+          avg_events_per_active_user: number | null
+          avg_screen_views_per_active_user: number | null
+          avg_session_seconds_per_active_user: number | null
+          avg_sessions_per_active_user: number | null
+          core_action_count: number | null
+          event_count: number | null
+          fact_date: string | null
+          screen_view_count: number | null
+          session_count: number | null
+        }
+        Relationships: []
+      }
+      v_analytics_feature_adoption: {
+        Row: {
+          active_user_count: number | null
+          adoption_rate: number | null
+          core_action_count: number | null
+          event_count: number | null
+          fact_date: string | null
+          feature_key: string | null
+          feature_user_count: number | null
+        }
+        Relationships: []
+      }
+      v_analytics_invite_virality: {
+        Row: {
+          account_invites_accepted_count: number | null
+          account_invites_created_count: number | null
+          active_user_count: number | null
+          fact_date: string | null
+          friendship_invites_accepted_count: number | null
+          friendship_invites_created_count: number | null
+          inviter_user_count: number | null
+          viral_coefficient_proxy: number | null
+        }
+        Insert: {
+          account_invites_accepted_count?: number | null
+          account_invites_created_count?: number | null
+          active_user_count?: number | null
+          fact_date?: string | null
+          friendship_invites_accepted_count?: number | null
+          friendship_invites_created_count?: number | null
+          inviter_user_count?: never
+          viral_coefficient_proxy?: never
+        }
+        Update: {
+          account_invites_accepted_count?: number | null
+          account_invites_created_count?: number | null
+          active_user_count?: number | null
+          fact_date?: string | null
+          friendship_invites_accepted_count?: number | null
+          friendship_invites_created_count?: number | null
+          inviter_user_count?: never
+          viral_coefficient_proxy?: never
+        }
+        Relationships: []
+      }
+      v_analytics_operational_rfm: {
+        Row: {
+          frequency_score: number | null
+          is_repeat_transaction_user: boolean | null
+          last_transaction_at: string | null
+          monetary_minor: number | null
+          monetary_score: number | null
+          recency_days: number | null
+          recency_score: number | null
+          repeat_transaction_rate: number | null
+          rfm_score: number | null
+          rfm_segment: string | null
+          transaction_count: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_accounts_owner_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_accounts_owner_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_balance_summary"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "ledger_accounts_owner_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_private"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_accounts_owner_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_user_profiles_visible"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_analytics_power_users: {
+        Row: {
+          active_user_count: number | null
+          fact_date: string | null
+          top_1_percent_event_share: number | null
+          top_10_percent_core_action_share: number | null
+          top_10_percent_event_share: number | null
+          top_5_percent_event_share: number | null
+        }
+        Relationships: []
+      }
+      v_analytics_retention_cohorts: {
+        Row: {
+          cohort_date: string | null
+          cohort_size: number | null
+          retained_d1_user_count: number | null
+          retained_d30_user_count: number | null
+          retained_d7_user_count: number | null
+          retention_d1_rate: number | null
+          retention_d30_rate: number | null
+          retention_d7_rate: number | null
+        }
+        Relationships: []
+      }
       v_friendship_invite_deliveries_live: {
         Row: {
           channel:
@@ -3635,6 +4035,7 @@ export type Database = {
           email: string
         }[]
       }
+      cleanup_supabase_usage_retention: { Args: never; Returns: Json }
       complete_graph_cycle_job: {
         Args: { p_job_id: string; p_result_json: Json; p_worker_id: string }
         Returns: Json
@@ -3829,6 +4230,14 @@ export type Database = {
         Returns: string
       }
       hash_invite_token: { Args: { p_token: string }; Returns: string }
+      ingest_product_analytics: {
+        Args: {
+          p_actor_user_id: string
+          p_client_session: Json
+          p_events?: Json
+        }
+        Returns: Json
+      }
       lock_graph_pair: {
         Args: {
           p_currency_code?: string
@@ -3917,6 +4326,10 @@ export type Database = {
         Args: { p_day: string }
         Returns: undefined
       }
+      refresh_analytics_recent_facts: {
+        Args: { p_days_back?: number }
+        Returns: undefined
+      }
       refresh_pair_net_edge_for_pair: {
         Args: {
           p_last_ledger_transaction_id?: string
@@ -3976,10 +4389,12 @@ export type Database = {
         }
         Returns: Json
       }
-      sanitize_product_event_metadata: {
-        Args: { p_metadata_json: Json }
-        Returns: Json
-      }
+      sanitize_product_event_metadata:
+        | {
+            Args: { p_event_name: string; p_metadata_json: Json }
+            Returns: Json
+          }
+        | { Args: { p_metadata_json: Json }; Returns: Json }
       sanitize_support_error_metadata: {
         Args: { p_metadata_json: Json }
         Returns: Json

@@ -92,6 +92,10 @@ function peoplePreviewLabel(row: BalanceAnalyticsCategoryRowDto): string {
   return compactFirstNames(row.personLabels);
 }
 
+function categoryMetaLabel(row: BalanceAnalyticsCategoryRowDto): string {
+  return `${peoplePreviewLabel(row)} | ${movementCountLabel(row.movementCount)}`;
+}
+
 export function CategoryRow({
   actionIcon = 'funnel-outline',
   onPress,
@@ -106,15 +110,13 @@ export function CategoryRow({
   const backgroundColor = transactionCategoryBackgroundColor(row.category);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [pressed ? styles.pressed : null]}>
-      <SurfaceCard
-        padding="md"
-        style={[
-          styles.categoryCard,
-          row.netMinor > 0 ? styles.cardPositive : null,
-          row.netMinor < 0 ? styles.cardNegative : null,
-        ]}
-      >
+    <Pressable
+      accessibilityLabel={`${row.label}. ${categoryMetaLabel(row)}. ${formatCop(row.netMinor)}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [pressed ? styles.pressed : null]}
+    >
+      <SurfaceCard padding="md" style={styles.categoryCard}>
         <View style={styles.leading}>
           <View style={[styles.categoryIcon, { backgroundColor }]}>
             <Ionicons color={color} name={icon} size={20} />
@@ -124,19 +126,21 @@ export function CategoryRow({
               {row.label}
             </AppText>
             <AppText numberOfLines={1} style={styles.categoryMeta}>
-              {peoplePreviewLabel(row)}
+              {categoryMetaLabel(row)}
             </AppText>
           </View>
         </View>
 
         <View style={styles.trailing}>
-          <AppText style={styles.amountLabel}>{movementCountLabel(row.movementCount)}</AppText>
-          <View style={styles.amountRow}>
-            <AppText numberOfLines={1} style={[styles.amount, amountToneStyle(row.netMinor)]}>
-              {formatCop(row.netMinor)}
-            </AppText>
-            <Ionicons color={theme.colors.textMuted} name={actionIcon} size={15} />
-          </View>
+          <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+            numberOfLines={1}
+            style={[styles.amount, amountToneStyle(row.netMinor)]}
+          >
+            {formatCop(row.netMinor)}
+          </AppText>
+          <Ionicons color={theme.colors.textMuted} name={actionIcon} size={15} />
         </View>
       </SurfaceCard>
     </Pressable>
@@ -187,7 +191,7 @@ export function CategoriesSummaryCard({
             numberOfLines={1}
             style={[styles.summaryFlowText, totalMinor >= 0 ? styles.positive : styles.negative]}
           >
-            balance
+            Balance
           </AppText>
         </View>
       </View>
@@ -201,7 +205,7 @@ export function CategoriesSummaryCard({
         {formatCop(totalMinor)}
       </AppText>
       <AppText style={styles.summaryMeta}>
-        Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoria
+        Cambio {signedFormatCop(deltaMinor)} | {categoryCount} categoría
         {categoryCount === 1 ? '' : 's'} | {movementCountLabel(movementCount)}
       </AppText>
     </SurfaceCard>

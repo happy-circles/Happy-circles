@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { useResolvedAvatarUrl } from '@/lib/avatar';
+import { isAvatarImageReady, rememberAvatarImageReady, useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 
 import { AppAvatar } from './app-avatar';
@@ -18,13 +18,14 @@ export interface AvatarViewerModalProps {
 
 export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarViewerModalProps) {
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
+  const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
   const [hasImageError, setHasImageError] = useState(false);
-  const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isImageLoaded, setIsImageLoaded] = useState(initialImageReady);
 
   useEffect(() => {
     setHasImageError(false);
-    setIsImageLoaded(false);
-  }, [resolvedImageUrl, visible]);
+    setIsImageLoaded(isAvatarImageReady(imageUrl, resolvedImageUrl));
+  }, [imageUrl, resolvedImageUrl, visible]);
 
   const canShowImage = Boolean(resolvedImageUrl && !hasImageError);
 
@@ -57,11 +58,14 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
                   setHasImageError(true);
                   setIsImageLoaded(false);
                 }}
-                onLoad={() => setIsImageLoaded(true)}
+                onLoad={() => {
+                  rememberAvatarImageReady(imageUrl, resolvedImageUrl);
+                  setIsImageLoaded(true);
+                }}
                 recyclingKey={resolvedImageUrl}
                 source={resolvedImageUrl}
                 style={[styles.photo, { opacity: isImageLoaded ? 1 : 0 }]}
-                transition={160}
+                transition={isImageLoaded ? 0 : 160}
               />
             ) : null}
           </View>
