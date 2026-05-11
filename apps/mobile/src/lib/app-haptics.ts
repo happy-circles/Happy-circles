@@ -10,6 +10,10 @@ export function triggerAppActionHaptic() {
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
 }
 
+export function triggerAppEmphasisHaptic() {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+}
+
 export function triggerAppSuccessHaptic() {
   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }

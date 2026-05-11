@@ -8,7 +8,12 @@ import type {
   SettlementProposalRow,
 } from '../types';
 import { formatRelativeLabel } from '../utils/dates';
-import { parseSettlementMovements, settlementProposalTotalAmount } from './settlement-core';
+import {
+  parseSettlementMovements,
+  settlementParticipantLegAmount,
+  settlementProposalParticipantAmount,
+  settlementProposalTotalAmount,
+} from './settlement-core';
 import { LIVE_DATA_CTA, LIVE_DATA_ROUTES } from '../presentation';
 import { formatCop } from '../../data';
 import {
@@ -16,6 +21,34 @@ import {
   isCurrentSettlementVersion,
   staleReasonDetail,
 } from './settlement-versions';
+
+function personalMovementAmount(
+  movements: readonly { readonly amountMinor: number; readonly creditorUserId: string; readonly debtorUserId: string }[],
+  currentUserId: string,
+  options: { readonly context: string; readonly requireBalanced: boolean },
+): number {
+  const summary = movements.reduce(
+    (totals, movement) => ({
+      paidMinor:
+        totals.paidMinor + (movement.debtorUserId === currentUserId ? movement.amountMinor : 0),
+      receivedMinor:
+        totals.receivedMinor +
+        (movement.creditorUserId === currentUserId ? movement.amountMinor : 0),
+    }),
+    { paidMinor: 0, receivedMinor: 0 },
+  );
+
+  return settlementParticipantLegAmount(summary, options);
+}
+
+function personalMovementCount(
+  movements: readonly { readonly creditorUserId: string; readonly debtorUserId: string }[],
+  currentUserId: string,
+): number {
+  return movements.filter(
+    (movement) => movement.debtorUserId === currentUserId || movement.creditorUserId === currentUserId,
+  ).length;
+}
 
 export function normalizeSettlementDetailDecision(
   decision: string | null,
@@ -58,6 +91,7 @@ export function buildPendingSettlementItems(
       continue;
     }
 
+    const personalAmountMinor = settlementProposalParticipantAmount(proposal, currentUserId);
     const participants = participantsByProposalId.get(proposal.id) ?? [];
     const participantLabels = buildSettlementParticipantLabels({
       participantUserIds: participants.map((participant) => participant.participant_user_id),
@@ -76,7 +110,7 @@ export function buildPendingSettlementItems(
       status: 'pending_approvals',
       ctaLabel: LIVE_DATA_CTA.review,
       href: LIVE_DATA_ROUTES.settlement(proposal.id),
-      amountMinor: settlementProposalTotalAmount(proposal),
+      amountMinor: personalAmountMinor,
       category: 'cycle',
       originSettlementProposalId: proposal.id,
       happyCircleCaseId: proposal.happy_circle_case_id,
@@ -109,6 +143,7 @@ export function buildPendingSettlementItems(
       const approvalsPending = participants.filter(
         (participant) => participant.decision === 'pending',
       ).length;
+      const personalAmountMinor = settlementProposalParticipantAmount(proposal, currentUserId);
 
       items.push({
         id: proposal.id,
@@ -118,7 +153,7 @@ export function buildPendingSettlementItems(
         status: 'waiting_other_side',
         ctaLabel: LIVE_DATA_CTA.review,
         href: LIVE_DATA_ROUTES.settlement(proposal.id),
-        amountMinor: settlementProposalTotalAmount(proposal),
+        amountMinor: personalAmountMinor,
         category: 'cycle',
         originSettlementProposalId: proposal.id,
         happyCircleCaseId: proposal.happy_circle_case_id,
@@ -131,6 +166,8 @@ export function buildPendingSettlementItems(
     }
 
     if (proposal.status === 'approved' && !proposal.executed_at) {
+      const personalAmountMinor = settlementProposalParticipantAmount(proposal, currentUserId);
+
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
@@ -139,7 +176,7 @@ export function buildPendingSettlementItems(
         status: 'approved',
         ctaLabel: LIVE_DATA_CTA.complete,
         href: LIVE_DATA_ROUTES.settlement(proposal.id),
-        amountMinor: settlementProposalTotalAmount(proposal),
+        amountMinor: personalAmountMinor,
         category: 'cycle',
         originSettlementProposalId: proposal.id,
         happyCircleCaseId: proposal.happy_circle_case_id,
@@ -226,6 +263,69 @@ export function summarizeSettlementParticipants(labels: readonly string[]): stri
   return `${others[0]} y ${others.length - 1} mas`;
 }
 
+function settlementLifecycleCopy(input: {
+  readonly actorDecision: string | null | undefined;
+  readonly participantCount: number;
+  readonly pendingCount: number;
+  readonly proposalStatus: string;
+  readonly staleReason: string | null;
+}): { readonly detail: string; readonly title: string } {
+  if (input.proposalStatus === 'executed') {
+    return {
+      detail: 'El saldo neto fue actualizado.',
+      title: 'Circle cerrado',
+    };
+  }
+
+  if (input.proposalStatus === 'stale') {
+    const detail = `Luego fue reemplazada: ${staleReasonDetail(input.staleReason)}`;
+
+    if (input.actorDecision === 'approved') {
+      return {
+        detail,
+        title: 'Tu aprobaste esta version',
+      };
+    }
+
+    if (input.actorDecision === 'rejected') {
+      return {
+        detail,
+        title: 'No aprobaste esta version',
+      };
+    }
+
+    return {
+      detail,
+      title: 'Versión reemplazada',
+    };
+  }
+
+  if (input.actorDecision === 'approved') {
+    const missingCount = Math.max(0, input.pendingCount);
+    const reason =
+      missingCount > 0
+        ? `Faltaron ${missingCount} de ${input.participantCount} aprobaciones.`
+        : 'Otra persona no aprobo el Circle.';
+
+    return {
+      detail: `${reason} No cambió el saldo.`,
+      title: 'Tu aprobaste este Circle',
+    };
+  }
+
+  if (input.actorDecision === 'rejected') {
+    return {
+      detail: 'No cambió el saldo.',
+      title: 'No aprobaste este Circle',
+    };
+  }
+
+  return {
+    detail: 'No se completó. No cambió el saldo.',
+    title: 'Circle no completado',
+  };
+}
+
 export function buildSettlementProposalHistoryTimelineItems(input: {
   readonly proposals: readonly SettlementProposalRow[];
   readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
@@ -235,7 +335,11 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
   readonly nowMs: number;
 }): PersonTimelineItemDto[] {
   return input.proposals.flatMap((proposal): PersonTimelineItemDto[] => {
-    if (proposal.status !== 'rejected' && proposal.status !== 'stale') {
+    if (
+      proposal.status !== 'rejected' &&
+      proposal.status !== 'stale' &&
+      proposal.status !== 'executed'
+    ) {
       return [];
     }
 
@@ -247,25 +351,37 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
       return [];
     }
 
-    const happenedAt = proposal.updated_at ?? proposal.created_at;
+    const actorParticipant = participants.find(
+      (participant) => participant.participant_user_id === input.currentUserId,
+    );
+    const happenedAt =
+      proposal.status === 'executed'
+        ? (proposal.executed_at ?? proposal.updated_at ?? proposal.created_at)
+        : (actorParticipant?.decided_at ?? proposal.updated_at ?? proposal.created_at);
     const otherNames = participants
       .map((participant) => input.names.get(participant.participant_user_id) ?? 'Persona')
       .filter((name) => name !== 'Tu');
-    const detail =
-      proposal.status === 'rejected'
-        ? 'Este Circle no se completo'
-        : staleReasonDetail(proposal.stale_reason);
+    const pendingCount = participants.filter((participant) => participant.decision === 'pending')
+      .length;
+    const lifecycleCopy = settlementLifecycleCopy({
+      actorDecision: actorParticipant?.decision,
+      participantCount: participants.length,
+      pendingCount,
+      proposalStatus: proposal.status,
+      staleReason: proposal.stale_reason,
+    });
     const peopleLabel = otherNames.length > 0 ? `Con ${otherNames.join(', ')}` : 'Happy Circle';
+    const personalAmountMinor = settlementProposalParticipantAmount(
+      proposal,
+      input.currentUserId,
+    );
 
     return [
       {
         id: `${proposal.id}:${proposal.status}`,
-        title:
-          proposal.status === 'rejected'
-            ? 'Happy Circle no completado'
-            : 'Happy Circle reemplazado',
-        subtitle: [peopleLabel, detail, formatRelativeLabel(happenedAt, input.nowMs)].join(' | '),
-        amountMinor: settlementProposalTotalAmount(proposal),
+        title: lifecycleCopy.title,
+        subtitle: [peopleLabel, lifecycleCopy.detail, formatRelativeLabel(happenedAt, input.nowMs)].join(' | '),
+        amountMinor: personalAmountMinor,
         category: 'cycle',
         tone: 'neutral',
         kind: 'settlement',
@@ -279,7 +395,7 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
         replacedByProposalId: proposal.replaced_by_proposal_id,
         staleReason: proposal.stale_reason,
         flowLabel: peopleLabel,
-        detail,
+        detail: lifecycleCopy.detail,
         happenedAt,
         happenedAtLabel: formatRelativeLabel(happenedAt, input.nowMs),
       },
@@ -306,20 +422,48 @@ export function buildSettlementDetail(
       names,
     }) ?? 'Otra persona';
 
-  const movementDetails = parseSettlementMovements(proposal.movements_json).map(
-    (movement, index) => {
+  const buildMovementDetails = (
+    rawMovements: ReturnType<typeof parseSettlementMovements>,
+    idPrefix: string,
+  ) =>
+    rawMovements.map((movement, index) => {
       const debtor = participantLabel(movement.debtor_user_id);
       const creditor = participantLabel(movement.creditor_user_id);
 
       return {
-        id: `${proposal.id}:movement:${index}`,
+        id: `${proposal.id}:${idPrefix}:${index}`,
         debtorUserId: movement.debtor_user_id,
         debtorLabel: debtor,
         creditorUserId: movement.creditor_user_id,
         creditorLabel: creditor,
         amountMinor: movement.amount_minor,
       };
-    },
+    });
+
+  const movementDetails = buildMovementDetails(
+    parseSettlementMovements(proposal.movements_json),
+    'movement',
+  );
+  const originalMovementDetails = buildMovementDetails(
+    parseSettlementMovements(proposal.graph_snapshot),
+    'original-movement',
+  );
+  const totalAmountMinor = settlementProposalTotalAmount(proposal);
+  const personalAmountMinor = personalMovementAmount(movementDetails, currentUserId, {
+    context: `Settlement detail ${proposal.id} participant ${currentUserId}`,
+    requireBalanced: proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+  });
+  const movementCount = movementDetails.length;
+  const personalFinalMovementCount = personalMovementCount(movementDetails, currentUserId);
+  const originalMovementCount = originalMovementDetails.length;
+  const personalOriginalMovementCount = personalMovementCount(
+    originalMovementDetails,
+    currentUserId,
+  );
+  const savedMovementsCount = Math.max(originalMovementCount - movementCount, 0);
+  const personalSavedMovementsCount = Math.max(
+    personalOriginalMovementCount - personalFinalMovementCount,
+    0,
   );
   const movements = movementDetails.map(
     (movement) =>
@@ -351,7 +495,7 @@ export function buildSettlementDetail(
       : proposal.status === 'approved'
         ? ['La propuesta ya fue aprobada por todos.', 'Estamos verificando el cierre automatico.']
         : proposal.status === 'executed'
-          ? ['Completaste un Circle!', 'El saldo neto ya fue actualizado.']
+          ? ['Circle cerrado.', 'El saldo neto ya fue actualizado.']
           : proposal.status === 'stale'
             ? [
                 staleReasonDetail(proposal.stale_reason),
@@ -374,7 +518,16 @@ export function buildSettlementDetail(
     participants: participantDecisions.map((participant) => participant.label),
     participantDecisions,
     participantStatuses,
+    totalAmountMinor,
+    personalAmountMinor,
+    movementCount,
+    personalMovementCount: personalFinalMovementCount,
+    originalMovementCount,
+    personalOriginalMovementCount,
+    savedMovementsCount,
+    personalSavedMovementsCount,
     movementDetails,
+    originalMovementDetails,
     movements,
     impactLines,
     explainers,
@@ -382,6 +535,7 @@ export function buildSettlementDetail(
       proposal,
       allProposals,
       participantsByProposalId,
+      currentUserId,
     }),
   };
 }

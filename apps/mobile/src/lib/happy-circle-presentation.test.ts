@@ -13,7 +13,7 @@ describe('happy circle presentation', () => {
     ).toMatchObject({
       actionability: 'can_decide',
       key: 'pending_own',
-      label: 'Necesita tu aprobacion',
+      label: 'Por aprobar',
       tone: 'warning',
     });
 
@@ -27,7 +27,7 @@ describe('happy circle presentation', () => {
       actionability: 'waiting',
       key: 'waiting_others',
       label: 'Esperando aprobaciones',
-      tone: 'neutral',
+      tone: 'cycle',
     });
   });
 
@@ -36,7 +36,7 @@ describe('happy circle presentation', () => {
       actionability: 'ready',
       key: 'approved',
       label: 'Listo para completar',
-      tone: 'cycle',
+      tone: 'success',
     });
     expect(resolveHappyCirclePresentation({ status: 'executed' })).toMatchObject({
       actionability: 'closed',
@@ -51,12 +51,12 @@ describe('happy circle presentation', () => {
     expect(resolveHappyCirclePresentation({ status: 'stale' })).toMatchObject({
       actionability: 'closed',
       key: 'stale',
-      tone: 'neutral',
+      tone: 'cycle',
     });
     expect(resolveHappyCirclePresentation({ status: 'expired' })).toMatchObject({
       actionability: 'closed',
       key: 'expired',
-      tone: 'neutral',
+      tone: 'danger',
     });
   });
 });

@@ -10,7 +10,7 @@ export function PersonDetailLoadingState() {
     <ScreenShell
       headerVariant="plain"
       largeTitle={false}
-      subtitle="Cargando esta relacion."
+      subtitle="Cargando esta relación."
       title="Persona"
     >
       <HappyCirclesMotion size={108} variant="loading" />
@@ -31,7 +31,7 @@ export function PersonDetailErrorState({
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
-      subtitle="No pudimos cargar esta relacion."
+      subtitle="No pudimos cargar esta relación."
       title="Persona"
     >
       <AppText style={styles.supportText}>{message}</AppText>
@@ -45,12 +45,12 @@ export function PersonDetailMissingState({ refresh }: { readonly refresh: Brande
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
-      subtitle="No encontramos esta relacion."
+      subtitle="No encontramos esta relación."
       title="Persona"
     >
       <EmptyState
-        description="Prueba desde la lista principal de personas o confirma que la relacion exista en Supabase."
-        title="Sin relacion activa"
+        description="Prueba desde la lista principal de personas o confirma que la relación exista en Supabase."
+        title="Sin relación activa"
       />
     </ScreenShell>
   );

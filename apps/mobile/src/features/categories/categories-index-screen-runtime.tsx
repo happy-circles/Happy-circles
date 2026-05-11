@@ -1,6 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  type LayoutChangeEvent,
+  PanResponder,
+  type PanResponderGestureState,
+  Pressable,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, BalanceAnalyticsCategoryRowDto } from '@happy-circles/application';
@@ -29,9 +37,12 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
-import { categoriesIndexScreenStyles as styles } from './categories-index-screen-styles';
 import {
-  ActiveCategoryPill,
+  CATEGORY_METRIC_CAROUSEL_ITEM_GAP,
+  CATEGORY_METRIC_CAROUSEL_ITEM_WIDTH,
+  categoriesIndexScreenStyles as styles,
+} from './categories-index-screen-styles';
+import {
   CategoriesPodiumCard,
   CategoryRow,
   CategoryTransactionCard,
@@ -44,6 +55,7 @@ const CATEGORY_INSIGHT_OPTIONS = [
   { label: 'Te deben', value: 'owed_to_me' },
   { label: 'Debes', value: 'i_owe' },
   { label: 'Pendientes', value: 'pending' },
+  { label: 'Rechazadas', value: 'rejected' },
   { label: 'Circles', value: 'circles' },
   { label: 'Movimientos', value: 'movements' },
 ] as const;
@@ -51,6 +63,22 @@ const CATEGORY_INSIGHT_OPTIONS = [
 type CategoryInsightFilter = (typeof CATEGORY_INSIGHT_OPTIONS)[number]['value'];
 
 const CATEGORY_INSIGHT_VALUES = CATEGORY_INSIGHT_OPTIONS.map((option) => option.value);
+const METRIC_CAROUSEL_ITEM_GAP = CATEGORY_METRIC_CAROUSEL_ITEM_GAP;
+const METRIC_CAROUSEL_ITEM_WIDTH = CATEGORY_METRIC_CAROUSEL_ITEM_WIDTH;
+const METRIC_CAROUSEL_STEP = METRIC_CAROUSEL_ITEM_WIDTH + METRIC_CAROUSEL_ITEM_GAP;
+const CATEGORY_INSIGHT_FALLBACK_WIDTH = 344;
+const CATEGORY_INSIGHT_LOOP_REPETITIONS = 9;
+const CATEGORY_INSIGHT_LOOP_MIDDLE_REPEAT = Math.floor(CATEGORY_INSIGHT_LOOP_REPETITIONS / 2);
+const CATEGORY_INSIGHT_HORIZONTAL_GESTURE_MIN_DX = 10;
+const CATEGORY_INSIGHT_HORIZONTAL_GESTURE_LOCK_RATIO = 1.5;
+const CATEGORY_INSIGHT_VERTICAL_TAKEOVER_RATIO = 1.25;
+const CATEGORY_INSIGHT_PODIUM_SNAP_COMMIT_RATIO = 0.22;
+const CATEGORY_INSIGHT_FILTER_SNAP_COMMIT_RATIO = 0.34;
+const CATEGORY_INSIGHT_PODIUM_SNAP_VELOCITY_THRESHOLD = 0.24;
+const CATEGORY_INSIGHT_FILTER_SNAP_VELOCITY_THRESHOLD = 0.36;
+const CATEGORY_INSIGHT_VELOCITY_PROJECTION_MS = 180;
+
+type CategoryInsightSwipeSource = 'filter' | 'podium';
 
 function normalizedText(value: string | number | null | undefined): string {
   return `${value ?? ''}`.trim().toLocaleLowerCase('es-CO');
@@ -69,11 +97,37 @@ function compactCategoryInsightLabel(filter: CategoryInsightFilter): string {
     return 'Pend.';
   }
 
+  if (filter === 'rejected') {
+    return 'Rech.';
+  }
+
   if (filter === 'movements') {
     return 'Movs.';
   }
 
   return categoryInsightFilterLabel(filter);
+}
+
+function shouldClaimHorizontalCategoryGesture(gestureState: PanResponderGestureState): boolean {
+  const absDx = Math.abs(gestureState.dx);
+  const absDy = Math.abs(gestureState.dy);
+
+  return (
+    absDx >= CATEGORY_INSIGHT_HORIZONTAL_GESTURE_MIN_DX &&
+    absDx > absDy * CATEGORY_INSIGHT_HORIZONTAL_GESTURE_LOCK_RATIO
+  );
+}
+
+function shouldReleaseCategoryGestureToVerticalScroll(
+  gestureState: PanResponderGestureState,
+): boolean {
+  const absDx = Math.abs(gestureState.dx);
+  const absDy = Math.abs(gestureState.dy);
+
+  return (
+    absDy > CATEGORY_INSIGHT_HORIZONTAL_GESTURE_MIN_DX &&
+    absDy > absDx * CATEGORY_INSIGHT_VERTICAL_TAKEOVER_RATIO
+  );
 }
 
 function categoryInsightIcon(filter: CategoryInsightFilter): keyof typeof Ionicons.glyphMap {
@@ -87,6 +141,10 @@ function categoryInsightIcon(filter: CategoryInsightFilter): keyof typeof Ionico
 
   if (filter === 'pending') {
     return 'time-outline';
+  }
+
+  if (filter === 'rejected') {
+    return 'close-circle-outline';
   }
 
   if (filter === 'circles') {
@@ -113,6 +171,10 @@ function categoryInsightTone(filter: CategoryInsightFilter): CategoryInsightTone
     return 'pending';
   }
 
+  if (filter === 'rejected') {
+    return 'danger';
+  }
+
   if (filter === 'circles') {
     return 'cycle';
   }
@@ -120,8 +182,36 @@ function categoryInsightTone(filter: CategoryInsightFilter): CategoryInsightTone
   return 'neutral';
 }
 
+function categoryInsightToneColor(tone: CategoryInsightTone): string {
+  if (tone === 'positive') {
+    return theme.colors.success;
+  }
+
+  if (tone === 'negative') {
+    return theme.colors.warning;
+  }
+
+  if (tone === 'pending') {
+    return '#ca8a04';
+  }
+
+  if (tone === 'danger') {
+    return theme.colors.danger;
+  }
+
+  if (tone === 'cycle') {
+    return '#2563eb';
+  }
+
+  return theme.colors.primary;
+}
+
 function emptyMetricForFilter(filter: CategoryInsightFilter): string {
   if (filter === 'pending') {
+    return '0';
+  }
+
+  if (filter === 'rejected') {
     return '0';
   }
 
@@ -141,6 +231,10 @@ function categoryInsightEmptyTitle(filter: CategoryInsightFilter): string {
     return 'Sin pendientes';
   }
 
+  if (filter === 'rejected') {
+    return 'Sin rechazadas';
+  }
+
   if (filter === 'circles') {
     return 'Sin Circles';
   }
@@ -153,6 +247,10 @@ function categoryInsightEmptyTitle(filter: CategoryInsightFilter): string {
 }
 
 function categoryInsightEmptyDescription(filter: CategoryInsightFilter): string {
+  if (filter === 'rejected') {
+    return 'Las categorías con movimientos rechazados aparecerán aquí.';
+  }
+
   if (filter === 'owed_to_me') {
     return 'Cuando una categoría acumule dinero que te deben, aparecerá aquí.';
   }
@@ -260,6 +358,10 @@ function matchesCategoryHistoryFilter(
     return true;
   }
 
+  if (filter === 'rejected') {
+    return item.status === 'rejected';
+  }
+
   if (filter === 'balance') {
     return isBalanceRootItem(item);
   }
@@ -335,7 +437,7 @@ function emptyCategoryInsight(
   };
 }
 
-function pendingCategoryRow(
+function activityCategoryRow(
   category: TransactionCategory,
   items: readonly ActivityItemDto[],
 ): BalanceAnalyticsCategoryRowDto {
@@ -376,9 +478,39 @@ function buildPendingCategoryInsights(
       return {
         metricLabel:
           amountMinor > 0 ? `${items.length} · ${formatCop(amountMinor)}` : String(items.length),
-        row: pendingCategoryRow(category, items),
+        row: activityCategoryRow(category, items),
         score: items.length * 100_000_000 + amountMinor,
         tone: 'pending',
+      };
+    }),
+  );
+}
+
+function buildRejectedCategoryInsights(
+  historyItems: readonly ActivityItemDto[],
+): readonly CategoryInsightRow[] {
+  const groupedItems = new Map<TransactionCategory, ActivityItemDto[]>();
+
+  for (const item of historyItems) {
+    if (item.status !== 'rejected') {
+      continue;
+    }
+
+    const category = transactionVisualCategory(item);
+    const existingItems = groupedItems.get(category) ?? [];
+    existingItems.push(item);
+    groupedItems.set(category, existingItems);
+  }
+
+  return sortInsights(
+    Array.from(groupedItems.entries()).map(([category, items]) => {
+      const amountMinor = items.reduce((total, item) => total + Math.abs(item.amountMinor ?? 0), 0);
+      return {
+        metricLabel:
+          amountMinor > 0 ? `${items.length} · ${formatCop(amountMinor)}` : String(items.length),
+        row: activityCategoryRow(category, items),
+        score: items.length * 100_000_000 + amountMinor,
+        tone: 'danger',
       };
     }),
   );
@@ -387,14 +519,20 @@ function buildPendingCategoryInsights(
 function buildCategoryInsightRows({
   categories,
   filter,
+  historyItems,
   pendingItems,
 }: {
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
   readonly filter: CategoryInsightFilter;
+  readonly historyItems: readonly ActivityItemDto[];
   readonly pendingItems: readonly ActivityItemDto[];
 }): readonly CategoryInsightRow[] {
   if (filter === 'pending') {
     return buildPendingCategoryInsights(pendingItems);
+  }
+
+  if (filter === 'rejected') {
+    return buildRejectedCategoryInsights(historyItems);
   }
 
   if (filter === 'owed_to_me') {
@@ -457,56 +595,483 @@ function buildCategoryInsightRows({
   );
 }
 
-function CategoryInsightFilterRail({
+function CategoryInsightSwitcher({
   activeFilter,
   onChange,
+  renderPage,
 }: {
   readonly activeFilter: CategoryInsightFilter;
   readonly onChange: (filter: CategoryInsightFilter) => void;
+  readonly renderPage: (filter: CategoryInsightFilter) => ReactNode;
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const [podiumWidth, setPodiumWidth] = useState(0);
+  const [filterWidth, setFilterWidth] = useState(0);
+  const [visualFilter, setVisualFilter] = useState<CategoryInsightFilter>(activeFilter);
+  const activeFilterRef = useRef(activeFilter);
+  const onChangeRef = useRef(onChange);
+  const hasAlignedRef = useRef(false);
+  const hasMeasuredWidthsRef = useRef(false);
+  const visualFilterRef = useRef(activeFilter);
+  const activeIndex = Math.max(0, CATEGORY_INSIGHT_VALUES.indexOf(activeFilter));
+  const centerLoopBaseIndex = CATEGORY_INSIGHT_LOOP_MIDDLE_REPEAT * CATEGORY_INSIGHT_VALUES.length;
+  const activeLoopIndex = centerLoopBaseIndex + activeIndex;
+  const currentLoopPositionRef = useRef(activeLoopIndex);
+  const gestureStartLoopPositionRef = useRef(activeLoopIndex);
+  const podiumPanResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  const filterPanResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  const skipNextActiveScrollRef = useRef(false);
+  const positionProgress = useRef(new Animated.Value(activeLoopIndex)).current;
+  const measuredWindowWidth = windowWidth > 0 ? windowWidth : CATEGORY_INSIGHT_FALLBACK_WIDTH;
+  const fallbackPodiumWidth =
+    windowWidth > 0 ? Math.max(0, measuredWindowWidth - theme.spacing.sm * 2) : measuredWindowWidth;
+  const fallbackFilterWidth = measuredWindowWidth;
+  const resolvedPodiumWidth = podiumWidth > 0 ? podiumWidth : fallbackPodiumWidth;
+  const resolvedFilterWidth = filterWidth > 0 ? filterWidth : fallbackFilterWidth;
+  const resolvedPodiumWidthRef = useRef(resolvedPodiumWidth);
+  const hasMeasuredWidths = podiumWidth > 0 && filterWidth > 0;
+  const filterSidePadding = Math.max(0, (resolvedFilterWidth - METRIC_CAROUSEL_ITEM_WIDTH) / 2);
+  const filterOptions = useMemo(() => {
+    return Array.from({ length: CATEGORY_INSIGHT_LOOP_REPETITIONS }, (_, repeatIndex) =>
+      CATEGORY_INSIGHT_OPTIONS.map((option, optionIndex) => ({
+        ...option,
+        carouselKey: `category-metric-${repeatIndex}-${option.value}`,
+        loopIndex: repeatIndex * CATEGORY_INSIGHT_VALUES.length + optionIndex,
+      })),
+    ).flat();
+  }, []);
+  const podiumFilters = useMemo(() => {
+    return Array.from({ length: CATEGORY_INSIGHT_LOOP_REPETITIONS }, () => [
+      ...CATEGORY_INSIGHT_VALUES,
+    ]).flat();
+  }, []);
+  const podiumTrackStyle = {
+    transform: [{ translateX: Animated.multiply(positionProgress, -resolvedPodiumWidth) }],
+  };
+  const filterTrackWidth =
+    filterSidePadding * 2 +
+    filterOptions.length * METRIC_CAROUSEL_ITEM_WIDTH +
+    Math.max(0, filterOptions.length - 1) * METRIC_CAROUSEL_ITEM_GAP;
+  const filterTrackStyle = {
+    paddingLeft: filterSidePadding,
+    paddingRight: filterSidePadding,
+    transform: [{ translateX: Animated.multiply(positionProgress, -METRIC_CAROUSEL_STEP) }],
+    width: filterTrackWidth,
+  };
+
+  onChangeRef.current = onChange;
+  resolvedPodiumWidthRef.current = resolvedPodiumWidth;
+
+  useEffect(() => {
+    if (resolvedPodiumWidth <= 0 || resolvedFilterWidth <= 0) {
+      return undefined;
+    }
+
+    if (skipNextActiveScrollRef.current) {
+      skipNextActiveScrollRef.current = false;
+      activeFilterRef.current = activeFilter;
+      updateVisualFilter(activeFilter);
+      return undefined;
+    }
+
+    const targetLoopIndex = loopIndexForFilter(activeFilter);
+    activeFilterRef.current = activeFilter;
+    updateVisualFilter(activeFilter);
+
+    const frame = requestAnimationFrame(() => {
+      const shouldAnimate = hasAlignedRef.current && hasMeasuredWidthsRef.current;
+
+      snapToLoopIndex(targetLoopIndex, shouldAnimate, false);
+      hasAlignedRef.current = true;
+      hasMeasuredWidthsRef.current = hasMeasuredWidthsRef.current || hasMeasuredWidths;
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [
+    activeFilter,
+    activeIndex,
+    activeLoopIndex,
+    hasMeasuredWidths,
+    resolvedFilterWidth,
+    resolvedPodiumWidth,
+  ]);
+
+  useEffect(() => {
+    const listenerId = positionProgress.addListener(({ value }) => {
+      currentLoopPositionRef.current = value;
+    });
+
+    return () => {
+      positionProgress.removeListener(listenerId);
+    };
+  }, [positionProgress]);
+
+  function valueIndexForLoopIndex(loopIndex: number): number {
+    const valueCount = CATEGORY_INSIGHT_VALUES.length;
+
+    if (valueCount === 0) {
+      return 0;
+    }
+
+    return ((loopIndex % valueCount) + valueCount) % valueCount;
+  }
+
+  function loopIndexForFilter(filter: CategoryInsightFilter): number {
+    const valueCount = CATEGORY_INSIGHT_VALUES.length;
+    const valueIndex = CATEGORY_INSIGHT_VALUES.indexOf(filter);
+
+    if (valueCount === 0 || valueIndex < 0) {
+      return Math.round(currentLoopPositionRef.current);
+    }
+
+    const preferredRepeat = Math.round((currentLoopPositionRef.current - valueIndex) / valueCount);
+    const clampedRepeat = Math.min(
+      Math.max(preferredRepeat, 0),
+      CATEGORY_INSIGHT_LOOP_REPETITIONS - 1,
+    );
+    const candidateRepeats = Array.from(
+      new Set([
+        CATEGORY_INSIGHT_LOOP_MIDDLE_REPEAT,
+        clampedRepeat - 1,
+        clampedRepeat,
+        clampedRepeat + 1,
+      ]),
+    ).filter((repeat) => repeat >= 0 && repeat < CATEGORY_INSIGHT_LOOP_REPETITIONS);
+
+    return candidateRepeats
+      .map((repeat) => repeat * valueCount + valueIndex)
+      .reduce((closestIndex, candidateIndex) =>
+        Math.abs(candidateIndex - currentLoopPositionRef.current) <
+        Math.abs(closestIndex - currentLoopPositionRef.current)
+          ? candidateIndex
+          : closestIndex,
+      );
+  }
+
+  function resolveLoopIndex(rawLoopIndex: number) {
+    const valueCount = CATEGORY_INSIGHT_VALUES.length;
+    const maxLoopIndex = valueCount * CATEGORY_INSIGHT_LOOP_REPETITIONS - 1;
+    const loopIndex = Math.min(Math.max(rawLoopIndex, 0), Math.max(maxLoopIndex, 0));
+    const valueIndex = valueIndexForLoopIndex(loopIndex);
+
+    return { loopIndex, valueIndex };
+  }
+
+  function centerLoopPosition(loopPosition: number): number {
+    const valueCount = CATEGORY_INSIGHT_VALUES.length;
+
+    if (valueCount === 0) {
+      return centerLoopBaseIndex;
+    }
+
+    const valueProgress = ((loopPosition % valueCount) + valueCount) % valueCount;
+
+    return centerLoopBaseIndex + valueProgress;
+  }
+
+  function updateVisualFilter(nextFilter: CategoryInsightFilter) {
+    if (visualFilterRef.current === nextFilter) {
+      return;
+    }
+
+    visualFilterRef.current = nextFilter;
+    setVisualFilter(nextFilter);
+  }
+
+  function commitLoopIndex(loopIndex: number) {
+    const { valueIndex } = resolveLoopIndex(Math.round(loopIndex));
+    const nextFilter = CATEGORY_INSIGHT_VALUES[valueIndex];
+
+    if (!nextFilter) {
+      return;
+    }
+
+    updateVisualFilter(nextFilter);
+
+    if (nextFilter === activeFilterRef.current) {
+      return;
+    }
+
+    skipNextActiveScrollRef.current = true;
+    activeFilterRef.current = nextFilter;
+    onChangeRef.current(nextFilter);
+  }
+
+  function normalizePosition(loopIndex: number) {
+    const centeredLoopIndex = centerLoopBaseIndex + valueIndexForLoopIndex(Math.round(loopIndex));
+
+    if (Math.abs(centeredLoopIndex - currentLoopPositionRef.current) <= 0.001) {
+      return;
+    }
+
+    currentLoopPositionRef.current = centeredLoopIndex;
+    positionProgress.setValue(centeredLoopIndex);
+  }
+
+  function snapToLoopIndex(
+    loopIndex: number,
+    animated: boolean,
+    shouldCommit: boolean,
+    velocity = 0,
+  ) {
+    const targetLoopIndex = resolveLoopIndex(loopIndex).loopIndex;
+
+    positionProgress.stopAnimation();
+
+    if (!animated) {
+      currentLoopPositionRef.current = targetLoopIndex;
+      positionProgress.setValue(targetLoopIndex);
+      normalizePosition(targetLoopIndex);
+
+      if (shouldCommit) {
+        commitLoopIndex(targetLoopIndex);
+      }
+
+      return;
+    }
+
+    Animated.spring(positionProgress, {
+      damping: 23,
+      mass: 0.9,
+      stiffness: 230,
+      toValue: targetLoopIndex,
+      useNativeDriver: true,
+      velocity,
+    }).start(({ finished }) => {
+      if (finished) {
+        normalizePosition(targetLoopIndex);
+
+        if (shouldCommit) {
+          commitLoopIndex(targetLoopIndex);
+        }
+      }
+    });
+  }
+
+  function handlePodiumLayout(event: LayoutChangeEvent) {
+    const nextWidth = event.nativeEvent.layout.width;
+
+    if (nextWidth > 0 && Math.abs(nextWidth - podiumWidth) > 0.5) {
+      setPodiumWidth(nextWidth);
+    }
+  }
+
+  function handleFilterLayout(event: LayoutChangeEvent) {
+    const nextWidth = event.nativeEvent.layout.width;
+
+    if (nextWidth > 0 && Math.abs(nextWidth - filterWidth) > 0.5) {
+      setFilterWidth(nextWidth);
+    }
+  }
+
+  function stepForSource(source: CategoryInsightSwipeSource) {
+    return source === 'filter' ? METRIC_CAROUSEL_STEP : resolvedPodiumWidthRef.current;
+  }
+
+  function snapCommitRatioForSource(source: CategoryInsightSwipeSource) {
+    return source === 'filter'
+      ? CATEGORY_INSIGHT_FILTER_SNAP_COMMIT_RATIO
+      : CATEGORY_INSIGHT_PODIUM_SNAP_COMMIT_RATIO;
+  }
+
+  function snapVelocityThresholdForSource(source: CategoryInsightSwipeSource) {
+    return source === 'filter'
+      ? CATEGORY_INSIGHT_FILTER_SNAP_VELOCITY_THRESHOLD
+      : CATEGORY_INSIGHT_PODIUM_SNAP_VELOCITY_THRESHOLD;
+  }
+
+  function handleGestureGrant() {
+    const fallbackCenteredPosition = centerLoopPosition(currentLoopPositionRef.current);
+
+    currentLoopPositionRef.current = fallbackCenteredPosition;
+    gestureStartLoopPositionRef.current = fallbackCenteredPosition;
+    positionProgress.setValue(fallbackCenteredPosition);
+
+    positionProgress.stopAnimation((value) => {
+      const centeredPosition = centerLoopPosition(value);
+
+      currentLoopPositionRef.current = centeredPosition;
+      gestureStartLoopPositionRef.current = centeredPosition;
+      positionProgress.setValue(centeredPosition);
+    });
+  }
+
+  function handleGestureMove(
+    source: CategoryInsightSwipeSource,
+    gestureState: PanResponderGestureState,
+  ) {
+    const step = stepForSource(source);
+
+    if (step <= 0) {
+      return;
+    }
+
+    const nextPosition = gestureStartLoopPositionRef.current - gestureState.dx / step;
+    const clampedPosition = resolveLoopIndex(nextPosition).loopIndex;
+
+    currentLoopPositionRef.current = clampedPosition;
+    positionProgress.setValue(clampedPosition);
+  }
+
+  function handleGestureEnd(
+    source: CategoryInsightSwipeSource,
+    gestureState: PanResponderGestureState,
+  ) {
+    const step = stepForSource(source);
+
+    if (step <= 0) {
+      return;
+    }
+
+    const dragDeltaItems = -gestureState.dx / step;
+    const velocityDeltaItems = (-gestureState.vx * CATEGORY_INSIGHT_VELOCITY_PROJECTION_MS) / step;
+    const projectedDeltaItems = dragDeltaItems + velocityDeltaItems;
+    const shouldAdvance =
+      Math.abs(dragDeltaItems) >= snapCommitRatioForSource(source) ||
+      Math.abs(gestureState.vx) >= snapVelocityThresholdForSource(source);
+    const direction =
+      projectedDeltaItems === 0 ? Math.sign(dragDeltaItems) : Math.sign(projectedDeltaItems);
+    const targetLoopIndex = shouldAdvance
+      ? Math.round(gestureStartLoopPositionRef.current) +
+        direction * Math.max(1, Math.round(Math.abs(projectedDeltaItems)))
+      : Math.round(gestureStartLoopPositionRef.current);
+    const velocityInItems = Math.max(-8, Math.min(8, (-gestureState.vx * 1000) / step));
+
+    snapToLoopIndex(targetLoopIndex, true, true, velocityInItems);
+  }
+
+  function handleGestureCancel() {
+    snapToLoopIndex(Math.round(gestureStartLoopPositionRef.current), true, false);
+  }
+
+  function createPanResponder(source: CategoryInsightSwipeSource) {
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        shouldClaimHorizontalCategoryGesture(gestureState),
+      onPanResponderGrant: handleGestureGrant,
+      onPanResponderMove: (_, gestureState) => handleGestureMove(source, gestureState),
+      onPanResponderRelease: (_, gestureState) => handleGestureEnd(source, gestureState),
+      onPanResponderTerminate: handleGestureCancel,
+      onPanResponderTerminationRequest: (_, gestureState) =>
+        shouldReleaseCategoryGestureToVerticalScroll(gestureState),
+      onShouldBlockNativeResponder: () => false,
+    });
+  }
+
+  function handleFilterPress(filter: CategoryInsightFilter, loopIndex: number) {
+    if (filter === activeFilterRef.current) {
+      snapToLoopIndex(loopIndex, true, false);
+      return;
+    }
+
+    snapToLoopIndex(loopIndex, true, true);
+  }
+
+  if (!podiumPanResponderRef.current) {
+    podiumPanResponderRef.current = createPanResponder('podium');
+  }
+
+  if (!filterPanResponderRef.current) {
+    filterPanResponderRef.current = createPanResponder('filter');
+  }
+
+  const podiumPanResponder = podiumPanResponderRef.current;
+  const filterPanResponder = filterPanResponderRef.current;
+
   return (
-    <View style={styles.filterStack}>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.filterRail}
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
+    <>
+      <View
+        onLayout={handlePodiumLayout}
+        style={styles.podiumPager}
+        {...podiumPanResponder.panHandlers}
       >
-        {CATEGORY_INSIGHT_OPTIONS.map((option) => {
-          const selected = option.value === activeFilter;
-          return (
-            <View key={option.value} style={styles.metricCarouselItem}>
-              {selected ? <View style={styles.metricCarouselShadow} /> : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => onChange(option.value)}
-                style={({ pressed }) => [
-                  styles.metricCarouselButton,
-                  selected ? styles.metricCarouselButtonSelected : null,
-                  pressed ? styles.metricCarouselItemPressed : null,
-                ]}
-              >
-                <Ionicons
-                  color={selected ? theme.colors.text : theme.colors.textMuted}
-                  name={categoryInsightIcon(option.value)}
-                  size={17}
-                />
-                <AppText
-                  numberOfLines={1}
-                  style={[
-                    styles.metricCarouselText,
-                    selected ? styles.metricCarouselTextSelected : null,
-                  ]}
-                >
-                  {compactCategoryInsightLabel(option.value)}
-                </AppText>
-              </Pressable>
+        <Animated.View
+          style={[
+            styles.syncedPodiumTrack,
+            { width: resolvedPodiumWidth * podiumFilters.length },
+            podiumTrackStyle,
+          ]}
+        >
+          {podiumFilters.map((pageFilter, pageIndex) => (
+            <View
+              key={`${pageIndex}:${pageFilter}`}
+              style={[
+                styles.syncedPodiumPage,
+                styles.podiumPagerPage,
+                { width: resolvedPodiumWidth },
+              ]}
+            >
+              {renderPage(pageFilter)}
             </View>
-          );
-        })}
-      </ScrollView>
-    </View>
+          ))}
+        </Animated.View>
+      </View>
+
+      <View onLayout={handleFilterLayout} style={styles.filterStack}>
+        <View style={styles.filterViewport} {...filterPanResponder.panHandlers}>
+          <Animated.View style={[styles.filterRail, filterTrackStyle]}>
+            {filterOptions.map((option) => {
+              const selected = option.value === visualFilter;
+              const color = categoryInsightToneColor(categoryInsightTone(option.value));
+              const focusStyle = {
+                opacity: positionProgress.interpolate({
+                  extrapolate: 'clamp',
+                  inputRange: [option.loopIndex - 1, option.loopIndex, option.loopIndex + 1],
+                  outputRange: [0.44, 1, 0.44],
+                }),
+                transform: [
+                  {
+                    scale: positionProgress.interpolate({
+                      extrapolate: 'clamp',
+                      inputRange: [option.loopIndex - 1, option.loopIndex, option.loopIndex + 1],
+                      outputRange: [0.96, 1.04, 0.96],
+                    }),
+                  },
+                ],
+              };
+              const shadowStyle = {
+                opacity: positionProgress.interpolate({
+                  extrapolate: 'clamp',
+                  inputRange: [option.loopIndex - 1, option.loopIndex, option.loopIndex + 1],
+                  outputRange: [0, 0.48, 0],
+                }),
+              };
+
+              return (
+                <Animated.View
+                  key={option.carouselKey}
+                  style={[styles.metricCarouselItem, focusStyle]}
+                >
+                  <Pressable
+                    accessibilityLabel={`Ver podio por ${option.label}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => handleFilterPress(option.value, option.loopIndex)}
+                    style={({ pressed }) => [
+                      styles.metricCarouselButton,
+                      pressed ? styles.metricCarouselItemPressed : null,
+                    ]}
+                  >
+                    <Ionicons color={color} name={categoryInsightIcon(option.value)} size={18} />
+                    <AppText
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.78}
+                      numberOfLines={1}
+                      style={[styles.metricCarouselText, { color }]}
+                    >
+                      {compactCategoryInsightLabel(option.value)}
+                    </AppText>
+                    <Animated.View
+                      style={[styles.metricCarouselShadow, { backgroundColor: color }, shadowStyle]}
+                    />
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </Animated.View>
+        </View>
+      </View>
+    </>
   );
 }
 
@@ -514,6 +1079,13 @@ function selectedCategorySectionTitles(filter: CategoryInsightFilter): {
   readonly history: string;
   readonly pending: string;
 } {
+  if (filter === 'rejected') {
+    return {
+      history: 'Rechazadas',
+      pending: 'Pendientes',
+    };
+  }
+
   if (filter === 'circles') {
     return {
       history: 'Historial de Circles',
@@ -531,6 +1103,10 @@ function selectedCategoryEmptyDescription(
   filter: CategoryInsightFilter,
   hasQuery: boolean,
 ): string {
+  if (!hasQuery && filter === 'rejected') {
+    return 'No hay movimientos rechazados para esta categoria.';
+  }
+
   if (hasQuery) {
     return 'Prueba con otro texto o borra la búsqueda para ver el historial.';
   }
@@ -540,7 +1116,7 @@ function selectedCategoryEmptyDescription(
   }
 
   if (filter === 'circles') {
-    return 'No hay Happy Circles visibles para esta categoría.';
+    return 'No hay Happy Circles para esta categoría.';
   }
 
   return 'No hay transacciones cerradas para esta categoría.';
@@ -553,6 +1129,14 @@ function selectedCategoryEmptyTitle(filter: CategoryInsightFilter, hasQuery: boo
 
   if (filter === 'pending') {
     return 'Sin pendientes';
+  }
+
+  if (filter === 'rejected') {
+    return 'Sin rechazadas';
+  }
+
+  if (filter === 'circles') {
+    return 'Sin Circles';
   }
 
   return 'Sin historial';
@@ -632,6 +1216,7 @@ export function CategoriesIndexScreen({
     categoryRowsByFilter[filter] = buildCategoryInsightRows({
       categories,
       filter,
+      historyItems,
       pendingItems,
     });
   }
@@ -646,11 +1231,17 @@ export function CategoriesIndexScreen({
   const selectedCategoryRow = selectedCategory
     ? rowForCategory(categories, selectedCategory)
     : null;
-  const selectedInsight =
-    selectedCategory && selectedCategoryRow
-      ? (categoryRows.find((insight) => insight.row.category === selectedCategory) ??
-        emptyCategoryInsight(selectedCategoryRow, activeFilter))
-      : null;
+  const selectedInsightByFilter = {} as Record<CategoryInsightFilter, CategoryInsightRow | null>;
+
+  for (const filter of CATEGORY_INSIGHT_VALUES) {
+    selectedInsightByFilter[filter] =
+      selectedCategory && selectedCategoryRow
+        ? (categoryRowsByFilter[filter].find(
+            (insight) => insight.row.category === selectedCategory,
+          ) ?? emptyCategoryInsight(selectedCategoryRow, filter))
+        : null;
+  }
+
   const insightSections = buildCategoryInsightActivitySections({
     filter: activeFilter,
     historyItems,
@@ -699,18 +1290,24 @@ export function CategoriesIndexScreen({
         </View>
 
         <View style={styles.topVisualBand}>
-          <CategoriesPodiumCard
-            onSelectCategory={(category) => {
-              triggerAppSelectionHaptic();
-              setSelectedCategory((currentCategory) =>
-                currentCategory === category ? null : category,
-              );
-            }}
-            ranking={rankingsByFilter[activeFilter]}
-            selectedCategory={selectedCategory}
-            selectedInsight={selectedInsight}
+          <CategoryInsightSwitcher
+            activeFilter={activeFilter}
+            onChange={changeCategoryFilter}
+            renderPage={(pageFilter) => (
+              <CategoriesPodiumCard
+                activeFilter={pageFilter}
+                onSelectCategory={(category) => {
+                  triggerAppSelectionHaptic();
+                  setSelectedCategory((currentCategory) =>
+                    currentCategory === category ? null : category,
+                  );
+                }}
+                ranking={rankingsByFilter[pageFilter]}
+                selectedCategory={selectedCategory}
+                selectedInsight={selectedInsightByFilter[pageFilter]}
+              />
+            )}
           />
-          <CategoryInsightFilterRail activeFilter={activeFilter} onChange={changeCategoryFilter} />
         </View>
       </View>
 
@@ -732,12 +1329,6 @@ export function CategoriesIndexScreen({
 
         {selectedCategory ? (
           <>
-            <ActiveCategoryPill
-              fallbackCategory={selectedCategory}
-              onClear={() => setSelectedCategory(null)}
-              row={selectedCategoryRow}
-            />
-
             {!hasSelectedCategoryActivity ? (
               <EmptyState
                 description={selectedCategoryEmptyDescription(activeFilter, hasQuery)}

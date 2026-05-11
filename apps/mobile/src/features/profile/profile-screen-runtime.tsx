@@ -704,6 +704,7 @@ export function ProfileScreen() {
             closedCircleCount={happyCircleClosedCount}
             onPress={openHappyFaces}
             totalFaces={happyCircleFaces}
+            variant="reward"
           />
         </View>
         <IdentityFlowIdentity

@@ -145,7 +145,16 @@ export interface SettlementDetailDto {
   readonly participants: readonly string[];
   readonly participantDecisions: readonly SettlementDetailParticipantDto[];
   readonly participantStatuses: readonly string[];
+  readonly totalAmountMinor: number;
+  readonly personalAmountMinor: number;
+  readonly movementCount: number;
+  readonly personalMovementCount: number;
+  readonly originalMovementCount: number;
+  readonly personalOriginalMovementCount: number;
+  readonly savedMovementsCount: number;
+  readonly personalSavedMovementsCount: number;
   readonly movementDetails: readonly SettlementDetailMovementDto[];
+  readonly originalMovementDetails: readonly SettlementDetailMovementDto[];
   readonly movements: readonly string[];
   readonly impactLines: readonly string[];
   readonly explainers: readonly string[];

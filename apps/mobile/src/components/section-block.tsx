@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
@@ -8,29 +9,40 @@ export interface SectionBlockProps extends PropsWithChildren {
   readonly title: string;
   readonly subtitle?: string;
   readonly action?: ReactNode;
+  readonly contentStyle?: StyleProp<ViewStyle>;
+  readonly headerStyle?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<ViewStyle>;
 }
 
-export function SectionBlock({ title, subtitle, action, children }: SectionBlockProps) {
+export function SectionBlock({
+  title,
+  subtitle,
+  action,
+  children,
+  contentStyle,
+  headerStyle,
+  style,
+}: SectionBlockProps) {
   return (
-    <View style={styles.section}>
-      <View style={styles.header}>
+    <View style={[styles.section, style]}>
+      <View style={[styles.header, headerStyle]}>
         <View style={styles.textWrap}>
           <AppText style={styles.title}>{title}</AppText>
           {subtitle ? <AppText style={styles.subtitle}>{subtitle}</AppText> : null}
         </View>
         {action}
       </View>
-      <View style={styles.content}>{children}</View>
+      <View style={[styles.content, contentStyle]}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   header: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
@@ -42,8 +54,9 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.text,
     fontSize: theme.typography.title3,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 24,
   },
   subtitle: {
     color: theme.colors.textMuted,

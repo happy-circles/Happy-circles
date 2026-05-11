@@ -1,8 +1,15 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 
+import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
+import type { AppHapticFeedback } from '@/lib/app-haptics';
+import {
+  cardStateIntentFromTone,
+  type CardHaloIntensity,
+  type CardStateIntent,
+} from '@/lib/card-language';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
@@ -26,10 +33,15 @@ export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly detail?: string | null;
   readonly meta?: string | null;
   readonly helperText?: string | null;
+  readonly haptic?: AppHapticFeedback;
   readonly focused?: boolean;
+  readonly haloColor?: string;
+  readonly haloIntensity?: CardHaloIntensity;
+  readonly leadingNode?: ReactNode;
   readonly variant?: PendingSnippetVariant;
   readonly tone?: PendingSnippetTone;
   readonly padding?: PendingSnippetPadding;
+  readonly stateIntent?: CardStateIntent;
   readonly style?: StyleProp<ViewStyle>;
   readonly onPress?: () => void;
 }
@@ -44,17 +56,35 @@ export function PendingSnippetCard({
   detail,
   meta,
   helperText,
+  haptic = 'selection',
   focused = false,
+  haloColor,
+  haloIntensity = 'strong',
+  leadingNode,
   variant = 'default',
   tone = 'neutral',
   padding = 'md',
+  stateIntent,
   style,
   onPress,
   children,
 }: PendingSnippetCardProps) {
+  const resolvedStateIntent = stateIntent ?? cardStateIntentFromTone(statusTone);
   const body = (
     <>
       <View style={styles.header}>
+        {leadingNode ? (
+          <CardActorAvatar
+            haloColor={haloColor}
+            haloIntensity={haloIntensity}
+            haloSize={42}
+            intent={resolvedStateIntent}
+            size={34}
+            tone={statusTone}
+          >
+            {leadingNode}
+          </CardActorAvatar>
+        ) : null}
         <View style={styles.copy}>
           <AppText style={styles.eyebrow}>{eyebrow}</AppText>
           <AppText style={styles.title}>{title}</AppText>
@@ -100,7 +130,12 @@ export function PendingSnippetCard({
       variant={variant}
     >
       {onPress ? (
-        <CardPressable accessibilityRole="button" onPress={onPress} style={styles.pressable}>
+        <CardPressable
+          accessibilityRole="button"
+          haptic={haptic}
+          onPress={onPress}
+          style={styles.pressable}
+        >
           {body}
         </CardPressable>
       ) : (

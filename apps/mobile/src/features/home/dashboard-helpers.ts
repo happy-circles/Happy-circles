@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 import type { AccountInviteListItem, FriendshipInviteListItem } from '@/lib/live-data';
+import { inviteStatusCopy } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
 import type { BalanceFocus } from '@/features/balance/balance-helpers';
 
@@ -451,46 +452,46 @@ export function inviteRequestMeta(item: InviteRequestItem): string {
 export function statusLabelForInvite(item: InviteRequestItem): string {
   if (item.actionState === 'history') {
     if (item.status === 'accepted') {
-      return 'Aceptada';
+      return inviteStatusCopy.accepted;
     }
 
     if (item.status === 'rejected') {
-      return 'Rechazada';
+      return inviteStatusCopy.rejected;
     }
 
     if (item.status === 'expired') {
-      return 'Expirada';
+      return inviteStatusCopy.expired;
     }
 
     if (item.status === 'canceled') {
-      return 'Cancelada';
+      return inviteStatusCopy.canceled;
     }
 
-    return 'Historico';
+    return 'Histórico';
   }
 
   if (item.actionState === 'requires_you_response') {
-    return 'Por responder';
+    return inviteStatusCopy.requiresResponse;
   }
 
   if (item.actionState === 'requires_you_review') {
-    return 'Por verificar';
+    return inviteStatusCopy.requiresReview;
   }
 
   if (item.actionState === 'pending_claim') {
-    return 'Pendiente de abrir';
+    return inviteStatusCopy.pendingClaim;
   }
 
   if (item.actionState === 'pending_activation') {
-    return 'Pendiente de activar';
+    return inviteStatusCopy.pendingActivation;
   }
 
   if (item.actionState === 'waiting_sender_review') {
-    return 'Esperando validacion';
+    return inviteStatusCopy.waitingSenderReview;
   }
 
   if (item.actionState === 'waiting_other_side') {
-    return 'Esperando respuesta';
+    return inviteStatusCopy.waitingOtherSide;
   }
 
   return 'En seguimiento';
@@ -510,12 +511,12 @@ export function inviteRequestEmptyTitle(tab: InviteRequestsTab): string {
 
 export function inviteRequestEmptyDescription(tab: InviteRequestsTab): string {
   if (tab === 'received') {
-    return 'Cuando alguien quiera conectar contigo, aparecera aqui.';
+    return 'Cuando alguien quiera conectar contigo, aparecerá aquí.';
   }
 
   if (tab === 'history') {
-    return 'Las solicitudes resueltas y vencidas apareceran aqui.';
+    return 'Las solicitudes resueltas y vencidas aparecerán aquí.';
   }
 
-  return 'Las invitaciones que envies quedaran en esta pestana.';
+  return 'Las invitaciones que envíes quedarán en esta pestaña.';
 }

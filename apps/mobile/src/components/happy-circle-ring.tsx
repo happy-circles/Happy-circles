@@ -24,9 +24,11 @@ export function happyCircleDecisionColor(decision: HappyCircleDecision): string 
 }
 
 export function HappyCircleFaceIcon({
+  backgroundColor = theme.colors.surface,
   decision,
   size,
 }: {
+  readonly backgroundColor?: string;
   readonly decision: HappyCircleDecision;
   readonly size: number;
 }) {
@@ -36,7 +38,14 @@ export function HappyCircleFaceIcon({
   if (decision === 'approved') {
     return (
       <Svg height={size} viewBox="0 0 24 24" width={size}>
-        <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+        <Circle
+          cx={12}
+          cy={12}
+          fill={backgroundColor}
+          r={10}
+          stroke={color}
+          strokeWidth={strokeWidth}
+        />
         <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
         <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
         <Path
@@ -53,7 +62,14 @@ export function HappyCircleFaceIcon({
   if (decision === 'rejected') {
     return (
       <Svg height={size} viewBox="0 0 24 24" width={size}>
-        <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+        <Circle
+          cx={12}
+          cy={12}
+          fill={backgroundColor}
+          r={10}
+          stroke={color}
+          strokeWidth={strokeWidth}
+        />
         <Circle cx={8.5} cy={10} fill={color} r={1.5} />
         <Circle cx={15.5} cy={10} fill={color} r={1.5} />
         <Path
@@ -69,7 +85,14 @@ export function HappyCircleFaceIcon({
 
   return (
     <Svg height={size} viewBox="0 0 24 24" width={size}>
-      <Circle cx={12} cy={12} fill="none" r={10} stroke={color} strokeWidth={strokeWidth} />
+      <Circle
+        cx={12}
+        cy={12}
+        fill={backgroundColor}
+        r={10}
+        stroke={color}
+        strokeWidth={strokeWidth}
+      />
       <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
       <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
       <Path d="M 8 15 L 16 15" stroke={color} strokeLinecap="round" strokeWidth={strokeWidth} />

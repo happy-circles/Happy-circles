@@ -30,6 +30,7 @@ export function DashboardPeopleSection({
           </Pressable>
         </Link>
       }
+      headerStyle={styles.homeSectionHeader}
       title="Personas"
     >
       <ScrollView
@@ -64,20 +65,59 @@ export function DashboardTransactionsSection({
     return null;
   }
 
+  const pendingItems = items.filter((entry) => entry.isPending);
+  const historyItems = items.filter((entry) => !entry.isPending);
+
   return (
-    <SectionBlock title="Ultimos movimientos">
-      <View style={styles.transactionList}>
-        {items.map(({ highlightPending, isPending, item, unread }) => (
-          <TransactionPreviewCard
-            highlightPending={highlightPending}
-            isPending={isPending}
-            item={item}
-            key={item.id}
-            onPress={() => onOpenItem(item)}
-            people={people}
-            unread={unread}
-          />
-        ))}
+    <SectionBlock
+      contentStyle={styles.homeSectionContent}
+      headerStyle={styles.homeSectionHeader}
+      title="Movimientos"
+    >
+      <View style={styles.transactionGroups}>
+        {pendingItems.length > 0 ? (
+          <View style={styles.transactionGroup}>
+            <View style={styles.transactionGroupHeader}>
+              <AppText style={styles.transactionGroupTitle}>Pendientes</AppText>
+              <View style={styles.transactionGroupBadge}>
+                <AppText style={styles.transactionGroupBadgeText}>{pendingItems.length}</AppText>
+              </View>
+            </View>
+            <View style={styles.transactionList}>
+              {pendingItems.map(({ highlightPending, isPending, item, unread }) => (
+                <TransactionPreviewCard
+                  highlightPending={highlightPending}
+                  isPending={isPending}
+                  item={item}
+                  key={item.id}
+                  onPress={() => onOpenItem(item)}
+                  people={people}
+                  unread={unread}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+        {historyItems.length > 0 ? (
+          <View style={styles.transactionGroup}>
+            <View style={styles.transactionGroupHeader}>
+              <AppText style={styles.transactionGroupTitle}>Histórico reciente</AppText>
+            </View>
+            <View style={styles.transactionList}>
+              {historyItems.map(({ highlightPending, isPending, item, unread }) => (
+                <TransactionPreviewCard
+                  highlightPending={highlightPending}
+                  isPending={isPending}
+                  item={item}
+                  key={item.id}
+                  onPress={() => onOpenItem(item)}
+                  people={people}
+                  unread={unread}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
         <Link href="/transactions" asChild>
           <Pressable
             style={({ pressed }) => [

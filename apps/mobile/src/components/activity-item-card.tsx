@@ -2,17 +2,19 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import type { AccessibilityRole, StyleProp, ViewStyle } from 'react-native';
 
 import { AppCardShell } from '@/components/card-shell';
+import type { AppHapticFeedback } from '@/lib/app-haptics';
 
 type ActivityItemCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
 
 export interface ActivityItemCardProps extends PropsWithChildren {
-  readonly accentColor: string;
+  readonly accentColor?: string;
   readonly attentionDot?: boolean;
   readonly compact?: boolean;
   readonly contextNode?: ReactNode;
   readonly leadingAccessibilityLabel?: string;
   readonly leadingAccessibilityRole?: AccessibilityRole;
   readonly leadingDisabled?: boolean;
+  readonly leadingHaptic?: AppHapticFeedback;
   readonly leadingNode: ReactNode;
   readonly metaNode?: ReactNode;
   readonly onLeadingPress?: () => void;
@@ -34,6 +36,7 @@ export function ActivityItemCard({
   leadingAccessibilityLabel,
   leadingAccessibilityRole,
   leadingDisabled,
+  leadingHaptic,
   leadingNode,
   metaNode,
   onLeadingPress,
@@ -54,6 +57,7 @@ export function ActivityItemCard({
       leadingAccessibilityLabel={leadingAccessibilityLabel}
       leadingAccessibilityRole={leadingAccessibilityRole}
       leadingDisabled={leadingDisabled}
+      leadingHaptic={leadingHaptic}
       leadingNode={leadingNode}
       metaNode={metaNode}
       onLeadingPress={onLeadingPress}

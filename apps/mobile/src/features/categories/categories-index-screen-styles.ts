@@ -2,6 +2,11 @@ import { StyleSheet } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
+const CATEGORY_INSIGHT_BODY_HEIGHT = 202;
+const CATEGORY_INSIGHT_PAGER_HEIGHT = CATEGORY_INSIGHT_BODY_HEIGHT + 12;
+export const CATEGORY_METRIC_CAROUSEL_ITEM_GAP = 10;
+export const CATEGORY_METRIC_CAROUSEL_ITEM_WIDTH = 104;
+
 export const categoriesIndexScreenStyles = StyleSheet.create({
   loadingState: { alignItems: 'center', gap: theme.spacing.sm },
   supportText: {
@@ -43,19 +48,33 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     width: '100%',
   },
+  podiumPager: {
+    height: CATEGORY_INSIGHT_PAGER_HEIGHT,
+    overflow: 'hidden',
+  },
+  syncedPodiumTrack: {
+    flexDirection: 'row',
+    height: '100%',
+  },
+  syncedPodiumPage: {
+    height: '100%',
+  },
+  podiumPagerPage: {
+    paddingHorizontal: 2,
+  },
   insightModule: {
     gap: 0,
     paddingHorizontal: 2,
     paddingTop: 0,
   },
   insightBody: {
-    height: 202,
+    height: CATEGORY_INSIGHT_BODY_HEIGHT,
   },
   podiumRow: {
     alignItems: 'flex-end',
     flexDirection: 'row',
     gap: 6,
-    height: 202,
+    height: CATEGORY_INSIGHT_BODY_HEIGHT,
     justifyContent: 'space-between',
   },
   podiumSlot: {
@@ -64,7 +83,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     borderRadius: theme.radius.large,
     flex: 1,
     gap: 8,
-    height: 202,
+    height: CATEGORY_INSIGHT_BODY_HEIGHT,
     justifyContent: 'flex-end',
     minWidth: 0,
     paddingHorizontal: 6,
@@ -84,24 +103,28 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   },
   podiumIconWrap: {
     alignItems: 'center',
+    overflow: 'visible',
     position: 'relative',
   },
   podiumRankMedal: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     borderWidth: 1.5,
-    height: 25,
+    elevation: 2,
+    height: 28,
     justifyContent: 'center',
     marginBottom: -6,
-    minWidth: 25,
-    paddingHorizontal: 7,
+    minWidth: 28,
+    overflow: 'visible',
+    paddingHorizontal: 8,
+    position: 'relative',
     zIndex: 2,
   },
   podiumRankMedalFirst: {
-    height: 29,
+    height: 30,
     marginBottom: -7,
-    minWidth: 29,
-    paddingHorizontal: 8,
+    minWidth: 30,
+    paddingHorizontal: 9,
   },
   podiumRankMedalEmpty: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -111,24 +134,29 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   podiumRankMedalText: {
     fontSize: theme.typography.caption,
     fontWeight: '900',
-    lineHeight: 15,
+    includeFontPadding: false,
+    lineHeight: 18,
     textAlign: 'center',
+    textAlignVertical: 'center',
   },
   podiumRankMedalTextFilter: {
     fontSize: 10,
-    lineHeight: 12,
+    lineHeight: 14,
   },
   podiumRankMedalTextEmpty: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '900',
-    lineHeight: 15,
+    includeFontPadding: false,
+    lineHeight: 18,
     textAlign: 'center',
+    textAlignVertical: 'center',
   },
   podiumIconRing: {
     borderRadius: theme.radius.pill,
     borderWidth: 2,
     padding: 3,
+    zIndex: 1,
   },
   podiumIconRingFocused: {
     borderWidth: 2.5,
@@ -174,7 +202,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     borderWidth: 1.5,
   },
   podiumStepFirst: {
-    height: 102,
+    height: 94,
     width: '92%',
   },
   podiumStepSecond: {
@@ -218,18 +246,20 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     marginTop: -4,
     overflow: 'visible',
   },
+  filterViewport: {
+    overflow: 'hidden',
+  },
   filterRail: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: theme.spacing.sm,
+    gap: CATEGORY_METRIC_CAROUSEL_ITEM_GAP,
     paddingVertical: 4,
   },
   metricCarouselItem: {
     backgroundColor: 'transparent',
     minHeight: 52,
     position: 'relative',
-    width: 104,
+    width: CATEGORY_METRIC_CAROUSEL_ITEM_WIDTH,
   },
   metricCarouselButton: {
     alignItems: 'center',
@@ -241,11 +271,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     paddingVertical: 6,
     width: '100%',
   },
-  metricCarouselButtonSelected: {
-    backgroundColor: theme.colors.elevated,
-    borderColor: theme.colors.hairline,
-    borderWidth: 1,
-  },
   metricCarouselItemPressed: {
     opacity: 0.76,
   },
@@ -256,9 +281,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     lineHeight: 16,
     minWidth: 0,
     textAlign: 'center',
-  },
-  metricCarouselTextSelected: {
-    color: theme.colors.text,
   },
   metricCarouselShadow: {
     backgroundColor: 'rgba(15, 23, 42, 0.18)',
@@ -316,23 +338,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   summaryMeta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  activeFilterWrap: { alignItems: 'flex-start' },
-  activeFilterPill: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    maxWidth: '100%',
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 7,
-  },
-  activeFilterText: {
-    flexShrink: 1,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
     lineHeight: 18,
   },
   searchWrap: {
@@ -408,6 +413,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   positive: { color: theme.colors.success },
   negative: { color: theme.colors.warning },
   pending: { color: '#ca8a04' },
+  danger: { color: theme.colors.danger },
   cycle: { color: '#2563eb' },
   neutral: { color: theme.colors.text },
 });

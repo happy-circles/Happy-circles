@@ -132,6 +132,10 @@ function compactPeopleInsightLabel(filter: PeopleInsightFilter): string {
     return 'Pend.';
   }
 
+  if (filter === 'rejected') {
+    return 'Rech.';
+  }
+
   if (filter === 'movements') {
     return 'Movs.';
   }
@@ -247,6 +251,10 @@ function insightToneColor(tone: PeopleInsightTone): string {
     return PENDING_COLOR;
   }
 
+  if (tone === 'danger') {
+    return theme.colors.danger;
+  }
+
   if (tone === 'cycle') {
     return CIRCLE_COLOR;
   }
@@ -265,6 +273,10 @@ function insightToneSoftColor(tone: PeopleInsightTone): string {
 
   if (tone === 'pending') {
     return PENDING_SOFT_COLOR;
+  }
+
+  if (tone === 'danger') {
+    return theme.colors.dangerSoft;
   }
 
   if (tone === 'cycle') {
@@ -287,6 +299,10 @@ function insightFilterTone(filter: PeopleInsightFilter): PeopleInsightTone {
     return 'pending';
   }
 
+  if (filter === 'rejected') {
+    return 'danger';
+  }
+
   if (filter === 'circles') {
     return 'cycle';
   }
@@ -305,6 +321,10 @@ function insightFilterIcon(filter: PeopleInsightFilter): keyof typeof Ionicons.g
 
   if (filter === 'pending') {
     return 'time-outline';
+  }
+
+  if (filter === 'rejected') {
+    return 'close-circle-outline';
   }
 
   if (filter === 'circles') {
@@ -328,6 +348,10 @@ function emptyMetricForFilter(filter: PeopleInsightFilter): string {
   }
 
   if (filter === 'pending') {
+    return '0';
+  }
+
+  if (filter === 'rejected') {
     return '0';
   }
 
@@ -471,9 +495,11 @@ function PeopleInsightSwitcher({
   const skipNextActiveScrollRef = useRef(false);
   const positionProgress = useRef(new Animated.Value(activeLoopIndex)).current;
   const measuredWindowWidth = windowWidth > 0 ? windowWidth : PEOPLE_INSIGHT_FALLBACK_WIDTH;
-  const fallbackSwitcherWidth = Math.max(300, measuredWindowWidth - theme.spacing.sm * 2);
-  const resolvedPodiumWidth = podiumWidth > 0 ? podiumWidth : fallbackSwitcherWidth;
-  const resolvedFilterWidth = filterWidth > 0 ? filterWidth : fallbackSwitcherWidth;
+  const fallbackPodiumWidth =
+    windowWidth > 0 ? Math.max(0, measuredWindowWidth - theme.spacing.sm * 2) : measuredWindowWidth;
+  const fallbackFilterWidth = measuredWindowWidth;
+  const resolvedPodiumWidth = podiumWidth > 0 ? podiumWidth : fallbackPodiumWidth;
+  const resolvedFilterWidth = filterWidth > 0 ? filterWidth : fallbackFilterWidth;
   const resolvedPodiumWidthRef = useRef(resolvedPodiumWidth);
   const hasMeasuredWidths = podiumWidth > 0 && filterWidth > 0;
   const filterSidePadding = Math.max(
@@ -1379,7 +1405,11 @@ export function PeopleIndexScreen() {
   const selectedPendingSectionTitle =
     activeFilter === 'circles' ? 'Circles activos' : 'Pendientes';
   const selectedHistorySectionTitle =
-    activeFilter === 'circles' ? 'Historial de Circles' : 'Historial';
+    activeFilter === 'circles'
+      ? 'Historial de Circles'
+      : activeFilter === 'rejected'
+        ? 'Rechazadas'
+        : 'Historial';
   const hasAnyRelationshipContext =
     people.length > 0 ||
     insightSections.pending.length > 0 ||
@@ -1803,24 +1833,28 @@ const styles = StyleSheet.create({
   },
   podiumAvatarWrap: {
     alignItems: 'center',
+    overflow: 'visible',
     position: 'relative',
   },
   podiumRankMedal: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     borderWidth: 1.5,
-    height: 25,
+    elevation: 2,
+    height: 28,
     justifyContent: 'center',
     marginBottom: -6,
-    minWidth: 25,
-    paddingHorizontal: 7,
+    minWidth: 28,
+    overflow: 'visible',
+    paddingHorizontal: 8,
+    position: 'relative',
     zIndex: 2,
   },
   podiumRankMedalFirst: {
-    height: 29,
+    height: 30,
     marginBottom: -7,
-    minWidth: 29,
-    paddingHorizontal: 8,
+    minWidth: 30,
+    paddingHorizontal: 9,
   },
   podiumRankMedalEmpty: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -1830,24 +1864,29 @@ const styles = StyleSheet.create({
   podiumRankMedalText: {
     fontSize: theme.typography.caption,
     fontWeight: '900',
-    lineHeight: 15,
+    includeFontPadding: false,
+    lineHeight: 18,
     textAlign: 'center',
+    textAlignVertical: 'center',
   },
   podiumRankMedalTextFilter: {
     fontSize: 10,
-    lineHeight: 12,
+    lineHeight: 14,
   },
   podiumRankMedalTextEmpty: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '900',
-    lineHeight: 15,
+    includeFontPadding: false,
+    lineHeight: 18,
     textAlign: 'center',
+    textAlignVertical: 'center',
   },
   podiumAvatarRing: {
     borderRadius: theme.radius.pill,
     borderWidth: 2,
     padding: 3,
+    zIndex: 1,
   },
   podiumAvatarRingFocused: {
     borderWidth: 2.5,
@@ -1881,7 +1920,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   podiumStepFirst: {
-    height: 102,
+    height: 94,
     width: '92%',
   },
   podiumStepSecond: {

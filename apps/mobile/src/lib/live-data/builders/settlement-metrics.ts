@@ -8,7 +8,7 @@ import type { AnalyticsRange } from '../utils/dates';
 import { computeChangeRatio, dateMs, isWithinRange } from '../utils/dates';
 import {
   parseSettlementMovements,
-  settlementProposalTotalAmount,
+  settlementProposalParticipantAmount,
   settlementSavedMovementsCount,
 } from './settlement-core';
 
@@ -54,17 +54,17 @@ export function buildSettlementMetrics(input: {
       timeMs !== null && isWithinRange(timeMs, input.range.currentStartMs, input.range.currentEndMs)
     );
   });
-  const sumProposalTotal = (proposal: SettlementProposalRow) =>
-    settlementProposalTotalAmount(proposal);
+  const sumProposalPersonal = (proposal: SettlementProposalRow) =>
+    settlementProposalParticipantAmount(proposal, input.currentUserId);
   const sumMovementCount = (proposal: SettlementProposalRow) =>
     parseSettlementMovements(proposal.movements_json).length;
 
   const resolvedMinor = currentExecuted.reduce(
-    (total, proposal) => total + sumProposalTotal(proposal),
+    (total, proposal) => total + sumProposalPersonal(proposal),
     0,
   );
   const previousResolvedMinor = previousExecuted.reduce(
-    (total, proposal) => total + sumProposalTotal(proposal),
+    (total, proposal) => total + sumProposalPersonal(proposal),
     0,
   );
   const movementCount = currentExecuted.reduce(

@@ -27,7 +27,7 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 import type { TransactionTargetPanel } from './dashboard-helpers';
 import { AppText } from '@/components/app-text';
 
-const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
+const AVATAR_COLORS = ['#e8604a', '#3dba6e', '#2563eb', '#7c3aed', '#f59e0b', '#0f8a5f'];
 
 export function initialsBackgroundColor(
   person: Pick<PersonCardDto, 'userId' | 'displayName'>,
@@ -173,7 +173,7 @@ export function ShortcutTile({
       style={({ pressed }) => [styles.peopleTile, pressed ? styles.quickActionPressed : null]}
     >
       <View style={[styles.shortcutCircle, dashed ? styles.shortcutCircleDashed : null]}>
-        <Ionicons color={theme.colors.textMuted} name={icon} size={20} />
+        <Ionicons color={theme.colors.primary} name={icon} size={22} />
         {typeof badgeCount === 'number' && badgeCount > 0 ? (
           <View style={styles.requestBadge}>
             <AppText style={styles.requestBadgeText}>{badgeLabel(badgeCount)}</AppText>
@@ -252,17 +252,19 @@ export function TransactionPreviewCard({
     density: 'summary',
     unread,
   });
+  const toneColor = transactionToneColor(item);
+  const previewAccentColor = unread || highlightPending ? toneColor : undefined;
 
   return (
     <TransactionEventCard
-      accentColor={transactionToneColor(item)}
+      accentColor={previewAccentColor}
       actorAvatarUrl={isSystemTransaction ? null : (person?.avatarUrl ?? null)}
       actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
       actorFallbackColor={
-        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
+        isSystemTransaction ? toneColor : initialsBackgroundColor(fallbackPerson)
       }
       actorLabel={name}
-      amountColor={transactionToneColor(item)}
+      amountColor={toneColor}
       amountLabel={amountLabel}
       amountStruckThrough={transactionAmountIsVoided(item)}
       category={category}
@@ -274,10 +276,12 @@ export function TransactionPreviewCard({
       meta={meta}
       onPress={onPress}
       pending={highlightPending}
-      pendingHighlightColor={transactionToneColor(item)}
+      pendingHighlightColor={toneColor}
       statusLabel={showStatus ? transactionStatusLabel(item) : null}
       statusTone={transactionStatusTone(item)}
       unread={unread}
+      variant="elevated"
+      style={styles.transactionPreviewCard}
     />
   );
 }

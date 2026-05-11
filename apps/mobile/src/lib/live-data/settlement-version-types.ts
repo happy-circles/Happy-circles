@@ -1,6 +1,7 @@
 export interface SettlementVersionTimelineItemDto {
   readonly proposalId: string;
   readonly versionNumber: number | null;
+  readonly displayVersionNumber: number | null;
   readonly status: string;
   readonly title: string;
   readonly detail: string;

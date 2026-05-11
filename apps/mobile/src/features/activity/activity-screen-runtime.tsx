@@ -10,6 +10,8 @@ import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
+import { CardActorAvatar } from '@/components/card-actor-avatar';
+import { CardPressable } from '@/components/card-shell';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
@@ -21,7 +23,9 @@ import {
   type InviteRequestsTab,
 } from '@/features/home/dashboard-helpers';
 import { usePeopleInviteRequestsController } from '@/features/people/use-people-invite-requests-controller';
+import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { formatCop } from '@/lib/data';
 import {
   markNotificationItemsViewed,
@@ -507,7 +511,7 @@ function settlementNotificationTitle(item: ActivityItemDto): string {
   }
 
   if (item.status === 'stale') {
-    return 'Version reemplazada';
+    return 'Versión reemplazada';
   }
 
   return 'Revisa este Happy Circle';
@@ -542,25 +546,25 @@ function transactionNotificationTitle(item: ActivityItemDto): string {
     return 'Solicitud cerrada';
   }
 
-  return 'Revisa esta transaccion';
+  return 'Revisa esta transacción';
 }
 
 function inviteNotificationTitle(item: ActivityItemDto): string {
   if (item.kind === 'friendship_invite') {
     if (item.status === 'requires_you_response') {
-      return 'Acepta la invitacion';
+      return 'Acepta la invitación';
     }
 
     if (item.status === 'requires_you_review') {
-      return 'Revisa esta invitacion';
+      return 'Revisa esta invitación';
     }
 
     if (item.status === 'pending_claim') {
-      return 'Invitacion enviada';
+      return 'Invitación enviada';
     }
 
     if (item.status === 'waiting_sender_review') {
-      return 'Esperando validacion';
+      return 'Esperando validación';
     }
 
     if (item.status === 'waiting_other_side') {
@@ -574,15 +578,15 @@ function inviteNotificationTitle(item: ActivityItemDto): string {
     }
 
     if (item.status === 'pending_activation') {
-      return readStringField(item, 'activatedUserId') ? 'Cuenta en creacion' : 'Acceso enviado';
+      return readStringField(item, 'activatedUserId') ? 'Cuenta en creación' : 'Acceso enviado';
     }
 
     if (item.status === 'waiting_sender_review') {
-      return 'Esperando validacion';
+      return 'Esperando validación';
     }
   }
 
-  return 'Revisa esta actualizacion';
+  return 'Revisa esta actualización';
 }
 
 export function ActivityScreen() {
@@ -744,6 +748,7 @@ export function ActivityScreen() {
   }
 
   function changeActiveCategory(category: NotificationCategoryKey) {
+    triggerAppSelectionHaptic();
     setVisualActiveCategory(category);
     setActiveCategory(category);
   }
@@ -759,6 +764,10 @@ export function ActivityScreen() {
     detailHref: NotificationTarget | null,
     unread: boolean,
   ) {
+    const actorIntent = cardStateIntentFromStatus(item.status, {
+      circle: isCycleTransactionItem(item),
+    });
+    const haloIntensity = unread || actorIntent === 'needsAction' ? 'strong' : 'soft';
     const card = (
       <ActivityItemCard
         accentColor={content.accentColor}
@@ -766,29 +775,35 @@ export function ActivityScreen() {
         compact
         key={item.id}
         leadingNode={
-          content.leading === 'avatar' ? (
-            <AppAvatar
-              fallbackBackgroundColor={avatarColorForLabel(actor.label)}
-              fallbackTextColor={theme.colors.white}
-              imageUrl={actor.avatarUrl}
-              label={actor.label}
-              rounded={false}
-              size={42}
-            />
-          ) : (
-            <View
-              style={[
-                styles.notificationActionIconBubble,
-                { backgroundColor: content.iconBackgroundColor ?? theme.colors.surfaceSoft },
-              ]}
-            >
-              <Ionicons
-                color={content.iconColor ?? theme.colors.textMuted}
-                name={content.iconName ?? 'information-circle-outline'}
-                size={24}
+          <CardActorAvatar
+            haloIntensity={haloIntensity}
+            haloSize={54}
+            intent={actorIntent}
+            size={42}
+          >
+            {content.leading === 'avatar' ? (
+              <AppAvatar
+                fallbackBackgroundColor={avatarColorForLabel(actor.label)}
+                fallbackTextColor={theme.colors.white}
+                imageUrl={actor.avatarUrl}
+                label={actor.label}
+                size={42}
               />
-            </View>
-          )
+            ) : (
+              <View
+                style={[
+                  styles.notificationActionIconBubble,
+                  { backgroundColor: content.iconBackgroundColor ?? theme.colors.surfaceSoft },
+                ]}
+              >
+                <Ionicons
+                  color={content.iconColor ?? theme.colors.textMuted}
+                  name={content.iconName ?? 'information-circle-outline'}
+                  size={24}
+                />
+              </View>
+            )}
+          </CardActorAvatar>
         }
         metaNode={
           content.meta ? (
@@ -828,13 +843,13 @@ export function ActivityScreen() {
     }
 
     return (
-      <Pressable
+      <CardPressable
+        haptic="selection"
         key={item.id}
         onPress={() => openNotificationTarget(detailHref)}
-        style={({ pressed }) => [pressed ? styles.tabButtonPressed : null]}
       >
         {card}
-      </Pressable>
+      </CardPressable>
     );
   }
 
@@ -1059,10 +1074,10 @@ export function ActivityScreen() {
           <EmptyState
             description={
               categoryKey === 'all'
-                ? 'Cuando haya algo por responder o revisar, aparecera aqui.'
+                ? 'Cuando haya algo por responder o revisar, aparecerá aquí.'
                 : `Cuando haya actividad de ${categoryMeta.label.toLocaleLowerCase(
                     'es-CO',
-                  )}, aparecera aqui.`
+                  )}, aparecerá aquí.`
             }
             title={
               categoryKey === 'all'

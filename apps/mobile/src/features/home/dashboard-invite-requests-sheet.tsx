@@ -6,9 +6,12 @@ import { AppAvatar } from '@/components/app-avatar';
 import { MessageBanner } from '@/components/message-banner';
 import { SurfaceCard } from '@/components/surface-card';
 import { SwipePager } from '@/components/swipe-pager';
+import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
 import { initialsBackgroundColor } from '@/features/home/dashboard-preview-cards';
+import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
 import {
   INVITE_REQUEST_TABS,
@@ -45,7 +48,10 @@ function InviteRequestTabButton({
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        triggerAppSelectionHaptic();
+        onPress();
+      }}
       style={({ pressed }) => [
         styles.sheetTab,
         selected ? styles.sheetTabActive : null,
@@ -99,6 +105,14 @@ export function InviteRequestRow({
     netAmountMinor: 0,
     pendingCount: 0,
   };
+  const requiresAction =
+    item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review';
+  const actorIntent = requiresAction
+    ? 'needsAction'
+    : item.actionState === 'history'
+      ? cardStateIntentFromStatus(item.status)
+      : cardStateIntentFromStatus(item.actionState);
+  const haloIntensity = requiresAction ? 'strong' : 'soft';
 
   const actionContent =
     item.actionState === 'requires_you_response' ? (
@@ -107,7 +121,10 @@ export function InviteRequestRow({
           accessibilityLabel="Rechazar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'reject');
+          }}
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
@@ -121,7 +138,10 @@ export function InviteRequestRow({
           accessibilityLabel="Aceptar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'accept')}
+          onPress={() => {
+            triggerAppActionHaptic();
+            onAction(item, 'accept');
+          }}
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonPrimary,
@@ -138,7 +158,10 @@ export function InviteRequestRow({
           accessibilityLabel="Rechazar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'reject');
+          }}
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
@@ -152,7 +175,10 @@ export function InviteRequestRow({
           accessibilityLabel="Aceptar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'approve')}
+          onPress={() => {
+            triggerAppActionHaptic();
+            onAction(item, 'approve');
+          }}
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonPrimary,
@@ -169,10 +195,13 @@ export function InviteRequestRow({
         !item.activatedUserId) ? (
       <View style={[styles.requestActions, styles.requestSingleActionRow]}>
         <Pressable
-          accessibilityLabel="Cancelar invitacion"
+          accessibilityLabel="Cancelar invitación"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'cancel')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'cancel');
+          }}
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
@@ -192,13 +221,15 @@ export function InviteRequestRow({
   const profileContent = (
     <View style={styles.requestPersonRow}>
       <View style={styles.requestAvatarSlot}>
-        <AppAvatar
-          fallbackBackgroundColor={initialsBackgroundColor(fallbackPerson)}
-          fallbackTextColor={theme.colors.white}
-          imageUrl={avatarUrl}
-          label={displayName}
-          size={48}
-        />
+        <CardActorAvatar haloIntensity={haloIntensity} haloSize={60} intent={actorIntent} size={48}>
+          <AppAvatar
+            fallbackBackgroundColor={initialsBackgroundColor(fallbackPerson)}
+            fallbackTextColor={theme.colors.white}
+            imageUrl={avatarUrl}
+            label={displayName}
+            size={48}
+          />
+        </CardActorAvatar>
       </View>
       <View style={styles.requestPersonCopy}>
         <AppText numberOfLines={1} style={styles.requestPersonName}>
@@ -325,14 +356,14 @@ export function InviteRequestsSheet({
             />
             <InviteRequestTabButton
               count={historyItems.length}
-              label="Historico"
+              label="Histórico"
               onPress={() => changeTab('history')}
               selected={visualTab === 'history'}
             />
           </View>
           {message ? <MessageBanner message={message} tone="neutral" /> : null}
           <SwipePager
-            accessibilityLabel="Pestanas de solicitudes"
+            accessibilityLabel="Pestañas de solicitudes"
             onChange={changeTab}
             onPreviewChange={setVisualTab}
             renderPage={(tab) => renderRequestPage(tab)}

@@ -230,6 +230,7 @@ function settlementProposal(value: Partial<SettlementProposalRow>): SettlementPr
         amount_minor: 2500,
       },
     ],
+    result_hash: null,
     anchor_user_low_id: ACTOR_ID,
     anchor_user_high_id: FRIEND_ID,
     currency_code: 'COP',
@@ -244,6 +245,25 @@ function settlementProposal(value: Partial<SettlementProposalRow>): SettlementPr
     executed_at: null,
     ...value,
   });
+}
+
+function cycleMovements(
+  amountMinor: number,
+  firstUserId = ACTOR_ID,
+  secondUserId = FRIEND_ID,
+) {
+  return [
+    {
+      debtor_user_id: secondUserId,
+      creditor_user_id: firstUserId,
+      amount_minor: amountMinor,
+    },
+    {
+      debtor_user_id: firstUserId,
+      creditor_user_id: secondUserId,
+      amount_minor: amountMinor,
+    },
+  ];
 }
 
 function settlementParticipant(value: Partial<SettlementParticipantRow>): SettlementParticipantRow {
@@ -507,7 +527,20 @@ describe('buildLiveSnapshot', () => {
         profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
         relationships: [relationship()],
         settlementProposals: [
-          settlementProposal({}),
+          settlementProposal({
+            graph_snapshot: [
+              {
+                debtor_user_id: FRIEND_ID,
+                creditor_user_id: ACTOR_ID,
+                amount_minor: 1200,
+              },
+              {
+                debtor_user_id: ACTOR_ID,
+                creditor_user_id: FRIEND_ID,
+                amount_minor: 800,
+              },
+            ],
+          }),
           settlementProposal({
             id: 'settlement-2',
             status: 'pending_approvals',
@@ -543,7 +576,15 @@ describe('buildLiveSnapshot', () => {
       snapshot.balanceOverview.resolution.activeProposals.map((proposal) => proposal.proposalId),
     ).toEqual(['settlement-1', 'settlement-2']);
     expect(snapshot.settlementsById['settlement-1']).toMatchObject({
+      movementCount: 1,
+      originalMovementCount: 2,
+      personalAmountMinor: 2500,
+      personalMovementCount: 1,
+      personalOriginalMovementCount: 2,
+      personalSavedMovementsCount: 1,
+      savedMovementsCount: 1,
       status: 'approved',
+      totalAmountMinor: 2500,
       participants: ['Tu', 'Ben'],
     });
     expect(snapshot.activitySections[0]?.items[0]).toMatchObject({
@@ -551,6 +592,154 @@ describe('buildLiveSnapshot', () => {
       status: 'approved',
       ctaLabel: 'Completar',
     });
+  });
+
+  it('uses the current participant leg amount for visible Happy Circle money', () => {
+    const multilateralMovements = [
+      {
+        debtor_user_id: FRIEND_ID,
+        creditor_user_id: ACTOR_ID,
+        amount_minor: 700,
+      },
+      {
+        debtor_user_id: ACTOR_ID,
+        creditor_user_id: OTHER_ID,
+        amount_minor: 700,
+      },
+      {
+        debtor_user_id: OTHER_ID,
+        creditor_user_id: FRIEND_ID,
+        amount_minor: 700,
+      },
+    ];
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        profiles: [
+          profile(ACTOR_ID, 'Ana'),
+          profile(FRIEND_ID, 'Ben'),
+          profile(OTHER_ID, 'Carla'),
+        ],
+        relationships: [relationship()],
+        settlementProposals: [
+          settlementProposal({
+            id: 'settlement-active',
+            happy_circle_case_id: 'case-active',
+            status: 'approved',
+            movements_json: multilateralMovements,
+          }),
+          settlementProposal({
+            id: 'settlement-executed',
+            happy_circle_case_id: 'case-executed',
+            status: 'executed',
+            movements_json: multilateralMovements,
+            executed_at: NOW,
+          }),
+        ],
+        settlementParticipants: [
+          settlementParticipant({
+            id: 'participant-active-actor',
+            settlement_proposal_id: 'settlement-active',
+            participant_user_id: ACTOR_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-active-friend',
+            settlement_proposal_id: 'settlement-active',
+            participant_user_id: FRIEND_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-active-other',
+            settlement_proposal_id: 'settlement-active',
+            participant_user_id: OTHER_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-executed-actor',
+            settlement_proposal_id: 'settlement-executed',
+            participant_user_id: ACTOR_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-executed-friend',
+            settlement_proposal_id: 'settlement-executed',
+            participant_user_id: FRIEND_ID,
+          }),
+          settlementParticipant({
+            id: 'participant-executed-other',
+            settlement_proposal_id: 'settlement-executed',
+            participant_user_id: OTHER_ID,
+          }),
+        ],
+      }),
+    );
+
+    expect(snapshot.balanceOverview.resolution.activeProposal).toMatchObject({
+      proposalId: 'settlement-active',
+      personalAmountMinor: 700,
+      totalAmountMinor: 2100,
+    });
+    expect(snapshot.balanceOverview.resolution.resolvedMinor).toBe(700);
+    expect(snapshot.activitySections[0]?.items[0]).toMatchObject({
+      id: 'settlement-active',
+      amountMinor: 700,
+      kind: 'settlement_proposal',
+      status: 'approved',
+    });
+  });
+
+  it('rejects Happy Circle money when the participant pay and receive legs differ', () => {
+    const invalidMovements = [
+      {
+        debtor_user_id: FRIEND_ID,
+        creditor_user_id: ACTOR_ID,
+        amount_minor: 700,
+      },
+      {
+        debtor_user_id: ACTOR_ID,
+        creditor_user_id: OTHER_ID,
+        amount_minor: 800,
+      },
+      {
+        debtor_user_id: OTHER_ID,
+        creditor_user_id: FRIEND_ID,
+        amount_minor: 700,
+      },
+    ];
+
+    expect(() =>
+      buildLiveSnapshot(
+        baseInput({
+          profiles: [
+            profile(ACTOR_ID, 'Ana'),
+            profile(FRIEND_ID, 'Ben'),
+            profile(OTHER_ID, 'Carla'),
+          ],
+          relationships: [relationship()],
+          settlementProposals: [
+            settlementProposal({
+              id: 'settlement-invalid',
+              happy_circle_case_id: 'case-invalid',
+              status: 'approved',
+              movements_json: invalidMovements,
+            }),
+          ],
+          settlementParticipants: [
+            settlementParticipant({
+              id: 'participant-invalid-actor',
+              settlement_proposal_id: 'settlement-invalid',
+              participant_user_id: ACTOR_ID,
+            }),
+            settlementParticipant({
+              id: 'participant-invalid-friend',
+              settlement_proposal_id: 'settlement-invalid',
+              participant_user_id: FRIEND_ID,
+            }),
+            settlementParticipant({
+              id: 'participant-invalid-other',
+              settlement_proposal_id: 'settlement-invalid',
+              participant_user_id: OTHER_ID,
+            }),
+          ],
+        }),
+      ),
+    ).toThrow(/Happy Circle participant amount mismatch/);
   });
 
   it('groups happy circle versions into one current active proposal and a detail timeline', () => {
@@ -563,7 +752,9 @@ describe('buildLiveSnapshot', () => {
             id: 'settlement-v1',
             status: 'stale',
             happy_circle_case_id: 'case-1',
+            movements_json: cycleMovements(2500),
             version_number: 1,
+            result_hash: 'result-v1',
             replaced_by_proposal_id: 'settlement-v2',
             stale_reason: 'balance_changed',
             updated_at: '2026-05-05T12:01:00.000Z',
@@ -572,7 +763,9 @@ describe('buildLiveSnapshot', () => {
             id: 'settlement-v2',
             status: 'pending_approvals',
             happy_circle_case_id: 'case-1',
+            movements_json: cycleMovements(2500),
             version_number: 2,
+            result_hash: 'result-v2',
             replaces_proposal_id: 'settlement-v1',
             graph_snapshot_hash: 'hash-2',
             updated_at: '2026-05-05T12:02:00.000Z',
@@ -614,6 +807,8 @@ describe('buildLiveSnapshot', () => {
       {
         proposalId: 'settlement-v1',
         versionNumber: 1,
+        displayVersionNumber: 1,
+        amountMinor: 2500,
         status: 'stale',
         replacedByProposalId: 'settlement-v2',
         detail: 'Fue reemplazada porque los saldos cambiaron.',
@@ -621,6 +816,8 @@ describe('buildLiveSnapshot', () => {
       {
         proposalId: 'settlement-v2',
         versionNumber: 2,
+        displayVersionNumber: 2,
+        amountMinor: 2500,
         status: 'pending_approvals',
         replacesProposalId: 'settlement-v1',
         isCurrent: true,

@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     maxWidth: 470,
   },
   footer: {
-    backgroundColor: 'rgba(247, 248, 251, 0.96)',
+    backgroundColor: theme.colors.background,
     borderTopColor: theme.colors.hairline,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: theme.spacing.lg,

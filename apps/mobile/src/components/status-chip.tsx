@@ -58,7 +58,12 @@ function statusIconName(label: string, tone: StatusChipTone): keyof typeof Ionic
     return 'notifications-outline';
   }
 
-  if (normalized.includes('conexion') || normalized.includes('invitacion')) {
+  if (
+    normalized.includes('conexion') ||
+    normalized.includes('conexión') ||
+    normalized.includes('invitacion') ||
+    normalized.includes('invitación')
+  ) {
     return 'people-outline';
   }
 

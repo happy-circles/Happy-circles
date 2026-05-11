@@ -114,7 +114,9 @@ const styles = StyleSheet.create({
     width: 240,
   },
   photoWrap: {
+    borderRadius: 120,
     height: 240,
+    overflow: 'hidden',
     width: 240,
   },
   label: {

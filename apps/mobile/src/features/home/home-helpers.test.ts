@@ -13,10 +13,12 @@ vi.mock('react-native', () => ({
 
 import {
   balanceFocusHref,
+  inviteRequestEmptyDescription,
   isReceivedInvite,
   isSentInvite,
   isVisibleInviteHistory,
   sortInviteRequestItems,
+  statusLabelForInvite,
   type InviteRequestItem,
 } from './dashboard-helpers';
 import {
@@ -96,6 +98,11 @@ describe('dashboard invite helpers', () => {
     ]);
     expect(isReceivedInvite(newer)).toBe(true);
     expect(isSentInvite(sent)).toBe(true);
+    expect(statusLabelForInvite(newer)).toBe('Por responder');
+    expect(statusLabelForInvite(sent)).toBe('Pendiente de abrir');
+    expect(inviteRequestEmptyDescription('sent')).toBe(
+      'Las invitaciones que envíes quedarán en esta pestaña.',
+    );
   });
 
   it('hides anonymous QR history and keeps balance focus routes stable', () => {

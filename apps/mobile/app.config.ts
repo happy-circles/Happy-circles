@@ -60,7 +60,7 @@ const config: ExpoConfig = {
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#f7f8fb',
+    backgroundColor: '#fbfcff',
   },
   userInterfaceStyle: 'light',
   plugins: [
@@ -72,7 +72,7 @@ const config: ExpoConfig = {
         image: './assets/splash-icon.png',
         imageWidth: 208,
         resizeMode: 'contain',
-        backgroundColor: '#f7f8fb',
+        backgroundColor: '#fbfcff',
       },
     ],
     'expo-asset',
@@ -129,7 +129,7 @@ const config: ExpoConfig = {
     versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#f7f8fb',
+      backgroundColor: '#fbfcff',
     },
     blockedPermissions: ['android.permission.WRITE_CONTACTS', 'android.permission.RECORD_AUDIO'],
     intentFilters: [

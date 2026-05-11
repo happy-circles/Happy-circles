@@ -5,12 +5,32 @@ import { AppState, Platform } from 'react-native';
 import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '@/lib/query-client';
+import { theme } from '@/lib/theme';
 import { installGlobalErrorReporting } from '@/lib/support-errors';
 
 import { SessionProvider } from './session-provider';
 
 export function AppProviders({ children }: PropsWithChildren) {
   useEffect(() => installGlobalErrorReporting(), []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const root = document.getElementById('root');
+    const backgroundColor = theme.colors.background;
+    document.documentElement.style.backgroundColor = backgroundColor;
+    document.documentElement.style.margin = '0';
+    document.documentElement.style.minHeight = '100%';
+    document.body.style.backgroundColor = backgroundColor;
+    document.body.style.margin = '0';
+    document.body.style.minHeight = '100%';
+    root?.style.setProperty('background-color', backgroundColor);
+    root?.style.setProperty('min-height', '100%');
+
+    return undefined;
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'web') {

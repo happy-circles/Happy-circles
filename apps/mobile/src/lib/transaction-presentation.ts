@@ -2,6 +2,12 @@ import type { ActivityItemDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
 import { formatCop } from './data';
+import {
+  cycleActivityKind,
+  isCircleActivityItem,
+  isCircleLifecycleOnly,
+} from './cycle-activity';
+import { circleStatusCopy, moneyStatusCopy } from './card-language';
 import { theme } from './theme';
 import {
   normalizeTransactionCategory,
@@ -75,9 +81,7 @@ function formatRelativeTransactionLabel(value: string): string {
 }
 
 export function isCycleTransactionItem(item: Pick<ActivityItemDto, 'category' | 'kind'>): boolean {
-  return (
-    item.category === 'cycle' || item.kind === 'settlement' || item.kind === 'settlement_proposal'
-  );
+  return isCircleActivityItem(item);
 }
 
 export function isPendingTransactionItem(item: ActivityItemDto): boolean {
@@ -99,7 +103,27 @@ export function isNoBalanceTransactionStatus(status: string): boolean {
   return NO_BALANCE_STATUSES.has(status);
 }
 
-export function transactionAmountIsVoided(item: Pick<ActivityItemDto, 'status'>): boolean {
+export function transactionAmountIsVoided(
+  item: Pick<ActivityItemDto, 'status'> &
+    Partial<Pick<ActivityItemDto, 'category' | 'kind' | 'id' | 'originSettlementProposalId'>>,
+): boolean {
+  if (
+    item.kind &&
+    isCircleActivityItem({
+      category: item.category,
+      kind: item.kind,
+    }) &&
+    isCircleLifecycleOnly({
+      category: item.category,
+      id: item.id ?? 'cycle',
+      kind: item.kind,
+      originSettlementProposalId: item.originSettlementProposalId,
+      status: item.status,
+    })
+  ) {
+    return true;
+  }
+
   return isNoBalanceTransactionStatus(item.status);
 }
 
@@ -119,7 +143,7 @@ export function transactionAccentColor(item: ActivityItemDto): string {
   }
 
   if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return theme.colors.warning;
+    return theme.colors.danger;
   }
 
   if (item.tone === 'negative') {
@@ -139,7 +163,7 @@ export function transactionToneColor(item: ActivityItemDto): string {
   }
 
   if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return theme.colors.warning;
+    return theme.colors.danger;
   }
 
   if (item.tone === 'positive') {
@@ -183,57 +207,68 @@ export function transactionAmountLabel(item: ActivityItemDto): string | null {
 
 export function transactionStatusLabel(item: ActivityItemDto): string | null {
   if (item.kind === 'settlement_proposal' || isCycleTransactionItem(item)) {
+    const circleKind = cycleActivityKind(item);
+
+    if (item.status === 'expired') {
+      return 'Expirado';
+    }
+
+    if (circleKind === 'lifecycle_rejected') {
+      return 'No completado';
+    }
+
+    if (circleKind === 'lifecycle_replaced') {
+      return 'Reemplazado';
+    }
+
+    if (circleKind === 'ledger_posted') {
+      return 'Movimiento aplicado';
+    }
+
+    if (circleKind === 'executed_proposal') {
+      return circleStatusCopy.completed;
+    }
+
     if (item.status === 'pending_approvals') {
-      return 'Necesita tu aprobacion';
+      return circleStatusCopy.requiresYou;
     }
 
     if (item.status === 'waiting_other_side') {
-      return 'Esperando aprobaciones';
+      return circleStatusCopy.waitingOthers;
     }
 
     if (item.status === 'approved') {
-      return 'Listo para completar';
+      return circleStatusCopy.approved;
     }
 
-    if (item.status === 'executed' || item.status === 'posted') {
-      return 'Completo';
-    }
-
-    if (item.status === 'rejected') {
-      return 'No completo';
-    }
-
-    if (item.status === 'stale') {
-      return 'Reemplazado';
-    }
   }
 
   if (item.status === 'requires_you') {
-    return 'Requiere tu respuesta';
+    return moneyStatusCopy.requiresYou;
   }
 
   if (item.status === 'waiting_other_side') {
-    return 'Esperando respuesta';
+    return moneyStatusCopy.waitingOtherSide;
   }
 
   if (item.status === 'accepted') {
-    return 'Completo';
+    return moneyStatusCopy.completed;
   }
 
   if (item.status === 'rejected') {
-    return 'Rechazado';
+    return moneyStatusCopy.rejected;
   }
 
   if (item.status === 'canceled') {
-    return 'Cancelado';
+    return moneyStatusCopy.canceled;
   }
 
   if (item.status === 'expired') {
-    return 'Expirado';
+    return moneyStatusCopy.expired;
   }
 
   if (item.status === 'amended') {
-    return 'Monto modificado';
+    return moneyStatusCopy.amended;
   }
 
   if (item.status === 'pending') {
@@ -249,24 +284,34 @@ export function transactionStatusLabel(item: ActivityItemDto): string | null {
 
 export function transactionStatusTone(item: ActivityItemDto): TransactionStatusTone {
   if (isCycleTransactionItem(item)) {
-    if (item.status === 'rejected' || item.status === 'canceled') {
+    const circleKind = cycleActivityKind(item);
+
+    if (circleKind === 'lifecycle_rejected') {
+      if (item.status === 'expired') {
+        return 'danger';
+      }
+
       return 'danger';
     }
 
-    if (
-      item.status === 'expired' ||
-      item.status === 'stale' ||
-      item.status === 'waiting_other_side'
-    ) {
-      return 'neutral';
+    if (circleKind === 'lifecycle_replaced' || item.status === 'waiting_other_side') {
+      return 'cycle';
     }
 
     if (item.status === 'pending_approvals') {
       return 'warning';
     }
 
-    if (item.status === 'executed' || item.status === 'posted') {
+    if (
+      item.status === 'approved' ||
+      circleKind === 'executed_proposal' ||
+      circleKind === 'ledger_posted'
+    ) {
       return 'success';
+    }
+
+    if (item.status === 'expired') {
+      return 'danger';
     }
 
     return 'cycle';
@@ -407,12 +452,14 @@ export function transactionContextLabel(item: ActivityItemDto, actorLabel: strin
   const subtitleParts = splitTransactionSubtitle(item.subtitle);
 
   if (isCycleTransactionItem(item)) {
-    if (item.status === 'rejected') {
-      return 'Este Circle no se completo';
+    const circleKind = cycleActivityKind(item);
+
+    if (circleKind === 'lifecycle_rejected') {
+      return 'No cambió el saldo';
     }
 
-    if (item.status === 'stale') {
-      return 'Esta version fue reemplazada porque los saldos cambiaron';
+    if (circleKind === 'lifecycle_replaced') {
+      return 'Versión reemplazada';
     }
 
     if (item.status === 'pending_approvals') {
@@ -420,18 +467,26 @@ export function transactionContextLabel(item: ActivityItemDto, actorLabel: strin
     }
 
     if (item.status === 'waiting_other_side') {
-      return 'Esperando aprobaciones';
+      return circleStatusCopy.waitingOthers;
     }
 
     if (item.status === 'approved') {
-      return 'Listo para completar';
+      return circleStatusCopy.approved;
     }
 
-    return 'Completaste un Circle!';
+    if (circleKind === 'ledger_posted') {
+      return cycleLedgerContextLabel(item);
+    }
+
+    if (circleKind === 'executed_proposal') {
+      return 'Circle cerrado';
+    }
+
+    return 'Happy Circle';
   }
 
   if (isNoBalanceTransactionStatus(item.status)) {
-    return 'No cambio el saldo';
+    return 'No cambió el saldo';
   }
 
   const timeLabel = item.happenedAtLabel ?? subtitleParts[subtitleParts.length - 1] ?? '';
@@ -457,4 +512,18 @@ export function transactionContextLabel(item: ActivityItemDto, actorLabel: strin
   }
 
   return transactionCategoryLabel(transactionVisualCategory(item));
+}
+
+function cycleLedgerContextLabel(item: Pick<ActivityItemDto, 'flowLabel'>): string {
+  const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
+
+  if (from === 'Tu' && to) {
+    return `Pagaste a ${to}`;
+  }
+
+  if (to === 'Tu' && from) {
+    return `${from} te pagó`;
+  }
+
+  return 'Movimiento de Circle aplicado';
 }

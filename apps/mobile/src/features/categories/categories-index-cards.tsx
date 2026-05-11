@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
-import { Pressable, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { Animated, Pressable, View } from 'react-native';
 
 import type {
   ActivityItemDto,
@@ -18,7 +19,6 @@ import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
   transactionCategoryIcon,
-  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import {
   isCycleTransactionItem,
@@ -36,7 +36,13 @@ import {
   transactionPersonForItem,
 } from '@/lib/transaction-people';
 
-export type CategoryInsightTone = 'positive' | 'negative' | 'pending' | 'neutral' | 'cycle';
+export type CategoryInsightTone =
+  | 'positive'
+  | 'negative'
+  | 'pending'
+  | 'danger'
+  | 'neutral'
+  | 'cycle';
 
 export interface CategoryInsightRow {
   readonly metricLabel: string;
@@ -84,6 +90,10 @@ function toneStyle(tone: CategoryInsightTone) {
     return styles.pending;
   }
 
+  if (tone === 'danger') {
+    return styles.danger;
+  }
+
   if (tone === 'cycle') {
     return styles.cycle;
   }
@@ -104,6 +114,10 @@ function toneColor(tone: CategoryInsightTone): string {
     return '#ca8a04';
   }
 
+  if (tone === 'danger') {
+    return theme.colors.danger;
+  }
+
   if (tone === 'cycle') {
     return '#2563eb';
   }
@@ -122,6 +136,10 @@ function toneSoftColor(tone: CategoryInsightTone): string {
 
   if (tone === 'pending') {
     return '#fef3c7';
+  }
+
+  if (tone === 'danger') {
+    return theme.colors.dangerSoft;
   }
 
   if (tone === 'cycle') {
@@ -305,21 +323,61 @@ export function CategoryRow({
 }
 
 export function CategoriesPodiumCard({
+  activeFilter,
   onSelectCategory,
   ranking,
   selectedCategory,
   selectedInsight,
 }: {
+  readonly activeFilter: string;
   readonly onSelectCategory: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
   readonly ranking: readonly CategoryInsightRow[];
   readonly selectedCategory: BalanceAnalyticsCategoryRowDto['category'] | null;
   readonly selectedInsight: CategoryInsightRow | null;
 }) {
-  const podiumItems = categoryPodiumVisualItems(ranking, selectedInsight);
+  const bodyProgress = useRef(new Animated.Value(1)).current;
+  const podiumItems = useMemo(
+    () => categoryPodiumVisualItems(ranking, selectedInsight),
+    [ranking, selectedInsight],
+  );
+  const bodyTransitionKey = selectedInsight
+    ? `category:${selectedInsight.row.category}:${activeFilter}:${selectedInsight.metricLabel}`
+    : `top:${activeFilter}:${ranking.map((insight) => insight.row.category).join('|')}`;
+
+  useEffect(() => {
+    bodyProgress.stopAnimation();
+    bodyProgress.setValue(0);
+    Animated.timing(bodyProgress, {
+      duration: 220,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [bodyProgress, bodyTransitionKey]);
+
+  const bodyAnimatedStyle = {
+    opacity: bodyProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.84, 1],
+    }),
+    transform: [
+      {
+        translateY: bodyProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [3, 0],
+        }),
+      },
+      {
+        scale: bodyProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.997, 1],
+        }),
+      },
+    ],
+  };
 
   return (
     <View style={styles.insightModule}>
-      <View style={styles.insightBody}>
+      <Animated.View style={[styles.insightBody, bodyAnimatedStyle]}>
         <View style={styles.podiumRow}>
           {podiumItems.map((item) => {
             const {
@@ -479,43 +537,7 @@ export function CategoriesPodiumCard({
             );
           })}
         </View>
-      </View>
-    </View>
-  );
-}
-
-export function ActiveCategoryPill({
-  row,
-  fallbackCategory,
-  onClear,
-}: {
-  readonly row: BalanceAnalyticsCategoryRowDto | null;
-  readonly fallbackCategory: BalanceAnalyticsCategoryRowDto['category'];
-  readonly onClear: () => void;
-}) {
-  const category = row?.category ?? fallbackCategory;
-  const label = row?.label ?? transactionCategoryLabel(category);
-  const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
-  const color = transactionCategoryColor(category);
-  const backgroundColor = transactionCategoryBackgroundColor(category);
-
-  return (
-    <View style={styles.activeFilterWrap}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onClear}
-        style={({ pressed }) => [
-          styles.activeFilterPill,
-          { backgroundColor, borderColor: color },
-          pressed ? styles.pressed : null,
-        ]}
-      >
-        <Ionicons color={color} name={icon} size={16} />
-        <AppText numberOfLines={1} style={[styles.activeFilterText, { color }]}>
-          {label}
-        </AppText>
-        <Ionicons color={color} name="close" size={15} />
-      </Pressable>
+      </Animated.View>
     </View>
   );
 }

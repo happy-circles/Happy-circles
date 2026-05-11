@@ -1,4 +1,12 @@
 import { formatCop } from './data';
+import {
+  circleAmountIsReal,
+  cycleActivityKind,
+  isCircleActivityItem,
+  isCircleExecutedProposal,
+  isCircleLifecycleOnly,
+} from './cycle-activity';
+import { circleStatusCopy } from './card-language';
 import type { HistoryCase, HistoryCaseItem, HistoryStatusTone } from './history-case-types';
 import {
   compactHistoryLabel,
@@ -13,6 +21,8 @@ import { historyStatusLabel, historyStatusTone } from './history-case-status';
 import { transactionCategoryLabel } from './transaction-categories';
 
 export { historyStatusLabel, historyStatusTone } from './history-case-status';
+
+const VOIDED_AMOUNT_STATUSES = new Set(['rejected', 'expired', 'canceled', 'stale']);
 
 export function historyCaseVisualCategory<T extends HistoryCaseItem>(
   itemCase: HistoryCase<T>,
@@ -57,16 +67,22 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
     return item.title;
   }
 
-  if (item.kind === 'settlement') {
-    if (item.status === 'rejected') {
-      return 'Este Circle no se completo';
+  if (isCircleActivityItem(item)) {
+    const circleKind = cycleActivityKind(item);
+
+    if (circleKind === 'lifecycle_rejected') {
+      return item.title;
     }
 
-    if (item.status === 'stale') {
-      return 'Version reemplazada por saldos nuevos';
+    if (circleKind === 'lifecycle_replaced') {
+      return item.title;
     }
 
-    return 'Completaste un Circle!';
+    if (circleKind === 'executed_proposal') {
+      return 'Circle cerrado';
+    }
+
+    return circleKind === 'ledger_posted' ? cycleLedgerStepLabel(item) : item.title;
   }
 
   if (item.kind === 'payment') {
@@ -119,7 +135,7 @@ export function historyImpactTone(
     return 'danger';
   }
 
-  if (item.kind === 'settlement' && item.status === 'stale') {
+  if (isCircleActivityItem(item) && cycleActivityKind(item) === 'lifecycle_replaced') {
     return 'neutral';
   }
 
@@ -131,7 +147,7 @@ export function historyImpactTone(
     return 'danger';
   }
 
-  if (item.kind === 'settlement') {
+  if (isCircleActivityItem(item)) {
     return 'cycle';
   }
 
@@ -155,34 +171,22 @@ export function historyImpactTone(
 export function historyImpactLabel(item: HistoryCaseItem): string | null {
   if (isInviteTrajectoryItem(item)) {
     if (item.status === 'accepted') {
-      return item.detail === 'Acceso privado' ? 'Acceso confirmado' : 'Relacion creada';
+      return item.detail === 'Acceso privado' ? 'Acceso confirmado' : 'Relación creada';
     }
 
     if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
-      return item.detail === 'Acceso privado' ? 'Acceso cerrado' : 'Sin relacion creada';
+      return item.detail === 'Acceso privado' ? 'Acceso cerrado' : 'Sin relación creada';
     }
 
     return null;
   }
 
-  if (item.kind === 'settlement') {
-    if (item.status === 'rejected') {
-      return 'Este Circle no se completo';
-    }
-
-    if (item.status === 'stale') {
-      return 'Version reemplazada';
-    }
-
-    if (item.status === 'posted' || item.status === 'executed') {
-      return 'Completaste un Circle!';
-    }
-
+  if (isCircleActivityItem(item)) {
     return null;
   }
 
   if (item.status === 'rejected' || item.status === 'expired' || item.status === 'canceled') {
-    return 'No cambio el saldo';
+    return 'No cambió el saldo';
   }
 
   if (typeof item.amountMinor !== 'number' || item.amountMinor <= 0) {
@@ -200,6 +204,20 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
   const flowLabel = direction === 'owes_me' ? 'Entrada' : 'Salida';
 
   return isProposal ? `${flowLabel} propuesta de ${amountLabel}` : `${flowLabel} de ${amountLabel}`;
+}
+
+function cycleLedgerStepLabel(item: Pick<HistoryCaseItem, 'flowLabel' | 'title'>): string {
+  const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
+
+  if (from === 'Tu' && to) {
+    return `Pagaste a ${to}`;
+  }
+
+  if (to === 'Tu' && from) {
+    return `${from} te pagó`;
+  }
+
+  return 'Movimiento de Circle aplicado';
 }
 
 export function historyCaseEyebrow<T extends HistoryCaseItem>(
@@ -223,15 +241,21 @@ export function historyCaseImpactLabel<T extends HistoryCaseItem>(
     return historyImpactLabel(itemCase.latest);
   }
 
-  if (itemCase.latest.status === 'rejected') {
-    return 'Este Circle no se completo';
+  const circleKind = cycleActivityKind(itemCase.latest);
+
+  if (circleKind === 'lifecycle_rejected') {
+    return 'No cambió el saldo';
   }
 
-  if (itemCase.latest.status === 'stale') {
-    return 'Version reemplazada por saldos nuevos';
+  if (circleKind === 'lifecycle_replaced') {
+    return 'Versión reemplazada';
   }
 
-  return 'Completaste un Circle!';
+  if (circleKind === 'executed_proposal') {
+    return 'Saldo actualizado';
+  }
+
+  return circleKind === 'ledger_posted' ? 'Movimiento aplicado' : 'Happy Circle';
 }
 
 function inviteMismatchLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string | null {
@@ -263,15 +287,21 @@ function inviteMismatchLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>
 
 export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {
   if (itemCase.isCycleSnippet) {
-    if (itemCase.latest.status === 'rejected') {
+    const circleKind = cycleActivityKind(itemCase.latest);
+
+    if (circleKind === 'lifecycle_rejected') {
       return 'Happy Circle no completado';
     }
 
-    if (itemCase.latest.status === 'stale') {
-      return 'Version reemplazada';
+    if (circleKind === 'lifecycle_replaced') {
+    return 'Versión reemplazada';
     }
 
-    return 'Happy Circle completado';
+    if (circleKind === 'executed_proposal') {
+      return 'Happy Circle completado';
+    }
+
+    return circleKind === 'ledger_posted' ? 'Movimiento de Circle' : 'Happy Circle';
   }
 
   if (isInviteTrajectoryItem(itemCase.latest)) {
@@ -300,32 +330,38 @@ export function historyCaseStatusLabel<T extends HistoryCaseItem>(
     return historyStatusLabel(itemCase.latest.status);
   }
 
-  if (itemCase.latest.status === 'rejected' || itemCase.latest.status === 'canceled') {
-    return 'No completado';
-  }
+  const circleKind = cycleActivityKind(itemCase.latest);
 
   if (itemCase.latest.status === 'expired') {
-    return 'Expirado';
+    return circleStatusCopy.expired;
   }
 
-  if (itemCase.latest.status === 'stale') {
-    return 'Reemplazado';
+  if (circleKind === 'lifecycle_rejected') {
+    return circleStatusCopy.rejected;
+  }
+
+  if (circleKind === 'lifecycle_replaced') {
+    return circleStatusCopy.stale;
   }
 
   if (itemCase.latest.status === 'waiting_other_side') {
-    return 'Esperando aprobaciones';
+    return circleStatusCopy.waitingOthers;
   }
 
   if (itemCase.latest.status === 'pending_approvals') {
-    return 'Necesita tu aprobacion';
+    return circleStatusCopy.requiresYou;
   }
 
   if (itemCase.latest.status === 'approved') {
-    return 'Listo para completar';
+    return circleStatusCopy.approved;
   }
 
-  if (itemCase.latest.status === 'executed' || itemCase.latest.status === 'posted') {
-    return 'Completado';
+  if (circleKind === 'executed_proposal') {
+    return circleStatusCopy.completed;
+  }
+
+  if (circleKind === 'ledger_posted') {
+    return 'Movimiento aplicado';
   }
 
   return 'Happy Circle';
@@ -338,15 +374,17 @@ export function historyCaseStatusTone<T extends HistoryCaseItem>(
     return historyStatusTone(itemCase.latest.status);
   }
 
-  if (itemCase.latest.status === 'rejected' || itemCase.latest.status === 'canceled') {
+  const circleKind = cycleActivityKind(itemCase.latest);
+
+  if (circleKind === 'lifecycle_rejected') {
+    if (itemCase.latest.status === 'expired') {
+      return 'neutral';
+    }
+
     return 'danger';
   }
 
-  if (
-    itemCase.latest.status === 'expired' ||
-    itemCase.latest.status === 'stale' ||
-    itemCase.latest.status === 'waiting_other_side'
-  ) {
+  if (circleKind === 'lifecycle_replaced' || itemCase.latest.status === 'waiting_other_side') {
     return 'neutral';
   }
 
@@ -354,30 +392,70 @@ export function historyCaseStatusTone<T extends HistoryCaseItem>(
     return 'warning';
   }
 
-  if (itemCase.latest.status === 'executed' || itemCase.latest.status === 'posted') {
+  if (circleKind === 'executed_proposal' || circleKind === 'ledger_posted') {
     return 'success';
   }
 
   return 'cycle';
 }
 
-export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
-  if (
-    item.status === 'rejected' ||
-    item.status === 'expired' ||
-    item.status === 'canceled' ||
-    item.status === 'stale'
-  ) {
-    return null;
-  }
-
-  if (item.kind === 'settlement' && item.status !== 'posted' && item.status !== 'executed') {
-    return null;
-  }
-
+function historyAmountLabel(item: Pick<HistoryCaseItem, 'amountMinor'>): string | null {
   return typeof item.amountMinor === 'number' && item.amountMinor > 0
     ? formatCop(item.amountMinor)
     : null;
+}
+
+export function historyAmountIsVoided(
+  item: Pick<HistoryCaseItem, 'status'> &
+    Partial<
+      Pick<
+        HistoryCaseItem,
+        'category' | 'kind' | 'id' | 'originSettlementProposalId' | 'happyCircleCaseId'
+      >
+    >,
+): boolean {
+  if (
+    item.kind &&
+    isCircleActivityItem({ category: item.category, kind: item.kind }) &&
+    isCircleLifecycleOnly({
+      category: item.category,
+      happyCircleCaseId: item.happyCircleCaseId,
+      id: item.id ?? 'cycle',
+      kind: item.kind,
+      originSettlementProposalId: item.originSettlementProposalId,
+      status: item.status,
+    })
+  ) {
+    return true;
+  }
+
+  return VOIDED_AMOUNT_STATUSES.has(item.status);
+}
+
+export function historyCaseAmountLabel(item: HistoryCaseItem): string | null {
+  if (isCircleActivityItem(item)) {
+    const kind = cycleActivityKind(item);
+
+    if (kind === 'executed_proposal' || kind === 'ledger_posted' || historyAmountIsVoided(item)) {
+      return historyAmountLabel(item);
+    }
+
+    return null;
+  }
+
+  return historyAmountLabel(item);
+}
+
+export function historyStepAmountLabel(item: HistoryCaseItem): string | null {
+  if (historyAmountIsVoided(item)) {
+    return null;
+  }
+
+  if (isCircleActivityItem(item) && !circleAmountIsReal(item)) {
+    return null;
+  }
+
+  return historyAmountLabel(item);
 }
 
 export function historyHasAmountChanges<T extends HistoryCaseItem>(steps: readonly T[]): boolean {
@@ -407,6 +485,21 @@ export function historyTimelineStepAmountLabel<T extends HistoryCaseItem>(
   }
 
   return amountLabel;
+}
+
+export function historyTimelineStepMetaLabel<T extends HistoryCaseItem>(
+  itemCase: Pick<HistoryCase<T>, 'isCycleSnippet' | 'latest'>,
+  step: T,
+): string | null {
+  if (
+    itemCase.isCycleSnippet &&
+    isCircleExecutedProposal(itemCase.latest) &&
+    isCircleLifecycleOnly(step)
+  ) {
+    return 'Antes del cierre';
+  }
+
+  return step.happenedAtLabel ?? null;
 }
 
 export function historyCaseMeta<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): string {

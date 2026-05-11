@@ -6,6 +6,7 @@ export const TRANSACTION_ROOT_FILTERS = [
   'pending',
   'pending_incoming',
   'pending_outgoing',
+  'rejected',
   'projection',
 ] as const;
 
@@ -24,7 +25,10 @@ export function normalizeTransactionFilter(
 
 export function primaryTransactionFilter(
   filter: TransactionRootFilter,
-): Extract<TransactionRootFilter, 'all' | 'current_balance' | 'owed_to_me' | 'i_owe' | 'pending'> {
+): Extract<
+  TransactionRootFilter,
+  'all' | 'current_balance' | 'owed_to_me' | 'i_owe' | 'pending' | 'rejected'
+> {
   if (filter === 'pending_incoming' || filter === 'pending_outgoing' || filter === 'projection') {
     return 'pending';
   }

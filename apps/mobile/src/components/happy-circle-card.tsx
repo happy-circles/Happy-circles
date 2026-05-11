@@ -1,13 +1,15 @@
 import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Easing, StyleSheet, View } from 'react-native';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
+import { CardPressable } from '@/components/card-shell';
 import { HappyCircleRing, happyCircleDecisionColor } from '@/components/happy-circle-ring';
+import { LiquidGlassDisc } from '@/components/liquid-glass-disc';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { PrimaryAction } from '@/components/primary-action';
 import { StatusChip } from '@/components/status-chip';
@@ -19,6 +21,7 @@ import {
   triggerAppSelectionHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
+import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
 import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation';
 import { showBlockedActionAlert, useActionFeedbackOverlay } from '@/lib/action-feedback';
 import { showGlobalFeedback } from '@/lib/global-feedback';
@@ -29,6 +32,78 @@ import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 
 const CYCLE_COLOR = transactionCategoryColor('cycle');
+
+function CircleStateGlow({
+  color,
+  strength,
+}: {
+  readonly color: string;
+  readonly strength: 'strong' | 'soft';
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const isStrong = strength === 'strong';
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(progress, {
+          duration: isStrong ? 1600 : 2200,
+          easing: Easing.inOut(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(progress, {
+          duration: isStrong ? 1600 : 2200,
+          easing: Easing.inOut(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+      progress.stopAnimation();
+    };
+  }, [isStrong, progress]);
+
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-180, 180],
+  });
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [isStrong ? 0.16 : 0.08, isStrong ? 0.44 : 0.24, isStrong ? 0.16 : 0.08],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.treasureLayer}>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.treasureBloom,
+          {
+            backgroundColor: color,
+            opacity: isStrong ? 0.16 : 0.09,
+          },
+        ]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.treasureSweep,
+          {
+            backgroundColor: color,
+            opacity,
+            transform: [{ translateX }, { rotate: '-18deg' }],
+          },
+        ]}
+      />
+    </View>
+  );
+}
 
 function ApprovalDots({
   decisions,
@@ -80,6 +155,12 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
     status: proposal.status,
   });
   const canDecide = presentation.actionability === 'can_decide';
+  const circleIntent = cardStateIntentFromTone(presentation.tone ?? 'neutral');
+  const circleGlowColor = cardStateColor(circleIntent, presentation.tone ?? 'neutral');
+  const circleGlowStrength =
+    canDecide || presentation.tone === 'danger' || presentation.tone === 'success'
+      ? 'strong'
+      : 'soft';
 
   const orderedDecisions = useMemo(() => {
     const arr = [...proposal.participantDecisions];
@@ -99,7 +180,9 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
     .join(' · ');
 
   async function handleAction(action: 'approve' | 'reject') {
-    triggerAppActionHaptic();
+    if (action === 'approve') {
+      triggerAppActionHaptic();
+    }
     setBusyAction(action);
     actionFeedback.clear();
 
@@ -164,14 +247,15 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
       variant="elevated"
     >
       <Link href={`/settlements/${proposal.proposalId}` as Href} asChild>
-        <Pressable
-          style={({ pressed }) => [
+        <CardPressable
+          haptic="selection"
+          style={[
             styles.cardPressable,
             isCompact ? styles.cardPressableCompact : null,
             isShowcase ? styles.cardPressableShowcase : null,
-            pressed ? styles.cardPressed : null,
           ]}
         >
+          <CircleStateGlow color={circleGlowColor} strength={circleGlowStrength} />
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderCopy}>
               {isShowcase ? null : (
@@ -205,11 +289,28 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
                 </View>
               </View>
 
-              <HappyCircleRing
-                decisions={orderedDecisions}
-                ringSize={ringSize}
-                style={styles.showcaseRing}
-              />
+              <View
+                style={[
+                  styles.ringHaloWrap,
+                  {
+                    height: ringSize + 18,
+                    width: ringSize + 18,
+                  },
+                ]}
+              >
+                <LiquidGlassDisc
+                  color={circleGlowColor}
+                  intensity={canDecide ? 'strong' : 'soft'}
+                  intent={circleIntent}
+                  size={ringSize + 18}
+                  tone={presentation.tone}
+                />
+                <HappyCircleRing
+                  decisions={orderedDecisions}
+                  ringSize={ringSize}
+                  style={styles.showcaseRing}
+                />
+              </View>
 
               <View style={styles.showcaseProgressBlock}>
                 <View style={styles.showcaseProgressMeta}>
@@ -231,17 +332,12 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
             <View style={[styles.body, isCompact ? styles.bodyCompact : null]}>
               <View style={styles.metricsColumn}>
                 <View style={styles.metricBlock}>
-                  <AppText style={styles.metricEyebrow}>Tu valor a resolver</AppText>
+                  <AppText style={styles.metricEyebrow}>Evitas mover</AppText>
                   <AppText
                     style={[styles.metricAmount, isCompact ? styles.metricAmountCompact : null]}
                   >
                     {formatCop(proposal.personalAmountMinor)}
                   </AppText>
-                  {proposal.personalAmountMinor !== proposal.totalAmountMinor ? (
-                    <AppText style={styles.metricSecondary}>
-                      Total del Circle: {formatCop(proposal.totalAmountMinor)}
-                    </AppText>
-                  ) : null}
                 </View>
                 <AppText style={styles.approvalSummary}>
                   {approvedCount}/{proposal.participantCount} aprobadas
@@ -255,10 +351,27 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
                 </View>
               </View>
 
-              <HappyCircleRing decisions={orderedDecisions} ringSize={ringSize} />
+              <View
+                style={[
+                  styles.ringHaloWrap,
+                  {
+                    height: ringSize + 16,
+                    width: ringSize + 16,
+                  },
+                ]}
+              >
+                <LiquidGlassDisc
+                  color={circleGlowColor}
+                  intensity={canDecide ? 'strong' : 'soft'}
+                  intent={circleIntent}
+                  size={ringSize + 16}
+                  tone={presentation.tone}
+                />
+                <HappyCircleRing decisions={orderedDecisions} ringSize={ringSize} />
+              </View>
             </View>
           )}
-        </Pressable>
+        </CardPressable>
       </Link>
 
       {canDecide ? (
@@ -325,7 +438,9 @@ const styles = StyleSheet.create({
   },
   cardPressable: {
     gap: theme.spacing.md,
+    overflow: 'hidden',
     padding: theme.spacing.lg,
+    position: 'relative',
   },
   cardPressableCompact: {
     gap: theme.spacing.sm,
@@ -344,6 +459,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 2,
   },
   cardHeaderCopy: {
     alignItems: 'center',
@@ -367,6 +483,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    zIndex: 2,
   },
   bodyCompact: {
     alignItems: 'flex-start',
@@ -374,6 +491,27 @@ const styles = StyleSheet.create({
   showcaseBody: {
     alignItems: 'center',
     gap: theme.spacing.md,
+    zIndex: 2,
+  },
+  treasureLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  treasureBloom: {
+    borderRadius: theme.radius.pill,
+    height: 220,
+    position: 'absolute',
+    right: -76,
+    top: 58,
+    width: 220,
+  },
+  treasureSweep: {
+    borderRadius: theme.radius.pill,
+    bottom: -40,
+    position: 'absolute',
+    top: -40,
+    width: 92,
   },
   showcaseSummary: {
     alignItems: 'center',
@@ -417,6 +555,11 @@ const styles = StyleSheet.create({
   },
   showcaseRing: {
     marginRight: 0,
+  },
+  ringHaloWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   showcaseProgressBlock: {
     gap: 7,
@@ -475,12 +618,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.title3,
     letterSpacing: -0.2,
     lineHeight: 24,
-  },
-  metricSecondary: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
   },
   approvalSummary: {
     color: theme.colors.success,

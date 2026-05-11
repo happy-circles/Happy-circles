@@ -1,7 +1,39 @@
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
+import { circleStatusCopy } from '@/lib/card-language';
+import {
+  circleHistoryGroupKey,
+  isCircleExecutedProposal,
+  isCircleLedgerPosted,
+} from '@/lib/cycle-activity';
+
 export type CircleStatusFilter = 'all' | 'needs_me' | 'new' | 'ready' | 'waiting';
 export type CircleProposalState = Exclude<CircleStatusFilter, 'all'>;
+
+interface CircleMetricSettlement {
+  readonly happyCircleCaseId: string | null;
+  readonly id: string;
+  readonly participantDecisions: readonly { readonly userId: string }[];
+  readonly personalAmountMinor: number;
+  readonly personalSavedMovementsCount: number;
+  readonly status: string;
+}
+
+interface CircleLedgerItem {
+  readonly amountMinor?: number;
+  readonly category?: string;
+  readonly happyCircleCaseId?: string | null;
+  readonly id: string;
+  readonly kind: string;
+  readonly originSettlementProposalId?: string | null;
+  readonly status: string;
+}
+
+export interface CirclePersonalMetrics {
+  readonly closedCircleCount: number;
+  readonly ledgerAmountMinor: number;
+  readonly savedTransactionCount: number;
+}
 
 export interface CircleProposalViewModel {
   readonly approvalLabel: string;
@@ -39,6 +71,89 @@ function participantDisplayLabel(
   currentUserId: string | null | undefined,
 ): string {
   return currentUserId && participant.userId === currentUserId ? 'Tú' : firstName(participant.label);
+}
+
+export function buildCirclePersonalMetrics(
+  input: {
+    readonly currentUserId: string | null | undefined;
+    readonly historyItems: readonly CircleLedgerItem[];
+    readonly settlementsById: Readonly<Record<string, CircleMetricSettlement>>;
+  },
+): CirclePersonalMetrics {
+  if (!input.currentUserId) {
+    return {
+      closedCircleCount: 0,
+      ledgerAmountMinor: 0,
+      savedTransactionCount: 0,
+    };
+  }
+
+  const circleGroups = new Map<string, CircleLedgerItem[]>();
+
+  for (const item of input.historyItems) {
+    if (!item.originSettlementProposalId && !item.happyCircleCaseId) {
+      continue;
+    }
+
+    const key = circleHistoryGroupKey(item);
+    const group = circleGroups.get(key);
+    if (group) {
+      group.push(item);
+    } else {
+      circleGroups.set(key, [item]);
+    }
+  }
+
+  return Array.from(circleGroups.values()).reduce<CirclePersonalMetrics>(
+    (metrics, items) => {
+      const settlement = settlementForLedgerItems(items, input.settlementsById);
+      const isClosed =
+        settlement?.status === 'executed' || items.some((item) => isCircleExecutedProposal(item));
+
+      if (!isClosed) {
+        return metrics;
+      }
+
+      const ledgerItems = items.filter(isCircleLedgerPosted);
+
+      return {
+        closedCircleCount: metrics.closedCircleCount + 1,
+        ledgerAmountMinor:
+          metrics.ledgerAmountMinor +
+          (personalLedgerAmountMinor(ledgerItems) || settlement?.personalAmountMinor || 0),
+        savedTransactionCount:
+          metrics.savedTransactionCount + (settlement?.personalSavedMovementsCount ?? 0),
+      };
+    },
+    {
+      closedCircleCount: 0,
+      ledgerAmountMinor: 0,
+      savedTransactionCount: 0,
+    },
+  );
+}
+
+function settlementForLedgerItems(
+  ledgerItems: readonly CircleLedgerItem[],
+  settlementsById: Readonly<Record<string, CircleMetricSettlement>>,
+): CircleMetricSettlement | undefined {
+  for (const item of ledgerItems) {
+    if (item.originSettlementProposalId && settlementsById[item.originSettlementProposalId]) {
+      return settlementsById[item.originSettlementProposalId];
+    }
+  }
+
+  const happyCircleCaseId = ledgerItems.find((item) => item.happyCircleCaseId)?.happyCircleCaseId;
+  return Object.values(settlementsById).find(
+    (settlement) => settlement.happyCircleCaseId === happyCircleCaseId,
+  );
+}
+
+function personalLedgerAmountMinor(ledgerItems: readonly CircleLedgerItem[]): number {
+  return ledgerItems.reduce(
+    (maxAmount, item) => Math.max(maxAmount, item.amountMinor ?? 0),
+    0,
+  );
 }
 
 export function circleApprovedCount(proposal: ActiveSettlementPreviewDto): number {
@@ -84,7 +199,7 @@ export function resolveCircleProposalState({
 
 export function circleStateLabel(state: CircleProposalState): string {
   if (state === 'needs_me') {
-    return 'Por aprobar';
+    return circleStatusCopy.requiresYou;
   }
 
   if (state === 'new') {
@@ -92,10 +207,10 @@ export function circleStateLabel(state: CircleProposalState): string {
   }
 
   if (state === 'ready') {
-    return 'Listo';
+    return circleStatusCopy.approved;
   }
 
-  return 'Esperando';
+  return circleStatusCopy.waitingOthers;
 }
 
 export function circleParticipantSummary(
@@ -156,7 +271,7 @@ export function buildCircleProposalViewModels({
         return priorityDiff;
       }
 
-      return right.proposal.totalAmountMinor - left.proposal.totalAmountMinor;
+      return right.proposal.personalAmountMinor - left.proposal.personalAmountMinor;
     });
 }
 

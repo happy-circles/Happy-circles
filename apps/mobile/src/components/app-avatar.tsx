@@ -34,12 +34,11 @@ export function AppAvatar({
   label,
   imageUrl,
   size = 44,
-  rounded = true,
   fallbackBackgroundColor,
   fallbackTextColor,
   variant = 'person',
 }: AppAvatarProps) {
-  const radius = rounded ? size / 2 : Math.max(theme.radius.small, size * 0.28);
+  const radius = size / 2;
   const avatarLabel = buildAvatarLabel(label);
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
   const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
@@ -138,6 +137,6 @@ const styles = StyleSheet.create({
   },
   avatarLabel: {
     fontWeight: '800',
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
 });

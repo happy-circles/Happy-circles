@@ -358,7 +358,9 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   }, [proposalId, settlement?.status]);
 
   async function handleAction(action: 'approve' | 'reject') {
-    triggerAppActionHaptic();
+    if (action === 'approve') {
+      triggerAppActionHaptic();
+    }
     setBusyAction(action);
     setBanner(null);
     actionFeedback.clear();
@@ -372,7 +374,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         if (nextStatus === 'stale') {
           triggerAppWarningHaptic();
           setBanner({
-            message: 'Esta version fue reemplazada porque los saldos cambiaron.',
+            message: 'Esta versión fue reemplazada porque los saldos cambiaron.',
             tone: 'warning',
           });
         } else {
@@ -395,7 +397,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       }
     } catch (error) {
       const nextMessage =
-        error instanceof Error ? error.message : 'No se pudo completar la accion.';
+        error instanceof Error ? error.message : 'No se pudo completar la acción.';
       if (
         showBlockedActionAlert(nextMessage, router, {
           hasEmailPassword: session.linkedMethods.hasEmailPassword,
@@ -517,14 +519,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         <View style={styles.timelineHeader}>
           <AppText style={styles.timelineTitle}>Historial de versiones</AppText>
           <AppText style={styles.timelineSubtitle}>
-            Cada cambio de saldos crea una version nueva que necesita aprobacion.
+            Solo mostramos versiones cuando cambia lo que debes revisar.
           </AppText>
         </View>
         <CardTimeline steps={versionTimelineSteps} />
         {replacementProposalId ? (
           <View style={styles.replacementAction}>
             <PrimaryAction
-              label="Ver nueva version"
+              label="Ver nueva versión"
               onPress={() => {
                 triggerAppSelectionHaptic();
                 pushRoute(router, `/settlements/${replacementProposalId}`);
@@ -595,7 +597,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                       triggerAppSelectionHaptic();
                       Alert.alert(
                         '¿Seguro quieres rechazar este Happy Circle?',
-                        'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                        'Si rechazas, este Circle se cerrará para todos. No se aplicará ningún movimiento.',
                         [
                           {
                             text: 'Volver',

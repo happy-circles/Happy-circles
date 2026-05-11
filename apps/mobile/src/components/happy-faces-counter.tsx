@@ -1,16 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { theme } from '@/lib/theme';
+
+export const HAPPY_FACES_TREASURE_GOLD = '#f5a400';
+
+const HAPPY_FACES_TREASURE_SOFT = '#fff4ce';
 
 type HappyFacesCounterProps = {
   closedCircleCount: number;
   compact?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  tone?: string;
   totalFaces: number;
+  variant?: 'default' | 'reward';
 };
 
 function compactFacesLabel(count: number) {
@@ -22,10 +28,13 @@ export function HappyFacesCounter({
   compact = false,
   onPress,
   style,
+  tone = HAPPY_FACES_TREASURE_GOLD,
   totalFaces,
+  variant = 'default',
 }: HappyFacesCounterProps) {
   const hasFaces = totalFaces > 0 || closedCircleCount > 0;
   const faceLabel = compactFacesLabel(totalFaces);
+  const isReward = variant === 'reward';
 
   return (
     <Pressable
@@ -36,20 +45,31 @@ export function HappyFacesCounter({
         styles.root,
         compact ? styles.compact : null,
         hasFaces ? styles.active : null,
+        isReward ? styles.reward : null,
         pressed && onPress ? styles.pressed : null,
         style,
       ]}
     >
+      {isReward && hasFaces ? (
+        <View pointerEvents="none" style={styles.rewardSpark}>
+          <Ionicons color={tone} name="sparkles" size={10} />
+        </View>
+      ) : null}
       <Ionicons
-        color={hasFaces ? theme.colors.warning : theme.colors.muted}
-        name={hasFaces ? 'happy' : 'happy-outline'}
-        size={compact ? 17 : 18}
+        color={isReward || hasFaces ? tone : theme.colors.muted}
+        name={isReward || hasFaces ? 'happy' : 'happy-outline'}
+        size={isReward ? 23 : compact ? 17 : 18}
       />
       <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.82}
         numberOfLines={1}
-        style={[styles.text, hasFaces ? styles.textActive : null]}
+        style={[
+          styles.text,
+          hasFaces ? styles.textActive : null,
+          isReward ? styles.textReward : null,
+          isReward ? styles.textRewardActive : null,
+        ]}
       >
         {faceLabel}
       </AppText>
@@ -69,6 +89,7 @@ const styles = StyleSheet.create({
     height: 38,
     justifyContent: 'center',
     minWidth: 72,
+    overflow: 'visible',
     paddingHorizontal: 9,
   },
   compact: {
@@ -76,11 +97,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
   },
   active: {
-    backgroundColor: theme.colors.warningSoft,
-    borderColor: 'rgba(249, 115, 22, 0.18)',
+    backgroundColor: theme.colors.surface,
+  },
+  reward: {
+    gap: 7,
+    height: 48,
+    minWidth: 92,
+    paddingHorizontal: 14,
+    backgroundColor: HAPPY_FACES_TREASURE_SOFT,
+  },
+  rewardSpark: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -3,
+    top: -8,
+    zIndex: 2,
   },
   pressed: {
-    opacity: 0.68,
+    opacity: 0.78,
+    transform: [{ scale: 0.95 }],
   },
   text: {
     color: theme.colors.textMuted,
@@ -90,5 +126,12 @@ const styles = StyleSheet.create({
   },
   textActive: {
     color: theme.colors.text,
+  },
+  textReward: {
+    fontSize: 17,
+    lineHeight: 20,
+  },
+  textRewardActive: {
+    color: HAPPY_FACES_TREASURE_GOLD,
   },
 });

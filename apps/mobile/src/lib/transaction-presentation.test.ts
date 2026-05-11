@@ -10,6 +10,7 @@ vi.mock('react-native', () => ({
 }));
 
 import {
+  transactionContextLabel,
   transactionShouldSurfaceStatus,
   transactionStatusLabel,
   transactionStatusTone,
@@ -81,6 +82,7 @@ describe('transaction presentation', () => {
       'Esperando respuesta',
     );
     expect(transactionStatusLabel(item({ status: 'amended' }))).toBe('Monto modificado');
+    expect(transactionStatusLabel(item({ status: 'requires_you' }))).toBe('Por responder');
   });
 
   it('keeps happy circle avatar tones aligned to actionability', () => {
@@ -92,11 +94,48 @@ describe('transaction presentation', () => {
       });
 
     expect(transactionStatusTone(circleItem('pending_approvals'))).toBe('warning');
-    expect(transactionStatusTone(circleItem('waiting_other_side'))).toBe('neutral');
-    expect(transactionStatusTone(circleItem('approved'))).toBe('cycle');
+    expect(transactionStatusTone(circleItem('waiting_other_side'))).toBe('cycle');
+    expect(transactionStatusTone(circleItem('approved'))).toBe('success');
     expect(transactionStatusTone(circleItem('executed'))).toBe('success');
     expect(transactionStatusTone(circleItem('rejected'))).toBe('danger');
-    expect(transactionStatusTone(circleItem('stale'))).toBe('neutral');
-    expect(transactionStatusTone(circleItem('expired'))).toBe('neutral');
+    expect(transactionStatusTone(circleItem('stale'))).toBe('cycle');
+    expect(transactionStatusTone(circleItem('expired'))).toBe('danger');
+  });
+
+  it('uses directional copy for posted Circle ledger rows', () => {
+    expect(
+      transactionContextLabel(
+        item({
+          category: 'cycle',
+          flowLabel: 'Tu -> Sofia',
+          kind: 'settlement',
+          status: 'posted',
+        }),
+        'Sofia',
+      ),
+    ).toBe('Pagaste a Sofia');
+
+    expect(
+      transactionContextLabel(
+        item({
+          category: 'cycle',
+          flowLabel: 'Sofia -> Tu',
+          kind: 'settlement',
+          status: 'posted',
+        }),
+        'Sofia',
+      ),
+    ).toBe('Sofia te pagó');
+  });
+
+  it('keeps executed Circle proposal metadata separate from ledger copy', () => {
+    const executedProposal = item({
+      category: 'cycle',
+      kind: 'settlement_proposal',
+      status: 'executed',
+    });
+
+    expect(transactionStatusLabel(executedProposal)).toBe('Completado');
+    expect(transactionContextLabel(executedProposal, 'Sofia')).toBe('Circle cerrado');
   });
 });

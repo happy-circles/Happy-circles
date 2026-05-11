@@ -188,6 +188,7 @@ const SETTLEMENT_PROPOSAL_SELECT = [
   'graph_snapshot_hash',
   'graph_snapshot',
   'movements_json',
+  'result_hash',
   'anchor_user_low_id',
   'anchor_user_high_id',
   'currency_code',

@@ -126,6 +126,25 @@ export function buildMovementFlowLabel(
   return `${debtor} -> ${creditor}`;
 }
 
+function buildCycleSettlementStepTitle(
+  row: RelationshipHistoryRow,
+  currentUserId: string,
+  names: Map<string, string>,
+): string {
+  const debtor = row.debtor_user_id ? (names.get(row.debtor_user_id) ?? 'Deudor') : null;
+  const creditor = row.creditor_user_id ? (names.get(row.creditor_user_id) ?? 'Acreedor') : null;
+
+  if (row.debtor_user_id === currentUserId && creditor) {
+    return `Pagaste a ${creditor}`;
+  }
+
+  if (row.creditor_user_id === currentUserId && debtor) {
+    return `${debtor} te pagó`;
+  }
+
+  return 'Movimiento de Circle aplicado';
+}
+
 export function buildTimelineStepTitle(
   row: RelationshipHistoryRow,
   currentUserId: string,
@@ -190,18 +209,15 @@ export function buildTimelineStepTitle(
   }
 
   if (row.subtype === 'cycle_settlement') {
-    return 'Completaste un Circle!';
+    return buildCycleSettlementStepTitle(row, currentUserId, names);
   }
 
   return buildHistoryTitle(row, counterpartyName, names);
 }
 
 export function buildCycleSettlementImpactLabel(row: RelationshipHistoryRow): string | null {
-  if (row.subtype !== 'cycle_settlement') {
-    return null;
-  }
-
-  return 'Completaste un Circle!';
+  void row;
+  return null;
 }
 
 export function buildHistorySubtitle(

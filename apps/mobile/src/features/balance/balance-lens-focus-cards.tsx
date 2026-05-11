@@ -801,6 +801,7 @@ export function BalanceFocusCard({
             onPress={onHappyFacesPress}
             style={styles.balanceFocusHappyFacesCounter}
             totalFaces={happyFacesTotal}
+            variant="reward"
           />
         ) : null}
       </View>

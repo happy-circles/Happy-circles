@@ -2,12 +2,12 @@ import { Platform } from 'react-native';
 
 export const theme = {
   colors: {
-    background: '#f7f8fb',
-    canvas: '#eef1f6',
+    background: '#fbfcff',
+    canvas: '#f3f7f5',
     surface: '#ffffff',
     elevated: '#ffffff',
-    surfaceMuted: '#f4f6fa',
-    surfaceSoft: '#e9edf5',
+    surfaceMuted: '#f6f8fb',
+    surfaceSoft: '#edf5f0',
     border: 'rgba(15, 23, 40, 0.08)',
     hairline: 'rgba(15, 23, 40, 0.06)',
     text: '#0f1728',

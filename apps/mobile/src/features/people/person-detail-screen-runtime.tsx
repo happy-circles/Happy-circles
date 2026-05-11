@@ -18,6 +18,7 @@ import { PendingFinancialRequestCard } from '@/components/pending-financial-requ
 import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { Snackbar } from '@/components/snackbar';
+import { StatusFaceBadge } from '@/components/status-face-badge';
 import { SwipePager } from '@/components/swipe-pager';
 import {
   showBlockedActionAlert,
@@ -25,21 +26,24 @@ import {
   useFeedbackSnackbar,
 } from '@/lib/action-feedback';
 import * as appHaptics from '@/lib/app-haptics';
+import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
+  historyAmountIsVoided,
   historyCardTitle,
+  historyCaseAmountLabel,
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
   historyCaseVisualCategory,
   historyImpactLabel,
   historyImpactTone,
-  historyStepAmountLabel,
   historyTimelineStepCategory,
   historyTimelineStepDetailLabel,
   historyTimelineStepAmountLabel,
+  historyTimelineStepMetaLabel,
   toHistoryFeedItem,
 } from '@/lib/history-cases';
 import {
@@ -72,7 +76,6 @@ import {
   buildFinancialRequestPendingContent,
   buildFocusCandidates,
   buildPersonRegisterHref,
-  historyStepMetaLabel,
   matchesFocusedTransaction,
   pendingSnippetTone,
   pendingStatusLabel,
@@ -428,7 +431,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           if (nextStatus === 'stale') {
             appHaptics.triggerAppWarningHaptic();
             setBanner({
-              message: 'Esta version fue reemplazada porque los saldos cambiaron.',
+              message: 'Esta versión fue reemplazada porque los saldos cambiaron.',
               tone: 'warning',
             });
           } else {
@@ -459,7 +462,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       }
     } catch (error) {
       const nextMessage =
-        error instanceof Error ? error.message : 'No se pudo completar la accion.';
+        error instanceof Error ? error.message : 'No se pudo completar la acción.';
       if (
         showBlockedActionAlert(nextMessage, router, {
           hasEmailPassword: session.linkedMethods.hasEmailPassword,
@@ -503,10 +506,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       {
         text: input.confirmLabel,
         style: 'destructive',
-        onPress: () => {
-          appHaptics.triggerAppActionHaptic();
-          input.onConfirm();
-        },
+        onPress: input.onConfirm,
       },
     ]);
   }
@@ -567,7 +567,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                   confirmPendingAction({
                     title: 'No aceptar propuesta',
                     message:
-                      'Avisaremos que no aceptas este movimiento y seguira pendiente de otra resolucion.',
+                      'Avisaremos que no aceptas este movimiento y seguirá pendiente de otra resolución.',
                     confirmLabel: 'No aceptar',
                     onConfirm: () =>
                       void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
@@ -581,6 +581,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         />
       );
     }
+
+    const statusLabel = transactionStatusLabel(item) ?? pendingStatusLabel(item.status);
+    const statusTone = transactionStatusTone(item);
 
     return (
       <PendingSnippetCard
@@ -597,6 +600,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : 'Pendiente'}
         focused={isFocused}
         key={item.id}
+        leadingNode={<StatusFaceBadge label={statusLabel} size={34} tone={statusTone} />}
         meta={
           item.kind === 'settlement_proposal'
             ? transactionMetaLabel(item)
@@ -607,8 +611,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             ? () => pushRoute(router, item.href as Parameters<typeof router.push>[0])
             : undefined
         }
-        statusLabel={transactionStatusLabel(item) ?? pendingStatusLabel(item.status)}
-        statusTone={transactionStatusTone(item)}
+        stateIntent={cardStateIntentFromStatus(item.status, {
+          circle: item.kind === 'settlement_proposal',
+        })}
+        statusLabel={statusLabel}
+        statusTone={statusTone}
         tone={pendingSnippetTone(item)}
         title={
           item.kind === 'settlement_proposal'
@@ -642,7 +649,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                       confirmPendingAction({
                         title: 'No aprobar Circle',
                         message:
-                          'Tu respuesta dejara este Happy Circle como no aprobado para el resto del circulo.',
+                          'Tu respuesta dejará este Happy Circle como no aprobado para el resto del círculo.',
                         confirmLabel: 'No aprobar',
                         onConfirm: () =>
                           void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
@@ -672,7 +679,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                         appHaptics.triggerAppSelectionHaptic();
                         Alert.alert(
                           'Completar Circle',
-                          'Aplicaremos este Happy Circle al historial y ya no podras deshacerlo desde aqui.',
+                          'Aplicaremos este Happy Circle al historial y ya no podrás deshacerlo desde aquí.',
                           [
                             { text: 'Cancelar', style: 'cancel' },
                             {
@@ -706,7 +713,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         orderedPendingItems.map((item) => renderPendingItem(item))
       ) : (
         <EmptyState
-          description="Cuando haya algo pendiente con esta persona, aparecera aqui."
+          description="Cuando haya algo pendiente con esta persona, aparecerá aquí."
           title="Nada pendiente"
         />
       );
@@ -715,8 +722,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     if (orderedHistoryCases.length === 0) {
       return (
         <EmptyState
-          description="Cuando haya propuestas o movimientos confirmados con esta persona, apareceran aqui."
-          title="Sin movimientos todavia"
+          description="Cuando haya propuestas o movimientos confirmados con esta persona, aparecerán aquí."
+          title="Sin movimientos todavía"
         />
       );
     }
@@ -725,7 +732,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       const isExpanded = expandedCaseIds[0] === itemCase.id;
       const isFocused = focusedLandingActive && focusedHistoryCaseId === itemCase.id;
       const latest = itemCase.latest;
-      const caseAmountLabel = historyStepAmountLabel(latest);
+      const caseAmountLabel = historyCaseAmountLabel(latest);
       const caseTone = historyImpactTone(latest) as HistoryCaseTone;
       const caseTitle = friendlyHistoryStepLabel(latest);
       const caseDescription = historyCardTitle(itemCase);
@@ -734,9 +741,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         <HistoryCaseCard
           actorAvatarUrl={person?.avatarUrl ?? null}
           amountLabel={caseAmountLabel}
+          amountStruckThrough={historyAmountIsVoided(latest)}
           category={historyCaseVisualCategory(itemCase)}
           description={null}
           eyebrow={person?.displayName ?? null}
+          expandedLayout="showcase"
           focused={isFocused}
           isCycleSnippet={itemCase.isCycleSnippet}
           isExpanded={isExpanded}
@@ -759,7 +768,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                 !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
                   ? null
                   : impact,
-              meta: historyStepMetaLabel(step),
+              meta: historyTimelineStepMetaLabel(itemCase, step),
               tone: historyImpactTone(step) as HistoryCaseTone,
             };
           })}
@@ -910,7 +919,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
           <SwipePager
-            accessibilityLabel="Paneles de la relacion"
+            accessibilityLabel="Paneles de la relación"
             onChange={changePanelSegment}
             onPreviewChange={setVisualPanelSegment}
             pageStyle={styles.panelPage}

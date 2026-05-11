@@ -37,7 +37,9 @@ function statusFaceVisual(
     tone === 'warning' ||
     normalized.includes('necesita') ||
     normalized.includes('requiere') ||
-    normalized.includes('por responder');
+    normalized.includes('por aprobar') ||
+    normalized.includes('por responder') ||
+    normalized.includes('por verificar');
   const isWaiting =
     normalized.includes('esperando') ||
     normalized.includes('en espera') ||

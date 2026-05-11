@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardTimeline, type CardTone, type CardTimelineStep } from '@/components/card-shell';
 import { StatusFaceBadge } from '@/components/status-face-badge';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
+import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
@@ -15,6 +17,7 @@ import { SurfaceCard } from './surface-card';
 import { AppText } from '@/components/app-text';
 
 export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle';
+export type HistoryCaseExpandedLayout = 'panel' | 'showcase';
 
 export interface HistoryCaseStepViewModel {
   readonly id: string;
@@ -35,6 +38,8 @@ export interface HistoryCaseCardProps {
   readonly title: string;
   readonly description?: string | null;
   readonly amountLabel?: string | null;
+  readonly amountStruckThrough?: boolean;
+  readonly expandedLayout?: HistoryCaseExpandedLayout;
   readonly focused?: boolean;
   readonly meta?: string | null;
   readonly statusLabel: string;
@@ -85,6 +90,8 @@ export function HistoryCaseCard({
   title,
   description,
   amountLabel,
+  amountStruckThrough = false,
+  expandedLayout = 'panel',
   focused = false,
   meta,
   statusLabel,
@@ -101,9 +108,13 @@ export function HistoryCaseCard({
     : null;
   const primaryLabel = eyebrow ?? (isCycleSnippet ? 'Happy Circle' : title);
   const detailTitle = primaryLabel !== title ? title : null;
-  const showExpandedSummary = isExpanded && Boolean(detailTitle || description);
+  const showExpandedSummary = Boolean(detailTitle || description);
+  const isExpandedShowcase = expandedLayout === 'showcase';
   const avatarSize = 34;
   const metaLabel = meta ? meta.replace(/\s*\|\s*/g, META_SEPARATOR) : null;
+  const avatarIntent = cardStateIntentFromTone(statusTone);
+  const avatarHaloIntensity = statusTone === 'warning' ? 'strong' : 'soft';
+  const avatarHaloColor = historyCaseHaloColor(tone, statusTone);
   const leadingNode =
     isCycleSnippet && statusLabel ? (
       <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
@@ -117,74 +128,91 @@ export function HistoryCaseCard({
         fallbackTextColor={theme.colors.white}
         imageUrl={isCycleSnippet ? null : actorAvatarUrl}
         label={primaryLabel}
-        rounded={false}
         size={avatarSize}
         variant={isCycleSnippet ? 'system' : 'person'}
       />
     );
 
   return (
-    <SurfaceCard
-      padding="sm"
-      style={[
-        styles.card,
-        tone === 'positive' ? styles.cardPositive : null,
-        tone === 'negative' ? styles.cardNegative : null,
-        tone === 'neutral' ? styles.cardNeutral : null,
-        tone === 'danger' ? styles.cardDanger : null,
-        tone === 'cycle' ? styles.cardCycle : null,
-        isCycleSnippet ? styles.cycleSnippet : null,
-        tone === 'danger' ? styles.rejectedSnippet : null,
-        focused ? styles.cardFocused : null,
-        isExpanded ? styles.cardExpanded : null,
-        isExpanded && tone === 'positive' ? styles.cardExpandedPositive : null,
-        isExpanded && tone === 'negative' ? styles.cardExpandedNegative : null,
-        isExpanded && tone === 'danger' ? styles.cardExpandedDanger : null,
-        isExpanded && tone === 'cycle' ? styles.cardExpandedCycle : null,
-      ]}
-      variant={isCycleSnippet ? 'muted' : 'default'}
-    >
-      <Pressable
-        accessibilityLabel={[primaryLabel, displayAmountLabel, metaLabel].filter(Boolean).join(', ')}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: isExpanded }}
-        onPress={() => animateHistoryToggle(isExpanded, onToggle)}
-        style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
+    <View style={styles.caseWrap}>
+      <SurfaceCard
+        padding="sm"
+        shape="pill"
+        style={[
+          styles.card,
+          isCycleSnippet ? styles.cycleSnippet : null,
+          tone === 'danger' ? styles.rejectedSnippet : null,
+          focused ? styles.cardFocused : null,
+          isExpanded ? styles.cardActive : null,
+        ]}
+        variant={isCycleSnippet ? 'muted' : 'default'}
       >
-        <View style={styles.headerRow}>
-          <View style={styles.avatarWrap}>{leadingNode}</View>
-          <View style={styles.headerCopy}>
-            <AppText numberOfLines={1} style={styles.headerTitle}>
-              {primaryLabel}
-            </AppText>
-            {metaLabel ? (
-              <AppText numberOfLines={1} style={styles.headerMeta}>
-                {metaLabel}
+        <Pressable
+          accessibilityLabel={[primaryLabel, displayAmountLabel, metaLabel]
+            .filter(Boolean)
+            .join(', ')}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isExpanded }}
+          onPress={() => animateHistoryToggle(isExpanded, onToggle)}
+          style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
+        >
+          <View style={styles.headerRow}>
+            <View style={styles.avatarWrap}>
+              <CardActorAvatar
+                haloColor={avatarHaloColor}
+                haloIntensity={avatarHaloIntensity}
+                haloSize={42}
+                intent={avatarIntent}
+                size={avatarSize}
+                tone={statusTone}
+              >
+                {leadingNode}
+              </CardActorAvatar>
+            </View>
+            <View style={styles.headerCopy}>
+              <AppText numberOfLines={1} style={styles.headerTitle}>
+                {primaryLabel}
               </AppText>
-            ) : null}
-          </View>
-          <View style={styles.headerSide}>
-            <View style={styles.amountRow}>
-              {displayAmountLabel ? (
-                <AppText
-                  numberOfLines={1}
-                  style={[styles.headerAmount, { color: toneColor(tone) }]}
-                >
-                  {displayAmountLabel}
+              {metaLabel ? (
+                <AppText numberOfLines={1} style={styles.headerMeta}>
+                  {metaLabel}
                 </AppText>
               ) : null}
-              <Ionicons
-                color={theme.colors.textMuted}
-                name={isExpanded ? 'chevron-up' : 'chevron-forward'}
-                size={16}
-              />
+            </View>
+            <View style={styles.headerSide}>
+              <View style={styles.amountRow}>
+                {displayAmountLabel ? (
+                  <AppText
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.76}
+                    numberOfLines={1}
+                    style={[
+                      styles.headerAmount,
+                      { color: toneColor(tone) },
+                      amountStruckThrough ? styles.headerAmountStruckThrough : null,
+                    ]}
+                  >
+                    {displayAmountLabel}
+                  </AppText>
+                ) : null}
+                <Ionicons
+                  color={theme.colors.textMuted}
+                  name={isExpanded ? 'chevron-up' : 'chevron-forward'}
+                  size={16}
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </Pressable>
+        </Pressable>
+      </SurfaceCard>
 
       {isExpanded ? (
-        <View style={styles.expandedContent}>
+        <SurfaceCard
+          glassTreatment={isExpandedShowcase ? 'standard' : 'flatSoft'}
+          padding={isExpandedShowcase ? 'lg' : 'md'}
+          style={[styles.expandedPanel, isExpandedShowcase ? styles.expandedPanelShowcase : null]}
+          variant={isCycleSnippet ? 'muted' : isExpandedShowcase ? 'elevated' : 'default'}
+        >
           {showExpandedSummary ? (
             <View style={styles.expandedSummary}>
               {detailTitle ? <AppText style={styles.expandedTitle}>{detailTitle}</AppText> : null}
@@ -194,9 +222,9 @@ export function HistoryCaseCard({
             </View>
           ) : null}
           <CardTimeline steps={historyTimelineSteps(steps)} />
-        </View>
+        </SurfaceCard>
       ) : null}
-    </SurfaceCard>
+    </View>
   );
 }
 
@@ -204,8 +232,8 @@ function historyTimelineSteps(
   steps: readonly HistoryCaseStepViewModel[],
 ): readonly CardTimelineStep[] {
   return steps.map((step) => ({
-    amountLabel: step.amountLabel ?? step.impact,
-    detail: step.detail,
+    amountLabel: step.amountLabel,
+    detail: step.detail ?? (step.impact && step.impact !== step.title ? step.impact : null),
     id: step.id,
     leadingNode: step.category ? (
       <View
@@ -263,63 +291,56 @@ function toneColor(tone: HistoryCaseTone): string {
   return toneStyles[tone].color;
 }
 
+function historyCaseHaloColor(tone: HistoryCaseTone, statusTone: CardTone): string {
+  if (statusTone === 'warning') {
+    return cardStateColor('needsAction', 'warning');
+  }
+
+  if (statusTone === 'danger' || tone === 'danger') {
+    return theme.colors.danger;
+  }
+
+  if (tone === 'positive' || statusTone === 'success') {
+    return theme.colors.success;
+  }
+
+  if (tone === 'negative') {
+    return theme.colors.warning;
+  }
+
+  if (tone === 'cycle' || statusTone === 'cycle' || statusTone === 'primary') {
+    return transactionCategoryColor('cycle');
+  }
+
+  return cardStateColor('neutral', 'neutral');
+}
+
 const styles = StyleSheet.create({
+  caseWrap: {
+    gap: 0,
+    position: 'relative',
+  },
   card: {
-    borderRadius: theme.radius.small,
     gap: theme.spacing.xs,
     minHeight: 68,
+    position: 'relative',
+    zIndex: 2,
   },
-  cardExpanded: {
-    borderColor: 'rgba(26, 39, 68, 0.14)',
-  },
-  cardExpandedPositive: {
-    borderColor: 'rgba(61, 186, 110, 0.24)',
-  },
-  cardExpandedNegative: {
-    borderColor: 'rgba(249, 115, 22, 0.22)',
-  },
-  cardExpandedDanger: {
-    borderColor: 'rgba(249, 115, 22, 0.22)',
-  },
-  cardExpandedCycle: {
-    borderColor: 'rgba(37, 99, 235, 0.2)',
+  cardActive: {
+    opacity: 0.98,
   },
   cycleSnippet: {
-    borderColor: 'rgba(37, 99, 235, 0.16)',
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
+    backgroundColor: 'transparent',
   },
   rejectedSnippet: {
-    backgroundColor: theme.colors.warningSoft,
-    borderColor: 'rgba(249, 115, 22, 0.18)',
-  },
-  cardPositive: {
-    borderLeftColor: theme.colors.success,
-    borderLeftWidth: 3,
-  },
-  cardNegative: {
-    borderLeftColor: theme.colors.warning,
-    borderLeftWidth: 3,
-  },
-  cardNeutral: {
-    borderLeftColor: theme.colors.textMuted,
-    borderLeftWidth: 3,
-  },
-  cardDanger: {
-    borderLeftColor: theme.colors.warning,
-    borderLeftWidth: 3,
-  },
-  cardCycle: {
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
+    backgroundColor: 'transparent',
   },
   cardFocused: {
-    backgroundColor: theme.colors.primaryGhost,
-    borderColor: 'rgba(26, 39, 68, 0.26)',
-    ...theme.shadow.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderColor: 'rgba(255, 255, 255, 0.98)',
   },
   header: {
-    borderRadius: theme.radius.small,
+    borderRadius: theme.radius.pill,
   },
   headerPressed: {
     opacity: 0.94,
@@ -332,10 +353,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   avatarWrap: {
-    height: 36,
+    height: 42,
     justifyContent: 'center',
     position: 'relative',
-    width: 36,
+    width: 42,
   },
   headerCopy: {
     flex: 1,
@@ -358,6 +379,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 3,
     minWidth: 82,
+    width: 104,
   },
   amountRow: {
     alignItems: 'center',
@@ -373,9 +395,24 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'right',
   },
-  expandedContent: {
+  headerAmountStruckThrough: {
+    opacity: 0.72,
+    textDecorationLine: 'line-through',
+  },
+  expandedPanel: {
     gap: theme.spacing.sm,
-    overflow: 'hidden',
+    marginHorizontal: theme.spacing.sm,
+    marginTop: -theme.spacing.sm,
+    paddingTop: theme.spacing.xl,
+    position: 'relative',
+    zIndex: 1,
+  },
+  expandedPanelShowcase: {
+    gap: theme.spacing.md,
+    marginHorizontal: 0,
+    marginTop: theme.spacing.xs,
+    minHeight: 150,
+    paddingTop: theme.spacing.lg,
   },
   expandedSummary: {
     gap: 3,

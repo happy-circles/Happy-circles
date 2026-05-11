@@ -9,6 +9,7 @@ export const personDetailScreenStyles = StyleSheet.create({
   },
   screenContent: {
     alignSelf: 'center',
+    backgroundColor: theme.colors.background,
     flex: 1,
     gap: theme.spacing.md,
     maxWidth: 560,
@@ -17,6 +18,7 @@ export const personDetailScreenStyles = StyleSheet.create({
     width: '100%',
   },
   fixedTop: {
+    backgroundColor: theme.colors.background,
     flexShrink: 0,
     gap: theme.spacing.md,
   },
@@ -101,6 +103,7 @@ export const personDetailScreenStyles = StyleSheet.create({
     maxWidth: 240,
   },
   panelArea: {
+    backgroundColor: theme.colors.background,
     flex: 1,
     flexShrink: 1,
     gap: theme.spacing.md,
@@ -109,6 +112,7 @@ export const personDetailScreenStyles = StyleSheet.create({
     width: '100%',
   },
   panelPager: {
+    backgroundColor: theme.colors.background,
     flex: 1,
     flexShrink: 1,
     minHeight: 0,

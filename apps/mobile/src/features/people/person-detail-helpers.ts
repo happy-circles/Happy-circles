@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import type { ActivityItemDto } from '@happy-circles/application';
 
 import type { HistoryCaseItem } from '@/lib/history-cases';
+import { circleStatusCopy, moneyStatusCopy } from '@/lib/card-language';
 
 export type PersonSegmentKey = 'pending' | 'history';
 export type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
@@ -76,15 +77,15 @@ export function pendingSnippetTone(
 
 export function pendingStatusLabel(status: string): string {
   if (status === 'pending_approvals') {
-    return 'Pendiente';
+    return circleStatusCopy.waitingOthers;
   }
 
   if (status === 'approved') {
-    return 'Aprobado';
+    return circleStatusCopy.approved;
   }
 
   if (status === 'waiting_other_side') {
-    return 'En espera';
+    return moneyStatusCopy.waitingOtherSide;
   }
 
   return status;

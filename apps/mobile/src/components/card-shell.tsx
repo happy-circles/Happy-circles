@@ -137,10 +137,10 @@ export function AppCardShell({
   return (
     <SurfaceCard
       padding={padding ?? (compact ? 'sm' : 'md')}
+      shape="pill"
       style={[
         styles.card,
         compact ? styles.cardCompact : null,
-        accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 3 } : null,
         style,
       ]}
       variant={variant}
@@ -300,7 +300,6 @@ const styles = StyleSheet.create({
     minHeight: 92,
   },
   cardCompact: {
-    borderRadius: theme.radius.medium,
     minHeight: 68,
   },
   body: {
@@ -366,7 +365,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   unreadSurfaceFilmCompact: {
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.pill,
   },
   pendingCornerDot: {
     backgroundColor: '#2f80ed',

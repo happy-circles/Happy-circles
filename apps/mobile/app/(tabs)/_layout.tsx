@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
+import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 
 export default function TabsLayout() {
@@ -18,6 +19,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        sceneStyle: styles.scene,
         tabBarStyle: styles.hiddenTabBar,
       }}
     >
@@ -32,6 +34,9 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  scene: {
+    backgroundColor: theme.colors.background,
+  },
   hiddenTabBar: {
     display: 'none',
   },

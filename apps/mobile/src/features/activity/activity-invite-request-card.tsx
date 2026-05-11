@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
+import { CardActorAvatar } from '@/components/card-actor-avatar';
 import {
   displayNameForInvite,
   inviteAccentBackgroundColor,
@@ -15,7 +16,9 @@ import {
   type InviteRequestAction,
   type InviteRequestItem,
 } from '@/features/home/dashboard-helpers';
+import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
 
 import { activityScreenStyles as styles } from './activity-screen.styles';
@@ -69,6 +72,12 @@ export function ActivityInviteRequestCard({
         : null);
   const requiresAction =
     item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review';
+  const actorIntent = requiresAction
+    ? 'needsAction'
+    : item.actionState === 'history'
+      ? cardStateIntentFromStatus(item.status)
+      : cardStateIntentFromStatus(item.actionState);
+  const haloIntensity = requiresAction ? 'strong' : 'soft';
   const typeIcon = (
     <View style={[styles.notificationInviteTypeIcon, { backgroundColor: accentBackgroundColor }]}>
       <Ionicons color={accentColor} name={inviteCardIcon(item)} size={15} />
@@ -82,7 +91,10 @@ export function ActivityInviteRequestCard({
           accessibilityLabel="Rechazar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'reject');
+          }}
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
@@ -96,7 +108,10 @@ export function ActivityInviteRequestCard({
           accessibilityLabel="Aceptar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'accept')}
+          onPress={() => {
+            triggerAppActionHaptic();
+            onAction(item, 'accept');
+          }}
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonPrimary,
@@ -113,7 +128,10 @@ export function ActivityInviteRequestCard({
           accessibilityLabel="Rechazar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'reject')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'reject');
+          }}
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
@@ -127,7 +145,10 @@ export function ActivityInviteRequestCard({
           accessibilityLabel="Aprobar solicitud"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'approve')}
+          onPress={() => {
+            triggerAppActionHaptic();
+            onAction(item, 'approve');
+          }}
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonPrimary,
@@ -144,10 +165,13 @@ export function ActivityInviteRequestCard({
         !item.activatedUserId) ? (
       <View style={styles.notificationInviteActions}>
         <Pressable
-          accessibilityLabel="Cancelar invitacion"
+          accessibilityLabel="Cancelar invitación"
           accessibilityRole="button"
           disabled={isBusy}
-          onPress={() => onAction(item, 'cancel')}
+          onPress={() => {
+            triggerAppSelectionHaptic();
+            onAction(item, 'cancel');
+          }}
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
@@ -166,14 +190,20 @@ export function ActivityInviteRequestCard({
       attentionDot={requiresAction}
       compact
       leadingNode={
-        <AppAvatar
-          fallbackBackgroundColor={avatarColorForLabel(displayName)}
-          fallbackTextColor={theme.colors.white}
-          imageUrl={avatarUrl}
-          label={displayName}
-          rounded={false}
+        <CardActorAvatar
+          haloIntensity={haloIntensity}
+          haloSize={54}
+          intent={actorIntent}
           size={42}
-        />
+        >
+          <AppAvatar
+            fallbackBackgroundColor={avatarColorForLabel(displayName)}
+            fallbackTextColor={theme.colors.white}
+            imageUrl={avatarUrl}
+            label={displayName}
+            size={42}
+          />
+        </CardActorAvatar>
       }
       metaNode={
         <AppText numberOfLines={2} style={styles.notificationActionMeta}>

@@ -78,7 +78,6 @@ export function PersonRow({ onAvatarPress, person }: PersonRowProps) {
                 <AppAvatar
                   imageUrl={person.avatarUrl ?? null}
                   label={person.displayName}
-                  rounded={false}
                   size={42}
                 />
               </Pressable>
@@ -86,7 +85,6 @@ export function PersonRow({ onAvatarPress, person }: PersonRowProps) {
               <AppAvatar
                 imageUrl={person.avatarUrl ?? null}
                 label={person.displayName}
-                rounded={false}
                 size={42}
               />
             )}
@@ -142,7 +140,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   avatarButton: {
-    borderRadius: theme.radius.medium,
+    borderRadius: theme.radius.pill,
   },
   avatarPressed: {
     opacity: 0.72,

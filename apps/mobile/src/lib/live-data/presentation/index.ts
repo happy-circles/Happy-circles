@@ -27,7 +27,7 @@ export function buildActivitySections(input: {
     {
       key: 'pending',
       title: 'Pendientes',
-      description: 'Todo lo que espera accion tuya ahora mismo.',
+      description: 'Todo lo que espera acción tuya ahora mismo.',
       emptyMessage: 'No hay pendientes por ahora.',
       items: input.pendingItems,
     },

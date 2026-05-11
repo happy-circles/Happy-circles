@@ -1,32 +1,33 @@
 import type { HistoryStatusTone } from './history-case-types';
+import { inviteStatusCopy, moneyStatusCopy } from './card-language';
 
 export function historyStatusLabel(status: string): string {
   if (status === 'requires_you') {
-    return 'Por responder';
+    return moneyStatusCopy.requiresYou;
   }
 
   if (status === 'requires_you_response') {
-    return 'Por responder';
+    return inviteStatusCopy.requiresResponse;
   }
 
   if (status === 'requires_you_review') {
-    return 'Por verificar';
+    return inviteStatusCopy.requiresReview;
   }
 
   if (status === 'waiting_other_side') {
-    return 'En espera';
+    return moneyStatusCopy.waitingOtherSide;
   }
 
   if (status === 'waiting_sender_review') {
-    return 'En validacion';
+    return inviteStatusCopy.waitingSenderReview;
   }
 
   if (status === 'pending_claim') {
-    return 'Pendiente';
+    return inviteStatusCopy.pendingClaim;
   }
 
   if (status === 'pending_activation') {
-    return 'Pendiente';
+    return inviteStatusCopy.pendingActivation;
   }
 
   if (status === 'pending_approvals') {
@@ -42,23 +43,23 @@ export function historyStatusLabel(status: string): string {
   }
 
   if (status === 'amended') {
-    return 'Monto modificado';
+    return moneyStatusCopy.amended;
   }
 
   if (status === 'accepted') {
-    return 'Aceptada';
+    return inviteStatusCopy.accepted;
   }
 
   if (status === 'rejected') {
-    return 'Rechazada';
+    return inviteStatusCopy.rejected;
   }
 
   if (status === 'expired') {
-    return 'Expirada';
+    return inviteStatusCopy.expired;
   }
 
   if (status === 'canceled') {
-    return 'Cancelada';
+    return inviteStatusCopy.canceled;
   }
 
   if (status === 'stale') {

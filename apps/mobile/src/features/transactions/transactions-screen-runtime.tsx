@@ -18,7 +18,9 @@ import {
   friendlyHistoryStepLabel,
   type HistoryCase,
   type HistoryCaseItem,
+  historyAmountIsVoided,
   historyCardTitle,
+  historyCaseAmountLabel,
   historyCaseEyebrow,
   historyCaseMeta,
   historyCaseStatusLabel,
@@ -26,10 +28,10 @@ import {
   historyCaseVisualCategory,
   historyImpactLabel,
   historyImpactTone,
-  historyStepAmountLabel,
   historyTimelineStepCategory,
   historyTimelineStepDetailLabel,
   historyTimelineStepAmountLabel,
+  historyTimelineStepMetaLabel,
 } from '@/lib/history-cases';
 import {
   markNotificationItemsViewed,
@@ -64,10 +66,14 @@ const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#
 
 const PRIMARY_FILTER_OPTIONS: readonly {
   readonly label: string;
-  readonly value: Extract<TransactionRootFilter, 'all' | 'owed_to_me' | 'i_owe' | 'pending'>;
+  readonly value: Extract<
+    TransactionRootFilter,
+    'all' | 'owed_to_me' | 'i_owe' | 'pending' | 'rejected'
+  >;
 }[] = [
   { label: 'Todo', value: 'all' },
   { label: 'Pendientes', value: 'pending' },
+  { label: 'Rechazadas', value: 'rejected' },
   { label: 'Te deben', value: 'owed_to_me' },
   { label: 'Debes', value: 'i_owe' },
 ];
@@ -98,6 +104,10 @@ function matchesPendingFilter(item: ActivityItemDto, filter: TransactionRootFilt
 function matchesHistoryFilter(item: ActivityItemDto, filter: TransactionRootFilter): boolean {
   if (filter === 'all') {
     return true;
+  }
+
+  if (filter === 'rejected') {
+    return item.status === 'rejected';
   }
 
   if (filter === 'current_balance') {
@@ -131,6 +141,10 @@ function emptyFilterTitle(filter: TransactionRootFilter): string {
     return 'Sin pendientes';
   }
 
+  if (filter === 'rejected') {
+    return 'Sin rechazadas';
+  }
+
   if (filter === 'projection') {
     return 'Sin raíz de proyección';
   }
@@ -140,7 +154,7 @@ function emptyFilterTitle(filter: TransactionRootFilter): string {
 
 function emptyFilterDescription(filter: TransactionRootFilter): string {
   if (filter === 'all') {
-    return 'Cuando registres movimientos o se creen propuestas, apareceran aqui.';
+    return 'Cuando registres movimientos o se creen propuestas, aparecerán aquí.';
   }
 
   if (filter === 'pending_incoming') {
@@ -153,6 +167,10 @@ function emptyFilterDescription(filter: TransactionRootFilter): string {
 
   if (filter === 'pending' || filter === 'projection') {
     return 'No hay movimientos pendientes para esta raiz.';
+  }
+
+  if (filter === 'rejected') {
+    return 'No hay movimientos rechazados en esta vista.';
   }
 
   if (filter === 'owed_to_me') {
@@ -529,7 +547,7 @@ export function TransactionsScreen() {
           <View style={styles.list}>
             {historyCases.map((itemCase) => {
               const latest = itemCase.latest;
-              const caseAmountLabel = historyStepAmountLabel(latest);
+              const caseAmountLabel = historyCaseAmountLabel(latest);
               const caseTone = historyImpactTone(latest) as HistoryCaseTone;
               const caseTitle = friendlyHistoryStepLabel(latest);
               const caseDescription = historyCardTitle(itemCase);
@@ -549,6 +567,7 @@ export function TransactionsScreen() {
                     itemCase.isCycleSnippet ? undefined : initialsBackgroundColor(fallbackPerson)
                   }
                   amountLabel={caseAmountLabel}
+                  amountStruckThrough={historyAmountIsVoided(latest)}
                   category={historyCaseVisualCategory(itemCase)}
                   description={null}
                   eyebrow={caseEyebrow}
@@ -572,7 +591,7 @@ export function TransactionsScreen() {
                         !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
                           ? null
                           : impact,
-                      meta: step.happenedAtLabel ?? null,
+                      meta: historyTimelineStepMetaLabel(itemCase, step),
                       title: friendlyHistoryStepLabel(step),
                       tone: historyImpactTone(step) as HistoryCaseTone,
                     };

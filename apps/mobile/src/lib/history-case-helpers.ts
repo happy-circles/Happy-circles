@@ -4,6 +4,7 @@ import type {
   HistoryCaseItem,
   HistoryDirection,
 } from './history-case-types';
+import { circleHistoryGroupKey, isCircleActivityItem } from './cycle-activity';
 
 export function historyStepPriority(item: Pick<ComparableHistoryItem, 'kind' | 'status'>): number {
   if (item.kind !== 'request') {
@@ -52,7 +53,7 @@ export function splitHistorySubtitle(value: string): string[] {
 }
 
 export function historyCreatorLabel(item: HistoryCaseItem, fallbackLabel: string): string {
-  if (item.category === 'cycle' || item.kind === 'settlement') {
+  if (isCircleActivityItem(item)) {
     return 'Happy Circle';
   }
 
@@ -141,7 +142,7 @@ export function compactHistoryLabel(
     return item.detail ?? 'Invitacion';
   }
 
-  if (item.kind === 'settlement') {
+  if (isCircleActivityItem(item)) {
     return 'Happy Circle';
   }
 
@@ -209,15 +210,11 @@ export function historyDirectionFromItem(item: HistoryCaseItem): HistoryDirectio
 export function historyCaseKey(
   item: Pick<
     HistoryCaseItem,
-    'id' | 'originRequestId' | 'originSettlementProposalId' | 'happyCircleCaseId'
+    'id' | 'kind' | 'category' | 'originRequestId' | 'originSettlementProposalId' | 'happyCircleCaseId'
   >,
 ): string {
-  if (item.happyCircleCaseId) {
-    return `happy_circle_case:${item.happyCircleCaseId}`;
-  }
-
-  if (item.originSettlementProposalId) {
-    return `settlement:${item.originSettlementProposalId}`;
+  if (isCircleActivityItem(item)) {
+    return circleHistoryGroupKey(item);
   }
 
   if (item.originRequestId) {

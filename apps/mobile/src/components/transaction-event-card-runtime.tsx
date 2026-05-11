@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter, type Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { View } from 'react-native';
 
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
+import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
 import { StatusFaceBadge } from '@/components/status-face-badge';
 import type { StatusChipProps } from '@/components/status-chip';
 import type { AppHapticFeedback } from '@/lib/app-haptics';
+import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionEventCardStyles as styles } from './transaction-event-card-styles';
@@ -23,7 +26,7 @@ import { AppText } from '@/components/app-text';
 const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
 export interface TransactionEventCardProps extends PropsWithChildren {
-  readonly accentColor: string;
+  readonly accentColor?: string;
   readonly actorAvatarUrl?: string | null;
   readonly actorAvatarVariant?: AppAvatarVariant;
   readonly actorFallbackColor: string;
@@ -47,6 +50,7 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly pendingHighlightColor?: string;
   readonly statusLabel?: string | null;
   readonly statusTone?: StatusChipProps['tone'];
+  readonly style?: StyleProp<ViewStyle>;
   readonly unread?: boolean;
   readonly variant?: 'default' | 'muted' | 'accent' | 'elevated';
   readonly compact?: boolean;
@@ -54,27 +58,6 @@ export interface TransactionEventCardProps extends PropsWithChildren {
   readonly contextVariant?: 'text' | 'badge';
   readonly compactMetaLayout?: 'inline' | 'stacked';
   readonly directionLayout?: 'stacked' | 'floating';
-}
-
-function withAlpha(color: string, alpha: number): string {
-  const normalized = color.trim();
-  const compactHexMatch = normalized.match(/^#([\da-f]{3})$/i);
-  if (compactHexMatch) {
-    const [r, g, b] = compactHexMatch[1].split('').map((entry) => entry + entry);
-    return withAlpha(`#${r}${g}${b}`, alpha);
-  }
-
-  const hexMatch = normalized.match(/^#([\da-f]{6})$/i);
-  if (!hexMatch) {
-    return color;
-  }
-
-  const rawHex = hexMatch[1];
-  const red = Number.parseInt(rawHex.slice(0, 2), 16);
-  const green = Number.parseInt(rawHex.slice(2, 4), 16);
-  const blue = Number.parseInt(rawHex.slice(4, 6), 16);
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 export function TransactionEventCard({
@@ -95,14 +78,13 @@ export function TransactionEventCard({
   contentHref,
   directionLabel,
   href,
-  haptic = 'none',
+  haptic,
   meta,
   onContentPress,
   onPress,
-  pending = false,
-  pendingHighlightColor,
   statusLabel,
   statusTone = 'neutral',
+  style,
   unread = false,
   variant = 'default',
   compact = false,
@@ -124,11 +106,22 @@ export function TransactionEventCard({
   const resolvedBadgeBackgroundColor =
     badgeBackgroundColor ?? transactionCategoryBackgroundColor(safeCategory);
   const resolvedBadgeColor = badgeColor ?? transactionCategoryColor(safeCategory);
-  const unreadSurfaceColor = withAlpha(pendingHighlightColor ?? accentColor, 0.1);
+  const unreadSurfaceColor = 'transparent';
   const hasAction = Boolean(href || onPress);
   const hasContentAction = !hasAction && Boolean(contentHref || onContentPress);
   const isStatusAvatar = actorAvatarVariant === 'system' && Boolean(statusLabel);
   const avatarSize = compact ? 34 : 44;
+  const actorIntent = cardStateIntentFromTone(statusTone);
+  const haloIntensity = unread || statusTone === 'warning' ? 'strong' : 'soft';
+  const haloColor =
+    statusTone === 'warning'
+      ? cardStateColor('needsAction', 'warning')
+      : statusTone === 'danger'
+        ? cardStateColor('negative', 'danger')
+        : statusTone === 'cycle' || statusTone === 'primary'
+          ? cardStateColor('ready', statusTone)
+          : amountColor;
+  const effectiveHaptic = haptic ?? (hasAction || hasContentAction ? 'selection' : 'none');
 
   function handleContentPress() {
     if (onContentPress) {
@@ -177,19 +170,27 @@ export function TransactionEventCard({
 
   const leadingNode = (
     <View style={[styles.avatarWrap, compact ? styles.avatarWrapCompact : null]}>
-      {isStatusAvatar && statusLabel ? (
-        <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
-      ) : (
-        <AppAvatar
-          fallbackBackgroundColor={actorFallbackColor}
-          fallbackTextColor={theme.colors.white}
-          imageUrl={actorAvatarUrl}
-          label={actorLabel}
-          rounded={false}
-          size={avatarSize}
-          variant={actorAvatarVariant}
-        />
-      )}
+      <CardActorAvatar
+        haloColor={haloColor}
+        haloIntensity={haloIntensity}
+        haloSize={compact ? 42 : 56}
+        intent={actorIntent}
+        size={avatarSize}
+        tone={statusTone}
+      >
+        {isStatusAvatar && statusLabel ? (
+          <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
+        ) : (
+          <AppAvatar
+            fallbackBackgroundColor={actorFallbackColor}
+            fallbackTextColor={theme.colors.white}
+            imageUrl={actorAvatarUrl}
+            label={actorLabel}
+            size={avatarSize}
+            variant={actorAvatarVariant}
+          />
+        )}
+      </CardActorAvatar>
       {!isStatusAvatar && categoryPlacement === 'avatar' ? (
         <View
           style={[
@@ -322,6 +323,8 @@ export function TransactionEventCard({
         ) : null}
         {amountLabel ? (
           <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.76}
             numberOfLines={1}
             style={[
               styles.amount,
@@ -343,14 +346,16 @@ export function TransactionEventCard({
   const card = (
     <ActivityItemCard
       accentColor={accentColor}
-      attentionDot={pending}
+      attentionDot={false}
       compact={compact}
       leadingAccessibilityLabel={`Abrir perfil de ${actorLabel}`}
       leadingDisabled={!hasContentAction}
+      leadingHaptic={effectiveHaptic}
       leadingNode={leadingNode}
       metaNode={metaNode}
       onLeadingPress={hasContentAction ? handleContentPress : undefined}
       sideNode={sideNode}
+      style={style}
       title={actorLabel}
       titleAccessoryNode={null}
       unread={unread}
@@ -364,7 +369,7 @@ export function TransactionEventCard({
   if (href) {
     return (
       <Link href={href} asChild>
-        <CardPressable haptic={haptic} style={styles.cardPressable}>
+        <CardPressable haptic={effectiveHaptic} style={styles.cardPressable}>
           {card}
         </CardPressable>
       </Link>
@@ -373,7 +378,7 @@ export function TransactionEventCard({
 
   if (onPress) {
     return (
-      <CardPressable haptic={haptic} onPress={onPress}>
+      <CardPressable haptic={effectiveHaptic} onPress={onPress}>
         {card}
       </CardPressable>
     );

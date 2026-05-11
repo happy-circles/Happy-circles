@@ -725,7 +725,6 @@ export function RegisterFlowScreen() {
                                     <AppAvatar
                                       imageUrl={person.avatarUrl ?? null}
                                       label={person.displayName}
-                                      rounded={false}
                                       size={40}
                                     />
                                     <View style={styles.personOptionCopy}>

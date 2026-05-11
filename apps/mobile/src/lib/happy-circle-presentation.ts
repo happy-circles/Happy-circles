@@ -1,4 +1,5 @@
 import type { StatusChipProps } from '@/components/status-chip';
+import { circleStatusCopy } from '@/lib/card-language';
 
 export type HappyCircleParticipantDecision = 'approved' | 'pending' | 'rejected';
 export type HappyCircleStatusKey =
@@ -33,7 +34,7 @@ export function resolveHappyCirclePresentation({
       return {
         actionability: 'can_decide',
         key: 'pending_own',
-        label: 'Necesita tu aprobacion',
+        label: circleStatusCopy.requiresYou,
         summary: 'Revisa el cierre antes de aprobar o rechazar.',
         tone: 'warning',
       };
@@ -42,12 +43,12 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'waiting',
       key: 'waiting_others',
-      label: 'Esperando aprobaciones',
+      label: circleStatusCopy.waitingOthers,
       summary:
         approvalsPending > 0
-          ? `Faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'} para completarlo automaticamente.`
+          ? `Faltan ${approvalsPending} aprobación${approvalsPending === 1 ? '' : 'es'} para completarlo automáticamente.`
           : 'Ya no faltan respuestas. Estamos completando el Circle.',
-      tone: 'neutral',
+      tone: 'cycle',
     };
   }
 
@@ -55,9 +56,9 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'ready',
       key: 'approved',
-      label: 'Listo para completar',
-      summary: 'Todos aprobaron este Happy Circle. Estamos verificando el cierre automatico.',
-      tone: 'cycle',
+      label: circleStatusCopy.approved,
+      summary: 'Todos aprobaron este Happy Circle. Estamos verificando el cierre automático.',
+      tone: 'success',
     };
   }
 
@@ -65,7 +66,7 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'closed',
       key: 'executed',
-      label: 'Completado',
+      label: circleStatusCopy.completed,
       summary: 'Happy Circle completado.',
       tone: 'success',
     };
@@ -75,8 +76,8 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'closed',
       key: 'rejected',
-      label: 'No completado',
-      summary: 'Este Circle no se completo.',
+      label: circleStatusCopy.rejected,
+      summary: 'Este Circle no se completó.',
       tone: 'danger',
     };
   }
@@ -85,9 +86,9 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'closed',
       key: 'stale',
-      label: 'Reemplazado',
-      summary: 'Esta version fue reemplazada porque los saldos cambiaron.',
-      tone: 'neutral',
+      label: circleStatusCopy.stale,
+      summary: 'Esta versión fue reemplazada porque los saldos cambiaron.',
+      tone: 'cycle',
     };
   }
 
@@ -95,9 +96,9 @@ export function resolveHappyCirclePresentation({
     return {
       actionability: 'closed',
       key: 'expired',
-      label: 'Expirado',
-      summary: 'Este Circle expiro antes de completarse.',
-      tone: 'neutral',
+      label: circleStatusCopy.expired,
+      summary: 'Este Circle expiró antes de completarse.',
+      tone: 'danger',
     };
   }
 

@@ -174,6 +174,7 @@ export const AUDIT_EVENT_NAMES = [
   'happy_circle_case.created',
   'happy_circle_case.version_created',
   'happy_circle_case.version_replaced',
+  'happy_circle_case.version_revalidated',
   'happy_circle_case.version_stale',
   'happy_circle_case.version_approved',
   'happy_circle_case.version_executed',

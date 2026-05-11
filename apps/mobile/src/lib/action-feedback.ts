@@ -258,7 +258,7 @@ export function useActionFeedbackOverlay({
   const overlayCopy = resultOverlay ?? loadingCopy;
   const overlayProps: ActionFeedbackOverlayProps = {
     message: overlayCopy?.message,
-    title: overlayCopy?.title ?? 'Procesando accion',
+    title: overlayCopy?.title ?? 'Procesando acción',
     variant: resultOverlay?.variant ?? 'loading',
     visible: Boolean(resultOverlay) || showBusyOverlay,
   };
@@ -311,7 +311,7 @@ function resolveBlockedAction(
     return {
       title: 'Valida este dispositivo para continuar',
       message:
-        'Esta accion requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
+        'Esta acción requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
       ctaLabel: 'Abrir setup',
       route: buildSetupAccountHref('security'),
     };

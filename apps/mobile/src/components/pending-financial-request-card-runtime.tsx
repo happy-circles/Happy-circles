@@ -18,8 +18,10 @@ import { AppTextInput } from './app-text-input';
 import { FieldBlock } from './field-block';
 import { PendingSnippetCard } from './pending-snippet-card';
 import { PrimaryAction } from './primary-action';
+import { StatusFaceBadge } from './status-face-badge';
 import { TransactionCategoryPicker } from './transaction-category-picker';
 import { AppText } from '@/components/app-text';
+import { cardStateColor, moneyStatusCopy } from '@/lib/card-language';
 
 export interface PendingFinancialRequestHistoryStep {
   readonly id: string;
@@ -218,6 +220,9 @@ export function PendingFinancialRequestCard({
     new Set(visibleHistorySteps.map((step) => step.createdByLabel)).size > 1;
   const historyChangeCount = Math.max(visibleHistorySteps.length - 1, 0);
   const historyChangeLabel = `${historyChangeCount} cambio${historyChangeCount === 1 ? '' : 's'}`;
+  const statusLabel =
+    responseState === 'requires_you' ? moneyStatusCopy.requiresYou : moneyStatusCopy.waitingOtherSide;
+  const statusTone = responseState === 'requires_you' ? 'warning' : 'neutral';
 
   return (
     <PendingSnippetCard
@@ -226,13 +231,14 @@ export function PendingFinancialRequestCard({
       detail={description}
       eyebrow={`Pendiente con ${counterpartyName}`}
       focused={focused}
+      haloColor={cardStateColor('needsAction', 'warning')}
+      leadingNode={<StatusFaceBadge label={statusLabel} size={34} tone={statusTone} />}
       meta={`${createdAtLabel} | ${transactionCategoryLabel(safeCategory)}`}
       onPress={onPress}
       padding="sm"
-      statusLabel={
-        responseState === 'requires_you' ? 'Requiere tu respuesta' : 'Esperando respuesta'
-      }
-      statusTone={responseState === 'requires_you' ? 'warning' : 'neutral'}
+      stateIntent={responseState === 'requires_you' ? 'needsAction' : 'waiting'}
+      statusLabel={statusLabel}
+      statusTone={statusTone}
       title={title}
       tone={responseState === 'requires_you' ? 'warning' : 'neutral'}
       variant="default"
@@ -362,7 +368,7 @@ export function PendingFinancialRequestCard({
 
               <FieldBlock
                 hint="Puedes cambiarla si el contexto nuevo lo necesita."
-                label="Categoria"
+                label="Categoría"
               >
                 <TransactionCategoryPicker
                   onChange={onChangeAmendmentCategory ?? (() => undefined)}

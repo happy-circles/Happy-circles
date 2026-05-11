@@ -4,14 +4,14 @@ import { theme } from '@/lib/theme';
 
 export const transactionEventCardStyles = StyleSheet.create({
   avatarWrap: {
-    height: 48,
+    height: 56,
     justifyContent: 'center',
     position: 'relative',
-    width: 48,
+    width: 56,
   },
   avatarWrapCompact: {
-    height: 36,
-    width: 36,
+    height: 42,
+    width: 42,
   },
   categoryBadge: {
     alignItems: 'center',
@@ -130,12 +130,15 @@ export const transactionEventCardStyles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.xs,
+    justifyContent: 'flex-end',
+    width: 104,
   },
   amountLineCompact: {
     gap: 3,
+    width: 96,
   },
   amountStack: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     minWidth: 0,
     position: 'relative',
   },

@@ -74,7 +74,8 @@ describe('person detail helpers', () => {
       'cycle',
     );
     expect(pendingSnippetTone(item({ status: 'requires_you' }))).toBe('warning');
-    expect(pendingStatusLabel('waiting_other_side')).toBe('En espera');
+    expect(pendingStatusLabel('waiting_other_side')).toBe('Esperando respuesta');
+    expect(pendingStatusLabel('pending_approvals')).toBe('Esperando aprobaciones');
     expect(buildPersonRegisterHref('user-1', 'owes_me')).toEqual({
       pathname: '/register',
       params: {

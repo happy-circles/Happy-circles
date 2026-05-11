@@ -2,6 +2,11 @@ import type { Database } from '@happy-circles/shared';
 
 import type { SettlementMovement, SettlementProposalRow } from '../types';
 
+export interface SettlementParticipantMovementSummary {
+  readonly paidMinor: number;
+  readonly receivedMinor: number;
+}
+
 export function parseSettlementMovements(
   value: Database['public']['Tables']['settlement_proposals']['Row']['movements_json'],
 ) {
@@ -43,20 +48,55 @@ export function settlementProposalTotalAmount(proposal: SettlementProposalRow): 
   );
 }
 
+export function settlementParticipantMovementSummary(
+  movements: readonly SettlementMovement[],
+  participantUserId: string,
+): SettlementParticipantMovementSummary {
+  return movements.reduce(
+    (totals, movement) => ({
+      paidMinor:
+        totals.paidMinor +
+        (movement.debtor_user_id === participantUserId ? movement.amount_minor : 0),
+      receivedMinor:
+        totals.receivedMinor +
+        (movement.creditor_user_id === participantUserId ? movement.amount_minor : 0),
+    }),
+    { paidMinor: 0, receivedMinor: 0 },
+  );
+}
+
+export function settlementParticipantLegAmount(
+  summary: SettlementParticipantMovementSummary,
+  options: { readonly context: string; readonly requireBalanced: boolean },
+): number {
+  const hasPayAndReceive = summary.paidMinor > 0 && summary.receivedMinor > 0;
+  const shouldValidateBalance = options.requireBalanced || hasPayAndReceive;
+
+  if (
+    shouldValidateBalance &&
+    (summary.paidMinor !== summary.receivedMinor ||
+      (options.requireBalanced && !hasPayAndReceive))
+  ) {
+    throw new Error(
+      `${options.context}: Happy Circle participant amount mismatch ` +
+        `(paidMinor=${summary.paidMinor}, receivedMinor=${summary.receivedMinor})`,
+    );
+  }
+
+  return summary.paidMinor || summary.receivedMinor;
+}
+
 export function settlementProposalParticipantAmount(
   proposal: SettlementProposalRow,
   participantUserId: string,
 ): number {
-  return parseSettlementMovements(proposal.movements_json).reduce((total, movement) => {
-    if (
-      movement.debtor_user_id === participantUserId ||
-      movement.creditor_user_id === participantUserId
-    ) {
-      return total + movement.amount_minor;
-    }
+  const movements = parseSettlementMovements(proposal.movements_json);
+  const summary = settlementParticipantMovementSummary(movements, participantUserId);
 
-    return total;
-  }, 0);
+  return settlementParticipantLegAmount(summary, {
+    context: `Settlement proposal ${proposal.id} participant ${participantUserId}`,
+    requireBalanced: proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+  });
 }
 
 export function settlementSavedMovementsCount(

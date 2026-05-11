@@ -221,7 +221,6 @@ export function BalanceLensCarousel({
         onChange={changeActiveFocus}
         onInteractionStateChange={handlePagerInteractionChange}
         onPreviewChange={setVisualFocus}
-        pageStyle={styles.carouselPage}
         renderPage={(focus) => renderCarouselPage(focus)}
         scrollEnabled={swipeEnabled}
         style={styles.carouselViewport}

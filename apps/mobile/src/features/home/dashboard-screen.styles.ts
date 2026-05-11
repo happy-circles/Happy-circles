@@ -2,41 +2,52 @@ import { StyleSheet } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-export const PEOPLE_TILE_WIDTH = 68;
-export const PEOPLE_TILE_CIRCLE_SIZE = 56;
-export const PEOPLE_TILE_AVATAR_SIZE = 52;
-export const PEOPLE_TILE_LABEL_LINE_HEIGHT = 15;
+export const PEOPLE_TILE_WIDTH = 82;
+export const PEOPLE_TILE_CIRCLE_SIZE = 70;
+export const PEOPLE_TILE_AVATAR_SIZE = 64;
+export const PEOPLE_TILE_LABEL_LINE_HEIGHT = 17;
 export const HOME_REGISTER_FAB_CLEARANCE = 132;
 
 export const dashboardStyles = StyleSheet.create({
   homeContent: {
-    gap: theme.spacing.xl,
+    gap: theme.spacing.xxl,
+  },
+  homeSectionContent: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  homeSectionHeader: {
+    paddingHorizontal: theme.spacing.lg,
   },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
+    marginHorizontal: theme.spacing.lg,
   },
   quickActionPressed: {
     opacity: 0.6,
   },
   peopleSectionAction: {
+    backgroundColor: theme.colors.primaryGhost,
+    borderColor: theme.colors.hairline,
     borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 3,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
   },
   peopleSectionActionText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
+    color: theme.colors.primary,
+    fontSize: theme.typography.footnote,
     fontWeight: '800',
+    lineHeight: 16,
   },
   peopleRailContent: {
-    gap: theme.spacing.sm,
-    paddingRight: theme.spacing.xs,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
   },
   peopleTile: {
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     width: PEOPLE_TILE_WIDTH,
   },
   shortcutCircle: {
@@ -76,39 +87,81 @@ export const dashboardStyles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.pill,
-    borderWidth: 2,
+    borderWidth: 2.5,
     height: PEOPLE_TILE_CIRCLE_SIZE,
     justifyContent: 'center',
+    position: 'relative',
     width: PEOPLE_TILE_CIRCLE_SIZE,
   },
   peopleTileLabel: {
     color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
     includeFontPadding: false,
     lineHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
     maxWidth: PEOPLE_TILE_WIDTH,
     minHeight: PEOPLE_TILE_LABEL_LINE_HEIGHT,
     textAlign: 'center',
   },
+  transactionGroups: {
+    gap: theme.spacing.lg,
+  },
+  transactionGroup: {
+    gap: theme.spacing.xs,
+  },
+  transactionGroupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minHeight: 28,
+  },
+  transactionGroupTitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 17,
+    textTransform: 'uppercase',
+  },
+  transactionGroupBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryGhost,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: 'center',
+    minWidth: 22,
+    paddingHorizontal: 7,
+  },
+  transactionGroupBadgeText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 13,
+  },
   transactionList: {
     gap: theme.spacing.sm,
   },
+  transactionPreviewCard: {
+    borderColor: 'rgba(255, 255, 255, 1)',
+    borderWidth: 1,
+  },
   transactionFooter: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.hairline,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    minHeight: 58,
+    minHeight: 64,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.sm,
+    ...theme.shadow.card,
   },
   transactionFooterIcon: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryGhost,
     borderColor: theme.colors.hairline,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
@@ -139,7 +192,7 @@ export const dashboardStyles = StyleSheet.create({
     maxWidth: 78,
   },
   transactionFooterCtaText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.primary,
     flexShrink: 1,
     fontSize: theme.typography.caption,
     fontWeight: '800',

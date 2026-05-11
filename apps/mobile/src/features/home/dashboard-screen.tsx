@@ -143,6 +143,7 @@ export function DashboardScreen() {
   const homeContentContainerStyle = useMemo(
     () => ({
       paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom),
+      paddingHorizontal: 0,
       paddingTop:
         HOME_CHROME_EXPANDED_HEIGHT +
         Math.max(0, insets.top) +
@@ -209,12 +210,13 @@ export function DashboardScreen() {
     return (
       <ScreenShell
         contentContainerStyle={homeContentContainerStyle}
+        contentMode="full"
         headerVisible={false}
         headerVariant="plain"
         onScroll={homeChrome.onScroll}
         overlay={homeChromeOverlay}
         refresh={refresh}
-        safeAreaEdges={['left', 'right']}
+        safeAreaEdges={[]}
         scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
@@ -228,12 +230,13 @@ export function DashboardScreen() {
     return (
       <ScreenShell
         contentContainerStyle={homeContentContainerStyle}
+        contentMode="full"
         headerVisible={false}
         headerVariant="plain"
         onScroll={homeChrome.onScroll}
         overlay={homeChromeOverlay}
         refresh={refresh}
-        safeAreaEdges={['left', 'right']}
+        safeAreaEdges={[]}
         scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
@@ -244,13 +247,14 @@ export function DashboardScreen() {
   return (
     <ScreenShell
       contentContainerStyle={homeContentContainerStyle}
+      contentMode="full"
       headerVisible={false}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
       onScroll={homeChrome.onScroll}
       overlay={homeChromeOverlay}
       refresh={refresh}
-      safeAreaEdges={['left', 'right']}
+      safeAreaEdges={[]}
       scrollEnabled={homeScrollEnabled}
       scrollEventThrottle={16}
       title="Happy Circles"

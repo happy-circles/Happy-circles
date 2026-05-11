@@ -3,7 +3,7 @@ import type {
   SettlementProposalRow,
   SettlementVersionTimelineItemDto,
 } from '../types';
-import { settlementProposalTotalAmount } from './settlement-core';
+import { settlementProposalParticipantAmount } from './settlement-core';
 
 function settlementVersionStatusTitle(status: string, versionNumber: number | null): string {
   const versionLabel = versionNumber ? `Version ${versionNumber}` : 'Version';
@@ -75,10 +75,64 @@ function settlementVersionDetail(input: {
   return `Estado: ${status}.${versionSuffix}`;
 }
 
+function sortSettlementProposalsByVersion(
+  proposals: readonly SettlementProposalRow[],
+): SettlementProposalRow[] {
+  return [...proposals].sort((left, right) => {
+    const leftVersion = left.version_number ?? Number.MAX_SAFE_INTEGER;
+    const rightVersion = right.version_number ?? Number.MAX_SAFE_INTEGER;
+    if (leftVersion !== rightVersion) {
+      return leftVersion - rightVersion;
+    }
+
+    return Date.parse(left.created_at) - Date.parse(right.created_at);
+  });
+}
+
+function isSameVisibleSettlementResult(
+  previous: SettlementProposalRow,
+  next: SettlementProposalRow,
+): boolean {
+  return Boolean(
+    previous.result_hash && next.result_hash && previous.result_hash === next.result_hash,
+  );
+}
+
+function buildVisibleSettlementVersionGroups(
+  proposals: readonly SettlementProposalRow[],
+): readonly {
+  readonly displayVersionNumber: number;
+  readonly proposal: SettlementProposalRow;
+}[] {
+  const groups: SettlementProposalRow[][] = [];
+
+  for (const proposal of sortSettlementProposalsByVersion(proposals)) {
+    const currentGroup = groups[groups.length - 1];
+    const previousProposal = currentGroup?.[currentGroup.length - 1];
+
+    if (
+      currentGroup &&
+      previousProposal &&
+      isSameVisibleSettlementResult(previousProposal, proposal)
+    ) {
+      currentGroup.push(proposal);
+      continue;
+    }
+
+    groups.push([proposal]);
+  }
+
+  return groups.map((group, index) => ({
+    displayVersionNumber: index + 1,
+    proposal: group[group.length - 1],
+  }));
+}
+
 export function buildSettlementVersionTimeline(input: {
   readonly proposal: SettlementProposalRow;
   readonly allProposals: readonly SettlementProposalRow[];
   readonly participantsByProposalId: Map<string, SettlementParticipantRow[]>;
+  readonly currentUserId: string;
 }): readonly SettlementVersionTimelineItemDto[] {
   const caseProposals = input.proposal.happy_circle_case_id
     ? input.allProposals.filter(
@@ -91,17 +145,8 @@ export function buildSettlementVersionTimeline(input: {
     uniqueById.set(proposal.id, proposal);
   }
 
-  return Array.from(uniqueById.values())
-    .sort((left, right) => {
-      const leftVersion = left.version_number ?? Number.MAX_SAFE_INTEGER;
-      const rightVersion = right.version_number ?? Number.MAX_SAFE_INTEGER;
-      if (leftVersion !== rightVersion) {
-        return leftVersion - rightVersion;
-      }
-
-      return Date.parse(left.created_at) - Date.parse(right.created_at);
-    })
-    .map((proposal) => {
+  return buildVisibleSettlementVersionGroups(Array.from(uniqueById.values())).map(
+    ({ displayVersionNumber, proposal }) => {
       const participants = input.participantsByProposalId.get(proposal.id) ?? [];
       const approvalsPending = participants.filter(
         (participant) => participant.decision === 'pending',
@@ -111,10 +156,11 @@ export function buildSettlementVersionTimeline(input: {
       return {
         proposalId: proposal.id,
         versionNumber: proposal.version_number,
+        displayVersionNumber,
         status: proposal.status,
-        title: settlementVersionStatusTitle(proposal.status, proposal.version_number),
+        title: settlementVersionStatusTitle(proposal.status, displayVersionNumber),
         detail: settlementVersionDetail({ proposal, approvalsPending, isCurrent }),
-        amountMinor: settlementProposalTotalAmount(proposal),
+        amountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
         createdAt: proposal.created_at,
         updatedAt: proposal.updated_at,
         isCurrent,
@@ -122,5 +168,6 @@ export function buildSettlementVersionTimeline(input: {
         replacedByProposalId: proposal.replaced_by_proposal_id,
         staleReason: proposal.stale_reason,
       };
-    });
+    },
+  );
 }

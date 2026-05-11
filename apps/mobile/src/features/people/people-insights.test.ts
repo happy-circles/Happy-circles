@@ -97,9 +97,11 @@ describe('people insights', () => {
   it('normalizes public filters and labels', () => {
     expect(normalizePeopleInsightFilter(undefined)).toBe('balance');
     expect(normalizePeopleInsightFilter('circles')).toBe('circles');
+    expect(normalizePeopleInsightFilter('rejected')).toBe('rejected');
     expect(normalizePeopleInsightFilter(['owed_to_me'])).toBe('owed_to_me');
     expect(normalizePeopleInsightFilter('unknown')).toBe('balance');
     expect(peopleInsightLabel('i_owe')).toBe('Debes');
+    expect(peopleInsightLabel('rejected')).toBe('Rechazadas');
     expect(peopleInsightLabel('movements')).toBe('Movimientos');
   });
 
@@ -136,11 +138,18 @@ describe('people insights', () => {
       status: 'posted',
       tone: 'neutral',
     });
+    const rejected = activity({
+      amountMinor: 33_000,
+      id: 'rejected',
+      kind: 'request',
+      status: 'rejected',
+      tone: 'positive',
+    });
 
     expect(
       buildPeopleInsightActivitySections({
         filter: 'balance',
-        historyItems: [balance, cycle, amended],
+        historyItems: [balance, cycle, amended, rejected],
         pendingItems: [pending],
       }),
     ).toEqual({ history: [balance], pending: [] });
@@ -165,6 +174,13 @@ describe('people insights', () => {
         pendingItems: [pending, pendingCircle],
       }),
     ).toEqual({ history: [cycle], pending: [pendingCircle] });
+    expect(
+      buildPeopleInsightActivitySections({
+        filter: 'rejected',
+        historyItems: [balance, rejected],
+        pendingItems: [pending],
+      }),
+    ).toEqual({ history: [rejected], pending: [] });
     expect(activityMatchesPersonId(pendingCircle, [person({ userId: 'ana' })], 'ana')).toBe(true);
   });
 
@@ -219,6 +235,14 @@ describe('people insights', () => {
       originSettlementProposalId: 'closed-circle',
       status: 'posted',
     });
+    const closedCircleExecuted = activity({
+      category: 'cycle',
+      href: '/person/ana',
+      id: 'closed-circle:executed',
+      kind: 'settlement',
+      originSettlementProposalId: 'closed-circle',
+      status: 'executed',
+    });
     const replacedCircle = activity({
       category: 'cycle',
       href: '/person/ana',
@@ -233,6 +257,13 @@ describe('people insights', () => {
       id: 'rejected-circle',
       kind: 'settlement_proposal',
       originSettlementProposalId: 'rejected-circle',
+      status: 'rejected',
+    });
+    const rejectedRequest = activity({
+      amountMinor: 24_000,
+      href: '/person/ana',
+      id: 'rejected-request',
+      kind: 'request',
       status: 'rejected',
     });
     const activeCircles = [activeCircle({ participantUserIds: ['ana'] })];
@@ -269,10 +300,30 @@ describe('people insights', () => {
     ).toBe('pending');
     expect(
       buildPeopleInsightRanking({
+        activeCircleProposals: [],
+        analyticsPeople,
+        filter: 'rejected',
+        historyItems: [rejectedRequest],
+        pendingItems: [],
+        people,
+      })[0],
+    ).toMatchObject({
+      metricLabel: '1 · $\u00a0240',
+      tone: 'danger',
+      userId: 'ana',
+    });
+    expect(
+      buildPeopleInsightRanking({
         activeCircleProposals: activeCircles,
         analyticsPeople,
         filter: 'circles',
-        historyItems: [closedCircle, closedCircleDuplicate, replacedCircle, rejectedCircle],
+        historyItems: [
+          closedCircle,
+          closedCircleDuplicate,
+          closedCircleExecuted,
+          replacedCircle,
+          rejectedCircle,
+        ],
         pendingItems: [],
         people,
       })[0]?.metricLabel,
@@ -287,6 +338,65 @@ describe('people insights', () => {
         people,
       })[0]?.userId,
     ).toBe('ben');
+  });
+
+  it('counts Circle history by case instead of stale versions or ledger rows', () => {
+    const people = [person({ displayName: 'Ana Perez', userId: 'ana' })];
+    const analyticsPeople = [analyticsPerson({ label: 'Ana Perez', userId: 'ana' })];
+    const activeCircles = [
+      activeCircle({
+        happyCircleCaseId: 'case-active',
+        participantUserIds: ['ana'],
+        proposalId: 'proposal-current',
+      }),
+    ];
+    const staleCurrentCase = activity({
+      category: 'cycle',
+      happyCircleCaseId: 'case-active',
+      href: '/person/ana',
+      id: 'proposal-old:stale',
+      kind: 'settlement',
+      originSettlementProposalId: 'proposal-old',
+      status: 'stale',
+    });
+    const postedOne = activity({
+      category: 'cycle',
+      happyCircleCaseId: 'case-closed',
+      href: '/person/ana',
+      id: 'ledger-a',
+      kind: 'settlement',
+      originSettlementProposalId: 'proposal-closed',
+      status: 'posted',
+    });
+    const postedTwo = activity({
+      category: 'cycle',
+      happyCircleCaseId: 'case-closed',
+      href: '/person/ana',
+      id: 'ledger-b',
+      kind: 'settlement',
+      originSettlementProposalId: 'proposal-closed',
+      status: 'posted',
+    });
+    const executed = activity({
+      category: 'cycle',
+      happyCircleCaseId: 'case-closed',
+      href: '/person/ana',
+      id: 'proposal-closed:executed',
+      kind: 'settlement',
+      originSettlementProposalId: 'proposal-closed',
+      status: 'executed',
+    });
+
+    expect(
+      buildPeopleInsightRanking({
+        activeCircleProposals: activeCircles,
+        analyticsPeople,
+        filter: 'circles',
+        historyItems: [staleCurrentCase, postedOne, postedTwo, executed],
+        pendingItems: [],
+        people,
+      })[0]?.metricLabel,
+    ).toBe('2 Circles');
   });
 
   it('keeps balance rows as person-first filter entries', () => {

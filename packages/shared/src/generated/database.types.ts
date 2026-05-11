@@ -2511,6 +2511,7 @@ export type Database = {
           movements_json: Json
           replaced_by_proposal_id: string | null
           replaces_proposal_id: string | null
+          result_hash: string | null
           source_graph_cycle_job_id: string | null
           stale_reason:
             | Database["public"]["Enums"]["settlement_stale_reason"]
@@ -2533,6 +2534,7 @@ export type Database = {
           movements_json: Json
           replaced_by_proposal_id?: string | null
           replaces_proposal_id?: string | null
+          result_hash?: string | null
           source_graph_cycle_job_id?: string | null
           stale_reason?:
             | Database["public"]["Enums"]["settlement_stale_reason"]
@@ -2555,6 +2557,7 @@ export type Database = {
           movements_json?: Json
           replaced_by_proposal_id?: string | null
           replaces_proposal_id?: string | null
+          result_hash?: string | null
           source_graph_cycle_job_id?: string | null
           stale_reason?:
             | Database["public"]["Enums"]["settlement_stale_reason"]
@@ -4059,6 +4062,14 @@ export type Database = {
       compute_graph_snapshot_hash: { Args: never; Returns: string }
       compute_happy_circle_participant_set_hash: {
         Args: { p_participant_user_ids: string[] }
+        Returns: string
+      }
+      compute_settlement_result_hash: {
+        Args: {
+          p_currency_code?: string
+          p_movements_json: Json
+          p_participant_user_ids: string[]
+        }
         Returns: string
       }
       create_account_invite: {

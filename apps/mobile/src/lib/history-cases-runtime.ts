@@ -11,6 +11,11 @@ import type {
   HistoryCaseItem,
 } from './history-case-types';
 import { historyCaseKey, historyStepPriority } from './history-case-helpers';
+import {
+  isCircleActivityItem,
+  isCircleExecutedProposal,
+  isCircleLifecycleOnly,
+} from './cycle-activity';
 
 export type {
   ActivityHistoryItem,
@@ -72,20 +77,72 @@ export function buildHistoryCases<T extends HistoryCaseItem>(
         return [];
       }
 
-      const steps = [...uniqueItems].reverse();
+      const isCycleSnippet = groupedItems.some(isCircleActivityItem);
+      const latest = isCycleSnippet ? selectCycleLatestItem(completedItems) : completedItems[0];
+      const steps =
+        isCycleSnippet && isCircleExecutedProposal(latest)
+          ? sortExecutedCycleSteps(uniqueItems)
+          : [...uniqueItems].reverse();
+
       return [
         {
           id,
           // Keep pending proposals inside the expanded timeline, but anchor the case
           // on the latest completed event so history does not duplicate inbox items.
-          latest: completedItems[0],
+          latest,
           earliest: steps[0],
           steps,
-          isCycleSnippet: groupedItems.some((item) => item.kind === 'settlement'),
+          isCycleSnippet,
         },
       ];
     })
     .sort((left, right) => compareHistoryItems(left.latest, right.latest));
+}
+
+function selectCycleLatestItem<T extends HistoryCaseItem>(items: readonly T[]): T {
+  const executed = items.find(isCircleExecutedProposal);
+  if (executed) {
+    return executed;
+  }
+
+  const lifecycle = items.find(isCircleLifecycleOnly);
+  if (lifecycle) {
+    return lifecycle;
+  }
+
+  return items[0];
+}
+
+function sortExecutedCycleSteps<T extends HistoryCaseItem>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) => {
+    const rankDiff = executedCycleStepRank(left) - executedCycleStepRank(right);
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    const timeDiff = Date.parse(left.happenedAt ?? '') - Date.parse(right.happenedAt ?? '');
+    if (timeDiff !== 0 && !Number.isNaN(timeDiff)) {
+      return timeDiff;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
+}
+
+function executedCycleStepRank(item: HistoryCaseItem): number {
+  if (isCircleLifecycleOnly(item)) {
+    return 0;
+  }
+
+  if (isCircleExecutedProposal(item)) {
+    return 1;
+  }
+
+  if (item.kind === 'settlement' && item.status === 'posted') {
+    return 2;
+  }
+
+  return 3;
 }
 
 export function buildLatestHistoryCaseItems<T extends HistoryCaseItem>(items: readonly T[]): T[] {
@@ -124,6 +181,10 @@ export function toHistoryFeedItem(
     happenedAtLabel: item.happenedAtLabel,
     originRequestId: item.originRequestId,
     originSettlementProposalId: item.originSettlementProposalId,
+    happyCircleCaseId: item.happyCircleCaseId,
+    replacesProposalId: item.replacesProposalId,
+    replacedByProposalId: item.replacedByProposalId,
+    staleReason: item.staleReason,
     counterpartyLabel,
   };
 }
