@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 
 import { theme } from '@/lib/theme';
 
-export const FOCUS_CARD_HEIGHT = 278;
+export const FOCUS_CARD_HEIGHT = 304;
 
 export const balanceOverviewStyles = StyleSheet.create({
   supportText: {
@@ -147,8 +147,8 @@ export const balanceOverviewStyles = StyleSheet.create({
   visualFocusCard: {
     backgroundColor: 'transparent',
   },
-  circleRadarCard: {
-    gap: theme.spacing.sm,
+  circleStageCard: {
+    gap: 0,
   },
   categoryFocusCard: {
     gap: 0,
@@ -392,109 +392,56 @@ export const balanceOverviewStyles = StyleSheet.create({
     fontWeight: '900',
     lineHeight: 15,
   },
-  circleRadarHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 28,
-  },
-  circleRadarStatusPill: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: theme.colors.transparent,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    minWidth: 84,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  circleRadarStatusText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '900',
-    lineHeight: 15,
-  },
-  circleRadarScene: {
-    alignItems: 'center',
-    alignSelf: 'center',
+  circleStageScene: {
     flex: 1,
-    height: 146,
-    justifyContent: 'center',
-    maxWidth: 280,
     minHeight: 0,
+    overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
-  circleRadarCanvas: {
-    ...StyleSheet.absoluteFillObject,
+  circleStageGraph: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleRadarSvg: {
-    position: 'absolute',
-  },
-  circleRadarSweepBeam: {
-    height: 172,
-    left: '50%',
-    marginLeft: -86,
-    marginTop: -86,
-    position: 'absolute',
-    top: '50%',
-    width: 172,
-  },
-  circleRadarGhostNode: {
-    borderRadius: theme.radius.pill,
-    borderWidth: 1.5,
-    position: 'absolute',
-    ...theme.shadow.card,
-  },
-  circleRadarDetectedGraph: {
-    alignItems: 'center',
-    height: 126,
+    height: 224,
     justifyContent: 'center',
     left: '50%',
-    marginLeft: -63,
-    marginTop: -63,
+    marginLeft: -112,
     position: 'absolute',
-    top: '50%',
-    width: 126,
+    top: 40,
+    width: 224,
+    zIndex: 2,
   },
-  circleRadarDetectedRing: {
+  circleStageIdleGraph: {
+    opacity: 0.5,
+  },
+  circleStageRing: {
     marginRight: 0,
   },
-  circleRadarFooter: {
+  circleStageCalloutDock: {
     alignItems: 'center',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 7,
+    position: 'absolute',
+    right: theme.spacing.md,
+    top: theme.spacing.md,
+    zIndex: 4,
   },
-  circleRadarFooterIcon: {
+  circleStageCallout: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 30,
-    justifyContent: 'center',
-    width: 30,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 30,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
   },
-  circleRadarFooterCopy: {
-    flex: 1,
-    minWidth: 0,
+  circleStageCalloutDot: {
+    borderRadius: theme.radius.pill,
+    height: 7,
+    width: 7,
   },
-  circleRadarFooterTitle: {
+  circleStageCalloutText: {
     color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '900',
-    lineHeight: 17,
-  },
-  circleRadarFooterDetail: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '700',
+    fontWeight: '900',
     lineHeight: 15,
   },
   balanceHomeBody: {
@@ -530,7 +477,6 @@ export const balanceOverviewStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
     justifyContent: 'center',
-    maxWidth: 190,
     minWidth: 0,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 8,

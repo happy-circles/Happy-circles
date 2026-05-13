@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Animated, Easing, Pressable, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 
 import type {
   ActiveSettlementPreviewDto,
@@ -12,10 +12,7 @@ import type {
 
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
-import {
-  HappyCircleRing,
-  type HappyCircleRingParticipant,
-} from '@/components/happy-circle-ring';
+import { HappyCircleRing, type HappyCircleRingParticipant } from '@/components/happy-circle-ring';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { StateAuraLayer } from '@/components/state-aura-layer';
 import { SurfaceCard } from '@/components/surface-card';
@@ -33,6 +30,7 @@ import {
   amountTone,
   balanceTone,
   firstName,
+  formatCompactCop,
   formatHomeBalanceCop,
   personLensAmount,
   signedFormatCompactCop,
@@ -610,10 +608,12 @@ function settleCategoryParticles(particles: ParticleState[], bounds: ParticleBou
 }
 
 function CategoryParticleField({
+  isActive = true,
   onCategoryPress,
   particles,
   totalFlowMinor,
 }: {
+  readonly isActive?: boolean;
   readonly onCategoryPress?: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
   readonly particles: readonly CategoryParticleDatum[];
   readonly totalFlowMinor: number;
@@ -683,6 +683,10 @@ function CategoryParticleField({
   }, [animatedPositions, bounds, displayedParticles, particleSignature]);
 
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
     let frame = 0;
     let lastFrameTime = Date.now();
 
@@ -738,7 +742,7 @@ function CategoryParticleField({
     return () => {
       cancelAnimationFrame(frame);
     };
-  }, [animatedPositions]);
+  }, [animatedPositions, isActive]);
 
   return (
     <View onLayout={handleLayout} style={styles.categoryProgressField}>
@@ -937,9 +941,11 @@ export function PeopleFocusCard({
 
 export function CategoriesFocusCard({
   categories,
+  isActive = true,
   onCategoryPress,
 }: {
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
+  readonly isActive?: boolean;
   readonly onCategoryPress?: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
 }) {
   const visibleCategories = useMemo(
@@ -982,6 +988,7 @@ export function CategoriesFocusCard({
         ) : (
           <View style={styles.categoryProgressFrame}>
             <CategoryParticleField
+              isActive={isActive}
               onCategoryPress={onCategoryPress}
               particles={particles}
               totalFlowMinor={totalFlowMinor}
@@ -993,38 +1000,30 @@ export function CategoriesFocusCard({
   );
 }
 
-type CircleRadarTone = 'needs_me' | 'new' | 'waiting' | 'ready';
+type CircleStageTone = 'needs_me' | 'new' | 'waiting' | 'ready';
 
-type CircleRadarItem = {
+type CircleStageItem = {
   readonly isNew: boolean;
   readonly key: string;
   readonly priority: number;
   readonly proposal: ActiveSettlementPreviewDto;
-  readonly tone: CircleRadarTone;
+  readonly tone: CircleStageTone;
 };
 
-type CircleRadarLayout = {
-  readonly left: number;
-  readonly size: number;
-  readonly top: number;
-};
-
-const CIRCLE_RADAR_WIDTH = 280;
-const CIRCLE_RADAR_HEIGHT = 146;
-const CIRCLE_RADAR_RING_SIZE = 126;
-const CIRCLE_RADAR_IDLE_NODES: readonly CircleRadarLayout[] = [
-  { left: 135, size: 12, top: 19 },
-  { left: 74, size: 10, top: 43 },
-  { left: 198, size: 11, top: 45 },
-  { left: 97, size: 9, top: 106 },
-  { left: 180, size: 10, top: 103 },
+const CIRCLE_STAGE_RING_SIZE = 224;
+const CIRCLE_STAGE_IDLE_PARTICIPANTS: readonly HappyCircleRingParticipant[] = [
+  { decision: 'pending', label: 'Happy', userId: 'circle-stage-idle:0' },
+  { decision: 'pending', label: 'Happy', userId: 'circle-stage-idle:1' },
+  { decision: 'pending', label: 'Happy', userId: 'circle-stage-idle:2' },
+  { decision: 'pending', label: 'Happy', userId: 'circle-stage-idle:3' },
+  { decision: 'pending', label: 'Happy', userId: 'circle-stage-idle:4' },
 ];
 
-function proposalRadarTone(
+function proposalStageTone(
   proposal: ActiveSettlementPreviewDto,
   currentUserId: string | null | undefined,
   isNew: boolean,
-): CircleRadarTone {
+): CircleStageTone {
   const myDecision = currentUserId
     ? proposal.participantDecisions.find((participant) => participant.userId === currentUserId)
         ?.decision
@@ -1050,7 +1049,7 @@ function proposalRadarTone(
   return 'waiting';
 }
 
-function circleRadarPriority(tone: CircleRadarTone, isNew: boolean): number {
+function circleStagePriority(tone: CircleStageTone, isNew: boolean): number {
   if (tone === 'needs_me') {
     return 0;
   }
@@ -1070,48 +1069,21 @@ function circleRadarPriority(tone: CircleRadarTone, isNew: boolean): number {
   return 4;
 }
 
-function buildCircleRadarItem(
+function buildCircleStageItem(
   proposal: ActiveSettlementPreviewDto,
   currentUserId: string | null | undefined,
   newCircleProposalIds: ReadonlySet<string> | undefined,
-): CircleRadarItem {
+): CircleStageItem {
   const isNew = Boolean(newCircleProposalIds?.has(proposal.proposalId));
-  const tone = proposalRadarTone(proposal, currentUserId, isNew);
+  const tone = proposalStageTone(proposal, currentUserId, isNew);
 
   return {
     isNew,
     key: proposal.proposalId,
-    priority: circleRadarPriority(tone, isNew),
+    priority: circleStagePriority(tone, isNew),
     proposal,
     tone,
   };
-}
-
-function circleRadarPrimaryLabel(input: {
-  readonly activeCount: number;
-  readonly needsMeCount: number;
-}): string {
-  if (input.needsMeCount > 0) {
-    return input.needsMeCount === 1 ? 'Responde el Circle' : 'Responde tus Circles';
-  }
-
-  if (input.activeCount > 0) {
-    return 'Esperando respuestas';
-  }
-
-  return 'Todo claro por ahora';
-}
-
-function circleRadarSecondaryLabel(activeCount: number): string {
-  if (activeCount > 1) {
-    return `${activeCount} Circles activos`;
-  }
-
-  if (activeCount === 1) {
-    return 'Circle activo';
-  }
-
-  return 'Buscando vueltas';
 }
 
 function fallbackRingDecision(proposal: ActiveSettlementPreviewDto): 'approved' | 'pending' {
@@ -1159,133 +1131,79 @@ function anonymizedCircleParticipants(
   return nodes;
 }
 
-function CircleRadarBackdrop({
-  active,
-  rotate,
-}: {
-  readonly active: boolean;
-  readonly rotate: Animated.AnimatedInterpolation<string>;
-}) {
-  const activeTheme = useAppTheme();
-  const radarColor = active ? activeTheme.colors.cycle : activeTheme.colors.primary;
-  const ringStroke = activeTheme.scheme === 'dark' ? activeTheme.colors.border : radarColor;
-  const sweepOpacity = active ? 0.5 : 0.34;
-
-  return (
-    <View pointerEvents="none" style={styles.circleRadarCanvas}>
-      <Svg height={CIRCLE_RADAR_HEIGHT} style={styles.circleRadarSvg} width={CIRCLE_RADAR_WIDTH}>
-        {[28, 52, 76].map((radius, index) => (
-          <Circle
-            cx={CIRCLE_RADAR_WIDTH / 2}
-            cy={CIRCLE_RADAR_HEIGHT / 2}
-            fill="none"
-            key={radius}
-            r={radius}
-            stroke={ringStroke}
-            strokeOpacity={active ? 0.22 - index * 0.035 : 0.16 - index * 0.025}
-            strokeWidth={1.4}
-          />
-        ))}
-        <Path
-          d={`M ${CIRCLE_RADAR_WIDTH / 2 - 84} ${CIRCLE_RADAR_HEIGHT / 2} H ${
-            CIRCLE_RADAR_WIDTH / 2 + 84
-          }`}
-          stroke={ringStroke}
-          strokeLinecap="round"
-          strokeOpacity={0.1}
-          strokeWidth={1}
-        />
-        <Path
-          d={`M ${CIRCLE_RADAR_WIDTH / 2} ${CIRCLE_RADAR_HEIGHT / 2 - 84} V ${
-            CIRCLE_RADAR_HEIGHT / 2 + 84
-          }`}
-          stroke={ringStroke}
-          strokeLinecap="round"
-          strokeOpacity={0.1}
-          strokeWidth={1}
-        />
-      </Svg>
-      <Animated.View
-        style={[
-          styles.circleRadarSweepBeam,
-          {
-            opacity: sweepOpacity,
-            transform: [{ rotate }],
-          },
-        ]}
-      >
-        <Svg height={172} width={172}>
-          <Path d="M 86 86 L 86 9 A 77 77 0 0 1 153 48 Z" fill={radarColor} opacity={0.18} />
-          <Path
-            d="M 86 86 L 86 8"
-            stroke={radarColor}
-            strokeLinecap="round"
-            strokeOpacity={0.58}
-            strokeWidth={2}
-          />
-        </Svg>
-      </Animated.View>
-    </View>
-  );
-}
-
-function CircleRadarIdleNodes({
-  pulse,
-}: {
-  readonly pulse: Animated.AnimatedInterpolation<number>;
-}) {
-  const activeTheme = useAppTheme();
-
-  return (
-    <>
-      {CIRCLE_RADAR_IDLE_NODES.map((node, index) => (
-        <Animated.View
-          key={`${node.left}:${node.top}`}
-          style={[
-            styles.circleRadarGhostNode,
-            {
-              backgroundColor:
-                activeTheme.scheme === 'dark'
-                  ? activeTheme.colors.surfaceSoft
-                  : activeTheme.colors.surface,
-              borderColor: `${activeTheme.colors.cycle}${index === 0 ? '5C' : '30'}`,
-              height: node.size,
-              left: node.left,
-              top: node.top,
-              transform: index === 0 ? [{ scale: pulse }] : undefined,
-              width: node.size,
-            },
-          ]}
-        />
-      ))}
-    </>
-  );
-}
-
-function CircleRadarDetectedGraph({
+function CircleStageActiveGraph({
   activeCount,
+  counterRotation,
   currentUserId,
+  needsMeCount,
+  orbitRotation,
   pulse,
   proposal,
 }: {
   readonly activeCount: number;
+  readonly counterRotation: Animated.AnimatedInterpolation<string>;
   readonly currentUserId?: string | null;
+  readonly needsMeCount: number;
+  readonly orbitRotation: Animated.AnimatedInterpolation<string>;
   readonly pulse: Animated.AnimatedInterpolation<number>;
   readonly proposal: ActiveSettlementPreviewDto;
 }) {
   const activeTheme = useAppTheme();
   const participants = anonymizedCircleParticipants(proposal, currentUserId);
+  const centerLabel =
+    activeCount > 1 ? String(activeCount) : formatCompactCop(proposal.personalAmountMinor);
+  const centerSubLabel =
+    needsMeCount > 0 ? 'por responder' : activeCount > 1 ? 'activos' : 'a solucionar';
 
   return (
-    <Animated.View style={[styles.circleRadarDetectedGraph, { transform: [{ scale: pulse }] }]}>
+    <Animated.View style={[styles.circleStageGraph, { transform: [{ scale: pulse }] }]}>
       <HappyCircleRing
+        animatePendingFaces
         centerColor={activeTheme.colors.cycle}
-        centerLabel={activeCount > 1 ? String(activeCount) : 'Circle'}
-        centerSubLabel={activeCount > 1 ? 'activos' : 'activo'}
+        centerLabel={centerLabel}
+        centerSubLabel={centerSubLabel}
         decisions={participants}
-        ringSize={CIRCLE_RADAR_RING_SIZE}
+        nodeCounterRotation={counterRotation}
+        orbitRotation={orbitRotation}
+        ringSize={CIRCLE_STAGE_RING_SIZE}
         showLabels={false}
-        style={styles.circleRadarDetectedRing}
+        style={styles.circleStageRing}
+      />
+    </Animated.View>
+  );
+}
+
+function CircleStageIdleGraph({
+  counterRotation,
+  orbitRotation,
+  pulse,
+}: {
+  readonly counterRotation: Animated.AnimatedInterpolation<string>;
+  readonly orbitRotation: Animated.AnimatedInterpolation<string>;
+  readonly pulse: Animated.AnimatedInterpolation<number>;
+}) {
+  const activeTheme = useAppTheme();
+
+  return (
+    <Animated.View
+      style={[
+        styles.circleStageGraph,
+        styles.circleStageIdleGraph,
+        { transform: [{ scale: pulse }] },
+      ]}
+    >
+      <HappyCircleRing
+        animatePendingFaces
+        centerColor={activeTheme.colors.textMuted}
+        centerLabel="0"
+        centerSubLabel="activos"
+        decisions={CIRCLE_STAGE_IDLE_PARTICIPANTS}
+        nodeCounterRotation={counterRotation}
+        orbitRotation={orbitRotation}
+        ringSize={CIRCLE_STAGE_RING_SIZE}
+        showContinuation={false}
+        showLabels={false}
+        style={styles.circleStageRing}
       />
     </Animated.View>
   );
@@ -1305,121 +1223,78 @@ export function SettlementsFocusCard({
 }) {
   const activeTheme = useAppTheme();
   const progress = useLoopingProgress(6200);
+  const orbitProgress = useLoopingProgress(26000);
   const pulse = progress.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [1, 1.04, 1],
   });
-  const sweepRotate = progress.interpolate({
+  const orbitRotation = orbitProgress.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+  const counterRotation = orbitProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '-360deg'],
+  });
   const prioritizedItems = activeProposals
-    .map((proposal) => buildCircleRadarItem(proposal, currentUserId, newCircleProposalIds))
+    .map((proposal) => buildCircleStageItem(proposal, currentUserId, newCircleProposalIds))
     .sort((left, right) => left.priority - right.priority);
   const heroItem = prioritizedItems[0];
   const activeCount = prioritizedItems.length;
   const needsMeCount = prioritizedItems.filter((item) => item.tone === 'needs_me').length;
   const newCount = prioritizedItems.filter((item) => item.isNew).length;
   const hasNewCircles = newCount > 0;
-  const hasActiveCircles = activeCount > 0 && heroItem !== undefined;
-  const primaryLabel = circleRadarPrimaryLabel({
-    activeCount,
-    needsMeCount,
-  });
-  const secondaryLabel = circleRadarSecondaryLabel(activeCount);
-  const statusLabel = hasActiveCircles
-    ? activeCount === 1
-      ? 'Detectado'
-      : `${activeCount} activos`
-    : 'Buscando';
-  const footerIcon: keyof typeof Ionicons.glyphMap = hasActiveCircles
-    ? needsMeCount > 0
-      ? 'radio-button-on-outline'
-      : 'time-outline'
-    : 'scan-outline';
 
   return (
     <SurfaceCard
-      padding="lg"
-      style={[styles.focusCard, styles.visualFocusCard, styles.circleRadarCard]}
-      underlay={
-        hasNewCircles ? <StateAuraLayer size="hero" variant="newCircle" /> : undefined
-      }
+      padding="none"
+      style={[styles.focusCard, styles.visualFocusCard, styles.circleStageCard]}
+      underlay={hasNewCircles ? <StateAuraLayer size="hero" variant="newCircle" /> : undefined}
     >
-      <View style={styles.circleRadarHeader}>
-        <FocusCardTitle>Circles</FocusCardTitle>
-        <View
-          style={[
-            styles.circleRadarStatusPill,
-            {
-              backgroundColor: hasActiveCircles
-                ? activeTheme.colors.cycleSoft
-                : activeTheme.glass.flatMutedBackground,
-              borderColor: activeTheme.colors.hairline,
-            },
-          ]}
-        >
-          <AppText
-            numberOfLines={1}
-            style={[styles.circleRadarStatusText, { color: activeTheme.colors.text }]}
-          >
-            {statusLabel}
-          </AppText>
-        </View>
-      </View>
-      <View style={styles.circleRadarScene}>
-        <CircleRadarBackdrop active={hasActiveCircles} rotate={sweepRotate} />
+      <View style={styles.circleStageScene}>
         {heroItem ? (
-          <CircleRadarDetectedGraph
+          <CircleStageActiveGraph
             activeCount={activeCount}
+            counterRotation={counterRotation}
             currentUserId={currentUserId}
+            needsMeCount={needsMeCount}
+            orbitRotation={orbitRotation}
             proposal={heroItem.proposal}
             pulse={pulse}
           />
         ) : (
-          <CircleRadarIdleNodes pulse={pulse} />
-        )}
-      </View>
-      <View
-        style={[
-          styles.circleRadarFooter,
-          {
-            backgroundColor: activeTheme.glass.flatMutedBackground,
-            borderColor: activeTheme.colors.hairline,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.circleRadarFooterIcon,
-            {
-              backgroundColor: hasActiveCircles
-                ? activeTheme.colors.cycleSoft
-                : activeTheme.colors.surfaceSoft,
-            },
-          ]}
-        >
-          <Ionicons
-            color={hasActiveCircles ? activeTheme.colors.cycle : activeTheme.colors.textMuted}
-            name={footerIcon}
-            size={17}
+          <CircleStageIdleGraph
+            counterRotation={counterRotation}
+            orbitRotation={orbitRotation}
+            pulse={pulse}
           />
-        </View>
-        <View style={styles.circleRadarFooterCopy}>
-          <AppText
-            numberOfLines={1}
-            style={[styles.circleRadarFooterTitle, { color: activeTheme.colors.text }]}
-          >
-            {primaryLabel}
-          </AppText>
-          <AppText
-            numberOfLines={1}
-            style={[styles.circleRadarFooterDetail, { color: activeTheme.colors.textMuted }]}
-          >
-            {secondaryLabel}
-          </AppText>
-        </View>
-        <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={17} />
+        )}
+        {needsMeCount > 0 ? (
+          <View pointerEvents="none" style={styles.circleStageCalloutDock}>
+            <View
+              style={[
+                styles.circleStageCallout,
+                {
+                  backgroundColor: activeTheme.glass.flatMutedBackground,
+                  borderColor: activeTheme.colors.cycleSoft,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.circleStageCalloutDot,
+                  { backgroundColor: activeTheme.colors.cycle },
+                ]}
+              />
+              <AppText
+                numberOfLines={1}
+                style={[styles.circleStageCalloutText, { color: activeTheme.colors.text }]}
+              >
+                Responder
+              </AppText>
+            </View>
+          </View>
+        ) : null}
       </View>
     </SurfaceCard>
   );

@@ -23,6 +23,7 @@ import { formatCop } from '@/lib/data';
 import {
   triggerAppActionHaptic,
   triggerAppErrorHaptic,
+  triggerAppSelectionHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
 import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
@@ -30,10 +31,19 @@ import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation'
 import { showBlockedActionAlert, useActionFeedbackOverlay } from '@/lib/action-feedback';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useApproveSettlementMutation, useRejectSettlementMutation } from '@/lib/live-data';
+import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
+
+const SHOWCASE_CARD_HEIGHT = 584;
+const SHOWCASE_BODY_HEIGHT = 468;
+const SHOWCASE_FOOTER_HEIGHT = SHOWCASE_CARD_HEIGHT - SHOWCASE_BODY_HEIGHT;
+const SHOWCASE_HEADER_TOP = 48;
+const SHOWCASE_RING_TOP = 110;
+const SHOWCASE_PILLS_TOP = 432;
+const SHOWCASE_PILLS_WIDTH = 260;
 
 function ApprovalDots({
   decisions,
@@ -81,7 +91,7 @@ function CircleStatusIcon({
     <View
       accessibilityLabel={label}
       accessible
-      style={[styles.statusIcon, { backgroundColor: `${color}12` }]}
+      style={[styles.statusIcon, { backgroundColor: `${color}12`, borderColor: `${color}28` }]}
     >
       <Ionicons color={color} name={icon} size={18} />
     </View>
@@ -144,12 +154,14 @@ function directCircleCardParticipants(
 
 export interface HappyCircleCardProps {
   readonly proposal: ActiveSettlementPreviewDto;
+  readonly showcaseRingSize?: number;
   readonly unread?: boolean;
   readonly variant?: 'full' | 'compact' | 'showcase';
 }
 
 export function HappyCircleCard({
   proposal,
+  showcaseRingSize,
   unread = false,
   variant = 'full',
 }: HappyCircleCardProps) {
@@ -163,11 +175,9 @@ export function HappyCircleCard({
 
   const isCompact = variant === 'compact';
   const isShowcase = variant === 'showcase';
-  const ringSize = isShowcase ? 260 : isCompact ? 166 : 220;
+  const ringSize = isShowcase ? (showcaseRingSize ?? 260) : isCompact ? 166 : 220;
   const amountLabel = formatCop(proposal.personalAmountMinor);
   const approvedCount = proposal.participantCount - proposal.approvalsPending;
-  const participantCount = Math.max(proposal.participantCount, 1);
-  const approvalRatio = Math.min(Math.max(approvedCount / participantCount, 0), 1);
   const myDecision = proposal.participantDecisions.find(
     (p) => p.userId === session.userId,
   )?.decision;
@@ -179,9 +189,9 @@ export function HappyCircleCard({
   const canDecide = presentation.actionability === 'can_decide';
   const circleIntent = cardStateIntentFromTone(presentation.tone ?? 'neutral');
   const cycleColor = activeTheme.colors.cycle;
-  const circleGlowColor = isShowcase
-    ? cycleColor
-    : cardStateColor(circleIntent, presentation.tone ?? 'neutral');
+  const detailHref = `/settlements/${proposal.proposalId}` as Href;
+  const stateColor = cardStateColor(circleIntent, presentation.tone ?? 'neutral');
+  const circleGlowColor = isShowcase ? cycleColor : stateColor;
   const auraSize = unread
     ? isShowcase
       ? 'hero'
@@ -266,7 +276,7 @@ export function HappyCircleCard({
       }
       variant="elevated"
     >
-      <Link href={`/settlements/${proposal.proposalId}` as Href} asChild>
+      <Link href={detailHref} asChild>
         <CardPressable
           haptic="selection"
           hapticTrigger="pressIn"
@@ -281,9 +291,7 @@ export function HappyCircleCard({
               <View style={styles.cardHeaderCopy}>
                 <View style={styles.brandRow}>
                   <Ionicons color={cycleColor} name="happy-outline" size={18} />
-                  <AppText style={[styles.brandLabel, { color: cycleColor }]}>
-                    Happy Circle
-                  </AppText>
+                  <AppText style={[styles.brandLabel, { color: cycleColor }]}>Happy Circle</AppText>
                 </View>
                 <CircleStatusIcon label={presentation.label} tone={presentation.tone} />
               </View>
@@ -310,9 +318,11 @@ export function HappyCircleCard({
               <View
                 style={[
                   styles.ringHaloWrap,
+                  styles.showcaseRingSlot,
                   {
-                    height: ringSize + 76,
-                    width: ringSize + 104,
+                    height: ringSize + 56,
+                    maxWidth: ringSize + 56,
+                    width: '100%',
                   },
                 ]}
               >
@@ -326,41 +336,23 @@ export function HappyCircleCard({
                 />
               </View>
 
-              <View style={styles.showcaseProgressBlock}>
-                <View style={styles.showcaseProgressMeta}>
-                  <AppText style={[styles.approvalSummary, { color: activeTheme.colors.success }]}>
-                    {approvedCount}/{proposal.participantCount} aprobadas
-                  </AppText>
-                </View>
-                <View
-                  style={[
-                    styles.progressTrack,
-                    { backgroundColor: activeTheme.colors.surfaceSoft },
-                  ]}
-                >
+              <View style={styles.showcasePillsRow}>
+                {orderedDecisions.map((participant) => (
                   <View
+                    key={participant.userId}
                     style={[
-                      styles.progressFill,
-                      { backgroundColor: cycleColor, width: `${approvalRatio * 100}%` },
+                      styles.showcaseProgressPill,
+                      { backgroundColor: happyCircleDecisionColor(participant.decision) },
                     ]}
                   />
-                </View>
-              </View>
-
-              <View style={styles.detailCta}>
-                <AppText style={[styles.detailCtaText, { color: cycleColor }]}>
-                  Ver detalle
-                </AppText>
-                <Ionicons color={cycleColor} name="chevron-forward" size={17} />
+                ))}
               </View>
             </View>
           ) : (
             <View style={[styles.body, isCompact ? styles.bodyCompact : null]}>
               <View style={styles.metricsColumn}>
                 <View style={styles.metricBlock}>
-                  <AppText
-                    style={[styles.metricEyebrow, { color: activeTheme.colors.textMuted }]}
-                  >
+                  <AppText style={[styles.metricEyebrow, { color: activeTheme.colors.textMuted }]}>
                     Evitas mover
                   </AppText>
                   <AppText
@@ -417,7 +409,7 @@ export function HappyCircleCard({
         </CardPressable>
       </Link>
 
-      {canDecide ? (
+      {isShowcase || canDecide ? (
         <View
           style={[
             styles.actionsFooter,
@@ -427,73 +419,113 @@ export function HappyCircleCard({
         >
           {isShowcase ? (
             <>
+              {canDecide ? (
+                <View style={styles.showcaseActionsRow}>
+                  <Pressable
+                    accessibilityLabel="Rechazar Happy Circle"
+                    accessibilityRole="button"
+                    disabled={busyAction !== null}
+                    onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
+                    onPress={() => {
+                      Alert.alert(
+                        'Seguro quieres rechazar este Happy Circle?',
+                        'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                        [
+                          {
+                            text: 'Volver',
+                            style: 'cancel',
+                          },
+                          {
+                            text: 'Rechazar Circle',
+                            style: 'destructive',
+                            onPress: () => void handleAction('reject'),
+                          },
+                        ],
+                      );
+                    }}
+                    style={({ pressed }) => [
+                      styles.iconActionButton,
+                      styles.iconActionButtonGhost,
+                      {
+                        backgroundColor: `${activeTheme.colors.danger}12`,
+                        borderColor: `${activeTheme.colors.danger}2E`,
+                      },
+                      pressed ? styles.iconActionButtonPressed : null,
+                      busyAction !== null ? styles.iconActionButtonDisabled : null,
+                    ]}
+                  >
+                    <Ionicons
+                      color={activeTheme.colors.danger}
+                      name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
+                      size={20}
+                    />
+                    <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.danger }]}>
+                      Rechazar
+                    </AppText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Aprobar Happy Circle"
+                    accessibilityRole="button"
+                    disabled={busyAction !== null}
+                    onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
+                    onPress={() => void handleAction('approve')}
+                    style={({ pressed }) => [
+                      styles.iconActionButton,
+                      {
+                        backgroundColor: cycleColor,
+                        borderColor: cycleColor,
+                        ...activeTheme.shadow.card,
+                      },
+                      pressed ? styles.iconActionButtonPressed : null,
+                      busyAction !== null ? styles.iconActionButtonDisabled : null,
+                    ]}
+                  >
+                    <Ionicons
+                      color={activeTheme.colors.white}
+                      name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
+                      size={20}
+                    />
+                    <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.white }]}>
+                      Aprobar
+                    </AppText>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.showcaseStatusLane}>
+                  <View
+                    style={[
+                      styles.showcaseStatePill,
+                      {
+                        backgroundColor: `${stateColor}12`,
+                        borderColor: `${stateColor}24`,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      numberOfLines={1}
+                      style={[styles.showcaseStateText, { color: stateColor }]}
+                    >
+                      {presentation.label}
+                    </AppText>
+                  </View>
+                </View>
+              )}
               <Pressable
-                accessibilityLabel="Rechazar Happy Circle"
+                accessibilityLabel="Ver detalle del Happy Circle"
                 accessibilityRole="button"
-                disabled={busyAction !== null}
-                onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
                 onPress={() => {
-                  Alert.alert(
-                    'Seguro quieres rechazar este Happy Circle?',
-                    'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
-                    [
-                      {
-                        text: 'Volver',
-                        style: 'cancel',
-                      },
-                      {
-                        text: 'Rechazar Circle',
-                        style: 'destructive',
-                        onPress: () => void handleAction('reject'),
-                      },
-                    ],
-                  );
+                  pushRoute(router, detailHref);
                 }}
+                onPressIn={triggerAppSelectionHaptic}
                 style={({ pressed }) => [
-                  styles.iconActionButton,
-                  styles.iconActionButtonGhost,
-                  {
-                    backgroundColor: `${activeTheme.colors.danger}12`,
-                    borderColor: `${activeTheme.colors.danger}2E`,
-                  },
-                  pressed ? styles.iconActionButtonPressed : null,
-                  busyAction !== null ? styles.iconActionButtonDisabled : null,
+                  styles.detailCta,
+                  pressed ? styles.detailCtaPressed : null,
                 ]}
               >
-                <Ionicons
-                  color={activeTheme.colors.danger}
-                  name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
-                  size={20}
-                />
-                <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.danger }]}>
-                  Rechazar
+                <AppText numberOfLines={1} style={[styles.detailCtaText, { color: cycleColor }]}>
+                  Ver detalle
                 </AppText>
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Aprobar Happy Circle"
-                accessibilityRole="button"
-                disabled={busyAction !== null}
-                onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
-                onPress={() => void handleAction('approve')}
-                style={({ pressed }) => [
-                  styles.iconActionButton,
-                  {
-                    backgroundColor: cycleColor,
-                    borderColor: cycleColor,
-                    ...activeTheme.shadow.card,
-                  },
-                  pressed ? styles.iconActionButtonPressed : null,
-                  busyAction !== null ? styles.iconActionButtonDisabled : null,
-                ]}
-              >
-                <Ionicons
-                  color={activeTheme.colors.white}
-                  name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
-                  size={20}
-                />
-                <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.white }]}>
-                  Aprobar
-                </AppText>
+                <Ionicons color={cycleColor} name="chevron-forward" size={14} />
               </Pressable>
             </>
           ) : (
@@ -561,7 +593,8 @@ const styles = StyleSheet.create({
   cardShowcase: {
     borderLeftWidth: 0,
     borderRadius: theme.radius.large,
-    minHeight: 560,
+    gap: 0,
+    height: SHOWCASE_CARD_HEIGHT,
   },
   cardPressable: {
     gap: theme.spacing.md,
@@ -574,10 +607,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   cardPressableShowcase: {
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+    height: SHOWCASE_BODY_HEIGHT,
+    paddingBottom: 0,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xxl,
+    paddingTop: 0,
   },
   cardPressed: {
     opacity: 0.9,
@@ -598,6 +632,7 @@ const styles = StyleSheet.create({
   statusIcon: {
     alignItems: 'center',
     borderRadius: theme.radius.small,
+    borderWidth: 1,
     height: 32,
     justifyContent: 'center',
     width: 32,
@@ -624,25 +659,31 @@ const styles = StyleSheet.create({
   },
   showcaseBody: {
     alignItems: 'center',
-    gap: 22,
+    height: SHOWCASE_BODY_HEIGHT,
+    position: 'relative',
+    width: '100%',
     zIndex: 2,
   },
   showcaseSummary: {
     alignItems: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: SHOWCASE_HEADER_TOP,
     width: '100%',
   },
   showcaseHeader: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: 46,
+    minHeight: 46,
+    paddingHorizontal: 58,
     position: 'relative',
     width: '100%',
   },
   showcaseStatusSlot: {
     position: 'absolute',
-    right: theme.spacing.xs,
-    top: 5,
+    right: theme.spacing.xxl,
+    top: theme.spacing.xs,
   },
   showcaseTitle: {
     color: theme.colors.text,
@@ -659,39 +700,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  showcaseProgressBlock: {
-    gap: 7,
-    width: '100%',
-  },
-  showcaseProgressMeta: {
-    alignItems: 'center',
-  },
-  progressTrack: {
+  showcaseRingSlot: {
     alignSelf: 'center',
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    height: 7,
-    maxWidth: 280,
-    overflow: 'hidden',
-    width: '100%',
+    position: 'absolute',
+    top: SHOWCASE_RING_TOP,
   },
-  progressFill: {
-    backgroundColor: theme.colors.cycle,
+  showcasePillsRow: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    maxWidth: SHOWCASE_PILLS_WIDTH,
+    position: 'absolute',
+    top: SHOWCASE_PILLS_TOP,
+    width: SHOWCASE_PILLS_WIDTH,
+  },
+  showcaseProgressPill: {
     borderRadius: theme.radius.pill,
-    height: '100%',
+    flex: 1,
+    height: 8,
+    minWidth: 0,
   },
   detailCta: {
     alignItems: 'center',
+    alignSelf: 'center',
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     gap: 4,
     justifyContent: 'center',
-    paddingTop: theme.spacing.xs,
+    minHeight: 22,
+    minWidth: 104,
+  },
+  detailCtaPressed: {
+    opacity: 0.72,
   },
   detailCtaText: {
     color: theme.colors.cycle,
-    fontSize: theme.typography.callout,
+    flexShrink: 0,
+    fontSize: theme.typography.footnote,
     fontWeight: '800',
-    lineHeight: 20,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   metricsColumn: {
     flex: 1,
@@ -751,10 +801,46 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   actionsFooterShowcase: {
+    alignItems: 'stretch',
     borderTopWidth: 0,
-    justifyContent: 'flex-end',
+    bottom: 0,
+    flexDirection: 'column',
+    gap: theme.spacing.xxs,
+    height: SHOWCASE_FOOTER_HEIGHT,
+    justifyContent: 'center',
+    left: 0,
+    paddingBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+    position: 'absolute',
+    right: 0,
+    zIndex: 4,
+  },
+  showcaseActionsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  showcaseStatusLane: {
+    height: 46,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  showcaseStatePill: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 46,
+    justifyContent: 'center',
+    minWidth: 132,
+    paddingHorizontal: theme.spacing.md,
+  },
+  showcaseStateText: {
+    fontSize: theme.typography.caption,
+    fontWeight: '900',
+    lineHeight: 16,
   },
   actionButton: {
     flex: 1,
@@ -763,6 +849,7 @@ const styles = StyleSheet.create({
   iconActionButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
+    flex: 1,
     flexDirection: 'row',
     gap: 6,
     height: 46,

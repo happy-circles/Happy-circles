@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, BalanceAnalyticsCategoryRowDto } from '@happy-circles/application';
@@ -8,11 +8,11 @@ import type { TransactionCategory } from '@happy-circles/shared';
 
 import { AppText } from '@/components/app-text';
 import { AppTextInput } from '@/components/app-text-input';
+import { BrandedRefreshControl } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
 import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
@@ -60,6 +60,26 @@ const CATEGORY_INSIGHT_VALUES = CATEGORY_INSIGHT_OPTIONS.map((option) => option.
 const METRIC_CAROUSEL_ITEM_GAP = CATEGORY_METRIC_CAROUSEL_ITEM_GAP;
 const METRIC_CAROUSEL_ITEM_WIDTH = CATEGORY_METRIC_CAROUSEL_ITEM_WIDTH;
 const CATEGORY_INSIGHT_FALLBACK_WIDTH = 344;
+
+type CategoryListItem =
+  | {
+      readonly insight: CategoryInsightRow;
+      readonly type: 'category';
+    }
+  | {
+      readonly item: ActivityItemDto;
+      readonly type: 'pending';
+    }
+  | {
+      readonly item: ActivityItemDto;
+      readonly type: 'history';
+    };
+
+type CategoryListSection = {
+  readonly data: readonly CategoryListItem[];
+  readonly key: string;
+  readonly title?: string;
+};
 
 function normalizedText(value: string | number | null | undefined): string {
   return `${value ?? ''}`.trim().toLocaleLowerCase('es-CO');
@@ -585,6 +605,10 @@ function CategoryInsightSwitcher({
   );
 }
 
+function CategoryListSeparator() {
+  return <View style={styles.categoriesListSeparator} />;
+}
+
 function selectedCategorySectionTitles(filter: CategoryInsightFilter): {
   readonly history: string;
   readonly pending: string;
@@ -795,6 +819,55 @@ export function CategoriesIndexScreen({
     selectedPendingItems.length > 0 || visibleHistoryCaseItems.length > 0;
   const selectedSectionTitles = selectedCategorySectionTitles(activeFilter);
   const hasQuery = query.trim().length > 0;
+  const categoryListSections = useMemo<readonly CategoryListSection[]>(() => {
+    if (selectedCategory) {
+      if (!hasSelectedCategoryActivity) {
+        return [];
+      }
+
+      const sections: CategoryListSection[] = [];
+
+      if (selectedPendingItems.length > 0) {
+        sections.push({
+          data: selectedPendingItems.map((item) => ({ item, type: 'pending' as const })),
+          key: 'selected-pending',
+          title: selectedSectionTitles.pending,
+        });
+      }
+
+      if (visibleHistoryCaseItems.length > 0) {
+        sections.push({
+          data: visibleHistoryCaseItems.map((item) => ({ item, type: 'history' as const })),
+          key: 'selected-history',
+          title: selectedSectionTitles.history,
+        });
+      }
+
+      return sections;
+    }
+
+    if (categoryRows.length === 0 || visibleCategoryRows.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        data: visibleCategoryRows.map((insight) => ({ insight, type: 'category' as const })),
+        key: `categories:${activeFilter}`,
+      },
+    ];
+  }, [
+    activeFilter,
+    categoryRows.length,
+    hasSelectedCategoryActivity,
+    selectedCategory,
+    selectedPendingItems,
+    selectedSectionTitles.history,
+    selectedSectionTitles.pending,
+    visibleCategoryRows,
+    visibleHistoryCaseItems,
+  ]);
+  const hasCategoryListRows = categoryListSections.some((section) => section.data.length > 0);
 
   if (snapshotQuery.error && !analytics) {
     return (
@@ -809,7 +882,7 @@ export function CategoriesIndexScreen({
       <ScreenShell headerVariant="plain" largeTitle={false} title="Categorías">
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <AppText style={styles.supportText}>Estamos organizando tus categorías.</AppText>
+          <AppText style={styles.supportText}>Estamos organizando tus categorias.</AppText>
         </View>
       </ScreenShell>
     );
@@ -820,124 +893,153 @@ export function CategoriesIndexScreen({
     setActiveFilter(nextFilter);
   }
 
+  function renderCategoryListItem({ item }: { readonly item: CategoryListItem }) {
+    if (item.type === 'category') {
+      return (
+        <View style={styles.containedListItem}>
+          <CategoryRow
+            metricLabel={item.insight.metricLabel}
+            metricTone={item.insight.tone}
+            onPress={() => {
+              triggerAppSelectionHaptic();
+              setSelectedCategory(item.insight.row.category);
+            }}
+            row={item.insight.row}
+          />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.containedListItem}>
+        <CategoryTransactionCard item={item.item} people={people} />
+      </View>
+    );
+  }
+
+  function renderCategorySectionHeader({
+    section,
+  }: {
+    readonly section: CategoryListSection;
+  }) {
+    if (!section.title) {
+      return null;
+    }
+
+    return (
+      <View style={[styles.containedListItem, styles.categoryActivitySectionHeader]}>
+        <AppText style={styles.categoryActivitySectionTitle}>{section.title}</AppText>
+      </View>
+    );
+  }
+
   return (
     <ScreenShell
       contentContainerStyle={styles.categoriesScreenContent}
       contentMode="full"
       headerVisible={false}
-      refresh={refresh}
       safeAreaEdges={['left', 'right']}
+      scrollEnabled={false}
       title="Categorías"
     >
-      <View style={[styles.categoriesTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
-        <View style={styles.containedContent}>
-          <View style={styles.categoriesHeader}>
-            <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
-          </View>
-        </View>
-
-        <View style={styles.topVisualBand}>
-          <CategoryInsightSwitcher
-            activeFilter={activeFilter}
-            onChange={changeCategoryFilter}
-            renderPage={(pageFilter) => (
-              <CategoriesPodiumCard
-                activeFilter={pageFilter}
-                onSelectCategory={(category) => {
-                  triggerAppSelectionHaptic();
-                  setSelectedCategory((currentCategory) =>
-                    currentCategory === category ? null : category,
-                  );
-                }}
-                ranking={rankingsByFilter[pageFilter]}
-                selectedCategory={selectedCategory}
-                selectedInsight={selectedInsightByFilter[pageFilter]}
-              />
-            )}
-          />
-        </View>
-      </View>
-
-      <View style={styles.containedContent}>
-        <View
-          style={[
-            styles.searchWrap,
-            {
-              backgroundColor: activeTheme.colors.surfaceMuted,
-              borderColor: activeTheme.colors.border,
-            },
-          ]}
-        >
-          <Ionicons color={activeTheme.colors.textMuted} name="search-outline" size={18} />
-          <AppTextInput
-            autoCapitalize="sentences"
-            clearButtonMode="while-editing"
-            chrome="plain"
-            density="compact"
-            onChangeText={setQuery}
-            placeholder={selectedCategory ? 'Buscar movimiento' : 'Buscar categoría'}
-            placeholderTextColor={activeTheme.colors.muted}
-            style={styles.searchInput}
-            value={query}
-          />
-        </View>
-
-        {selectedCategory ? (
+      <SectionList
+        ItemSeparatorComponent={CategoryListSeparator}
+        ListFooterComponent={<View style={styles.categoriesListFooter} />}
+        ListHeaderComponent={
           <>
-            {!hasSelectedCategoryActivity ? (
-              <EmptyState
-                description={selectedCategoryEmptyDescription(activeFilter, hasQuery)}
-                title={selectedCategoryEmptyTitle(activeFilter, hasQuery)}
-              />
-            ) : null}
-
-            {selectedPendingItems.length > 0 ? (
-              <SectionBlock title={selectedSectionTitles.pending}>
-                <View style={styles.list}>
-                  {selectedPendingItems.map((item) => (
-                    <CategoryTransactionCard item={item} key={item.id} people={people} />
-                  ))}
+            <View style={[styles.categoriesTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
+              <View style={styles.containedContent}>
+                <View style={styles.categoriesHeader}>
+                  <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
                 </View>
-              </SectionBlock>
-            ) : null}
+              </View>
 
-            {visibleHistoryCaseItems.length > 0 ? (
-              <SectionBlock title={selectedSectionTitles.history}>
-                <View style={styles.list}>
-                  {visibleHistoryCaseItems.map((item) => (
-                    <CategoryTransactionCard item={item} key={item.id} people={people} />
-                  ))}
-                </View>
-              </SectionBlock>
-            ) : null}
+              <View style={styles.topVisualBand}>
+                <CategoryInsightSwitcher
+                  activeFilter={activeFilter}
+                  onChange={changeCategoryFilter}
+                  renderPage={(pageFilter) => (
+                    <CategoriesPodiumCard
+                      activeFilter={pageFilter}
+                      onSelectCategory={(category) => {
+                        triggerAppSelectionHaptic();
+                        setSelectedCategory((currentCategory) =>
+                          currentCategory === category ? null : category,
+                        );
+                      }}
+                      ranking={rankingsByFilter[pageFilter]}
+                      selectedCategory={selectedCategory}
+                      selectedInsight={selectedInsightByFilter[pageFilter]}
+                    />
+                  )}
+                />
+              </View>
+            </View>
+
+            <View style={[styles.containedContent, styles.categoriesControlsSection]}>
+              <View
+                style={[
+                  styles.searchWrap,
+                  {
+                    backgroundColor: activeTheme.colors.surfaceMuted,
+                    borderColor: activeTheme.colors.border,
+                  },
+                ]}
+              >
+                <Ionicons color={activeTheme.colors.textMuted} name="search-outline" size={18} />
+                <AppTextInput
+                  autoCapitalize="sentences"
+                  clearButtonMode="while-editing"
+                  chrome="plain"
+                  density="compact"
+                  onChangeText={setQuery}
+                  placeholder={selectedCategory ? 'Buscar movimiento' : 'Buscar categoría'}
+                  placeholderTextColor={activeTheme.colors.muted}
+                  style={styles.searchInput}
+                  value={query}
+                />
+              </View>
+
+              {selectedCategory && !hasSelectedCategoryActivity ? (
+                <EmptyState
+                  description={selectedCategoryEmptyDescription(activeFilter, hasQuery)}
+                  title={selectedCategoryEmptyTitle(activeFilter, hasQuery)}
+                />
+              ) : !selectedCategory && categoryRows.length === 0 ? (
+                <EmptyState
+                  description={categoryInsightEmptyDescription(activeFilter)}
+                  title={categoryInsightEmptyTitle(activeFilter)}
+                />
+              ) : !selectedCategory && visibleCategoryRows.length === 0 ? (
+                <EmptyState
+                  description="Prueba con otro texto o borra la búsqueda para ver tus categorías."
+                  title="No encontramos categorías"
+                />
+              ) : null}
+            </View>
+
+            {hasCategoryListRows ? <View style={styles.categoriesListHeaderGap} /> : null}
           </>
-        ) : categoryRows.length === 0 ? (
-          <EmptyState
-            description={categoryInsightEmptyDescription(activeFilter)}
-            title={categoryInsightEmptyTitle(activeFilter)}
-          />
-        ) : visibleCategoryRows.length === 0 ? (
-          <EmptyState
-            description="Prueba con otro texto o borra la búsqueda para ver tus categorías."
-            title="No encontramos categorías"
-          />
-        ) : (
-          <View style={styles.list}>
-            {visibleCategoryRows.map((insight) => (
-              <CategoryRow
-                key={`${activeFilter}-${insight.row.key}`}
-                metricLabel={insight.metricLabel}
-                metricTone={insight.tone}
-                onPress={() => {
-                  triggerAppSelectionHaptic();
-                  setSelectedCategory(insight.row.category);
-                }}
-                row={insight.row}
-              />
-            ))}
-          </View>
-        )}
-      </View>
+        }
+        contentContainerStyle={styles.categoriesListContent}
+        keyExtractor={(item) =>
+          item.type === 'category'
+            ? `category:${item.insight.row.key}`
+            : `${item.type}:${item.item.id}`
+        }
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<BrandedRefreshControl refresh={refresh} />}
+        renderItem={renderCategoryListItem}
+        renderSectionHeader={renderCategorySectionHeader}
+        sections={categoryListSections}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
+        style={[
+          styles.virtualizedCategoriesList,
+          { backgroundColor: activeTheme.colors.background },
+        ]}
+      />
     </ScreenShell>
   );
 }

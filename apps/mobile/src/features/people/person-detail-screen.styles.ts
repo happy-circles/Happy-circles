@@ -162,23 +162,40 @@ export const personDetailScreenStyles = StyleSheet.create({
   },
   pendingActionStack: {
     gap: theme.spacing.xs,
-  },
-  pendingActionSlot: {
     width: '100%',
   },
-  inlineAction: {
-    paddingVertical: 2,
+  pendingActionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    width: '100%',
   },
-  inlineActionPressed: {
-    opacity: 0.62,
+  circlePanelAction: {
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
   },
-  inlineActionText: {
-    color: theme.colors.primary,
+  circlePanelDanger: {
+    borderWidth: 1,
+  },
+  circleDetailLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    maxWidth: '100%',
+    minHeight: 34,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  circleDetailLinkPressed: {
+    opacity: 0.68,
+  },
+  circleDetailLinkText: {
+    flexShrink: 1,
     fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  inlineActionDangerText: {
-    color: theme.colors.danger,
+    fontWeight: '800',
+    lineHeight: 18,
+    textAlign: 'center',
   },
   neutral: {
     color: theme.colors.textMuted,

@@ -11,32 +11,23 @@ export const pendingFinancialRequestCardStyles = StyleSheet.create({
     flex: 1,
   },
   responseActionRail: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: theme.spacing.xs,
-    marginTop: 2,
-    paddingTop: theme.spacing.xs,
   },
   responseAction: {
     alignItems: 'center',
-    borderRadius: theme.radius.small,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
     flex: 1,
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
     justifyContent: 'center',
-    minHeight: 38,
-    paddingHorizontal: 6,
-  },
-  responseActionPrimary: {
-    backgroundColor: theme.colors.primaryGhost,
-  },
-  responseActionDanger: {
-    backgroundColor: theme.colors.dangerSoft,
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.sm,
   },
   responseActionPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.86,
+    transform: [{ scale: 0.97 }],
   },
   responseActionDisabled: {
     opacity: 0.58,
@@ -45,13 +36,8 @@ export const pendingFinancialRequestCardStyles = StyleSheet.create({
     color: theme.colors.primary,
     flexShrink: 1,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  responseActionPrimaryText: {
-    color: theme.colors.primary,
-  },
-  responseActionDangerText: {
-    color: theme.colors.danger,
+    fontWeight: '900',
+    lineHeight: 16,
   },
   amendmentPanel: {
     backgroundColor: theme.colors.surfaceMuted,

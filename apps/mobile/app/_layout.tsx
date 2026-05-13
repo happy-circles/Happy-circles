@@ -31,7 +31,11 @@ import {
   type BrandVerificationState,
 } from '@/components/brand-verification-lockup';
 import { GlobalFeedbackOverlay } from '@/components/global-feedback-overlay';
-import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
+import {
+  HappyCirclesCenterSvg,
+  HappyCirclesGlyph,
+  resolveHappyCirclesPalette,
+} from '@/components/happy-circles-glyph';
 import {
   IDENTITY_FLOW_COMPACT_FACE_SIZE,
   IDENTITY_FLOW_LARGE_FACE_VIEW_BOX,
@@ -1031,7 +1035,7 @@ function HomeEntryHandoffOverlay({
     const completionTimers = new Set<ReturnType<typeof setTimeout>>();
     let completing = false;
 
-    function completeHandoff() {
+    function completeHandoff(options?: { readonly immediate?: boolean }) {
       if (!active || completing) {
         return;
       }
@@ -1040,6 +1044,12 @@ function HomeEntryHandoffOverlay({
 
       void waitForNextFrame().then(() => {
         if (!active) {
+          return;
+        }
+
+        if (options?.immediate) {
+          setVisible(false);
+          onVisibleChange(false);
           return;
         }
 
@@ -1070,10 +1080,13 @@ function HomeEntryHandoffOverlay({
       });
     }
 
-    function scheduleCompletionFallback(duration: number) {
+    function scheduleCompletionFallback(
+      duration: number,
+      options?: { readonly immediate?: boolean },
+    ) {
       const timer = setTimeout(() => {
         completionTimers.delete(timer);
-        completeHandoff();
+        completeHandoff(options);
       }, duration + 220);
 
       completionTimers.add(timer);
@@ -1183,7 +1196,8 @@ function HomeEntryHandoffOverlay({
       }
 
       const duration = nextTarget ? HOME_ENTRY_LAND_MS : HOME_ENTRY_REDUCED_MOTION_EXIT_MS + 220;
-      const completionTimer = scheduleCompletionFallback(duration);
+      const completionOptions = { immediate: Boolean(nextTarget) };
+      const completionTimer = scheduleCompletionFallback(duration, completionOptions);
       Animated.timing(landMotion, {
         duration,
         easing: LAUNCH_EASING,
@@ -1193,7 +1207,7 @@ function HomeEntryHandoffOverlay({
         if (finished) {
           clearTimeout(completionTimer);
           completionTimers.delete(completionTimer);
-          completeHandoff();
+          completeHandoff(completionOptions);
         }
       });
     }
@@ -1264,26 +1278,23 @@ function HomeEntryHandoffOverlay({
     outputRange: [sourceTarget ? 1 : 0.96, 1],
   });
   const logoScale = Animated.multiply(entryScale, landingScale);
-  const backdropOpacity = reducedMotion
-    ? Animated.multiply(
-        entryMotion,
-        reducedExitMotion.interpolate({
+  const backdropOpacity = Animated.multiply(
+    entryMotion,
+    reducedMotion
+      ? reducedExitMotion.interpolate({
           inputRange: [0, 1],
           outputRange: [1, 0],
-        }),
-      )
-    : entryMotion;
+        })
+      : activeTarget
+        ? landMotion.interpolate({
+            inputRange: [0, 0.76, 1],
+            outputRange: [1, 0.16, 0],
+          })
+        : 1,
+  );
   const rootOpacity = handoffMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
-  });
-  const markOpacity = landMotion.interpolate({
-    inputRange: [0, 0.9, 1],
-    outputRange: activeTarget ? [1, 1, 0] : [1, 1, 1],
-  });
-  const headerGlyphOpacity = landMotion.interpolate({
-    inputRange: [0, 0.9, 1],
-    outputRange: activeTarget ? [0, 0, 1] : [0, 0, 0],
   });
   const sourceAvatarSize =
     visualSourceTarget?.visualKind === 'identityAvatar'
@@ -1309,6 +1320,67 @@ function HomeEntryHandoffOverlay({
         size={sourceAvatarSize}
       />
     ) : undefined;
+  const hasHomeEntrySourceCenter = Boolean(
+    sourceAvatarCenter || visualSourceTarget?.visualKind === 'identityMark',
+  );
+  const sourceCenterOpacity = landMotion.interpolate({
+    inputRange: [0, 0.72, 0.92, 1],
+    outputRange: activeTarget && hasHomeEntrySourceCenter ? [1, 1, 0, 0] : [1, 1, 1, 1],
+  });
+  const homeHeaderCenterOpacity = landMotion.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: activeTarget ? (hasHomeEntrySourceCenter ? [0, 0, 1] : [1, 1, 1]) : [0, 0, 0],
+  });
+  const homeHeaderPalette = resolveHappyCirclesPalette('brand');
+  const homeHeaderCenter = activeTarget ? (
+    <View style={styles.launchHomeCenterMorph}>
+      {sourceAvatarCenter && sourceAvatarSize ? (
+        <Animated.View
+          style={[
+            styles.launchHomeCenterLayer,
+            {
+              height: sourceAvatarSize,
+              left: (LAUNCH_LOGO_SIZE - sourceAvatarSize) / 2,
+              opacity: sourceCenterOpacity,
+              top: (LAUNCH_LOGO_SIZE - sourceAvatarSize) / 2,
+              width: sourceAvatarSize,
+            },
+          ]}
+        >
+          {sourceAvatarCenter}
+        </Animated.View>
+      ) : visualSourceTarget?.visualKind === 'identityMark' ? (
+        <Animated.View
+          style={[
+            styles.launchHomeCenterLayer,
+            {
+              height: sourceCenterGlyphSize ?? LAUNCH_LOGO_SIZE,
+              left: (LAUNCH_LOGO_SIZE - (sourceCenterGlyphSize ?? LAUNCH_LOGO_SIZE)) / 2,
+              opacity: sourceCenterOpacity,
+              top: (LAUNCH_LOGO_SIZE - (sourceCenterGlyphSize ?? LAUNCH_LOGO_SIZE)) / 2,
+              width: sourceCenterGlyphSize ?? LAUNCH_LOGO_SIZE,
+            },
+          ]}
+        >
+          <HappyCirclesCenterSvg
+            palette={homeHeaderPalette}
+            size={sourceCenterGlyphSize ?? LAUNCH_LOGO_SIZE}
+            viewBox={sourceCenterGlyphViewBox}
+          />
+        </Animated.View>
+      ) : null}
+      <Animated.View
+        style={[styles.launchHomeCenterLayer, { opacity: homeHeaderCenterOpacity }]}
+      >
+        <HappyCirclesCenterSvg palette={homeHeaderPalette} size={LAUNCH_LOGO_SIZE} />
+      </Animated.View>
+    </View>
+  ) : (
+    sourceAvatarCenter
+  );
+  const homeEntryOuterRotationDegrees = activeTarget
+    ? (activeTarget.outerRotationDegrees ?? 0)
+    : (visualSourceTarget?.outerRotationDegrees ?? 0);
 
   return (
     <Animated.View
@@ -1336,31 +1408,30 @@ function HomeEntryHandoffOverlay({
         ]}
       >
         <Animated.View style={{ transform: [{ scale: logoScale }] }}>
-          <Animated.View style={{ opacity: markOpacity }}>
+          <Animated.View>
             <BrandVerificationMark
-              center={sourceAvatarCenter}
+              center={homeHeaderCenter}
               centerGlyphSize={sourceCenterGlyphSize}
               centerGlyphViewBox={sourceCenterGlyphViewBox}
-              centerSize={sourceAvatarSize}
-              outerRotationDegrees={visualSourceTarget?.outerRotationDegrees ?? 0}
+              centerSize={activeTarget ? LAUNCH_LOGO_SIZE : sourceAvatarSize}
+              outerRotationDegrees={homeEntryOuterRotationDegrees}
               replaceCenterOnResult={
                 visualSourceTarget?.visualKind === 'identityAvatar'
                   ? !visualSourceTarget.avatarEditable
                   : undefined
               }
+              releaseSpinOnExit={false}
               showOuterInIdle
               size={LAUNCH_LOGO_SIZE}
               state={lockupState}
             />
           </Animated.View>
-          {activeTarget ? (
-            <Animated.View style={[styles.launchHeaderGlyphLayer, { opacity: headerGlyphOpacity }]}>
-              <HappyCirclesGlyph size={LAUNCH_LOGO_SIZE} />
-            </Animated.View>
-          ) : null}
           {visualSourceTarget?.visualKind === 'identityAvatar' &&
           visualSourceTarget.avatarEditable ? (
-            <Animated.View pointerEvents="none" style={styles.launchAvatarEditPencil}>
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.launchAvatarEditPencil, { opacity: sourceCenterOpacity }]}
+            >
               <Ionicons color={theme.colors.white} name="pencil" size={15} />
             </Animated.View>
           ) : null}
@@ -2067,6 +2138,16 @@ const styles = StyleSheet.create({
     width: LAUNCH_AVATAR_EDIT_PENCIL_SIZE,
   },
   launchHeaderGlyphLayer: {
+    left: 0,
+    position: 'absolute',
+    top: 0,
+  },
+  launchHomeCenterMorph: {
+    height: LAUNCH_LOGO_SIZE,
+    position: 'relative',
+    width: LAUNCH_LOGO_SIZE,
+  },
+  launchHomeCenterLayer: {
     left: 0,
     position: 'absolute',
     top: 0,

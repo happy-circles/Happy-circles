@@ -61,7 +61,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   setRuntimeThemeScheme(scheme);
 
   useEffect(() => {
-    Appearance.setColorScheme(preference === 'system' ? null : preference);
+    if (typeof Appearance.setColorScheme === 'function') {
+      Appearance.setColorScheme(preference === 'system' ? null : preference);
+    }
   }, [preference]);
 
   const value = useMemo<ThemeContextValue>(

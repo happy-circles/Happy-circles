@@ -18,6 +18,12 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 0,
   },
+  categoriesListContent: {
+    flexGrow: 1,
+    paddingBottom: theme.spacing.xl,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+  },
   categoriesTopChrome: {
     gap: theme.spacing.lg,
     width: '100%',
@@ -28,6 +34,37 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     maxWidth: 560,
     paddingHorizontal: theme.spacing.lg,
     width: '100%',
+  },
+  containedListItem: {
+    alignSelf: 'center',
+    maxWidth: 560,
+    paddingHorizontal: theme.spacing.lg,
+    width: '100%',
+  },
+  categoriesControlsSection: {
+    marginTop: theme.spacing.lg,
+  },
+  categoryActivitySectionHeader: {
+    paddingTop: theme.spacing.sm,
+  },
+  categoryActivitySectionTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 24,
+  },
+  categoriesListHeaderGap: {
+    height: theme.spacing.lg,
+  },
+  categoriesListSeparator: {
+    height: theme.spacing.sm,
+  },
+  categoriesListFooter: {
+    height: theme.spacing.xl,
+  },
+  virtualizedCategoriesList: {
+    flex: 1,
   },
   categoriesHeader: {
     alignItems: 'center',

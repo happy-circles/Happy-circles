@@ -37,6 +37,7 @@ function SurfaceLiquidGlassLayer({
       pointerEvents="none"
       style={[
         styles.glassLayer,
+        shape === 'pill' ? styles.glassLayerPill : null,
         { backgroundColor: resolveGlassBackgroundColor(activeTheme, treatment, variant) },
       ]}
     >
@@ -285,7 +286,10 @@ export function SurfaceCard({
       ]}
     >
       {underlay ? (
-        <View pointerEvents="none" style={styles.underlay}>
+        <View
+          pointerEvents="none"
+          style={[styles.underlay, shape === 'pill' ? styles.underlayPill : null]}
+        >
           {underlay}
         </View>
       ) : null}
@@ -305,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.large,
     borderWidth: 1,
     gap: theme.spacing.sm,
-    overflow: 'hidden',
+    overflow: 'visible',
     position: 'relative',
   },
   shapePill: {
@@ -313,12 +317,22 @@ const styles = StyleSheet.create({
   },
   underlay: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.large,
+    overflow: 'hidden',
+  },
+  underlayPill: {
+    borderRadius: theme.radius.pill,
   },
   flat: {
     borderWidth: 1,
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.large,
+    overflow: 'hidden',
+  },
+  glassLayerPill: {
+    borderRadius: theme.radius.pill,
   },
   glassInnerEdge: {
     ...StyleSheet.absoluteFillObject,

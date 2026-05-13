@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, type Href } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Platform } from 'react-native';
 import {
   HOME_REGISTER_FAB_CLEARANCE,
@@ -45,6 +45,7 @@ const HOME_REFRESH_MINIMUM_VISIBLE_MS = 700;
 export function DashboardScreen() {
   const router = useRouter();
   const session = useSession();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const topInset = Math.max(0, insets.top);
   const homeChromeHeight = HOME_CHROME_EXPANDED_HEIGHT + topInset;
@@ -266,6 +267,7 @@ export function DashboardScreen() {
           currentUserId={session.userId}
           happyFacesClosedCount={happyCircleClosedCount}
           happyFacesTotal={happyCircleFaces}
+          isActive={isFocused}
           newCircleProposalIds={newCircleProposalIds}
           onCategoryPress={(category, period) =>
             pushRoute(router, `/categories?category=${category}&period=${period}` as Href)

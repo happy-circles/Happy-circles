@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
@@ -53,6 +54,7 @@ export interface HistoryCaseCardProps {
   readonly onPress?: () => void;
   readonly onToggle?: () => void;
   readonly steps: readonly HistoryCaseStepViewModel[];
+  readonly children?: ReactNode;
 }
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -107,6 +109,7 @@ export function HistoryCaseCard({
   onPress,
   onToggle,
   steps,
+  children,
 }: HistoryCaseCardProps) {
   const activeTheme = useAppTheme();
   const impactSign = tone === 'positive' ? '+' : tone === 'negative' ? '-' : null;
@@ -257,8 +260,19 @@ export function HistoryCaseCard({
       {showExpanded ? (
         <SurfaceCard
           glassTreatment={isExpandedShowcase ? 'standard' : 'flatSoft'}
+          underlay={
+            isCycleSnippet ? (
+              <StateAuraLayer
+                size={isExpandedShowcase ? 'regular' : 'compact'}
+                variant={stateAuraVariantFromTone(statusTone)}
+              />
+            ) : undefined
+          }
           padding={isExpandedShowcase ? 'lg' : 'md'}
-          style={[styles.expandedPanel, isExpandedShowcase ? styles.expandedPanelShowcase : null]}
+          style={[
+            styles.expandedPanel,
+            isExpandedShowcase ? styles.expandedPanelShowcase : styles.expandedPanelFlat,
+          ]}
           variant={isCycleSnippet ? 'muted' : isExpandedShowcase ? 'elevated' : 'default'}
         >
           {showExpandedSummary ? (
@@ -281,6 +295,11 @@ export function HistoryCaseCard({
             </View>
           ) : null}
           <CardTimeline steps={historyTimelineSteps(steps)} />
+          {children ? (
+            <View style={[styles.expandedActions, { borderTopColor: activeTheme.colors.hairline }]}>
+              {children}
+            </View>
+          ) : null}
         </SurfaceCard>
       ) : null}
     </View>
@@ -465,6 +484,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 1,
   },
+  expandedPanelFlat: {
+    boxShadow: 'none',
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
   expandedPanelShowcase: {
     gap: theme.spacing.md,
     marginHorizontal: 0,
@@ -486,6 +511,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 16,
+  },
+  expandedActions: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
   },
   steps: {
     borderTopColor: theme.colors.hairline,

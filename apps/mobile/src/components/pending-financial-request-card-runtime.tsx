@@ -3,7 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, View } from 'react-native';
 
 import { formatCop } from '@/lib/data';
-import { CardTimeline, type CardTone } from '@/components/card-shell';
+import {
+  HistoryCaseCard,
+  type HistoryCaseStepViewModel,
+  type HistoryCaseTone,
+} from '@/components/history-case-card';
 import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { theme } from '@/lib/theme';
 import { pendingFinancialRequestCardStyles as styles } from './pending-financial-request-card-styles';
@@ -16,12 +20,11 @@ import {
 
 import { AppTextInput } from './app-text-input';
 import { FieldBlock } from './field-block';
-import { PendingSnippetCard } from './pending-snippet-card';
 import { PrimaryAction } from './primary-action';
-import { StatusFaceBadge } from './status-face-badge';
 import { TransactionCategoryPicker } from './transaction-category-picker';
 import { AppText } from '@/components/app-text';
-import { cardStateColor, moneyStatusCopy } from '@/lib/card-language';
+import { moneyStatusCopy } from '@/lib/card-language';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface PendingFinancialRequestHistoryStep {
   readonly id: string;
@@ -31,10 +34,12 @@ export interface PendingFinancialRequestHistoryStep {
   readonly category?: string | null;
   readonly createdByLabel: string;
   readonly createdAtLabel: string;
+  readonly status?: string;
   readonly isCurrent: boolean;
 }
 
 export interface PendingFinancialRequestCardProps {
+  readonly actorAvatarUrl?: string | null;
   readonly counterpartyName: string;
   readonly responseState: 'requires_you' | 'waiting_other_side';
   readonly amountTone?: 'positive' | 'negative' | 'neutral' | 'danger';
@@ -63,6 +68,8 @@ export interface PendingFinancialRequestCardProps {
   readonly onChangeAmendmentCategory?: (value: UserTransactionCategory) => void;
   readonly onSubmitAmendment?: () => void;
   readonly onPress?: () => void;
+  readonly isExpanded?: boolean;
+  readonly onToggle?: () => void;
 }
 
 type ResponseActionTone = 'primary' | 'neutral' | 'danger';
@@ -84,13 +91,19 @@ function ResponseActionButton({
   disabled = false,
   onPress,
 }: ResponseActionButtonProps) {
+  const activeTheme = useAppTheme();
   const iconColor = (() => {
-    if (tone === 'danger') {
-      return theme.colors.danger;
+    if (tone === 'primary') {
+      return activeTheme.colors.white;
     }
 
-    return theme.colors.primary;
+    if (tone === 'danger') {
+      return activeTheme.colors.danger;
+    }
+
+    return activeTheme.colors.primary;
   })();
+  const labelColor = tone === 'primary' ? activeTheme.colors.white : iconColor;
 
   return (
     <Pressable
@@ -109,8 +122,21 @@ function ResponseActionButton({
       }
       style={({ pressed }) => [
         styles.responseAction,
-        tone === 'primary' ? styles.responseActionPrimary : null,
-        tone === 'danger' ? styles.responseActionDanger : null,
+        {
+          backgroundColor:
+            tone === 'primary'
+              ? activeTheme.colors.primary
+              : tone === 'danger'
+                ? `${activeTheme.colors.danger}12`
+                : activeTheme.colors.surfaceSoft,
+          borderColor:
+            tone === 'primary'
+              ? activeTheme.colors.primary
+              : tone === 'danger'
+                ? `${activeTheme.colors.danger}2E`
+                : activeTheme.colors.border,
+        },
+        tone === 'primary' ? activeTheme.shadow.card : null,
         pressed && !disabled ? styles.responseActionPressed : null,
         disabled ? styles.responseActionDisabled : null,
       ]}
@@ -120,8 +146,7 @@ function ResponseActionButton({
         numberOfLines={1}
         style={[
           styles.responseActionText,
-          tone === 'primary' ? styles.responseActionPrimaryText : null,
-          tone === 'danger' ? styles.responseActionDangerText : null,
+          { color: labelColor },
         ]}
       >
         {label}
@@ -148,6 +173,10 @@ function pendingHistoryStepAmountLabel(
   step: PendingFinancialRequestHistoryStep,
   index: number,
 ): string | null {
+  if (steps.length <= 1) {
+    return formatCop(step.amountMinor);
+  }
+
   if (!hasPendingHistoryAmountChanges(steps)) {
     return null;
   }
@@ -160,26 +189,86 @@ function pendingHistoryStepAmountLabel(
   return formatCop(step.amountMinor);
 }
 
-function pendingTimelineTone(
+function pendingHistoryStatusLabel(
   step: PendingFinancialRequestHistoryStep,
+  responseState: PendingFinancialRequestCardProps['responseState'],
+): string {
+  if (step.isCurrent) {
+    return responseState === 'requires_you'
+      ? 'Actual - te toca responder'
+      : 'Actual - responde la otra persona';
+  }
+
+  if (step.status === 'accepted') {
+    return 'Aceptada';
+  }
+
+  if (step.status === 'rejected') {
+    return 'Rechazada';
+  }
+
+  if (step.status === 'canceled') {
+    return 'Cancelada';
+  }
+
+  if (step.status === 'expired') {
+    return 'Expirada';
+  }
+
+  return step.status === 'amended' ? 'Reemplazada' : 'Anterior';
+}
+
+function pendingHistoryStepTitle(
+  steps: readonly PendingFinancialRequestHistoryStep[],
+  step: PendingFinancialRequestHistoryStep,
+  index: number,
+): string {
+  if (steps.length <= 1) {
+    return step.title;
+  }
+
+  return `Instancia ${index + 1}: ${step.title}`;
+}
+
+function pendingTimelineTone(
   amountTone: PendingFinancialRequestCardProps['amountTone'],
-): CardTone {
+): HistoryCaseTone {
   if (amountTone === 'positive') {
-    return 'success';
+    return 'positive';
   }
 
   if (amountTone === 'negative') {
-    return 'warning';
+    return 'negative';
   }
 
   if (amountTone === 'danger') {
     return 'danger';
   }
 
-  return step.isCurrent ? 'primary' : 'neutral';
+  return 'neutral';
+}
+
+function pendingCardTone(
+  amountTone: PendingFinancialRequestCardProps['amountTone'],
+  responseState: PendingFinancialRequestCardProps['responseState'],
+): HistoryCaseTone {
+  if (amountTone === 'positive') {
+    return 'positive';
+  }
+
+  if (amountTone === 'negative') {
+    return 'negative';
+  }
+
+  if (amountTone === 'danger') {
+    return 'danger';
+  }
+
+  return responseState === 'requires_you' ? 'negative' : 'neutral';
 }
 
 export function PendingFinancialRequestCard({
+  actorAvatarUrl = null,
   counterpartyName,
   responseState,
   amountTone = 'neutral',
@@ -188,6 +277,7 @@ export function PendingFinancialRequestCard({
   category = DEFAULT_TRANSACTION_CATEGORY,
   amountMinor,
   createdAtLabel,
+  createdByLabel,
   focused = false,
   historySteps = [],
   busyAccept = false,
@@ -207,103 +297,83 @@ export function PendingFinancialRequestCard({
   onChangeAmendmentCategory,
   onSubmitAmendment,
   onPress,
+  isExpanded,
+  onToggle,
 }: PendingFinancialRequestCardProps) {
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
   const safeCategory = isUserTransactionCategory(category)
     ? category
     : DEFAULT_TRANSACTION_CATEGORY;
-  const visibleHistorySteps = historySteps.length > 1 ? historySteps : [];
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
-  const currentHistoryStep = visibleHistorySteps[visibleHistorySteps.length - 1] ?? null;
-  const currentHistoryAmountMinor = currentHistoryStep?.amountMinor ?? amountMinor;
+  const requestHistorySteps =
+    historySteps.length > 0
+      ? historySteps
+      : [
+          {
+            amountMinor,
+            category: safeCategory,
+            createdAtLabel,
+            createdByLabel,
+            description,
+            id: 'current',
+            isCurrent: true,
+            status: 'pending',
+            title: 'Propuesta actual',
+          },
+        ];
+  const [isLocallyExpanded, setIsLocallyExpanded] = useState(false);
+  const expanded = isExpanded ?? isLocallyExpanded;
   const showHistoryActors =
-    new Set(visibleHistorySteps.map((step) => step.createdByLabel)).size > 1;
-  const historyChangeCount = Math.max(visibleHistorySteps.length - 1, 0);
-  const historyChangeLabel = `${historyChangeCount} cambio${historyChangeCount === 1 ? '' : 's'}`;
+    new Set(requestHistorySteps.map((step) => step.createdByLabel)).size > 1;
   const statusLabel =
     responseState === 'requires_you' ? moneyStatusCopy.requiresYou : moneyStatusCopy.waitingOtherSide;
   const statusTone = responseState === 'requires_you' ? 'warning' : 'neutral';
+  const timelineSteps: readonly HistoryCaseStepViewModel[] =
+    requestHistorySteps.map((step, index) => {
+      const stepMeta = [
+        pendingHistoryStatusLabel(step, responseState),
+        showHistoryActors ? historyActorLabel(step.createdByLabel) : null,
+        step.createdAtLabel,
+      ]
+        .filter(Boolean)
+        .join(' - ');
+
+      return {
+        amountLabel: pendingHistoryStepAmountLabel(requestHistorySteps, step, index),
+        category: step.category ?? safeCategory,
+        detail: step.description,
+        id: step.id,
+        meta: stepMeta,
+        title: pendingHistoryStepTitle(requestHistorySteps, step, index),
+        tone: pendingTimelineTone(amountTone),
+      };
+    });
+
+  function handleToggle() {
+    if (onToggle) {
+      onToggle();
+      return;
+    }
+
+    setIsLocallyExpanded((current) => !current);
+  }
 
   return (
-    <PendingSnippetCard
+    <HistoryCaseCard
+      actorAvatarUrl={actorAvatarUrl}
       amountLabel={formatCop(amountMinor)}
-      amountTone={amountTone}
-      detail={description}
-      eyebrow={`Pendiente con ${counterpartyName}`}
+      description={null}
+      eyebrow={counterpartyName}
       focused={focused}
-      haloColor={cardStateColor('needsAction', 'warning')}
-      leadingNode={<StatusFaceBadge label={statusLabel} size={34} tone={statusTone} />}
       meta={`${createdAtLabel} | ${transactionCategoryLabel(safeCategory)}`}
       onPress={onPress}
-      padding="sm"
-      stateIntent={responseState === 'requires_you' ? 'needsAction' : 'waiting'}
+      onToggle={handleToggle}
+      isExpanded={expanded}
       statusLabel={statusLabel}
       statusTone={statusTone}
+      steps={timelineSteps}
       title={title}
-      tone={responseState === 'requires_you' ? 'warning' : 'neutral'}
-      variant="default"
+      tone={pendingCardTone(amountTone, responseState)}
     >
-      {visibleHistorySteps.length > 0 ? (
-        <View style={styles.historyPanel}>
-          <Pressable
-            accessibilityLabel={
-              isHistoryExpanded ? 'Ocultar historia del pendiente' : 'Ver historia del pendiente'
-            }
-            accessibilityRole="button"
-            onPress={() => {
-              triggerAppSelectionHaptic();
-              setIsHistoryExpanded((current) => !current);
-            }}
-            style={({ pressed }) => [
-              styles.historyToggle,
-              pressed ? styles.historyTogglePressed : null,
-            ]}
-          >
-            <View style={styles.historyToggleCopy}>
-              <Ionicons color={theme.colors.primary} name="git-branch-outline" size={15} />
-              <View style={styles.historyToggleText}>
-                <AppText style={styles.historyTitle}>Historia del pendiente</AppText>
-                <AppText numberOfLines={1} style={styles.historySummary}>
-                  {historyChangeLabel} - actual {formatCop(currentHistoryAmountMinor)}
-                </AppText>
-              </View>
-            </View>
-            <View style={styles.historyToggleAction}>
-              <AppText style={styles.historyToggleActionText}>
-                {isHistoryExpanded ? 'Ocultar' : 'Ver historia'}
-              </AppText>
-              <Ionicons
-                color={theme.colors.textMuted}
-                name={isHistoryExpanded ? 'chevron-up' : 'chevron-forward'}
-                size={15}
-              />
-            </View>
-          </Pressable>
-
-          {isHistoryExpanded ? (
-            <CardTimeline
-              steps={visibleHistorySteps.map((step, index) => {
-                const stepMeta = [
-                  showHistoryActors ? historyActorLabel(step.createdByLabel) : null,
-                  step.createdAtLabel,
-                ]
-                  .filter(Boolean)
-                  .join(' - ');
-
-                return {
-                  amountLabel: pendingHistoryStepAmountLabel(visibleHistorySteps, step, index),
-                  detail: step.description,
-                  id: step.id,
-                  meta: stepMeta,
-                  title: step.title,
-                  tone: pendingTimelineTone(step, amountTone),
-                };
-              })}
-            />
-          ) : null}
-        </View>
-      ) : null}
-
       {responseState === 'requires_you' ? (
         <>
           <View style={styles.responseActionRail}>
@@ -325,7 +395,7 @@ export function PendingFinancialRequestCard({
             <ResponseActionButton
               disabled={busyAccept || busyReject || busyAmendment}
               icon={showAmendment ? 'chevron-up-circle-outline' : 'create-outline'}
-              label={showAmendment ? 'Ocultar' : 'Cambiar monto'}
+              label={showAmendment ? 'Ocultar' : 'Editar'}
               haptic="selection"
               onPress={onToggleAmendment}
             />
@@ -333,11 +403,7 @@ export function PendingFinancialRequestCard({
 
           {showAmendment ? (
             <View style={styles.amendmentPanel}>
-              <FieldBlock
-                error={amendmentAmountError}
-                hint="Escribe el valor en pesos."
-                label="Monto"
-              >
+              <FieldBlock error={amendmentAmountError} label="Monto">
                 <AppTextInput
                   hasError={Boolean(amendmentAmountError)}
                   keyboardType="number-pad"
@@ -351,25 +417,18 @@ export function PendingFinancialRequestCard({
                 ) : null}
               </FieldBlock>
 
-              <FieldBlock
-                error={amendmentDescriptionError}
-                hint="Ajusta el concepto antes de enviarlo."
-                label="Concepto"
-              >
+              <FieldBlock error={amendmentDescriptionError} label="Concepto">
                 <AppTextInput
                   hasError={Boolean(amendmentDescriptionError)}
                   multiline
                   onChangeText={onChangeAmendmentDescription}
-                  placeholder="Explica el nuevo monto"
+                  placeholder="Nuevo concepto"
                   placeholderTextColor={theme.colors.muted}
                   value={amendmentDescription}
                 />
               </FieldBlock>
 
-              <FieldBlock
-                hint="Puedes cambiarla si el contexto nuevo lo necesita."
-                label="Categoría"
-              >
+              <FieldBlock label="Categoría">
                 <TransactionCategoryPicker
                   onChange={onChangeAmendmentCategory ?? (() => undefined)}
                   value={amendmentCategory}
@@ -379,7 +438,7 @@ export function PendingFinancialRequestCard({
               <View style={styles.actionRow}>
                 <View style={styles.actionSlot}>
                   <PrimaryAction
-                    label={busyAmendment ? 'Enviando...' : 'Enviar nuevo monto'}
+                    label={busyAmendment ? 'Enviando...' : 'Enviar'}
                     compact
                     loading={busyAmendment}
                     onPress={
@@ -397,6 +456,6 @@ export function PendingFinancialRequestCard({
           ) : null}
         </>
       ) : null}
-    </PendingSnippetCard>
+    </HistoryCaseCard>
   );
 }

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   type LayoutChangeEvent,
@@ -80,12 +80,13 @@ export function LoopingInsightSwitcher<T extends string>({
 }) {
   const { width: windowWidth } = useWindowDimensions();
   const initialIndex = clamp(values.indexOf(activeValue), 0, Math.max(values.length - 1, 0));
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [renderWindowCenterIndex, setRenderWindowCenterIndex] = useState(initialIndex);
   const [visualValue, setVisualValue] = useState(activeValue);
   const [podiumWidth, setPodiumWidth] = useState(0);
   const [filterWidth, setFilterWidth] = useState(0);
   const activeIndexRef = useRef(initialIndex);
   const activeValueRef = useRef(activeValue);
+  const renderWindowCenterIndexRef = useRef(initialIndex);
   const visualValueRef = useRef(activeValue);
   const onChangeRef = useRef(onChange);
   const valuesRef = useRef(values);
@@ -97,6 +98,7 @@ export function LoopingInsightSwitcher<T extends string>({
   const measuredWindowWidth = windowWidth > 0 ? windowWidth : fallbackWidth;
   const resolvedPodiumWidth = podiumWidth > 0 ? podiumWidth : measuredWindowWidth;
   const resolvedFilterWidth = filterWidth > 0 ? filterWidth : measuredWindowWidth;
+  const syncedPodiumWidthRef = useRef(resolvedPodiumWidth);
   const resolvedPodiumWidthRef = useRef(resolvedPodiumWidth);
   const itemStep = itemWidth + itemGap;
   const filterSidePadding = Math.max(0, (resolvedFilterWidth - itemWidth) / 2);
@@ -112,7 +114,9 @@ export function LoopingInsightSwitcher<T extends string>({
     ],
     width: filterTrackWidth,
   };
-  const optionByValue = new Map(options.map((option) => [option.value, option]));
+  const optionByValue = useMemo(() => new Map(options.map((option) => [option.value, option])), [
+    options,
+  ]);
 
   activeValueRef.current = activeValue;
   onChangeRef.current = onChange;
@@ -136,6 +140,23 @@ export function LoopingInsightSwitcher<T extends string>({
 
     visualValueRef.current = nextValue;
     setVisualValue(nextValue);
+  }
+
+  function updateRenderWindowCenter(index: number) {
+    const targetIndex = clamp(Math.round(index), 0, maxIndex);
+
+    if (renderWindowCenterIndexRef.current === targetIndex) {
+      return;
+    }
+
+    renderWindowCenterIndexRef.current = targetIndex;
+    setRenderWindowCenterIndex(targetIndex);
+  }
+
+  function shouldRenderPodiumPage(index: number): boolean {
+    return (
+      Math.abs(index - renderWindowCenterIndex) <= 1 || Math.abs(index - activeIndexRef.current) <= 1
+    );
   }
 
   function clearProgrammaticCommitTimer() {
@@ -175,7 +196,7 @@ export function LoopingInsightSwitcher<T extends string>({
 
     clearProgrammaticCommitTimer();
     activeIndexRef.current = targetIndex;
-    setActiveIndex(targetIndex);
+    updateRenderWindowCenter(targetIndex);
     positionProgress.setValue(targetIndex);
     updateVisualValue(nextValue);
 
@@ -215,13 +236,23 @@ export function LoopingInsightSwitcher<T extends string>({
 
     pendingInternalValueRef.current = null;
     const nextIndex = clamp(values.indexOf(activeValue), 0, maxIndex);
+    const indexChanged = activeIndexRef.current !== nextIndex;
+    const pageWidthChanged =
+      Math.abs(syncedPodiumWidthRef.current - resolvedPodiumWidth) > SCROLL_SETTLE_EPSILON;
 
-    activeIndexRef.current = nextIndex;
-    setActiveIndex(nextIndex);
+    if (indexChanged) {
+      activeIndexRef.current = nextIndex;
+      positionProgress.setValue(nextIndex);
+    }
+
+    updateRenderWindowCenter(nextIndex);
     updateVisualValue(activeValue);
-    positionProgress.setValue(nextIndex);
-    scrollToIndex(nextIndex, podiumWidth > 0);
-  }, [activeValue, maxIndex, podiumWidth, positionProgress, values]);
+
+    if (indexChanged || pageWidthChanged) {
+      syncedPodiumWidthRef.current = resolvedPodiumWidth;
+      scrollToIndex(nextIndex, podiumWidth > 0 && indexChanged);
+    }
+  }, [activeValue, maxIndex, podiumWidth, positionProgress, resolvedPodiumWidth, values]);
 
   function handlePodiumLayout(event: LayoutChangeEvent) {
     const nextWidth = event.nativeEvent.layout.width;
@@ -317,7 +348,7 @@ export function LoopingInsightSwitcher<T extends string>({
                 { width: resolvedPodiumWidth },
               ]}
             >
-              {renderPage(pageValue)}
+              {shouldRenderPodiumPage(pageIndex) ? renderPage(pageValue) : null}
             </View>
           ) : null,
         )}
@@ -369,6 +400,8 @@ export function LoopingInsightSwitcher<T extends string>({
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
                     onPress={() => {
+                      updateRenderWindowCenter(optionIndex);
+
                       if (optionIndex === activeIndexRef.current) {
                         scrollToIndex(optionIndex, true);
                         return;

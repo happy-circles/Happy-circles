@@ -73,6 +73,23 @@ function resolveHomeLiquidGlassPlatformStyle(activeTheme: AppTheme) {
   }) as object | undefined;
 }
 
+function resolveHomeFabOuterGlowPlatformStyle(activeTheme: AppTheme) {
+  return Platform.select({
+    web: {
+      boxShadow: `0 0 26px ${activeTheme.glass.homeFabOuterGlow}, 0 0 20px ${activeTheme.glass.homeFabWarmGlow}`,
+    },
+    ios: {
+      shadowColor: activeTheme.glass.homeFabWarmGlow,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 1,
+      shadowRadius: 22,
+    },
+    default: {
+      elevation: 5,
+    },
+  }) as object | undefined;
+}
+
 function LiquidGlassSurface({
   children,
   showGlow = true,
@@ -429,7 +446,7 @@ export function HomeCollapsibleChrome({
             backgroundColor: hasNativeLiquidGlass
               ? activeTheme.glass.homeNativeBackground
               : activeTheme.glass.homeBackground,
-            borderColor: activeTheme.glass.fallbackBorder,
+            borderColor: activeTheme.glass.homeBorder,
             borderRadius: glassRadius,
             height: glassHeight,
             left: glassLeft,
@@ -526,6 +543,7 @@ export function HomeRegisterFab({
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const liquidGlassPlatformStyle = resolveHomeLiquidGlassPlatformStyle(activeTheme);
+  const fabOuterGlowPlatformStyle = resolveHomeFabOuterGlowPlatformStyle(activeTheme);
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, windowWidth - theme.spacing.lg * 2),
@@ -561,6 +579,16 @@ export function HomeRegisterFab({
         },
       ]}
     >
+      <View
+        pointerEvents="none"
+        style={[
+          styles.fabOuterGlow,
+          fabOuterGlowPlatformStyle,
+          {
+            borderColor: activeTheme.glass.homeFabOuterGlow,
+          },
+        ]}
+      />
       <Pressable
         accessibilityLabel="Registrar movimiento"
         accessibilityRole="button"
@@ -572,12 +600,42 @@ export function HomeRegisterFab({
             backgroundColor: hasNativeLiquidGlass
               ? activeTheme.glass.homeNativeFabBackground
               : activeTheme.glass.homeFabBackground,
-            borderColor: activeTheme.glass.fallbackBorder,
+            borderColor: activeTheme.glass.homeFabBorder,
           },
           pressed ? styles.pressed : null,
         ]}
       >
-        <LiquidGlassSurface showGlow={false} />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabEdgeGlow,
+            {
+              borderColor: activeTheme.glass.homeFabEdgeGlow,
+            },
+          ]}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabEdgeRing,
+            {
+              borderColor: activeTheme.glass.homeFabEdgeRing,
+            },
+          ]}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabHighlightEdge,
+            {
+              borderBottomColor: activeTheme.glass.homeFabWarmEdge,
+              borderLeftColor: activeTheme.glass.homeFabHighlightEdge,
+              borderRightColor: activeTheme.glass.homeFabWarmEdge,
+              borderTopColor: activeTheme.glass.homeFabHighlightEdge,
+            },
+          ]}
+        />
+        <LiquidGlassSurface showGlow={false} tintColor={activeTheme.glass.homeFabGlassTint} />
         <Ionicons color={activeTheme.colors.text} name="add" size={28} />
         <Animated.View
           pointerEvents="none"
@@ -750,6 +808,46 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
+    zIndex: 1,
+  },
+  fabOuterGlow: {
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderWidth: 1,
+    bottom: 2,
+    left: 2,
+    position: 'absolute',
+    right: 2,
+    top: 2,
+  },
+  fabEdgeGlow: {
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderWidth: 8,
+    bottom: 4,
+    left: 5,
+    position: 'absolute',
+    right: 5,
+    top: 4,
+  },
+  fabEdgeRing: {
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderWidth: 2.25,
+    bottom: 5,
+    left: 6,
+    position: 'absolute',
+    right: 6,
+    top: 5,
+  },
+  fabHighlightEdge: {
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderRightWidth: 2,
+    borderTopWidth: 3,
+    bottom: 7,
+    left: 8,
+    position: 'absolute',
+    right: 8,
+    top: 7,
   },
   fabLabelWrap: {
     overflow: 'hidden',

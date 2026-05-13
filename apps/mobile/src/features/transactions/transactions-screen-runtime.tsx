@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
@@ -346,6 +347,7 @@ function FilterPill({
 
 export function TransactionsScreen() {
   const activeTheme = useAppTheme();
+  const { top: topInset } = useSafeAreaInsets();
   const router = useRouter();
   const searchParams = useLocalSearchParams<{
     category?: string | string[];
@@ -486,8 +488,10 @@ export function TransactionsScreen() {
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
         headerVariant="plain"
         largeTitle={false}
+        safeAreaEdges={['left', 'right']}
         subtitle="Estamos organizando tus pendientes y el historial completo."
         title="Transacciones"
       >
@@ -502,9 +506,11 @@ export function TransactionsScreen() {
   if (snapshotQuery.error) {
     return (
       <ScreenShell
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
         headerVariant="plain"
         largeTitle={false}
         refresh={refresh}
+        safeAreaEdges={['left', 'right']}
         subtitle="No pudimos cargar tus transacciones."
         title="Transacciones"
       >
@@ -515,6 +521,7 @@ export function TransactionsScreen() {
 
   return (
     <ScreenShell
+      contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
       headerLeading={
         <Pressable
           onPress={() => {
@@ -528,6 +535,7 @@ export function TransactionsScreen() {
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
+      safeAreaEdges={['left', 'right']}
       title="Transacciones"
       titleAlign="center"
     >

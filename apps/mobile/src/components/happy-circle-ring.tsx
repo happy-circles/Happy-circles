@@ -1,6 +1,6 @@
-import { Fragment } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import { Fragment, useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { getRuntimeTheme, theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
@@ -9,6 +9,9 @@ export const HAPPY_CIRCLE_STANDARD_NODE_COUNT = 5;
 const HAPPY_CIRCLE_ANONYMOUS_LABEL = 'Happy';
 
 export type HappyCircleDecision = 'approved' | 'pending' | 'rejected';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const PENDING_FACE_CYCLE_DURATION_MS = 7800;
 
 export interface HappyCircleRingParticipant {
   readonly userId: string;
@@ -20,7 +23,7 @@ export function happyCircleDecisionColor(decision: HappyCircleDecision): string 
   const activeTheme = getRuntimeTheme();
 
   if (decision === 'approved') return activeTheme.colors.success;
-  if (decision === 'rejected') return activeTheme.colors.warning;
+  if (decision === 'rejected') return activeTheme.colors.danger;
   return activeTheme.colors.cycle;
 }
 
@@ -99,7 +102,7 @@ function normalizedRingParticipants(
 }
 
 export function HappyCircleFaceIcon({
-  backgroundColor = theme.colors.surface,
+  backgroundColor = 'transparent',
   decision,
   size,
 }: {
@@ -109,54 +112,12 @@ export function HappyCircleFaceIcon({
 }) {
   const color = happyCircleDecisionColor(decision);
   const strokeWidth = 1.5;
-
-  if (decision === 'approved') {
-    return (
-      <Svg height={size} viewBox="0 0 24 24" width={size}>
-        <Circle
-          cx={12}
-          cy={12}
-          fill={backgroundColor}
-          r={10}
-          stroke={color}
-          strokeWidth={strokeWidth}
-        />
-        <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
-        <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
-        <Path
-          d="M 7 14 Q 12 19 17 14"
-          fill="none"
-          stroke={color}
-          strokeLinecap="round"
-          strokeWidth={strokeWidth}
-        />
-      </Svg>
-    );
-  }
-
-  if (decision === 'rejected') {
-    return (
-      <Svg height={size} viewBox="0 0 24 24" width={size}>
-        <Circle
-          cx={12}
-          cy={12}
-          fill={backgroundColor}
-          r={10}
-          stroke={color}
-          strokeWidth={strokeWidth}
-        />
-        <Circle cx={8.5} cy={10} fill={color} r={1.5} />
-        <Circle cx={15.5} cy={10} fill={color} r={1.5} />
-        <Path
-          d="M 7 17 Q 12 12 17 17"
-          fill="none"
-          stroke={color}
-          strokeLinecap="round"
-          strokeWidth={strokeWidth}
-        />
-      </Svg>
-    );
-  }
+  const mouthPath =
+    decision === 'approved'
+      ? 'M 7.5 14.2 Q 12 17.8 16.5 14.2'
+      : decision === 'rejected'
+        ? 'M 7.5 16.2 Q 12 13.9 16.5 16.2'
+        : 'M 8 15 L 16 15';
 
   return (
     <Svg height={size} viewBox="0 0 24 24" width={size}>
@@ -170,8 +131,127 @@ export function HappyCircleFaceIcon({
       />
       <Circle cx={8.5} cy={9.5} fill={color} r={1.5} />
       <Circle cx={15.5} cy={9.5} fill={color} r={1.5} />
-      <Path d="M 8 15 L 16 15" stroke={color} strokeLinecap="round" strokeWidth={strokeWidth} />
+      <Path
+        d={mouthPath}
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeWidth={strokeWidth}
+      />
     </Svg>
+  );
+}
+
+function usePendingFaceCycleProgress(isActive: boolean) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isActive) {
+      progress.setValue(0);
+      return;
+    }
+
+    progress.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        duration: PENDING_FACE_CYCLE_DURATION_MS,
+        easing: Easing.linear,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [isActive, progress]);
+
+  return progress;
+}
+
+function pendingDecisionCycleOpacities(progress: Animated.Value) {
+  return {
+    approvedOpacity: progress.interpolate({
+      inputRange: [0, 0.22, 0.32, 0.5, 0.6, 1],
+      outputRange: [0, 0, 1, 1, 0, 0],
+    }),
+    pendingOpacity: progress.interpolate({
+      inputRange: [0, 0.22, 0.32, 0.84, 0.94, 1],
+      outputRange: [1, 1, 0, 0, 1, 1],
+    }),
+    rejectedOpacity: progress.interpolate({
+      inputRange: [0, 0.5, 0.6, 0.84, 0.94, 1],
+      outputRange: [0, 0, 1, 1, 0, 0],
+    }),
+  };
+}
+
+function CyclingPendingFaceIcon({
+  progress,
+  size,
+}: {
+  readonly progress: Animated.Value;
+  readonly size: number;
+}) {
+  const { approvedOpacity, pendingOpacity, rejectedOpacity } =
+    pendingDecisionCycleOpacities(progress);
+
+  return (
+    <View style={{ height: size, width: size }}>
+      <Animated.View style={[styles.faceCycleIcon, { opacity: pendingOpacity }]}>
+        <HappyCircleFaceIcon decision="pending" size={size} />
+      </Animated.View>
+      <Animated.View style={[styles.faceCycleIcon, { opacity: approvedOpacity }]}>
+        <HappyCircleFaceIcon decision="approved" size={size} />
+      </Animated.View>
+      <Animated.View style={[styles.faceCycleIcon, { opacity: rejectedOpacity }]}>
+        <HappyCircleFaceIcon decision="rejected" size={size} />
+      </Animated.View>
+    </View>
+  );
+}
+
+function CyclingPendingArc({
+  path,
+  progress,
+  strokeWidth,
+}: {
+  readonly path: string;
+  readonly progress: Animated.Value;
+  readonly strokeWidth: number;
+}) {
+  const { approvedOpacity, pendingOpacity, rejectedOpacity } =
+    pendingDecisionCycleOpacities(progress);
+
+  return (
+    <Fragment>
+      <AnimatedPath
+        d={path}
+        fill="none"
+        opacity={pendingOpacity}
+        stroke={happyCircleDecisionColor('pending')}
+        strokeLinecap="round"
+        strokeWidth={strokeWidth}
+      />
+      <AnimatedPath
+        d={path}
+        fill="none"
+        opacity={approvedOpacity}
+        stroke={happyCircleDecisionColor('approved')}
+        strokeLinecap="round"
+        strokeWidth={strokeWidth}
+      />
+      <AnimatedPath
+        d={path}
+        fill="none"
+        opacity={rejectedOpacity}
+        stroke={happyCircleDecisionColor('rejected')}
+        strokeLinecap="round"
+        strokeWidth={strokeWidth}
+      />
+    </Fragment>
   );
 }
 
@@ -179,13 +259,17 @@ function ParticipantNode({
   decision,
   index,
   label,
+  counterRotation,
+  pendingFaceProgress,
   showLabel,
   totalCount,
   ringSize,
 }: {
+  readonly counterRotation?: Animated.AnimatedInterpolation<string> | string;
   readonly decision: HappyCircleDecision;
   readonly index: number;
   readonly label: string;
+  readonly pendingFaceProgress?: Animated.Value;
   readonly showLabel: boolean;
   readonly totalCount: number;
   readonly ringSize: number;
@@ -219,11 +303,15 @@ function ParticipantNode({
           },
         ]}
       >
-        <HappyCircleFaceIcon
-          backgroundColor={activeTheme.colors.surface}
-          decision={decision}
-          size={nodeSize}
-        />
+        <Animated.View
+          style={counterRotation ? { transform: [{ rotate: counterRotation }] } : undefined}
+        >
+          {decision === 'pending' && pendingFaceProgress ? (
+            <CyclingPendingFaceIcon progress={pendingFaceProgress} size={nodeSize} />
+          ) : (
+            <HappyCircleFaceIcon decision={decision} size={nodeSize} />
+          )}
+        </Animated.View>
       </View>
       {showLabel ? (
         <View
@@ -256,10 +344,12 @@ function ParticipantNode({
 
 function CircleArcs({
   decisions,
+  pendingFaceProgress,
   ringSize,
   splitContinuationArc,
 }: {
   readonly decisions: readonly { readonly decision: HappyCircleDecision }[];
+  readonly pendingFaceProgress?: Animated.Value;
   readonly ringSize: number;
   readonly splitContinuationArc: boolean;
 }) {
@@ -281,8 +371,7 @@ function CircleArcs({
         const startAngle = angle1 + arcGap;
         const endAngle = angle2 - arcGap;
 
-        const color1 = happyCircleDecisionColor(participant.decision);
-        const color2 = happyCircleDecisionColor(decisions[(index + 1) % participantCount].decision);
+        const segmentColor = happyCircleDecisionColor(participant.decision);
         const segmentCount = shouldSplitArc ? 3 : 1;
         const totalAngle = endAngle - startAngle;
 
@@ -290,8 +379,7 @@ function CircleArcs({
 
         return Array.from({ length: segmentCount }, (_, segmentIndex) => {
           const segmentGap = shouldSplitArc ? 0.055 : 0;
-          const segmentStart =
-            startAngle + (totalAngle * segmentIndex) / segmentCount + segmentGap;
+          const segmentStart = startAngle + (totalAngle * segmentIndex) / segmentCount + segmentGap;
           const segmentEnd =
             startAngle + (totalAngle * (segmentIndex + 1)) / segmentCount - segmentGap;
 
@@ -304,31 +392,27 @@ function CircleArcs({
 
           const largeArc = segmentEnd - segmentStart > Math.PI ? 1 : 0;
           const path = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArc} 1 ${x2} ${y2}`;
-          const gradientId = `grad-${index}-${segmentIndex}`;
 
-          return (
-            <Fragment key={`${index}:${segmentIndex}`}>
-              <Defs>
-                <LinearGradient
-                  gradientUnits="userSpaceOnUse"
-                  id={gradientId}
-                  x1={x1}
-                  x2={x2}
-                  y1={y1}
-                  y2={y2}
-                >
-                  <Stop offset="0%" stopColor={color1} />
-                  <Stop offset="100%" stopColor={color2} />
-                </LinearGradient>
-              </Defs>
-              <Path
-                d={path}
-                fill="none"
-                stroke={`url(#${gradientId})`}
-                strokeLinecap="round"
+          if (participant.decision === 'pending' && pendingFaceProgress) {
+            return (
+              <CyclingPendingArc
+                key={`${index}:${segmentIndex}`}
+                path={path}
+                progress={pendingFaceProgress}
                 strokeWidth={strokeWidth}
               />
-            </Fragment>
+            );
+          }
+
+          return (
+            <Path
+              d={path}
+              fill="none"
+              key={`${index}:${segmentIndex}`}
+              stroke={segmentColor}
+              strokeLinecap="round"
+              strokeWidth={strokeWidth}
+            />
           );
         });
       })}
@@ -337,34 +421,62 @@ function CircleArcs({
 }
 
 export function HappyCircleRing({
+  animatePendingFaces = false,
   centerColor = theme.colors.primary,
   centerLabel,
   centerSubLabel,
   decisions,
+  nodeCounterRotation,
+  orbitRotation,
   ringSize,
   showContinuation = true,
   showLabels = true,
   style,
 }: {
+  readonly animatePendingFaces?: boolean;
   readonly centerColor?: string;
   readonly centerLabel?: string | null;
   readonly centerSubLabel?: string | null;
   readonly decisions: readonly HappyCircleRingParticipant[];
+  readonly nodeCounterRotation?: Animated.AnimatedInterpolation<string> | string;
+  readonly orbitRotation?: Animated.AnimatedInterpolation<string> | string;
   readonly ringSize: number;
   readonly showContinuation?: boolean;
   readonly showLabels?: boolean;
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const activeTheme = useAppTheme();
+  const pendingFaceProgress = usePendingFaceCycleProgress(animatePendingFaces);
   const ringDecisions = normalizedRingParticipants(decisions);
 
   return (
     <View style={[styles.ringContainer, { width: ringSize, height: ringSize }, style]}>
-      <CircleArcs
-        decisions={ringDecisions}
-        ringSize={ringSize}
-        splitContinuationArc={showContinuation}
-      />
+      <Animated.View
+        style={[
+          styles.orbitLayer,
+          orbitRotation ? { transform: [{ rotate: orbitRotation }] } : null,
+        ]}
+      >
+        <CircleArcs
+          decisions={ringDecisions}
+          pendingFaceProgress={animatePendingFaces ? pendingFaceProgress : undefined}
+          ringSize={ringSize}
+          splitContinuationArc={showContinuation}
+        />
+        {ringDecisions.map((participant, index) => (
+          <ParticipantNode
+            counterRotation={nodeCounterRotation}
+            decision={participant.decision}
+            index={index}
+            key={`${participant.userId}:${index}`}
+            label={participant.label}
+            pendingFaceProgress={animatePendingFaces ? pendingFaceProgress : undefined}
+            ringSize={ringSize}
+            showLabel={showLabels}
+            totalCount={ringDecisions.length}
+          />
+        ))}
+      </Animated.View>
       {centerLabel ? (
         <View
           style={[
@@ -393,18 +505,6 @@ export function HappyCircleRing({
           ) : null}
         </View>
       ) : null}
-
-      {ringDecisions.map((participant, index) => (
-        <ParticipantNode
-          decision={participant.decision}
-          index={index}
-          key={`${participant.userId}:${index}`}
-          label={participant.label}
-          ringSize={ringSize}
-          showLabel={showLabels}
-          totalCount={ringDecisions.length}
-        />
-      ))}
     </View>
   );
 }
@@ -413,6 +513,12 @@ const styles = StyleSheet.create({
   ringContainer: {
     marginRight: theme.spacing.sm,
     position: 'relative',
+  },
+  orbitLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  faceCycleIcon: {
+    ...StyleSheet.absoluteFillObject,
   },
   nodeContainer: {
     alignItems: 'center',

@@ -1,7 +1,6 @@
 import { StyleSheet } from 'react-native';
 
 import { theme } from '@/lib/theme';
-import { transactionCategoryColor } from '@/lib/transaction-categories';
 
 export const settlementDetailScreenStyles = StyleSheet.create({
   supportText: {
@@ -9,180 +8,259 @@ export const settlementDetailScreenStyles = StyleSheet.create({
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
-  summaryCard: {
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
+  detailCard: {
+    overflow: 'visible',
   },
-  summaryTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '700',
+  detailCardBody: {
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
   },
-  summaryBody: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  timelineCard: {
-    borderLeftColor: theme.colors.border,
-    borderLeftWidth: 3,
-  },
-  timelineHeader: {
-    gap: 2,
-  },
-  timelineTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  timelineSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 18,
-  },
-  replacementAction: {
-    marginTop: theme.spacing.sm,
-  },
-  circleGraphCard: {
-    borderLeftColor: transactionCategoryColor('cycle'),
-    borderLeftWidth: 3,
-  },
-  circleGraphHeader: {
+  detailCardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: theme.spacing.sm,
     justifyContent: 'space-between',
+    width: '100%',
   },
-  circleGraphTitleBlock: {
+  detailCardTitleBlock: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
   },
-  circleGraphTitle: {
+  detailCardTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.title3,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0,
     lineHeight: 24,
   },
-  circleGraphSubtitle: {
+  detailCardMeta: {
+    color: theme.colors.success,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
+  detailCardHeaderActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: theme.spacing.xs,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+  },
+  movementDetails: {
+    gap: 0,
+    paddingHorizontal: theme.spacing.xs,
+    width: '100%',
+  },
+  movementMapRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 52,
+    width: '100%',
+  },
+  movementEndpoint: {
+    alignItems: 'center',
+    gap: 5,
+    width: 54,
+  },
+  movementEndpointIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  movementEndpointLabel: {
+    color: theme.colors.text,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 14,
+    maxWidth: 58,
+    textAlign: 'center',
+  },
+  movementFlowBadge: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  movementConnectorTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'space-between',
+    minHeight: 20,
+  },
+  movementDetailLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 14,
+    textTransform: 'uppercase',
+  },
+  movementDetailAmount: {
+    fontSize: theme.typography.callout,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 19,
+    textAlign: 'right',
+  },
+  movementLineRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    marginHorizontal: 4,
+  },
+  movementLineRowIncoming: {
+    transform: [{ rotate: '15deg' }],
+  },
+  movementLineRowOutgoing: {
+    transform: [{ rotate: '15deg' }],
+  },
+  movementLine: {
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    height: 2,
+  },
+  movementCenterRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 58,
+    width: '100%',
+  },
+  movementSelfNode: {
+    alignItems: 'center',
+    gap: 5,
+    width: 66,
+  },
+  movementSelfIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  movementSelfLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  movementSelfSpacer: {
+    width: 54,
+  },
+  approvalPillsBlock: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  approvalPillsRow: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    maxWidth: 260,
+    width: '100%',
+  },
+  approvalPill: {
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    height: 8,
+    minWidth: 0,
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+  },
+  detailCardState: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
-  },
-  circleGraphInfoButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    height: 32,
-    justifyContent: 'center',
-    marginTop: -2,
-    width: 32,
-  },
-  circleGraphInfoButtonActive: {
-    backgroundColor: theme.colors.primaryGhost,
-  },
-  circleGraphInfoButtonPressed: {
-    opacity: 0.72,
-  },
-  circleGraph: {
-    alignSelf: 'center',
-    marginTop: theme.spacing.md,
-    position: 'relative',
-  },
-  focusGraph: {
-    alignSelf: 'center',
-    height: 228,
-    marginTop: theme.spacing.md,
-    position: 'relative',
-    width: 282,
-  },
-  focusCurveLayer: {
-    left: 0,
-    position: 'absolute',
-    top: 0,
-  },
-  focusNodeAbsolute: {
-    position: 'absolute',
-  },
-  focusNodeIncoming: {
-    left: 0,
-    top: 82,
-  },
-  focusNodeCurrentPosition: {
-    left: 114,
-    top: 0,
-  },
-  focusNodeOutgoing: {
-    left: 228,
-    top: 82,
-  },
-  focusNodeWrap: {
-    alignItems: 'center',
-    width: 56,
-  },
-  focusNode: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  focusNodeLabel: {
-    color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 13,
-    marginTop: 3,
-    maxWidth: 56,
     textAlign: 'center',
   },
-  focusArrowLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 13,
-    position: 'absolute',
-  },
-  focusArrowLabelIncoming: {
-    left: 64,
-    top: 44,
-  },
-  focusArrowLabelOutgoing: {
-    right: 54,
-    top: 44,
-  },
-  focusExplanationPill: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.medium,
-    gap: 2,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    position: 'absolute',
-    top: 164,
-    width: 132,
-  },
-  focusExplanationIncoming: {
-    left: 0,
-  },
-  focusExplanationOutgoing: {
-    right: 0,
-  },
-  focusExplanationLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  focusExplanationAmount: {
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-  actions: {
+  cardActions: {
+    alignItems: 'stretch',
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: theme.spacing.sm,
+    justifyContent: 'center',
+    paddingBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xs,
   },
-  actionSlot: {
-    flexGrow: 1,
-    minWidth: 140,
+  circleActionButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    height: 46,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  circleActionLabel: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  circleActionButtonPressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.97 }],
+  },
+  circleActionButtonDisabled: {
+    opacity: 0.55,
+  },
+  versionsSection: {
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+  },
+  versionsHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  versionsTitleBlock: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  versionsTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 20,
+  },
+  versionsCountBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    minWidth: 30,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  versionsCountText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  versionStoryPanel: {
+    paddingHorizontal: theme.spacing.xs,
+  },
+  replacementAction: {
+    marginTop: theme.spacing.xs,
   },
 });

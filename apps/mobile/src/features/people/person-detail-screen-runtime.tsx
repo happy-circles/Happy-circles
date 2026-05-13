@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Link, useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,10 +15,8 @@ import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
-import { PendingSnippetCard } from '@/components/pending-snippet-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { Snackbar } from '@/components/snackbar';
-import { StatusFaceBadge } from '@/components/status-face-badge';
 import { SwipePager } from '@/components/swipe-pager';
 import {
   showBlockedActionAlert,
@@ -26,7 +24,6 @@ import {
   useFeedbackSnackbar,
 } from '@/lib/action-feedback';
 import * as appHaptics from '@/lib/app-haptics';
-import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
@@ -78,7 +75,6 @@ import {
   buildFocusCandidates,
   buildPersonRegisterHref,
   matchesFocusedTransaction,
-  pendingSnippetTone,
   pendingStatusLabel,
   readNestedStatus,
   readResultStatus,
@@ -112,6 +108,95 @@ interface AmendmentErrors {
 
 const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
 
+function CircleDetailLink({ color, href }: { readonly color: string; readonly href: Href }) {
+  return (
+    <Link href={href} asChild>
+      <Pressable
+        accessibilityRole="link"
+        onPressIn={appHaptics.triggerAppSelectionHaptic}
+        style={({ pressed }) => [
+          styles.circleDetailLink,
+          pressed ? styles.circleDetailLinkPressed : null,
+        ]}
+      >
+        <AppText numberOfLines={1} style={[styles.circleDetailLinkText, { color }]}>
+          Ver detalle del Circle &gt;
+        </AppText>
+      </Pressable>
+    </Link>
+  );
+}
+
+function pendingCaseTone(item: ActivityItemDto): HistoryCaseTone {
+  if (item.kind === 'settlement_proposal') {
+    return 'cycle';
+  }
+
+  if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
+    return 'danger';
+  }
+
+  if (item.tone === 'positive') {
+    return 'positive';
+  }
+
+  if (item.tone === 'negative') {
+    return 'negative';
+  }
+
+  return 'neutral';
+}
+
+function pendingCurrentStatusTone(item: ActivityItemDto): HistoryCaseTone {
+  if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
+    return 'danger';
+  }
+
+  if (item.status === 'approved') {
+    return 'positive';
+  }
+
+  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
+    return 'negative';
+  }
+
+  if (item.kind === 'settlement_proposal') {
+    return 'cycle';
+  }
+
+  return pendingCaseTone(item);
+}
+
+function pendingCurrentStatusDetail(item: ActivityItemDto): string {
+  if (item.kind === 'settlement_proposal') {
+    if (item.status === 'pending_approvals') {
+      return 'Falta tu aprobacion.';
+    }
+
+    if (item.status === 'approved') {
+      return 'Aprobado. Puedes completarlo.';
+    }
+
+    if (item.status === 'waiting_other_side') {
+      return 'Faltan aprobaciones.';
+    }
+
+    if (item.status === 'rejected') {
+      return 'No fue aprobado.';
+    }
+
+    if (item.status === 'expired') {
+      return 'Expirado.';
+    }
+
+    if (item.status === 'stale') {
+      return item.staleReason ?? 'Reemplazado por cambios en el balance.';
+    }
+  }
+
+  return transactionStatusLabel(item) ?? pendingStatusLabel(item.status);
+}
+
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -135,6 +220,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     DEFAULT_TRANSACTION_CATEGORY,
   );
   const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
+  const [expandedPendingItemIds, setExpandedPendingItemIds] = useState<string[]>([]);
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
   const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
@@ -265,8 +351,22 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }, [focusedHistoryCaseId]);
 
+  useEffect(() => {
+    if (!focusedPendingItemId) {
+      return;
+    }
+
+    setExpandedPendingItemIds((current) =>
+      current[0] === focusedPendingItemId ? current : [focusedPendingItemId],
+    );
+  }, [focusedPendingItemId]);
+
   function toggleHistoryCase(caseId: string) {
     setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
+  }
+
+  function togglePendingItem(itemId: string) {
+    setExpandedPendingItemIds((current) => (current[0] === itemId ? [] : [itemId]));
   }
 
   const changePanelSegment = useCallback((segment: PersonSegmentKey) => {
@@ -306,6 +406,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       ? item.category
       : DEFAULT_TRANSACTION_CATEGORY;
     setActiveAmendmentItemId(item.id);
+    setExpandedPendingItemIds([item.id]);
     setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
     setAmendmentDescription(financialRequestContent.detail);
     setAmendmentCategory(category);
@@ -510,6 +611,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       const financialRequestContent = buildFinancialRequestPendingContent(item);
       return (
         <PendingFinancialRequestCard
+          actorAvatarUrl={person?.avatarUrl ?? null}
           amendmentAmount={amendmentAmount}
           amendmentCategory={amendmentCategory}
           amendmentDescription={amendmentDescription}
@@ -525,6 +627,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           description={financialRequestContent.detail}
           focused={isFocused}
           historySteps={item.pendingHistorySteps}
+          isExpanded={expandedPendingItemIds[0] === item.id}
           key={item.id}
           amendmentAmountError={
             activeAmendmentItemId === item.id ? (amendmentErrors.amount ?? null) : null
@@ -557,9 +660,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               ? undefined
               : () =>
                   confirmPendingAction({
-                    title: 'No aceptar propuesta',
-                    message:
-                      'Avisaremos que no aceptas este movimiento y seguirá pendiente de otra resolución.',
+                    title: 'No aceptar',
+                    message: 'No se aplicara este movimiento.',
                     confirmLabel: 'No aceptar',
                     onConfirm: () =>
                       void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
@@ -567,6 +669,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           }
           onSubmitAmendment={busyKey ? undefined : () => void handleAmendment(item.id)}
           onToggleAmendment={busyKey ? undefined : () => toggleAmendment(item)}
+          onToggle={() => togglePendingItem(item.id)}
           responseState={item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'}
           showAmendment={activeAmendmentItemId === item.id}
           title={item.title}
@@ -576,54 +679,97 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
     const statusLabel = transactionStatusLabel(item) ?? pendingStatusLabel(item.status);
     const statusTone = transactionStatusTone(item);
+    const amountLabel =
+      typeof item.amountMinor === 'number' && item.amountMinor > 0
+        ? formatCop(item.amountMinor)
+        : null;
+    const detail =
+      item.kind === 'settlement_proposal'
+        ? transactionContextLabel(item, person?.displayName ?? 'Persona')
+        : (splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle);
+    const meta =
+      item.kind === 'settlement_proposal'
+        ? transactionMetaLabel(item)
+        : splitSubtitleSegments(item.subtitle).slice(1).join(' | ') || null;
+    const isExpanded = expandedPendingItemIds[0] === item.id;
+    const cardTitle = item.title;
 
     return (
-      <PendingSnippetCard
-        amountLabel={
-          typeof item.amountMinor === 'number' && item.amountMinor > 0
-            ? formatCop(item.amountMinor)
-            : null
-        }
-        detail={
-          item.kind === 'settlement_proposal'
-            ? transactionContextLabel(item, person?.displayName ?? 'Persona')
-            : (splitSubtitleSegments(item.subtitle)[0] ?? item.subtitle)
-        }
-        eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : 'Pendiente'}
+      <HistoryCaseCard
+        actorAvatarUrl={item.kind === 'settlement_proposal' ? null : (person?.avatarUrl ?? null)}
+        amountLabel={amountLabel}
+        description={null}
+        eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : (person?.displayName ?? null)}
         focused={isFocused}
+        isCycleSnippet={item.kind === 'settlement_proposal'}
+        isExpanded={isExpanded}
         key={item.id}
-        leadingNode={<StatusFaceBadge label={statusLabel} size={34} tone={statusTone} />}
-        meta={
-          item.kind === 'settlement_proposal'
-            ? transactionMetaLabel(item)
-            : splitSubtitleSegments(item.subtitle).slice(1).join(' | ') || null
-        }
-        onPress={
-          item.href
-            ? () => pushRoute(router, item.href as Parameters<typeof router.push>[0])
-            : undefined
-        }
-        stateIntent={cardStateIntentFromStatus(item.status, {
-          circle: item.kind === 'settlement_proposal',
-        })}
-        stateAura={item.kind === 'settlement_proposal'}
+        meta={meta}
+        onToggle={() => togglePendingItem(item.id)}
         statusLabel={statusLabel}
         statusTone={statusTone}
-        tone={pendingSnippetTone(item)}
-        title={
-          item.kind === 'settlement_proposal'
-            ? (transactionStatusLabel(item) ?? 'Happy Circle')
-            : item.title
-        }
-        variant="default"
+        steps={[
+          {
+            amountLabel,
+            category: item.category ?? (item.kind === 'settlement_proposal' ? 'cycle' : null),
+            detail,
+            id: `${item.id}:context`,
+            meta,
+            title: item.title,
+            tone: pendingCaseTone(item),
+          },
+          {
+            detail: pendingCurrentStatusDetail(item),
+            id: `${item.id}:status`,
+            meta: null,
+            title: 'Estado actual',
+            tone: pendingCurrentStatusTone(item),
+          },
+        ]}
+        title={cardTitle}
+        tone={pendingCaseTone(item)}
       >
         {item.kind === 'settlement_proposal' && item.status === 'pending_approvals' ? (
           <View style={styles.pendingActionStack}>
-            <View style={styles.pendingActionSlot}>
+            <View style={styles.pendingActionRow}>
               <PrimaryAction
+                color={activeTheme.colors.danger}
                 compact
+                disabled={busyKey !== null}
+                fullWidth={false}
+                icon="close"
+                label={busyKey === `${item.id}:reject` ? 'Enviando...' : 'Rechazar'}
+                loading={busyKey === `${item.id}:reject`}
+                onPress={
+                  busyKey
+                    ? undefined
+                    : () =>
+                        confirmPendingAction({
+                          title: 'Rechazar Circle',
+                          message: 'No se aplicara este Circle.',
+                          confirmLabel: 'Rechazar',
+                          onConfirm: () =>
+                            void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
+                        })
+                }
+                style={[
+                  styles.circlePanelAction,
+                  styles.circlePanelDanger,
+                  {
+                    backgroundColor: `${activeTheme.colors.danger}12`,
+                    borderColor: `${activeTheme.colors.danger}2E`,
+                  },
+                ]}
+                variant="secondary"
+              />
+              <PrimaryAction
+                color={activeTheme.colors.cycle}
+                compact
+                disabled={busyKey !== null}
+                fullWidth={false}
+                icon="checkmark"
                 loading={busyKey === `${item.id}:approve`}
-                label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar Circle'}
+                label={busyKey === `${item.id}:approve` ? 'Aprobando...' : 'Aprobar'}
                 onPress={
                   busyKey
                     ? undefined
@@ -632,39 +778,24 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                         void handlePendingItemAction(item.id, item.kind, item.status, 'approve');
                       }
                 }
+                style={styles.circlePanelAction}
               />
             </View>
-            <Pressable
-              onPress={
-                busyKey
-                  ? undefined
-                  : () =>
-                      confirmPendingAction({
-                        title: 'No aprobar Circle',
-                        message:
-                          'Tu respuesta dejará este Happy Circle como no aprobado para el resto del círculo.',
-                        confirmLabel: 'No aprobar',
-                        onConfirm: () =>
-                          void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
-                      })
-              }
-              style={({ pressed }) => [
-                styles.inlineAction,
-                pressed ? styles.inlineActionPressed : null,
-              ]}
-            >
-              <AppText style={[styles.inlineActionText, styles.inlineActionDangerText]}>
-                {busyKey === `${item.id}:reject` ? 'Enviando...' : 'No aprobar'}
-              </AppText>
-            </Pressable>
+            {item.href ? (
+              <CircleDetailLink color={activeTheme.colors.cycle} href={item.href as Href} />
+            ) : null}
           </View>
         ) : item.kind === 'settlement_proposal' && item.status === 'approved' ? (
           <View style={styles.pendingActionStack}>
-            <View style={styles.pendingActionSlot}>
+            <View style={styles.pendingActionRow}>
               <PrimaryAction
+                color={activeTheme.colors.cycle}
                 compact
+                disabled={busyKey !== null}
+                fullWidth={false}
+                icon="checkmark-done"
                 loading={busyKey === `${item.id}:execute`}
-                label={busyKey === `${item.id}:execute` ? 'Completando...' : 'Completar Circle'}
+                label={busyKey === `${item.id}:execute` ? 'Completando...' : 'Completar'}
                 onPress={
                   busyKey
                     ? undefined
@@ -672,7 +803,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                         appHaptics.triggerAppSelectionHaptic();
                         Alert.alert(
                           'Completar Circle',
-                          'Aplicaremos este Happy Circle al historial y ya no podrás deshacerlo desde aquí.',
+                          'Se movera al historial.',
                           [
                             { text: 'Cancelar', style: 'cancel' },
                             {
@@ -691,12 +822,20 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                           ],
                         );
                       }
-                }
+                  }
+                style={styles.circlePanelAction}
               />
             </View>
+            {item.href ? (
+              <CircleDetailLink color={activeTheme.colors.cycle} href={item.href as Href} />
+            ) : null}
+          </View>
+        ) : item.kind === 'settlement_proposal' && item.href ? (
+          <View style={styles.pendingActionStack}>
+            <CircleDetailLink color={activeTheme.colors.cycle} href={item.href as Href} />
           </View>
         ) : null}
-      </PendingSnippetCard>
+      </HistoryCaseCard>
     );
   }
 

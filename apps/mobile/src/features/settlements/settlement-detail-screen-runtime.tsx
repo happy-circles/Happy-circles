@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState } from '@/components/empty-state';
 import {
-  HappyCircleFaceIcon,
-  HappyCircleRing,
-  type HappyCircleDecision,
-  type HappyCircleRingParticipant,
-} from '@/components/happy-circle-ring';
+  CardTimeline,
+  type CardTimelineStep,
+  type CardTone,
+} from '@/components/card-shell';
+import { EmptyState } from '@/components/empty-state';
+import { HappyCircleFaceIcon, happyCircleDecisionColor } from '@/components/happy-circle-ring';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
@@ -18,6 +18,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { StatusChip } from '@/components/status-chip';
+import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
 import { SurfaceCard } from '@/components/surface-card';
 import {
   showBlockedActionAlert,
@@ -39,15 +40,15 @@ import {
   useRejectSettlementMutation,
   type SettlementDetailMovementDto,
   type SettlementDetailParticipantDto,
+  type SettlementVersionTimelineItemDto,
 } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { settlementDetailScreenStyles as styles } from './settlement-detail-screen-styles';
-import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
-import { CardTimeline, type CardTone } from '@/components/card-shell';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface SettlementDetailScreenProps {
   readonly proposalId: string;
@@ -95,29 +96,122 @@ function versionTimelineTone(status: string): CardTone {
   return 'neutral';
 }
 
-function circleFallbackDecision(
-  participants: readonly SettlementDetailParticipantDto[],
-): HappyCircleDecision {
-  if (participants.some((participant) => participant.decision === 'rejected')) {
-    return 'rejected';
+function versionStatusLabel(status: string): string {
+  if (status === 'pending_approvals') {
+    return 'En aprobacion';
   }
 
-  if (participants.some((participant) => participant.decision === 'pending')) {
-    return 'pending';
+  if (status === 'approved') {
+    return 'Lista';
   }
 
-  return 'approved';
+  if (status === 'executed') {
+    return 'Cerrada';
+  }
+
+  if (status === 'rejected') {
+    return 'No aprobada';
+  }
+
+  if (status === 'stale') {
+    return 'Reemplazada';
+  }
+
+  if (status === 'expired') {
+    return 'Expirada';
+  }
+
+  return status;
 }
 
-function anonymousGraphParticipant(
-  key: string,
-  decision: HappyCircleDecision,
-): HappyCircleRingParticipant {
-  return {
-    decision,
-    label: 'Happy',
-    userId: key,
-  };
+function versionNumberLabel(item: SettlementVersionTimelineItemDto, index: number): string {
+  const versionNumber = item.displayVersionNumber ?? item.versionNumber ?? index + 1;
+
+  return `Version ${versionNumber}`;
+}
+
+function versionDateLabel(timestamp: string): string | null {
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric',
+    month: 'short',
+  }).format(date);
+}
+
+function versionStoryTitle(item: SettlementVersionTimelineItemDto, index: number): string {
+  if (item.isCurrent) {
+    return index === 0 ? 'Calculo actual' : 'Nuevo calculo actual';
+  }
+
+  if (item.status === 'executed') {
+    return 'Circle cerrado';
+  }
+
+  if (item.status === 'rejected') {
+    return 'No se aprobo';
+  }
+
+  if (item.status === 'stale' || item.replacedByProposalId) {
+    return index === 0 ? 'Primer calculo' : 'Calculo anterior';
+  }
+
+  return index === 0 ? 'Primer calculo' : 'Nuevo calculo';
+}
+
+function versionStoryDetail(item: SettlementVersionTimelineItemDto): string | null {
+  if (item.status === 'pending_approvals') {
+    return 'Esperando aprobaciones';
+  }
+
+  if (item.status === 'approved') {
+    return 'Listo para cerrar';
+  }
+
+  if (item.status === 'executed') {
+    return 'Actualizo el saldo';
+  }
+
+  if (item.status === 'rejected') {
+    return 'No cambio el saldo';
+  }
+
+  if (item.status === 'stale') {
+    return 'Los saldos cambiaron';
+  }
+
+  if (item.status === 'expired') {
+    return 'Expiro antes de cerrarse';
+  }
+
+  return null;
+}
+
+function versionStoryMeta(item: SettlementVersionTimelineItemDto, index: number): string {
+  const parts = [
+    versionNumberLabel(item, index),
+    versionDateLabel(item.createdAt),
+    item.isCurrent ? 'Actual' : versionStatusLabel(item.status),
+  ].filter(Boolean);
+
+  return parts.join(' / ');
+}
+
+function versionStorySteps(
+  timeline: readonly SettlementVersionTimelineItemDto[],
+): readonly CardTimelineStep[] {
+  return timeline.map((item, index) => ({
+    amountLabel: formatCop(item.amountMinor),
+    detail: versionStoryDetail(item),
+    id: item.proposalId,
+    meta: versionStoryMeta(item, index),
+    tone: versionTimelineTone(item.status),
+    title: versionStoryTitle(item, index),
+  }));
 }
 
 function personalMovementsForUser(
@@ -130,7 +224,7 @@ function personalMovementsForUser(
 
   const incoming = movements.filter((movement) => movement.creditorUserId === currentUserId);
   const outgoing = movements.filter((movement) => movement.debtorUserId === currentUserId);
-  return [...incoming, ...outgoing].slice(0, 2);
+  return [...incoming, ...outgoing];
 }
 
 function participantById(
@@ -151,66 +245,160 @@ function participantById(
   );
 }
 
-function privateCircleParticipants(
-  participants: readonly SettlementDetailParticipantDto[],
-  movements: readonly SettlementDetailMovementDto[],
-  currentUserId: string | null,
-): readonly HappyCircleRingParticipant[] {
-  const fallbackDecision = circleFallbackDecision(participants);
-  const personalMovements = personalMovementsForUser(movements, currentUserId);
-  const incomingMovement =
-    personalMovements.find((movement) => movement.creditorUserId === currentUserId) ?? null;
-  const outgoingMovement =
-    personalMovements.find((movement) => movement.debtorUserId === currentUserId) ?? null;
-  const currentParticipant =
-    participantById(participants, currentUserId, 'Tu') ??
-    anonymousGraphParticipant('happy-circle:self', fallbackDecision);
-  const outgoingParticipant = outgoingMovement
-    ? participantById(participants, outgoingMovement.creditorUserId, outgoingMovement.creditorLabel)
-    : null;
-  const incomingParticipant = incomingMovement
-    ? participantById(participants, incomingMovement.debtorUserId, incomingMovement.debtorLabel)
-    : null;
+function approvalDecisionLabel(decision: SettlementDetailParticipantDto['decision']): string {
+  if (decision === 'approved') {
+    return 'aprobado';
+  }
 
-  return [
-    { ...currentParticipant, label: 'Tu' },
-    outgoingParticipant ?? anonymousGraphParticipant('happy-circle:outgoing', fallbackDecision),
-    anonymousGraphParticipant('happy-circle:hidden:right', fallbackDecision),
-    anonymousGraphParticipant('happy-circle:hidden:left', fallbackDecision),
-    incomingParticipant ?? anonymousGraphParticipant('happy-circle:incoming', fallbackDecision),
-  ];
+  if (decision === 'rejected') {
+    return 'no aprobado';
+  }
+
+  return 'pendiente';
 }
 
-function FocusedConnectionNode({
+function ApprovalPills({
+  participants,
+}: {
+  readonly participants: readonly SettlementDetailParticipantDto[];
+}) {
+  if (participants.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.approvalPillsRow}>
+      {participants.map((participant) => {
+        const color = happyCircleDecisionColor(participant.decision);
+
+        return (
+          <View
+            accessible
+            accessibilityLabel={`${participant.label}: ${approvalDecisionLabel(participant.decision)}`}
+            key={participant.userId}
+            style={[
+              styles.approvalPill,
+              { backgroundColor: color, shadowColor: color },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+function MovementEndpoint({
+  active,
+  label,
   participant,
   tone,
 }: {
+  readonly active: boolean;
+  readonly label: string;
   readonly participant: SettlementDetailParticipantDto | null;
-  readonly tone: 'current' | 'incoming' | 'outgoing' | 'muted';
+  readonly tone: 'success' | 'warning';
 }) {
-  const displayLabel = participant
-    ? tone === 'current'
-      ? 'Tu'
-      : (participant.label.split(/\s+/)[0] ?? participant.label)
-    : 'Sin dato';
+  const toneColor = tone === 'success' ? theme.colors.success : theme.colors.warning;
 
   return (
-    <View style={styles.focusNodeWrap}>
-      <View style={styles.focusNode}>
+    <View style={styles.movementEndpoint}>
+      <View
+        style={[
+          styles.movementEndpointIcon,
+          { backgroundColor: active ? `${toneColor}12` : theme.colors.surfaceSoft },
+        ]}
+      >
         {participant ? (
-          <HappyCircleFaceIcon decision={participant.decision} size={40} />
+          <HappyCircleFaceIcon decision={participant.decision} size={30} />
         ) : (
-          <Ionicons color={theme.colors.muted} name="remove-circle-outline" size={30} />
+          <Ionicons color={theme.colors.textMuted} name="remove-circle-outline" size={22} />
         )}
       </View>
-      <AppText numberOfLines={1} style={styles.focusNodeLabel}>
-        {displayLabel}
+      <AppText numberOfLines={1} style={styles.movementEndpointLabel}>
+        {label}
       </AppText>
     </View>
   );
 }
 
-function FocusedCircleConnections({
+function MovementFlowBadge({
+  active,
+  amountLabel,
+  direction,
+  label,
+  tone,
+}: {
+  readonly active: boolean;
+  readonly amountLabel: string;
+  readonly direction: 'incoming' | 'outgoing';
+  readonly label: string;
+  readonly tone: 'success' | 'warning';
+}) {
+  const toneColor = tone === 'success' ? theme.colors.success : theme.colors.warning;
+  const color = active ? toneColor : theme.colors.textMuted;
+  const lineColor = active ? `${toneColor}B8` : theme.colors.hairline;
+
+  return (
+    <View style={styles.movementFlowBadge}>
+      <View style={styles.movementConnectorTop}>
+        <AppText numberOfLines={1} style={[styles.movementDetailLabel, { color }]}>
+          {label}
+        </AppText>
+        <AppText
+          adjustsFontSizeToFit
+          minimumFontScale={0.76}
+          numberOfLines={1}
+          style={[styles.movementDetailAmount, { color }]}
+        >
+          {amountLabel}
+        </AppText>
+      </View>
+      <View
+        style={[
+          styles.movementLineRow,
+          direction === 'incoming'
+            ? styles.movementLineRowIncoming
+            : styles.movementLineRowOutgoing,
+        ]}
+      >
+        <View style={[styles.movementLine, { backgroundColor: lineColor }]} />
+        <Ionicons color={lineColor} name="arrow-forward" size={15} />
+        <View style={[styles.movementLine, { backgroundColor: lineColor }]} />
+      </View>
+    </View>
+  );
+}
+
+function MovementSelfNode({
+  participant,
+}: {
+  readonly participant: SettlementDetailParticipantDto | null;
+}) {
+  return (
+    <View style={styles.movementSelfNode}>
+      <View style={[styles.movementSelfIcon, { backgroundColor: `${theme.colors.cycle}12` }]}>
+        {participant ? (
+          <HappyCircleFaceIcon decision={participant.decision} size={34} />
+        ) : (
+          <Ionicons color={theme.colors.cycle} name="person-circle-outline" size={26} />
+        )}
+      </View>
+      <AppText numberOfLines={1} style={styles.movementSelfLabel}>
+        Tu
+      </AppText>
+    </View>
+  );
+}
+
+function participantShortLabel(participant: SettlementDetailParticipantDto | null, fallback: string) {
+  if (!participant) {
+    return fallback;
+  }
+
+  return participant.label.split(/\s+/)[0] ?? participant.label;
+}
+
+function CircleMovementDetails({
   currentUserId,
   movements,
   participants,
@@ -231,135 +419,54 @@ function FocusedCircleConnections({
   const outgoingParticipant = outgoingMovement
     ? participantById(participants, outgoingMovement.creditorUserId, outgoingMovement.creditorLabel)
     : null;
-  const incomingAmount = incomingMovement ? formatCop(incomingMovement.amountMinor) : 'Sin pago';
-  const outgoingAmount = outgoingMovement ? formatCop(outgoingMovement.amountMinor) : 'Sin pago';
 
   return (
-    <View style={styles.focusGraph}>
-      <Svg height={140} style={styles.focusCurveLayer} width={282}>
-        <Path
-          d="M 58 104 C 74 40 119 20 141 38"
-          fill="none"
-          stroke={incomingMovement ? theme.colors.success : theme.colors.surfaceSoft}
-          strokeLinecap="round"
-          strokeWidth={7}
-        />
-        <Path
-          d="M 135 42 L 147 37 L 143 50 Z"
-          fill={incomingMovement ? theme.colors.success : theme.colors.surfaceSoft}
-        />
-        <Path
-          d="M 141 38 C 164 20 208 40 224 104"
-          fill="none"
-          stroke={outgoingMovement ? theme.colors.warning : theme.colors.surfaceSoft}
-          strokeLinecap="round"
-          strokeWidth={7}
-        />
-        <Path
-          d="M 220 97 L 226 110 L 212 106 Z"
-          fill={outgoingMovement ? theme.colors.warning : theme.colors.surfaceSoft}
-        />
-      </Svg>
-      <AppText
-        numberOfLines={1}
-        style={[
-          styles.focusArrowLabel,
-          styles.focusArrowLabelIncoming,
-          { color: incomingMovement ? theme.colors.success : theme.colors.textMuted },
-        ]}
-      >
-        Te paga
-      </AppText>
-      <AppText
-        numberOfLines={1}
-        style={[
-          styles.focusArrowLabel,
-          styles.focusArrowLabelOutgoing,
-          { color: outgoingMovement ? theme.colors.warning : theme.colors.textMuted },
-        ]}
-      >
-        Le pagas
-      </AppText>
-      <View style={[styles.focusNodeAbsolute, styles.focusNodeIncoming]}>
-        <FocusedConnectionNode
+    <View style={styles.movementDetails}>
+      <View style={styles.movementMapRow}>
+        <MovementEndpoint
+          active={incomingMovement !== null}
+          label={participantShortLabel(incomingParticipant, 'Nadie')}
           participant={incomingParticipant}
-          tone={incomingParticipant ? 'incoming' : 'muted'}
+          tone="success"
         />
+        <MovementFlowBadge
+          active={incomingMovement !== null}
+          amountLabel={incomingMovement ? formatCop(incomingMovement.amountMinor) : 'Sin pago'}
+          direction="incoming"
+          label="Recibes"
+          tone="success"
+        />
+        <View style={styles.movementSelfSpacer} />
       </View>
-      <View style={[styles.focusNodeAbsolute, styles.focusNodeCurrentPosition]}>
-        <FocusedConnectionNode participant={currentParticipant} tone="current" />
+
+      <View style={styles.movementCenterRow}>
+        <MovementSelfNode participant={currentParticipant} />
       </View>
-      <View style={[styles.focusNodeAbsolute, styles.focusNodeOutgoing]}>
-        <FocusedConnectionNode
+
+      <View style={styles.movementMapRow}>
+        <View style={styles.movementSelfSpacer} />
+        <MovementFlowBadge
+          active={outgoingMovement !== null}
+          amountLabel={outgoingMovement ? formatCop(outgoingMovement.amountMinor) : 'Sin pago'}
+          direction="outgoing"
+          label="Pagas"
+          tone="warning"
+        />
+        <MovementEndpoint
+          active={outgoingMovement !== null}
+          label={participantShortLabel(outgoingParticipant, 'Nadie')}
           participant={outgoingParticipant}
-          tone={outgoingParticipant ? 'outgoing' : 'muted'}
+          tone="warning"
         />
       </View>
-      <View style={[styles.focusExplanationPill, styles.focusExplanationIncoming]}>
-        <AppText numberOfLines={1} style={styles.focusExplanationLabel}>
-          {incomingParticipant
-            ? `${incomingParticipant.label.split(/\s+/)[0]} te paga`
-            : 'Nadie te paga'}
-        </AppText>
-        <AppText style={[styles.focusExplanationAmount, { color: theme.colors.success }]}>
-          {incomingAmount}
-        </AppText>
-      </View>
-      <View style={[styles.focusExplanationPill, styles.focusExplanationOutgoing]}>
-        <AppText numberOfLines={1} style={styles.focusExplanationLabel}>
-          {outgoingParticipant
-            ? `Pagas a ${outgoingParticipant.label.split(/\s+/)[0]}`
-            : 'No pagas'}
-        </AppText>
-        <AppText style={[styles.focusExplanationAmount, { color: theme.colors.warning }]}>
-          {outgoingAmount}
-        </AppText>
-      </View>
-    </View>
-  );
-}
-
-function SettlementCircleGraph({
-  amountLabel,
-  currentUserId,
-  focused,
-  movements,
-  participants,
-}: {
-  readonly amountLabel: string;
-  readonly currentUserId: string | null;
-  readonly focused: boolean;
-  readonly movements: readonly SettlementDetailMovementDto[];
-  readonly participants: readonly SettlementDetailParticipantDto[];
-}) {
-  if (focused) {
-    return (
-      <FocusedCircleConnections
-        currentUserId={currentUserId}
-        movements={movements}
-        participants={participants}
-      />
-    );
-  }
-
-  const ringSize = 260;
-  const visibleParticipants = privateCircleParticipants(participants, movements, currentUserId);
-
-  return (
-    <View style={styles.circleGraph}>
-      <HappyCircleRing
-        centerColor={transactionCategoryColor('cycle')}
-        centerLabel={amountLabel}
-        centerSubLabel="a solucionar"
-        decisions={visibleParticipants}
-        ringSize={ringSize}
-      />
     </View>
   );
 }
 
 export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenProps) {
   const router = useRouter();
+  const { top: topInset } = useSafeAreaInsets();
+  const activeTheme = useAppTheme();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -368,7 +475,6 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
-  const [graphFocused, setGraphFocused] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
   const viewedProposalIdRef = useRef<string | null>(null);
@@ -457,8 +563,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (snapshotQuery.isLoading) {
     return (
       <ScreenShell
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
         eyebrow="Happy Circle"
         largeTitle={false}
+        safeAreaEdges={['left', 'right']}
         subtitle="Cargando el detalle de la propuesta."
         title="Happy Circle"
       >
@@ -473,9 +581,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (snapshotQuery.error) {
     return (
       <ScreenShell
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
         eyebrow="Happy Circle"
         largeTitle={false}
         refresh={refresh}
+        safeAreaEdges={['left', 'right']}
         subtitle="No pudimos cargar esta propuesta."
         title="Happy Circle"
       >
@@ -487,9 +597,11 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (!settlement) {
     return (
       <ScreenShell
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
         eyebrow="Happy Circle"
         largeTitle={false}
         refresh={refresh}
+        safeAreaEdges={['left', 'right']}
         subtitle="No encontramos esta propuesta."
         title="Happy Circle"
       >
@@ -513,146 +625,163 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     myDecision,
     status: settlement.status,
   });
-  const summaryText = presentation.summary;
+  const participantCount = settlement.participantDecisions.length;
+  const approvedCount = settlement.participantDecisions.filter(
+    (participant) => participant.decision === 'approved',
+  ).length;
+  const approvalSummary = `${approvedCount}/${participantCount} aprobadas`;
   const replacementProposalId = settlement.replacedByProposalId;
-  const versionTimelineSteps = settlement.timeline.map((item) => ({
-    id: item.proposalId,
-    title: item.title,
-    detail: item.detail,
-    amountLabel: formatCop(item.amountMinor),
-    meta: item.isCurrent ? 'Version actual' : null,
-    tone: versionTimelineTone(item.status),
-  }));
+  const versionSteps = versionStorySteps(settlement.timeline);
+  const cycleColor = activeTheme.colors.cycle;
 
   return (
     <ScreenShell
-      eyebrow="Happy Circle"
+      contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
       largeTitle={false}
       overlay={
         <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
       }
       refresh={refresh}
-      subtitle="Lo esencial antes de aprobar."
-      title="Happy Circle"
+      safeAreaEdges={['left', 'right']}
+      title="Detalle"
+      headerVariant="plain"
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-      <SurfaceCard padding="lg" style={styles.summaryCard} variant="elevated">
-        <StatusChip label={presentation.label} tone={presentation.tone} />
-        <AppText style={styles.summaryTitle}>Que pasa con este Happy Circle</AppText>
-        <AppText style={styles.summaryBody}>{summaryText}</AppText>
-      </SurfaceCard>
+      <SurfaceCard
+        padding="none"
+        style={styles.detailCard}
+        underlay={
+          <StateAuraLayer size="hero" variant={stateAuraVariantFromTone(presentation.tone)} />
+        }
+        variant="elevated"
+      >
+        <View style={styles.detailCardBody}>
+          <View style={styles.detailCardHeader}>
+            <View style={styles.detailCardTitleBlock}>
+              <AppText style={styles.detailCardTitle}>Happy Circle</AppText>
+              <AppText style={styles.detailCardMeta}>{approvalSummary}</AppText>
+            </View>
+            <View style={styles.detailCardHeaderActions}>
+              <StatusChip compact label={presentation.label} tone={presentation.tone} />
+            </View>
+          </View>
 
-      <SurfaceCard padding="lg" style={styles.timelineCard} variant="elevated">
-        <View style={styles.timelineHeader}>
-          <AppText style={styles.timelineTitle}>Historial de versiones</AppText>
-          <AppText style={styles.timelineSubtitle}>
-            Solo mostramos versiones cuando cambia lo que debes revisar.
-          </AppText>
+          <CircleMovementDetails
+            currentUserId={session.userId}
+            movements={settlement.movementDetails}
+            participants={settlement.participantDecisions}
+          />
+
+          <View style={styles.approvalPillsBlock}>
+            <ApprovalPills participants={settlement.participantDecisions} />
+            <AppText numberOfLines={1} style={styles.detailCardState}>
+              {presentation.summary}
+            </AppText>
+          </View>
         </View>
-        <CardTimeline steps={versionTimelineSteps} />
-        {replacementProposalId ? (
-          <View style={styles.replacementAction}>
-            <PrimaryAction
-              label="Ver nueva versión"
+
+        {canDecide ? (
+          <View style={styles.cardActions}>
+            <Pressable
+              accessibilityLabel="Rechazar Happy Circle"
+              accessibilityRole="button"
+              disabled={busyAction !== null}
+              onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
               onPress={() => {
-                triggerAppSelectionHaptic();
-                pushRoute(router, `/settlements/${replacementProposalId}`);
+                Alert.alert(
+                  'Seguro quieres rechazar este Happy Circle?',
+                  'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                  [
+                    {
+                      text: 'Volver',
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Rechazar Circle',
+                      style: 'destructive',
+                      onPress: () => void handleAction('reject'),
+                    },
+                  ],
+                );
               }}
-              variant="secondary"
-            />
+              style={({ pressed }) => [
+                styles.circleActionButton,
+                {
+                  backgroundColor: `${activeTheme.colors.danger}12`,
+                  borderColor: `${activeTheme.colors.danger}2E`,
+                  borderWidth: 1,
+                },
+                pressed ? styles.circleActionButtonPressed : null,
+                busyAction !== null ? styles.circleActionButtonDisabled : null,
+              ]}
+            >
+              <Ionicons
+                color={activeTheme.colors.danger}
+                name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
+                size={20}
+              />
+              <AppText style={[styles.circleActionLabel, { color: activeTheme.colors.danger }]}>
+                {busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
+              </AppText>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Aprobar Happy Circle"
+              accessibilityRole="button"
+              disabled={busyAction !== null}
+              onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
+              onPress={() => void handleAction('approve')}
+              style={({ pressed }) => [
+                styles.circleActionButton,
+                {
+                  backgroundColor: cycleColor,
+                  borderColor: cycleColor,
+                  ...activeTheme.shadow.card,
+                },
+                pressed ? styles.circleActionButtonPressed : null,
+                busyAction !== null ? styles.circleActionButtonDisabled : null,
+              ]}
+            >
+              <Ionicons
+                color={activeTheme.colors.white}
+                name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
+                size={20}
+              />
+              <AppText style={[styles.circleActionLabel, { color: activeTheme.colors.white }]}>
+                {busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
+              </AppText>
+            </Pressable>
           </View>
         ) : null}
       </SurfaceCard>
 
-      <SurfaceCard padding="lg" style={styles.circleGraphCard} variant="elevated">
-        <View style={styles.circleGraphHeader}>
-          <View style={styles.circleGraphTitleBlock}>
-            <AppText style={styles.circleGraphTitle}>Estado del Circle</AppText>
-            <AppText style={styles.circleGraphSubtitle}>
-              {graphFocused
-                ? 'Tus conexiones directas dentro del cierre.'
-                : 'Solo ves tus conexiones directas.'}
-            </AppText>
+      <View style={styles.versionsSection}>
+        <View style={styles.versionsHeader}>
+          <View style={styles.versionsTitleBlock}>
+            <AppText style={styles.versionsTitle}>Historia del Circle</AppText>
           </View>
-          <Pressable
-            accessibilityLabel={
-              graphFocused ? 'Mostrar Circle completo' : 'Mostrar conexiones importantes'
-            }
-            hitSlop={10}
-            onPress={() => {
-              setGraphFocused((current) => !current);
-            }}
-            onPressIn={triggerAppSelectionHaptic}
-            style={({ pressed }) => [
-              styles.circleGraphInfoButton,
-              graphFocused ? styles.circleGraphInfoButtonActive : null,
-              pressed ? styles.circleGraphInfoButtonPressed : null,
-            ]}
-          >
-            <Ionicons
-              color={graphFocused ? transactionCategoryColor('cycle') : theme.colors.textMuted}
-              name={graphFocused ? 'close-circle-outline' : 'information-circle-outline'}
-              size={20}
-            />
-          </Pressable>
+          <View style={styles.versionsCountBadge}>
+            <AppText style={styles.versionsCountText}>{settlement.timeline.length}</AppText>
+          </View>
         </View>
-        <SettlementCircleGraph
-          amountLabel={formatCop(settlement.personalAmountMinor)}
-          currentUserId={session.userId}
-          focused={graphFocused}
-          movements={settlement.movementDetails}
-          participants={settlement.participantDecisions}
-        />
-      </SurfaceCard>
+        <View style={styles.versionStoryPanel}>
+          <CardTimeline steps={versionSteps} />
+        </View>
+        {replacementProposalId ? (
+          <View style={styles.replacementAction}>
+            <PrimaryAction
+              color={cycleColor}
+              icon="arrow-forward"
+              label="Abrir calculo actual"
+              onPress={() => {
+                triggerAppSelectionHaptic();
+                pushRoute(router, `/settlements/${replacementProposalId}`);
+              }}
+            />
+          </View>
+        ) : null}
+      </View>
 
-      {canDecide ? (
-        <View style={styles.actions}>
-          <View style={styles.actionSlot}>
-            <PrimaryAction
-              label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
-              loading={busyAction === 'approve'}
-              onPress={
-                busyAction
-                  ? undefined
-                  : () => {
-                      triggerAppActionHaptic();
-                      void handleAction('approve');
-                    }
-              }
-            />
-          </View>
-          <View style={styles.actionSlot}>
-            <PrimaryAction
-              label={busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
-              loading={busyAction === 'reject'}
-              onPress={
-                busyAction
-                  ? undefined
-                  : () => {
-                      triggerAppWarningHaptic();
-                      Alert.alert(
-                        '¿Seguro quieres rechazar este Happy Circle?',
-                        'Si rechazas, este Circle se cerrará para todos. No se aplicará ningún movimiento.',
-                        [
-                          {
-                            text: 'Volver',
-                            style: 'cancel',
-                          },
-                          {
-                            text: 'Rechazar Circle',
-                            style: 'destructive',
-                            onPress: () => void handleAction('reject'),
-                          },
-                        ],
-                      );
-                    }
-              }
-              variant="secondary"
-            />
-          </View>
-        </View>
-      ) : null}
       <LoadingOverlay {...actionFeedback.overlayProps} />
     </ScreenShell>
   );

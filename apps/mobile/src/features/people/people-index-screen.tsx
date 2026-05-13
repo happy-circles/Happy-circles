@@ -14,7 +14,6 @@ import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
 import { ScreenShell } from '@/components/screen-shell';
-import { SectionBlock } from '@/components/section-block';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
@@ -89,6 +88,25 @@ type PodiumVisualItem = {
   readonly person: PeopleInsightPerson | null;
   readonly visualPlace: PodiumRank;
 };
+
+type PeopleListRow =
+  | {
+      readonly person: PeopleInsightPerson;
+      readonly type: 'person';
+    }
+  | {
+      readonly key: string;
+      readonly title: string;
+      readonly type: 'sectionHeader';
+    }
+  | {
+      readonly item: ActivityItemDto;
+      readonly type: 'pending';
+    }
+  | {
+      readonly item: ActivityItemDto;
+      readonly type: 'history';
+    };
 
 function PeopleListSeparator() {
   return <View style={styles.peopleListSeparator} />;
@@ -919,18 +937,27 @@ export function PeopleIndexScreen() {
       ),
     [normalizedPeopleQuery, personRows],
   );
-  const visiblePendingItems = insightSections.pending.filter(
-    (item) =>
-      activityMatchesQuery(item, query) &&
-      activityMatchesPersonId(item, people, selectedActivityPersonId),
+  const visiblePendingItems = useMemo(
+    () =>
+      insightSections.pending.filter(
+        (item) =>
+          activityMatchesQuery(item, query) &&
+          activityMatchesPersonId(item, people, selectedActivityPersonId),
+      ),
+    [insightSections.pending, people, query, selectedActivityPersonId],
   );
-  const visibleHistoryItems = insightSections.history.filter(
-    (item) =>
-      activityMatchesQuery(item, query) &&
-      activityMatchesPersonId(item, people, selectedActivityPersonId),
+  const visibleHistoryItems = useMemo(
+    () =>
+      insightSections.history.filter(
+        (item) =>
+          activityMatchesQuery(item, query) &&
+          activityMatchesPersonId(item, people, selectedActivityPersonId),
+      ),
+    [insightSections.history, people, query, selectedActivityPersonId],
   );
-  const visibleHistoryCaseItems = buildLatestHistoryCaseItems(
-    visibleHistoryItems.filter(isHistoryCaseItem),
+  const visibleHistoryCaseItems = useMemo(
+    () => buildLatestHistoryCaseItems(visibleHistoryItems.filter(isHistoryCaseItem)),
+    [visibleHistoryItems],
   );
   const hasSelectedPerson = selectedActivityPersonId !== null;
   const hasVisibleActivity = visiblePendingItems.length > 0 || visibleHistoryCaseItems.length > 0;
@@ -962,20 +989,88 @@ export function PeopleIndexScreen() {
       direction,
     };
   }, [params.amountMinor, params.description, params.direction]);
-  const peopleListRows =
-    !hasSelectedPerson && hasAnyRelationshipContext && visiblePersonRows.length > 0
-      ? visiblePersonRows
-      : [];
+  const peopleListRows = useMemo<readonly PeopleListRow[]>(() => {
+    if (hasSelectedPerson) {
+      if (!hasVisibleActivity) {
+        return [];
+      }
 
-  function renderPersonInsightRow({ item }: { readonly item: PeopleInsightPerson }) {
+      const selectedRows: PeopleListRow[] = [];
+
+      if (visiblePendingItems.length > 0) {
+        selectedRows.push({
+          key: 'selected-pending-title',
+          title: selectedPendingSectionTitle,
+          type: 'sectionHeader',
+        });
+        selectedRows.push(
+          ...visiblePendingItems.map((item) => ({ item, type: 'pending' as const })),
+        );
+      }
+
+      if (visibleHistoryCaseItems.length > 0) {
+        selectedRows.push({
+          key: 'selected-history-title',
+          title: selectedHistorySectionTitle,
+          type: 'sectionHeader',
+        });
+        selectedRows.push(
+          ...visibleHistoryCaseItems.map((item) => ({ item, type: 'history' as const })),
+        );
+      }
+
+      return selectedRows;
+    }
+
+    if (!hasAnyRelationshipContext || visiblePersonRows.length === 0) {
+      return [];
+    }
+
+    return visiblePersonRows.map((person) => ({ person, type: 'person' as const }));
+  }, [
+    hasAnyRelationshipContext,
+    hasSelectedPerson,
+    hasVisibleActivity,
+    selectedHistorySectionTitle,
+    selectedPendingSectionTitle,
+    visibleHistoryCaseItems,
+    visiblePendingItems,
+    visiblePersonRows,
+  ]);
+
+  function renderPeopleListRow({ item }: { readonly item: PeopleListRow }) {
+    if (item.type === 'sectionHeader') {
+      return (
+        <View style={[styles.containedListItem, styles.peopleActivitySectionHeader]}>
+          <AppText style={styles.peopleActivitySectionTitle}>{item.title}</AppText>
+        </View>
+      );
+    }
+
+    if (item.type === 'pending') {
+      return (
+        <View style={styles.containedListItem}>
+          <PendingTransactionCard item={item.item} people={people} unread={false} />
+        </View>
+      );
+    }
+
+    if (item.type === 'history') {
+      return (
+        <View style={styles.containedListItem}>
+          <HistoryTransactionCard item={item.item} people={people} />
+        </View>
+      );
+    }
+
     return (
       <View style={styles.containedListItem}>
         <PersonInsightRow
           onPress={() => {
             triggerAppSelectionHaptic();
-            setSelectedPersonId(item.userId);
+            setSelectedPersonId(item.person.userId);
           }}
-          person={item}
+          person={item.person}
         />
       </View>
     );
@@ -1112,7 +1207,7 @@ export function PeopleIndexScreen() {
               </View>
             </View>
 
-            <View style={styles.containedContent}>
+            <View style={[styles.containedContent, styles.peopleControlsSection]}>
               <View
                 style={[
                   styles.searchWrap,
@@ -1164,30 +1259,6 @@ export function PeopleIndexScreen() {
                     />
                   ) : null}
 
-                  {visiblePendingItems.length > 0 ? (
-                    <SectionBlock title={selectedPendingSectionTitle}>
-                      <View style={styles.list}>
-                        {visiblePendingItems.map((item) => (
-                          <PendingTransactionCard
-                            item={item}
-                            key={item.id}
-                            people={people}
-                            unread={false}
-                          />
-                        ))}
-                      </View>
-                    </SectionBlock>
-                  ) : null}
-
-                  {visibleHistoryCaseItems.length > 0 ? (
-                    <SectionBlock title={selectedHistorySectionTitle}>
-                      <View style={styles.list}>
-                        {visibleHistoryCaseItems.map((item) => (
-                          <HistoryTransactionCard item={item} key={item.id} people={people} />
-                        ))}
-                      </View>
-                    </SectionBlock>
-                  ) : null}
                 </>
               ) : visiblePersonRows.length === 0 ? (
                 <EmptyState
@@ -1210,11 +1281,21 @@ export function PeopleIndexScreen() {
         }
         contentContainerStyle={styles.peopleScreenContent}
         data={peopleListRows}
-        keyExtractor={(person) => person.userId}
+        keyExtractor={(item) => {
+          if (item.type === 'person') {
+            return `person:${item.person.userId}`;
+          }
+
+          if (item.type === 'sectionHeader') {
+            return item.key;
+          }
+
+          return `${item.type}:${item.item.id}`;
+        }}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         refreshControl={<BrandedRefreshControl refresh={refresh} />}
-        renderItem={renderPersonInsightRow}
+        renderItem={renderPeopleListRow}
         showsVerticalScrollIndicator={false}
         style={[styles.virtualizedPeopleList, { backgroundColor: activeTheme.colors.background }]}
       />
@@ -1286,6 +1367,9 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     paddingHorizontal: theme.spacing.lg,
     width: '100%',
+  },
+  peopleControlsSection: {
+    marginTop: theme.spacing.lg,
   },
   peopleHeader: {
     alignItems: 'center',
@@ -1661,6 +1745,16 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: theme.spacing.sm,
+  },
+  peopleActivitySectionHeader: {
+    paddingTop: theme.spacing.sm,
+  },
+  peopleActivitySectionTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 24,
   },
   containedListItem: {
     alignSelf: 'center',

@@ -82,6 +82,7 @@ export function BalanceLensCarousel({
   happyFacesClosedCount,
   happyFacesTotal,
   initialFocus = 'balance',
+  isActive = true,
   lens = 'balance',
   newCircleProposalIds,
   onCategoryPress,
@@ -97,6 +98,7 @@ export function BalanceLensCarousel({
   readonly happyFacesClosedCount?: number;
   readonly happyFacesTotal?: number;
   readonly initialFocus?: BalanceFocus;
+  readonly isActive?: boolean;
   readonly lens?: BalanceAnalyticsLens;
   readonly newCircleProposalIds?: ReadonlySet<string>;
   readonly onCategoryPress?: (
@@ -203,6 +205,7 @@ export function BalanceLensCarousel({
       const categoriesCard = (
         <CategoriesFocusCard
           categories={sortedCategories}
+          isActive={isActive && visualFocus === 'categories'}
           onCategoryPress={
             onCategoryPress ? (category) => onCategoryPress(category, selectedPeriod) : undefined
           }
