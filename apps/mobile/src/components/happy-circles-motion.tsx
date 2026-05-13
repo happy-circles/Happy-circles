@@ -14,6 +14,7 @@ import {
   type HappyCirclesTone,
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
+import { useAppTheme } from '@/providers/theme-provider';
 
 type HappyCirclesMotionVariant = 'idle' | 'splash' | 'loading' | 'success' | 'wink';
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -90,6 +91,7 @@ export function HappyCirclesMotion({
   tone = 'brand',
   variant = 'idle',
 }: HappyCirclesMotionProps) {
+  useAppTheme();
   const reducedMotion = useReducedMotion();
   const palette = resolveHappyCirclesPalette(tone, color);
   const outerMaskId = useMemo(() => createMaskId('happy-circles-outer'), []);

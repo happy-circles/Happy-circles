@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
@@ -11,7 +11,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { backOrReturnTo } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
   buildHistoryCases,
@@ -38,7 +38,7 @@ import {
   notificationViewKeyForItem,
   useAppSnapshot,
 } from '@/lib/live-data';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import { transactionsScreenStyles as styles } from './transactions-screen-styles';
 import {
   normalizeTransactionCategory,
@@ -61,8 +61,7 @@ import {
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { PendingTransactionCard } from './transactions-pending-card';
-
-const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
+import { useAppTheme } from '@/providers/theme-provider';
 
 const PRIMARY_FILTER_OPTIONS: readonly {
   readonly label: string;
@@ -184,7 +183,10 @@ function emptyFilterDescription(filter: TransactionRootFilter): string {
   return 'No hay movimientos que expliquen esta raiz del balance.';
 }
 
-function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'displayName'>): string {
+function initialsBackgroundColor(
+  person: Pick<PersonCardDto, 'userId' | 'displayName'>,
+  activeTheme: AppTheme = theme,
+): string {
   const source = `${person.userId}:${person.displayName}`;
   let hash = 0;
 
@@ -192,7 +194,10 @@ function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'display
     hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
   }
 
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? theme.colors.primary;
+  return (
+    activeTheme.palette.avatar[hash % activeTheme.palette.avatar.length] ??
+    activeTheme.colors.primary
+  );
 }
 
 function personIdFromHref(href: string | undefined): string | null {
@@ -257,6 +262,40 @@ function transactionPersonForHistoryCase(
   return people.find((person) => person.displayName === itemCase.latest.counterpartyLabel);
 }
 
+function transactionHistoryCaseHref(
+  people: readonly PersonCardDto[],
+  itemCase: HistoryCase<HistoryCaseItem>,
+): Href {
+  if (itemCase.isCycleSnippet) {
+    const proposalId =
+      itemCase.latest.originSettlementProposalId ??
+      itemCase.steps.find((step) => step.originSettlementProposalId)?.originSettlementProposalId;
+
+    if (proposalId) {
+      return `/settlements/${proposalId}` as Href;
+    }
+
+    return itemCase.latest.href?.startsWith('/settlements/')
+      ? (itemCase.latest.href as Href)
+      : ('/circles' as Href);
+  }
+
+  const matchedPerson = transactionPersonForHistoryCase(people, itemCase);
+  const personId = matchedPerson?.userId ?? personIdFromHref(itemCase.latest.href);
+  if (!personId) {
+    return itemCase.latest.href?.startsWith('/person/')
+      ? (itemCase.latest.href as Href)
+      : ('/transactions' as Href);
+  }
+
+  const focusId =
+    itemCase.latest.originSettlementProposalId ??
+    itemCase.latest.originRequestId ??
+    itemCase.latest.id;
+
+  return `/person/${personId}?panel=history&focus=${encodeURIComponent(focusId)}` as Href;
+}
+
 function FilterPill({
   icon,
   iconColor,
@@ -270,23 +309,35 @@ function FilterPill({
   readonly onPress: () => void;
   readonly selected: boolean;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.filterPill,
-        selected ? styles.filterPillSelected : null,
+        {
+          backgroundColor: selected
+            ? activeTheme.colors.primaryGhost
+            : activeTheme.colors.surface,
+          borderColor: selected ? activeTheme.colors.primaryGhost : activeTheme.colors.border,
+        },
         pressed ? styles.filterPillPressed : null,
       ]}
     >
       {icon ? (
         <Ionicons
-          color={selected ? (iconColor ?? theme.colors.primary) : theme.colors.textMuted}
+          color={selected ? (iconColor ?? activeTheme.colors.primary) : activeTheme.colors.textMuted}
           name={icon}
           size={14}
         />
       ) : null}
-      <AppText style={[styles.filterPillText, selected ? styles.filterPillTextSelected : null]}>
+      <AppText
+        style={[
+          styles.filterPillText,
+          { color: selected ? activeTheme.colors.primary : activeTheme.colors.textMuted },
+        ]}
+      >
         {label}
       </AppText>
     </Pressable>
@@ -294,6 +345,7 @@ function FilterPill({
 }
 
 export function TransactionsScreen() {
+  const activeTheme = useAppTheme();
   const router = useRouter();
   const searchParams = useLocalSearchParams<{
     category?: string | string[];
@@ -309,7 +361,6 @@ export function TransactionsScreen() {
   const categoryFilter = rawCategory ? normalizeTransactionCategory(rawCategory) : null;
   const circleFilterSelected = categoryFilter === 'cycle';
   const [activeFilter, setActiveFilter] = useState<TransactionRootFilter>(initialFilter);
-  const [expandedCaseIds, setExpandedCaseIds] = useState<readonly string[]>([]);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -417,10 +468,6 @@ export function TransactionsScreen() {
     });
   }, [session.userId, unviewedPendingTransactionItems]);
 
-  function toggleHistoryCase(caseId: string) {
-    setExpandedCaseIds((current) => (current[0] === caseId ? [] : [caseId]));
-  }
-
   function selectPrimaryFilter(filter: (typeof PRIMARY_FILTER_OPTIONS)[number]['value']) {
     triggerAppSelectionHaptic();
     setActiveFilter(filter);
@@ -475,7 +522,7 @@ export function TransactionsScreen() {
           }}
           style={({ pressed }) => [styles.backButton, pressed ? styles.backButtonPressed : null]}
         >
-          <Ionicons color={theme.colors.text} name="chevron-back" size={20} />
+          <Ionicons color={activeTheme.colors.text} name="chevron-back" size={20} />
         </Pressable>
       }
       headerVariant="plain"
@@ -507,13 +554,21 @@ export function TransactionsScreen() {
           />
         </ScrollView>
         {categoryFilter && !circleFilterSelected ? (
-          <View style={styles.categoryFilterChip}>
+          <View
+            style={[
+              styles.categoryFilterChip,
+              {
+                backgroundColor: activeTheme.colors.surfaceMuted,
+                borderColor: activeTheme.colors.hairline,
+              },
+            ]}
+          >
             <Ionicons
               color={transactionCategoryColor(categoryFilter)}
               name={transactionCategoryIcon(categoryFilter) as keyof typeof Ionicons.glyphMap}
               size={13}
             />
-            <AppText style={styles.categoryFilterText}>
+            <AppText style={[styles.categoryFilterText, { color: activeTheme.colors.textMuted }]}>
               Categoria: {transactionCategoryLabel(categoryFilter)}
             </AppText>
           </View>
@@ -564,18 +619,21 @@ export function TransactionsScreen() {
                     itemCase.isCycleSnippet ? null : (historyPerson?.avatarUrl ?? null)
                   }
                   actorFallbackColor={
-                    itemCase.isCycleSnippet ? undefined : initialsBackgroundColor(fallbackPerson)
+                    itemCase.isCycleSnippet
+                      ? undefined
+                      : initialsBackgroundColor(fallbackPerson, activeTheme)
                   }
                   amountLabel={caseAmountLabel}
                   amountStruckThrough={historyAmountIsVoided(latest)}
                   category={historyCaseVisualCategory(itemCase)}
                   description={null}
                   eyebrow={caseEyebrow}
+                  expandable={false}
                   isCycleSnippet={itemCase.isCycleSnippet}
-                  isExpanded={expandedCaseIds[0] === itemCase.id}
+                  isExpanded={false}
                   key={itemCase.id}
                   meta={historyCaseMeta(itemCase)}
-                  onToggle={() => toggleHistoryCase(itemCase.id)}
+                  onPress={() => pushRoute(router, transactionHistoryCaseHref(people, itemCase))}
                   statusLabel={historyCaseStatusLabel(itemCase)}
                   statusTone={historyCaseStatusTone(itemCase)}
                   steps={itemCase.steps.map((step, index) => {

@@ -121,6 +121,38 @@ export function isVisibleInviteHistory(item: InviteRequestItem): boolean {
   return inviteHasLinkedPerson(item);
 }
 
+export function inviteRequestPersonHref(item: InviteRequestItem): Href | null {
+  if (item.actionState !== 'history' || item.status !== 'accepted') {
+    return null;
+  }
+
+  return inviteProfilePersonHref(item, 'history');
+}
+
+export function inviteRequestPersonHrefAfterSuccessfulAction(
+  item: InviteRequestItem,
+  action: InviteRequestAction,
+): Href | null {
+  if (action !== 'accept' && action !== 'approve') {
+    return null;
+  }
+
+  return inviteProfilePersonHref(item, 'history');
+}
+
+function inviteProfilePersonHref(
+  item: InviteRequestItem,
+  panel: 'pending' | 'history',
+): Href | null {
+  if (!item.profileUserId) {
+    return null;
+  }
+
+  return `/person/${encodeURIComponent(item.profileUserId)}?panel=${panel}&focus=${encodeURIComponent(
+    item.inviteId,
+  )}` as Href;
+}
+
 export function inviteCardIcon(item: InviteRequestItem): InviteCardIconName {
   if (item.originChannel === 'qr') {
     return 'qr-code-outline';

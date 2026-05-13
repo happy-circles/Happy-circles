@@ -4,6 +4,7 @@ export type IdentityFlowIdentityPosition = 'auto' | 'center' | 'top';
 export function resolveIdentityFlowLayout(input: {
   readonly bodyHeight: number;
   readonly centerLayout: IdentityFlowCenterLayout;
+  readonly contentHeight?: number;
   readonly hasMessage: boolean;
   readonly identityPosition: IdentityFlowIdentityPosition;
   readonly layoutReady: boolean;
@@ -26,8 +27,18 @@ export function resolveIdentityFlowLayout(input: {
   const centerRestRatio = input.centerLayout === 'compact' ? 0.32 : 0.44;
   const preferredCenterIdentityY = input.bodyHeight / 2 - input.stageSize / 2;
   const readableCenterIdentityY = input.bodyHeight * centerRestRatio - input.stageSize / 2;
+  const contentHeight = Math.max(0, input.contentHeight ?? 0);
+  const centeredGroupHeight =
+    contentHeight > 0 ? input.stageSize + input.verticalGap + contentHeight : 0;
+  const maxFittingCenterIdentityY =
+    centeredGroupHeight > 0
+      ? Math.max(topIdentityY, input.bodyHeight - centeredGroupHeight)
+      : Number.POSITIVE_INFINITY;
   const centerIdentityY = input.layoutReady
-    ? Math.max(topIdentityY, Math.min(preferredCenterIdentityY, readableCenterIdentityY))
+    ? Math.max(
+        topIdentityY,
+        Math.min(preferredCenterIdentityY, readableCenterIdentityY, maxFittingCenterIdentityY),
+      )
     : topIdentityY;
   const topContentY = topIdentityY + input.stageSize + input.verticalGap;
   const centerContentY = centerIdentityY + input.stageSize + input.verticalGap;

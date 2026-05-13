@@ -9,6 +9,7 @@ import {
 import {
   buildSettlementParticipantLabels,
   normalizeSettlementDetailDecision,
+  settlementParticipantLabel,
   summarizeSettlementParticipants,
 } from './settlements-runtime';
 import { isCurrentSettlementVersion } from './settlement-versions';
@@ -49,6 +50,13 @@ export function buildActiveSettlementPreviews(input: {
   return Array.from(activeProposalsByCase.values()).map((proposal) => {
     const participants = input.participantsByProposalId.get(proposal.id) ?? [];
     const participantUserIds = participants.map((participant) => participant.participant_user_id);
+    const participantLabel = (participantUserId: string) =>
+      settlementParticipantLabel({
+        participantUserId,
+        currentUserId: input.currentUserId,
+        visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+        names: input.names,
+      }) ?? 'Happy';
     const participantLabels = buildSettlementParticipantLabels({
       participantUserIds,
       currentUserId: input.currentUserId,
@@ -58,7 +66,12 @@ export function buildActiveSettlementPreviews(input: {
     const approvalsPending = participants.filter(
       (participant) => participant.decision === 'pending',
     ).length;
-    const movementCount = parseSettlementMovements(proposal.movements_json).length;
+    const movements = parseSettlementMovements(proposal.movements_json);
+    const movementCount = movements.length;
+    const incomingMovement =
+      movements.find((movement) => movement.creditor_user_id === input.currentUserId) ?? null;
+    const outgoingMovement =
+      movements.find((movement) => movement.debtor_user_id === input.currentUserId) ?? null;
     const participantDecisions = participants.map((participant, index) => ({
       userId: participant.participant_user_id,
       label: participantLabels[index] ?? 'Persona',
@@ -88,6 +101,20 @@ export function buildActiveSettlementPreviews(input: {
       participantUserIds,
       participantLabels,
       participantDecisions,
+      incomingConnection: incomingMovement
+        ? {
+            amountMinor: incomingMovement.amount_minor,
+            label: participantLabel(incomingMovement.debtor_user_id),
+            userId: incomingMovement.debtor_user_id,
+          }
+        : null,
+      outgoingConnection: outgoingMovement
+        ? {
+            amountMinor: outgoingMovement.amount_minor,
+            label: participantLabel(outgoingMovement.creditor_user_id),
+            userId: outgoingMovement.creditor_user_id,
+          }
+        : null,
     };
   });
 }

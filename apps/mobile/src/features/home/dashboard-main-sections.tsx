@@ -1,10 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
-import { theme } from '@/lib/theme';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
 import { AppText } from '@/components/app-text';
@@ -21,6 +19,8 @@ export function DashboardPeopleSection({
       action={
         <Link href="/people" asChild>
           <Pressable
+            hitSlop={12}
+            pressRetentionOffset={12}
             style={({ pressed }) => [
               styles.peopleSectionAction,
               pressed ? styles.quickActionPressed : null,
@@ -70,6 +70,20 @@ export function DashboardTransactionsSection({
 
   return (
     <SectionBlock
+      action={
+        <Link href="/transactions" asChild>
+          <Pressable
+            hitSlop={12}
+            pressRetentionOffset={12}
+            style={({ pressed }) => [
+              styles.peopleSectionAction,
+              pressed ? styles.quickActionPressed : null,
+            ]}
+          >
+            <AppText style={styles.peopleSectionActionText}>Ver historial</AppText>
+          </Pressable>
+        </Link>
+      }
       contentStyle={styles.homeSectionContent}
       headerStyle={styles.homeSectionHeader}
       title="Movimientos"
@@ -101,7 +115,7 @@ export function DashboardTransactionsSection({
         {historyItems.length > 0 ? (
           <View style={styles.transactionGroup}>
             <View style={styles.transactionGroupHeader}>
-              <AppText style={styles.transactionGroupTitle}>Histórico reciente</AppText>
+              <AppText style={styles.transactionGroupTitle}>Historial reciente</AppText>
             </View>
             <View style={styles.transactionList}>
               {historyItems.map(({ highlightPending, isPending, item, unread }) => (
@@ -118,32 +132,6 @@ export function DashboardTransactionsSection({
             </View>
           </View>
         ) : null}
-        <Link href="/transactions" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.transactionFooter,
-              pressed ? styles.quickActionPressed : null,
-            ]}
-          >
-            <View style={styles.transactionFooterIcon}>
-              <Ionicons color={theme.colors.primary} name="time-outline" size={19} />
-            </View>
-            <View style={styles.transactionFooterCopy}>
-              <AppText numberOfLines={1} style={styles.transactionFooterTitle}>
-                Ver historial completo
-              </AppText>
-              <AppText numberOfLines={1} style={styles.transactionFooterDetail}>
-                Abre todos los movimientos y filtros.
-              </AppText>
-            </View>
-            <View style={styles.transactionFooterCta}>
-              <AppText numberOfLines={1} style={styles.transactionFooterCtaText}>
-                Abrir
-              </AppText>
-              <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
-            </View>
-          </Pressable>
-        </Link>
       </View>
     </SectionBlock>
   );

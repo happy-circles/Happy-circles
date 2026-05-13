@@ -49,6 +49,7 @@ import {
 } from '@/lib/transaction-people';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
   { label: 'Semana', value: 'week' },
@@ -147,6 +148,7 @@ export function CategoryDetailScreen({
   readonly category: string;
   readonly initialPeriod?: string | null;
 }) {
+  const activeTheme = useAppTheme();
   const category = normalizeTransactionCategory(rawCategory);
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -263,6 +265,10 @@ export function CategoryDetailScreen({
                         disabled={!userId}
                         style={({ pressed }) => [
                           styles.personChip,
+                          {
+                            backgroundColor: activeTheme.colors.surfaceMuted,
+                            borderColor: activeTheme.colors.hairline,
+                          },
                           pressed ? styles.personChipPressed : null,
                         ]}
                       >

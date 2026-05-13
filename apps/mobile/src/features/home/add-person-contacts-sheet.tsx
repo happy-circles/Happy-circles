@@ -1,3 +1,4 @@
+import { useMemo, useRef } from 'react';
 import { CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -17,11 +18,12 @@ import {
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
 import {
-  AddPersonInPersonControls,
-  useAddPersonInPersonMorph,
+  AddPersonInPersonQrBlock,
+  AddPersonSearchControls,
+  AddPersonTransactionContextBlock,
 } from '@/features/home/add-person-in-person-controls';
 import { type PeopleTargetResolution } from '@/lib/live-data';
-import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
 import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
 import { AppText } from '@/components/app-text';
@@ -37,15 +39,34 @@ function ContactRow({
   readonly onPress: () => void;
   readonly resolution: PeopleTargetResolution | null;
 }) {
+  const activeTheme = useAppTheme();
   const hasMultiplePhones = contact.phoneOptions.length > 1;
   const action = actionMetaForResolution(resolution, hasMultiplePhones);
   const disabled = action.disabled || busy;
+  const actionBackgroundColor =
+    action.tone === 'invite'
+      ? activeTheme.colors.warning
+      : action.tone === 'muted'
+        ? activeTheme.colors.muted
+        : activeTheme.colors.primary;
 
   return (
-    <View style={[styles.contactRow, shouldShowInApp(resolution) ? styles.contactRowInApp : null]}>
+    <View
+      style={[
+        styles.contactRow,
+        { backgroundColor: activeTheme.colors.surfaceMuted },
+        shouldShowInApp(resolution)
+          ? {
+              backgroundColor: activeTheme.colors.successSoft,
+              borderColor: activeTheme.colors.successSoft,
+              borderWidth: 1,
+            }
+          : null,
+      ]}
+    >
       <AppAvatar
-        fallbackBackgroundColor={contactAvatarColor(contact)}
-        fallbackTextColor={theme.colors.white}
+        fallbackBackgroundColor={contactAvatarColor(contact, activeTheme)}
+        fallbackTextColor={activeTheme.colors.white}
         label={contact.alias}
         size={44}
       />
@@ -62,13 +83,16 @@ function ContactRow({
         onPress={disabled ? undefined : onPress}
         style={({ pressed }) => [
           styles.contactActionButton,
-          action.tone === 'invite' ? styles.contactActionInvite : null,
-          action.tone === 'muted' ? styles.contactActionMuted : null,
+          { backgroundColor: actionBackgroundColor },
           pressed && !disabled ? styles.pressed : null,
           disabled ? styles.disabled : null,
         ]}
       >
-        <Ionicons color={theme.colors.white} name={busy ? 'sync-outline' : action.icon} size={14} />
+        <Ionicons
+          color={activeTheme.colors.white}
+          name={busy ? 'sync-outline' : action.icon}
+          size={14}
+        />
         <AppText numberOfLines={1} style={styles.contactActionText}>
           {busy ? '...' : action.label}
         </AppText>
@@ -92,6 +116,7 @@ export function AddPersonContactsSheet({
   readonly transactionContext?: AddPersonTransactionContext | null;
   readonly visible: boolean;
 }) {
+  const activeTheme = useAppTheme();
   const {
     busyKey,
     canReadContacts,
@@ -131,7 +156,18 @@ export function AddPersonContactsSheet({
     transactionContext,
     visible,
   });
-  const inPersonMorph = useAddPersonInPersonMorph(visible);
+  const stickySearchIndex = transactionContext ? 2 : 1;
+  const compactActionsRevealY = useRef(new Animated.Value(0)).current;
+  const compactActionsRevealStyle = useMemo(
+    () => ({
+      opacity: compactActionsRevealY.interpolate({
+        inputRange: [0, 72, 120],
+        outputRange: [0, 0, 1],
+        extrapolate: 'clamp',
+      }),
+    }),
+    [compactActionsRevealY],
+  );
 
   function renderContactSection(title: string, items: readonly EnrichedContact[]) {
     if (items.length === 0) {
@@ -161,42 +197,49 @@ export function AddPersonContactsSheet({
       <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheetScrim}
+          style={[styles.sheetScrim, { backgroundColor: activeTheme.colors.overlay }]}
         >
           <Pressable onPress={onClose} style={styles.sheetBackdrop} />
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { backgroundColor: activeTheme.colors.surface }]}>
             <View style={styles.sheetHeader}>
               <AppText style={styles.sheetTitle}>Agregar personas</AppText>
               <Pressable onPress={onClose} style={styles.closeButton}>
-                <Ionicons color={theme.colors.text} name="close" size={22} />
+                <Ionicons color={activeTheme.colors.text} name="close" size={22} />
               </Pressable>
             </View>
 
-            <AddPersonInPersonControls
-              busyKey={busyKey}
-              morph={inPersonMorph}
-              onOpenScanner={() => void handleOpenScanner()}
-              onShowMyQr={() => void handleShowMyQr()}
-              searchValue={searchValue}
-              setSearchValue={setSearchValue}
-              transactionContext={transactionContext}
-            />
-
-            {message ? <MessageBanner message={message} tone="neutral" /> : null}
-
             <Animated.ScrollView
-              ref={inPersonMorph.scrollViewRef}
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
-              onContentSizeChange={inPersonMorph.onContentSizeChange}
-              onLayout={inPersonMorph.onLayout}
-              onMomentumScrollEnd={inPersonMorph.onMomentumScrollEnd}
-              onScroll={inPersonMorph.onScroll}
-              onScrollBeginDrag={inPersonMorph.onScrollBeginDrag}
-              onScrollEndDrag={inPersonMorph.onScrollEndDrag}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: compactActionsRevealY } } }],
+                { useNativeDriver: true },
+              )}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
+              stickyHeaderIndices={[stickySearchIndex]}
             >
+              <AddPersonInPersonQrBlock
+                busyKey={busyKey}
+                onOpenScanner={() => void handleOpenScanner()}
+                onShowMyQr={() => void handleShowMyQr()}
+              />
+
+              {transactionContext ? (
+                <AddPersonTransactionContextBlock transactionContext={transactionContext} />
+              ) : null}
+
+              <AddPersonSearchControls
+                busyKey={busyKey}
+                onOpenScanner={() => void handleOpenScanner()}
+                onShowMyQr={() => void handleShowMyQr()}
+                searchValue={searchValue}
+                compactActionsStyle={compactActionsRevealStyle}
+                setSearchValue={setSearchValue}
+              />
+
+              {message ? <MessageBanner message={message} tone="neutral" /> : null}
+
               {canReadContacts ? (
                 <>
                   {contactsPermissionStatus === 'limited' ? (
@@ -238,7 +281,12 @@ export function AddPersonContactsSheet({
                   ) : null}
                 </>
               ) : (
-                <View style={styles.permissionBox}>
+                <View
+                  style={[
+                    styles.permissionBox,
+                    { backgroundColor: activeTheme.colors.surfaceMuted },
+                  ]}
+                >
                   <AppText style={styles.emptyTitle}>Conecta tu agenda</AppText>
                   <AppText style={styles.emptyText}>
                     Asi vemos quien ya esta en Happy Circles y quien necesita invitacion.
@@ -260,9 +308,9 @@ export function AddPersonContactsSheet({
           </View>
 
           {scannerOpen ? (
-            <View style={styles.floatingOverlay}>
+            <View style={[styles.floatingOverlay, { backgroundColor: activeTheme.colors.overlay }]}>
               <Pressable onPress={() => setScannerOpen(false)} style={styles.sheetBackdrop} />
-              <View style={styles.scannerCard}>
+              <View style={[styles.scannerCard, { backgroundColor: activeTheme.colors.surface }]}>
                 <View style={styles.modalHeader}>
                   <View style={styles.modalHeaderCopy}>
                     <AppText style={styles.optionTitle}>Escanear QR</AppText>
@@ -271,7 +319,7 @@ export function AddPersonContactsSheet({
                     </AppText>
                   </View>
                   <Pressable onPress={() => setScannerOpen(false)} style={styles.closeButton}>
-                    <Ionicons color={theme.colors.text} name="close" size={22} />
+                    <Ionicons color={activeTheme.colors.text} name="close" size={22} />
                   </Pressable>
                 </View>
                 {scannerMessage ? <MessageBanner message={scannerMessage} tone="neutral" /> : null}
@@ -287,23 +335,23 @@ export function AddPersonContactsSheet({
           ) : null}
 
           {myQrVisible ? (
-            <View style={styles.floatingOverlay}>
+            <View style={[styles.floatingOverlay, { backgroundColor: activeTheme.colors.overlay }]}>
               <Pressable onPress={() => setMyQrVisible(false)} style={styles.sheetBackdrop} />
-              <View style={styles.myQrCard}>
+              <View style={[styles.myQrCard, { backgroundColor: activeTheme.colors.surface }]}>
                 <View style={styles.modalHeader}>
                   <View style={styles.modalHeaderCopy}>
                     <AppText style={styles.optionTitle}>Mi QR</AppText>
                     <AppText style={styles.emptyText}>Para conectar en persona.</AppText>
                   </View>
                   <Pressable onPress={() => setMyQrVisible(false)} style={styles.closeButton}>
-                    <Ionicons color={theme.colors.text} name="close" size={22} />
+                    <Ionicons color={activeTheme.colors.text} name="close" size={22} />
                   </Pressable>
                 </View>
 
                 <View style={styles.qrProfile}>
                   <AppAvatar
-                    fallbackBackgroundColor={theme.colors.primary}
-                    fallbackTextColor={theme.colors.white}
+                    fallbackBackgroundColor={activeTheme.colors.primary}
+                    fallbackTextColor={activeTheme.colors.onPrimary}
                     imageUrl={currentUserAvatarUrl ?? null}
                     label={currentUserLabel}
                     size={52}
@@ -320,18 +368,26 @@ export function AddPersonContactsSheet({
 
                 {myQrMessage ? <MessageBanner message={myQrMessage} tone="neutral" /> : null}
 
-                <View style={styles.qrCodeShell}>
+                <View
+                  style={[
+                    styles.qrCodeShell,
+                    {
+                      backgroundColor: activeTheme.colors.white,
+                      borderColor: activeTheme.colors.border,
+                    },
+                  ]}
+                >
                   {myQrLink ? (
                     <QRCode
-                      backgroundColor={theme.colors.white}
-                      color={theme.colors.text}
+                      backgroundColor={activeTheme.colors.white}
+                      color={activeTheme.colors.black}
                       size={210}
                       value={myQrLink}
                     />
                   ) : (
                     <View style={styles.qrLoading}>
-                      <Ionicons color={theme.colors.textMuted} name="sync-outline" size={28} />
-                      <AppText style={styles.helperText}>
+                      <Ionicons color={activeTheme.colors.muted} name="sync-outline" size={28} />
+                      <AppText style={[styles.helperText, { color: activeTheme.colors.muted }]}>
                         {busyKey === 'my-qr' ? 'Creando QR temporal...' : 'Toca renovar QR.'}
                       </AppText>
                     </View>
@@ -366,12 +422,12 @@ export function AddPersonContactsSheet({
         transparent
         visible={pendingContactSelection !== null}
       >
-        <View style={styles.optionScrim}>
+        <View style={[styles.optionScrim, { backgroundColor: activeTheme.colors.overlay }]}>
           <Pressable
             onPress={() => setPendingContactSelection(null)}
             style={styles.sheetBackdrop}
           />
-          <View style={styles.optionCard}>
+          <View style={[styles.optionCard, { backgroundColor: activeTheme.colors.surface }]}>
             <AppText style={styles.optionTitle}>Elige el numero</AppText>
             <AppText style={styles.emptyText}>
               {pendingContactSelection
@@ -385,7 +441,10 @@ export function AddPersonContactsSheet({
                 const disabled = action.disabled || busyKey === phoneOption.phoneE164;
 
                 return (
-                  <View key={phoneOption.id} style={styles.optionRow}>
+                  <View
+                    key={phoneOption.id}
+                    style={[styles.optionRow, { backgroundColor: activeTheme.colors.surfaceMuted }]}
+                  >
                     <View style={styles.contactCopy}>
                       <AppText style={styles.contactName}>{contactMeta(phoneOption)}</AppText>
                       <AppText style={styles.contactPhone}>
@@ -415,13 +474,19 @@ export function AddPersonContactsSheet({
                       }
                       style={({ pressed }) => [
                         styles.contactActionButton,
-                        action.tone === 'invite' ? styles.contactActionInvite : null,
-                        action.tone === 'muted' ? styles.contactActionMuted : null,
+                        {
+                          backgroundColor:
+                            action.tone === 'invite'
+                              ? activeTheme.colors.warning
+                              : action.tone === 'muted'
+                                ? activeTheme.colors.muted
+                                : activeTheme.colors.primary,
+                        },
                         pressed && !disabled ? styles.pressed : null,
                         disabled ? styles.disabled : null,
                       ]}
                     >
-                      <Ionicons color={theme.colors.white} name={action.icon} size={14} />
+                      <Ionicons color={activeTheme.colors.white} name={action.icon} size={14} />
                       <AppText style={styles.contactActionText}>{action.label}</AppText>
                     </Pressable>
                   </View>

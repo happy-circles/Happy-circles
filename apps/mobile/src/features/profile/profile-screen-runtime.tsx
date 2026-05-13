@@ -18,11 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppText } from '@/components/app-text';
-import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
+import type { AppTextInputRef } from '@/components/app-text-input';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
+import { PasswordTextInput } from '@/components/password-text-input';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { prepareAvatarImageForUpload } from '@/lib/avatar-image';
@@ -61,23 +62,20 @@ import {
   resolveProfileFocusRequest,
 } from './profile-helpers';
 import { ProfileStatusRow } from './profile-status-row';
+import { ThemePreferenceSection } from './theme-preference-section';
 
 const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
 const TERMS_URL = 'https://app.happy-circles.com/terms';
 const SUPPORT_URL = 'https://app.happy-circles.com/support';
-
 function triggerSelectionHaptic() {
   triggerAppSelectionHaptic();
 }
-
 function triggerImpactHaptic() {
   triggerAppActionHaptic();
 }
-
 function triggerSuccessHaptic() {
   triggerAppSuccessHaptic();
 }
-
 function triggerWarningHaptic() {
   triggerAppWarningHaptic();
 }
@@ -872,22 +870,20 @@ export function ProfileScreen() {
           />
           {!session.linkedMethods.hasEmailPassword ? (
             <View style={styles.actionCluster}>
-              <AppTextInput
+              <PasswordTextInput
                 autoCapitalize="none"
                 onChangeText={setAttachPassword}
                 placeholder="Nueva clave"
                 placeholderTextColor={theme.colors.muted}
                 ref={attachPasswordInputRef}
-                secureTextEntry
                 style={styles.input}
                 value={attachPassword}
               />
-              <AppTextInput
+              <PasswordTextInput
                 autoCapitalize="none"
                 onChangeText={setAttachPasswordConfirm}
                 placeholder="Confirmar clave"
                 placeholderTextColor={theme.colors.muted}
-                secureTextEntry
                 style={styles.input}
                 value={attachPasswordConfirm}
               />
@@ -1074,13 +1070,12 @@ export function ProfileScreen() {
               ) : null}
               {showTrustPasswordFallback ? (
                 <>
-                  <AppTextInput
+                  <PasswordTextInput
                     autoCapitalize="none"
                     onChangeText={setTrustPassword}
                     placeholder="Tu clave actual"
                     placeholderTextColor={theme.colors.muted}
                     ref={trustPasswordInputRef}
-                    secureTextEntry
                     style={styles.input}
                     value={trustPassword}
                   />
@@ -1150,6 +1145,8 @@ export function ProfileScreen() {
           ))}
         </View>
       </View>
+
+      <ThemePreferenceSection />
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>

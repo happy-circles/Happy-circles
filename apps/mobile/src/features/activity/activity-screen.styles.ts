@@ -186,11 +186,11 @@ export const activityScreenStyles = StyleSheet.create({
   },
   notificationInviteIconButtonPrimary: {
     backgroundColor: theme.colors.primarySoft,
-    borderColor: 'rgba(26, 39, 68, 0.14)',
+    borderColor: theme.colors.primaryGhost,
   },
   notificationInviteIconButtonDanger: {
     backgroundColor: theme.colors.dangerSoft,
-    borderColor: 'rgba(232, 96, 74, 0.18)',
+    borderColor: theme.colors.dangerSoft,
   },
   notificationInviteDisabled: {
     opacity: 0.5,

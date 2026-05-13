@@ -18,7 +18,8 @@ import { AppText } from '@/components/app-text';
 import { HeaderBrandTitle } from '@/components/header-brand-title';
 import { HappyCirclesOuterSvg, resolveHappyCirclesPalette } from '@/components/happy-circles-glyph';
 import { pushRoute } from '@/lib/navigation';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const HOME_CHROME_MORPH_START_Y = 2;
 const HOME_CHROME_COMPACT_STATE_Y = 88;
@@ -50,59 +51,69 @@ export const HOME_CHROME_EXPANDED_HEIGHT = 86;
 
 type HomeChromeProgress = Animated.Value;
 
-const liquidGlassPlatformStyle = Platform.select({
-  web: {
-    WebkitBackdropFilter: 'blur(38px) saturate(220%)',
-    backdropFilter: 'blur(38px) saturate(220%)',
-    boxShadow: '0 22px 54px rgba(15, 23, 40, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.86)',
-  },
-  ios: {
-    shadowColor: '#0f1728',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.16,
-    shadowRadius: 34,
-  },
-  default: {
-    elevation: 9,
-  },
-}) as object | undefined;
-
 const shouldMountNativeGlass = Platform.OS === 'ios';
 const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
-const liquidGlassBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.12)'
-  : 'rgba(255, 255, 255, 0.94)';
-const fabGlassBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.1)'
-  : 'rgba(255, 255, 255, 0.9)';
-const liquidGlassTopGlowBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.24)'
-  : 'rgba(255, 255, 255, 0.82)';
-const liquidGlassTopGlowOpacity = hasNativeLiquidGlass ? 0.42 : 0.96;
+
+function resolveHomeLiquidGlassPlatformStyle(activeTheme: AppTheme) {
+  return Platform.select({
+    web: {
+      WebkitBackdropFilter: 'blur(38px) saturate(220%)',
+      backdropFilter: 'blur(38px) saturate(220%)',
+      boxShadow: activeTheme.glass.homeWebShadow,
+    },
+    ios: {
+      shadowColor: activeTheme.glass.homeShadowColor,
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: activeTheme.glass.homeShadowOpacity,
+      shadowRadius: activeTheme.glass.homeShadowRadius,
+    },
+    default: {
+      elevation: 9,
+    },
+  }) as object | undefined;
+}
 
 function LiquidGlassSurface({
   children,
   showGlow = true,
   style,
-  tintColor = 'rgba(255, 255, 255, 0.04)',
+  tintColor,
 }: {
   readonly children?: ReactNode;
   readonly showGlow?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly tintColor?: string;
 }) {
+  const activeTheme = useAppTheme();
+  const resolvedTintColor = tintColor ?? activeTheme.glass.homeTint;
+
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, style]}>
       {shouldMountNativeGlass ? (
         <GlassView
-          colorScheme="light"
+          colorScheme={activeTheme.scheme}
           glassEffectStyle="regular"
           pointerEvents="none"
           style={styles.nativeLiquidGlass}
-          tintColor={tintColor}
+          tintColor={resolvedTintColor}
         />
       ) : null}
-      {showGlow ? <View pointerEvents="none" style={styles.liquidGlassTopGlow} /> : null}
+      {showGlow ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.liquidGlassTopGlow,
+            {
+              backgroundColor: hasNativeLiquidGlass
+                ? activeTheme.glass.homeNativeTopGlow
+                : activeTheme.glass.homeTopGlow,
+              opacity: hasNativeLiquidGlass
+                ? activeTheme.glass.homeNativeTopGlowOpacity
+                : activeTheme.glass.homeTopGlowOpacity,
+            },
+          ]}
+        />
+      ) : null}
       {children}
     </View>
   );
@@ -254,6 +265,7 @@ function HomeCompactAvatarFrame({ progress }: { readonly progress: HomeChromePro
 }
 
 function HomeActivityButton({ count }: { readonly count: number }) {
+  const activeTheme = useAppTheme();
   const hasAttention = count > 0;
 
   return (
@@ -265,18 +277,36 @@ function HomeActivityButton({ count }: { readonly count: number }) {
         accessibilityRole="button"
         style={({ pressed }) => [
           styles.activityButton,
-          hasAttention ? styles.activityButtonActive : null,
+          {
+            backgroundColor: hasAttention
+              ? activeTheme.colors.primarySoft
+              : activeTheme.colors.surface,
+            borderColor: hasAttention
+              ? activeTheme.colors.primaryGhost
+              : activeTheme.colors.hairline,
+          },
+          activeTheme.shadow.card,
           pressed ? styles.pressed : null,
         ]}
       >
         <Ionicons
-          color={hasAttention ? theme.colors.primary : theme.colors.text}
+          color={hasAttention ? activeTheme.colors.primary : activeTheme.colors.text}
           name={hasAttention ? 'notifications' : 'notifications-outline'}
           size={24}
         />
         {hasAttention ? (
-          <View style={styles.activityBadge}>
-            <AppText style={styles.activityBadgeText}>{compactCountLabel(count)}</AppText>
+          <View
+            style={[
+              styles.activityBadge,
+              {
+                backgroundColor: activeTheme.colors.danger,
+                borderColor: activeTheme.colors.surface,
+              },
+            ]}
+          >
+            <AppText style={[styles.activityBadgeText, { color: activeTheme.colors.white }]}>
+              {compactCountLabel(count)}
+            </AppText>
           </View>
         ) : null}
       </Pressable>
@@ -299,7 +329,9 @@ export function HomeCollapsibleChrome({
   readonly progress: HomeChromeProgress;
   readonly topInset: number;
 }) {
+  const activeTheme = useAppTheme();
   const { width } = useWindowDimensions();
+  const liquidGlassPlatformStyle = resolveHomeLiquidGlassPlatformStyle(activeTheme);
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, width - theme.spacing.lg * 2),
@@ -394,6 +426,10 @@ export function HomeCollapsibleChrome({
           styles.liquidGlass,
           liquidGlassPlatformStyle,
           {
+            backgroundColor: hasNativeLiquidGlass
+              ? activeTheme.glass.homeNativeBackground
+              : activeTheme.glass.homeBackground,
+            borderColor: activeTheme.glass.fallbackBorder,
             borderRadius: glassRadius,
             height: glassHeight,
             left: glassLeft,
@@ -486,8 +522,10 @@ export function HomeRegisterFab({
   readonly isCompact: boolean;
   readonly progress: HomeChromeProgress;
 }) {
+  const activeTheme = useAppTheme();
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
+  const liquidGlassPlatformStyle = resolveHomeLiquidGlassPlatformStyle(activeTheme);
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, windowWidth - theme.spacing.lg * 2),
@@ -527,10 +565,20 @@ export function HomeRegisterFab({
         accessibilityLabel="Registrar movimiento"
         accessibilityRole="button"
         onPress={() => pushRoute(router, '/register')}
-        style={({ pressed }) => [styles.fab, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [
+          styles.fab,
+          liquidGlassPlatformStyle,
+          {
+            backgroundColor: hasNativeLiquidGlass
+              ? activeTheme.glass.homeNativeFabBackground
+              : activeTheme.glass.homeFabBackground,
+            borderColor: activeTheme.glass.fallbackBorder,
+          },
+          pressed ? styles.pressed : null,
+        ]}
       >
-        <LiquidGlassSurface showGlow={false} tintColor="rgba(255, 255, 255, 0.035)" />
-        <Ionicons color={theme.colors.text} name="add" size={28} />
+        <LiquidGlassSurface showGlow={false} />
+        <Ionicons color={activeTheme.colors.text} name="add" size={28} />
         <Animated.View
           pointerEvents="none"
           style={[
@@ -542,7 +590,7 @@ export function HomeRegisterFab({
             },
           ]}
         >
-          <AppText numberOfLines={1} style={styles.fabLabel}>
+          <AppText numberOfLines={1} style={[styles.fabLabel, { color: activeTheme.colors.text }]}>
             Registro
           </AppText>
         </Animated.View>
@@ -561,8 +609,6 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   liquidGlass: {
-    backgroundColor: liquidGlassBackgroundColor,
-    borderColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1.25,
     overflow: 'hidden',
     position: 'absolute',
@@ -573,11 +619,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   liquidGlassTopGlow: {
-    backgroundColor: liquidGlassTopGlowBackgroundColor,
     borderRadius: theme.radius.pill,
     height: 8,
     left: 14,
-    opacity: liquidGlassTopGlowOpacity,
     position: 'absolute',
     right: 14,
     top: 5,
@@ -657,23 +701,14 @@ const styles = StyleSheet.create({
   },
   activityButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.hairline,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     height: 48,
     justifyContent: 'center',
     width: 48,
-    ...theme.shadow.card,
-  },
-  activityButtonActive: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: 'rgba(20, 30, 51, 0.12)',
   },
   activityBadge: {
     alignItems: 'center',
-    backgroundColor: theme.colors.danger,
-    borderColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
     borderWidth: 2,
     height: 19,
@@ -685,7 +720,6 @@ const styles = StyleSheet.create({
     top: -4,
   },
   activityBadgeText: {
-    color: theme.colors.white,
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 12,
@@ -704,8 +738,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     alignItems: 'center',
-    backgroundColor: fabGlassBackgroundColor,
-    borderColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1.25,
     borderRadius: HOME_CHROME_FAB_RADIUS,
     flexDirection: 'row',
@@ -718,13 +750,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
-    ...liquidGlassPlatformStyle,
   },
   fabLabelWrap: {
     overflow: 'hidden',
   },
   fabLabel: {
-    color: theme.colors.text,
     fontSize: theme.typography.footnote,
     fontWeight: '800',
     lineHeight: 17,

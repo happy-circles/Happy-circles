@@ -2,12 +2,11 @@ import { Fragment } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
-import { theme } from '@/lib/theme';
+import { getRuntimeTheme, theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
-
-const APPROVED_COLOR = theme.colors.success;
-const PENDING_COLOR = '#2563eb';
-const REJECTED_COLOR = theme.colors.warning;
+import { useAppTheme } from '@/providers/theme-provider';
+export const HAPPY_CIRCLE_STANDARD_NODE_COUNT = 5;
+const HAPPY_CIRCLE_ANONYMOUS_LABEL = 'Happy';
 
 export type HappyCircleDecision = 'approved' | 'pending' | 'rejected';
 
@@ -18,9 +17,85 @@ export interface HappyCircleRingParticipant {
 }
 
 export function happyCircleDecisionColor(decision: HappyCircleDecision): string {
-  if (decision === 'approved') return APPROVED_COLOR;
-  if (decision === 'rejected') return REJECTED_COLOR;
-  return PENDING_COLOR;
+  const activeTheme = getRuntimeTheme();
+
+  if (decision === 'approved') return activeTheme.colors.success;
+  if (decision === 'rejected') return activeTheme.colors.warning;
+  return activeTheme.colors.cycle;
+}
+
+function anonymousHappyParticipant(
+  key: string,
+  decision: HappyCircleDecision,
+): HappyCircleRingParticipant {
+  return {
+    decision,
+    label: HAPPY_CIRCLE_ANONYMOUS_LABEL,
+    userId: key,
+  };
+}
+
+export function standardHappyCircleParticipants(
+  decisions: readonly HappyCircleRingParticipant[],
+  currentUserId: string | null | undefined,
+  fallbackDecision: HappyCircleDecision = 'pending',
+): readonly HappyCircleRingParticipant[] {
+  const currentParticipant =
+    decisions.find((participant) => participant.userId === currentUserId) ??
+    anonymousHappyParticipant('happy-circle:self', fallbackDecision);
+  const hiddenParticipants = decisions.filter(
+    (participant) => participant.userId !== currentParticipant.userId,
+  );
+  const nodes: HappyCircleRingParticipant[] = [
+    {
+      ...currentParticipant,
+      label: 'Tu',
+    },
+  ];
+
+  for (const participant of hiddenParticipants) {
+    if (nodes.length >= HAPPY_CIRCLE_STANDARD_NODE_COUNT) {
+      break;
+    }
+
+    nodes.push({
+      ...participant,
+      label: HAPPY_CIRCLE_ANONYMOUS_LABEL,
+    });
+  }
+
+  while (nodes.length < HAPPY_CIRCLE_STANDARD_NODE_COUNT) {
+    nodes.push(anonymousHappyParticipant(`happy-circle:hidden:${nodes.length}`, fallbackDecision));
+  }
+
+  return nodes;
+}
+
+function fallbackDecisionForRing(
+  decisions: readonly Pick<HappyCircleRingParticipant, 'decision'>[],
+): HappyCircleDecision {
+  if (decisions.some((participant) => participant.decision === 'rejected')) {
+    return 'rejected';
+  }
+
+  if (decisions.some((participant) => participant.decision === 'pending')) {
+    return 'pending';
+  }
+
+  return 'approved';
+}
+
+function normalizedRingParticipants(
+  decisions: readonly HappyCircleRingParticipant[],
+): readonly HappyCircleRingParticipant[] {
+  const fallbackDecision = fallbackDecisionForRing(decisions);
+  const nodes = decisions.slice(0, HAPPY_CIRCLE_STANDARD_NODE_COUNT);
+
+  while (nodes.length < HAPPY_CIRCLE_STANDARD_NODE_COUNT) {
+    nodes.push(anonymousHappyParticipant(`happy-circle:auto:${nodes.length}`, fallbackDecision));
+  }
+
+  return nodes;
 }
 
 export function HappyCircleFaceIcon({
@@ -104,15 +179,18 @@ function ParticipantNode({
   decision,
   index,
   label,
+  showLabel,
   totalCount,
   ringSize,
 }: {
   readonly decision: HappyCircleDecision;
   readonly index: number;
   readonly label: string;
+  readonly showLabel: boolean;
   readonly totalCount: number;
   readonly ringSize: number;
 }) {
+  const activeTheme = useAppTheme();
   const nodeSize = 40;
   const radius = ringSize / 2;
   const arcRadius = radius - 16;
@@ -121,9 +199,10 @@ function ParticipantNode({
   const centerX = radius + arcRadius * Math.cos(angle) - nodeSize / 2;
   const centerY = radius + arcRadius * Math.sin(angle) - nodeSize / 2;
 
-  const labelWidth = 80;
+  const labelWidth = 72;
   const labelX = centerX + nodeSize / 2;
-  const labelY = centerY + nodeSize + 3;
+  const labelY = centerY + nodeSize + (Math.sin(angle) < -0.75 ? 4 : 7);
+  const labelShiftX = Math.abs(Math.cos(angle)) > 0.25 ? Math.sign(Math.cos(angle)) * 10 : 0;
 
   const displayLabel = label.split(/\s+/)[0] ?? label;
 
@@ -140,22 +219,37 @@ function ParticipantNode({
           },
         ]}
       >
-        <HappyCircleFaceIcon decision={decision} size={nodeSize} />
+        <HappyCircleFaceIcon
+          backgroundColor={activeTheme.colors.surface}
+          decision={decision}
+          size={nodeSize}
+        />
       </View>
-      <View
-        style={{
-          position: 'absolute',
-          left: labelX - labelWidth / 2,
-          top: labelY,
-          width: labelWidth,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <AppText numberOfLines={1} style={styles.nodeLabel}>
-          {displayLabel}
-        </AppText>
-      </View>
+      {showLabel ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: labelX - labelWidth / 2 + labelShiftX,
+            top: labelY,
+            width: labelWidth,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <AppText
+            numberOfLines={1}
+            style={[
+              styles.nodeLabel,
+              {
+                backgroundColor: activeTheme.colors.floatingSurface,
+                color: activeTheme.colors.text,
+              },
+            ]}
+          >
+            {displayLabel}
+          </AppText>
+        </View>
+      ) : null}
     </Fragment>
   );
 }
@@ -163,9 +257,11 @@ function ParticipantNode({
 function CircleArcs({
   decisions,
   ringSize,
+  splitContinuationArc,
 }: {
   readonly decisions: readonly { readonly decision: HappyCircleDecision }[];
   readonly ringSize: number;
+  readonly splitContinuationArc: boolean;
 }) {
   const participantCount = decisions.length;
   if (participantCount < 2) return null;
@@ -173,81 +269,140 @@ function CircleArcs({
   const radius = ringSize / 2;
   const arcRadius = radius - 16;
   const strokeWidth = 8;
-  const gap = 0.5;
 
   return (
     <Svg height={ringSize} style={{ position: 'absolute' }} width={ringSize}>
-      {decisions.map((participant, index) => {
+      {decisions.flatMap((participant, index) => {
         const angle1 = -Math.PI / 2 + (2 * Math.PI * index) / participantCount;
         const angle2 = -Math.PI / 2 + (2 * Math.PI * (index + 1)) / participantCount;
+        const shouldSplitArc = splitContinuationArc && participantCount === 5 && index === 2;
+        const arcGap = shouldSplitArc ? 0.16 : 0.28;
 
-        const startAngle = angle1 + gap;
-        const endAngle = angle2 - gap;
-
-        if (startAngle >= endAngle) return null;
-
-        const x1 = radius + arcRadius * Math.cos(startAngle);
-        const y1 = radius + arcRadius * Math.sin(startAngle);
-        const x2 = radius + arcRadius * Math.cos(endAngle);
-        const y2 = radius + arcRadius * Math.sin(endAngle);
+        const startAngle = angle1 + arcGap;
+        const endAngle = angle2 - arcGap;
 
         const color1 = happyCircleDecisionColor(participant.decision);
         const color2 = happyCircleDecisionColor(decisions[(index + 1) % participantCount].decision);
+        const segmentCount = shouldSplitArc ? 3 : 1;
+        const totalAngle = endAngle - startAngle;
 
-        const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
-        const path = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArc} 1 ${x2} ${y2}`;
-        const gradientId = `grad-${index}`;
+        if (startAngle >= endAngle) return [];
 
-        return (
-          <Fragment key={index}>
-            <Defs>
-              <LinearGradient
-                gradientUnits="userSpaceOnUse"
-                id={gradientId}
-                x1={x1}
-                x2={x2}
-                y1={y1}
-                y2={y2}
-              >
-                <Stop offset="0%" stopColor={color1} />
-                <Stop offset="100%" stopColor={color2} />
-              </LinearGradient>
-            </Defs>
-            <Path
-              d={path}
-              fill="none"
-              stroke={`url(#${gradientId})`}
-              strokeLinecap="round"
-              strokeWidth={strokeWidth}
-            />
-          </Fragment>
-        );
+        return Array.from({ length: segmentCount }, (_, segmentIndex) => {
+          const segmentGap = shouldSplitArc ? 0.055 : 0;
+          const segmentStart =
+            startAngle + (totalAngle * segmentIndex) / segmentCount + segmentGap;
+          const segmentEnd =
+            startAngle + (totalAngle * (segmentIndex + 1)) / segmentCount - segmentGap;
+
+          if (segmentStart >= segmentEnd) return null;
+
+          const x1 = radius + arcRadius * Math.cos(segmentStart);
+          const y1 = radius + arcRadius * Math.sin(segmentStart);
+          const x2 = radius + arcRadius * Math.cos(segmentEnd);
+          const y2 = radius + arcRadius * Math.sin(segmentEnd);
+
+          const largeArc = segmentEnd - segmentStart > Math.PI ? 1 : 0;
+          const path = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArc} 1 ${x2} ${y2}`;
+          const gradientId = `grad-${index}-${segmentIndex}`;
+
+          return (
+            <Fragment key={`${index}:${segmentIndex}`}>
+              <Defs>
+                <LinearGradient
+                  gradientUnits="userSpaceOnUse"
+                  id={gradientId}
+                  x1={x1}
+                  x2={x2}
+                  y1={y1}
+                  y2={y2}
+                >
+                  <Stop offset="0%" stopColor={color1} />
+                  <Stop offset="100%" stopColor={color2} />
+                </LinearGradient>
+              </Defs>
+              <Path
+                d={path}
+                fill="none"
+                stroke={`url(#${gradientId})`}
+                strokeLinecap="round"
+                strokeWidth={strokeWidth}
+              />
+            </Fragment>
+          );
+        });
       })}
     </Svg>
   );
 }
 
 export function HappyCircleRing({
+  centerColor = theme.colors.primary,
+  centerLabel,
+  centerSubLabel,
   decisions,
   ringSize,
+  showContinuation = true,
+  showLabels = true,
   style,
 }: {
+  readonly centerColor?: string;
+  readonly centerLabel?: string | null;
+  readonly centerSubLabel?: string | null;
   readonly decisions: readonly HappyCircleRingParticipant[];
   readonly ringSize: number;
+  readonly showContinuation?: boolean;
+  readonly showLabels?: boolean;
   readonly style?: StyleProp<ViewStyle>;
 }) {
+  const activeTheme = useAppTheme();
+  const ringDecisions = normalizedRingParticipants(decisions);
+
   return (
     <View style={[styles.ringContainer, { width: ringSize, height: ringSize }, style]}>
-      <CircleArcs decisions={decisions} ringSize={ringSize} />
+      <CircleArcs
+        decisions={ringDecisions}
+        ringSize={ringSize}
+        splitContinuationArc={showContinuation}
+      />
+      {centerLabel ? (
+        <View
+          style={[
+            styles.centerBadge,
+            {
+              borderColor: `${centerColor}24`,
+              maxWidth: Math.max(92, ringSize * 0.52),
+            },
+          ]}
+        >
+          <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            numberOfLines={1}
+            style={[styles.centerLabel, { color: centerColor }]}
+          >
+            {centerLabel}
+          </AppText>
+          {centerSubLabel ? (
+            <AppText
+              numberOfLines={1}
+              style={[styles.centerSubLabel, { color: activeTheme.colors.textMuted }]}
+            >
+              {centerSubLabel}
+            </AppText>
+          ) : null}
+        </View>
+      ) : null}
 
-      {decisions.map((participant, index) => (
+      {ringDecisions.map((participant, index) => (
         <ParticipantNode
           decision={participant.decision}
           index={index}
-          key={participant.userId}
+          key={`${participant.userId}:${index}`}
           label={participant.label}
           ringSize={ringSize}
-          totalCount={decisions.length}
+          showLabel={showLabels}
+          totalCount={ringDecisions.length}
         />
       ))}
     </View>
@@ -263,13 +418,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'absolute',
+    zIndex: 2,
   },
   nodeLabel: {
+    backgroundColor: theme.colors.floatingSurface,
+    borderRadius: 8,
     color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 13,
-    maxWidth: 56,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 14,
+    maxWidth: 66,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     textAlign: 'center',
+  },
+  centerBadge: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: theme.radius.medium,
+    borderWidth: 0,
+    gap: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+    position: 'absolute',
+    top: '50%',
+    transform: [{ translateY: -22 }],
+    zIndex: 1,
+  },
+  centerLabel: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  centerSubLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
 });

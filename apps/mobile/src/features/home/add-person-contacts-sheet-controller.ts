@@ -36,6 +36,55 @@ import {
   readContactsPageFromDevice,
 } from '@/features/invites/people-outreach-utils';
 
+type WarmContactScanCache = {
+  readonly userId: string | null;
+  readonly contactsPermissionStatus: ContactsPermissionStatus;
+  readonly contacts: readonly ContactCandidate[];
+  readonly targetCache: Record<string, PeopleTargetResolution>;
+};
+
+let warmContactScanCache: WarmContactScanCache | null = null;
+
+function readWarmContactScanCache(userId: string | null | undefined): WarmContactScanCache | null {
+  if (!warmContactScanCache || warmContactScanCache.userId !== (userId ?? null)) {
+    return null;
+  }
+
+  return {
+    ...warmContactScanCache,
+    contacts: [...warmContactScanCache.contacts],
+    targetCache: { ...warmContactScanCache.targetCache },
+  };
+}
+
+function writeWarmContactScanCache(cache: WarmContactScanCache) {
+  warmContactScanCache = {
+    ...cache,
+    contacts: [...cache.contacts],
+    targetCache: { ...cache.targetCache },
+  };
+}
+
+function clearWarmContactScanCache(userId: string | null | undefined) {
+  if (warmContactScanCache?.userId === (userId ?? null)) {
+    warmContactScanCache = null;
+  }
+}
+
+function updateWarmContactScanTargetCache(
+  userId: string | null | undefined,
+  targetCache: Record<string, PeopleTargetResolution>,
+) {
+  if (warmContactScanCache?.userId !== (userId ?? null)) {
+    return;
+  }
+
+  warmContactScanCache = {
+    ...warmContactScanCache,
+    targetCache: { ...targetCache },
+  };
+}
+
 export function useAddPersonContactsSheetController({
   initialSearchValue,
   onClose,
@@ -64,6 +113,7 @@ export function useAddPersonContactsSheetController({
   const [contactsScanComplete, setContactsScanComplete] = useState(false);
   const [contactsLoadedCount, setContactsLoadedCount] = useState(0);
   const scanRunIdRef = useRef(0);
+  const contactsRef = useRef<readonly ContactCandidate[]>([]);
   const targetCacheRef = useRef<Record<string, PeopleTargetResolution>>({});
   const pendingResolutionQueueRef = useRef<string[]>([]);
   const pendingResolutionSetRef = useRef(new Set<string>());
@@ -108,19 +158,23 @@ export function useAddPersonContactsSheetController({
     setMessage,
   });
 
-  const mergeTargetResolutions = useCallback((resolutions: readonly PeopleTargetResolution[]) => {
-    if (resolutions.length === 0) {
-      return;
-    }
+  const mergeTargetResolutions = useCallback(
+    (resolutions: readonly PeopleTargetResolution[]) => {
+      if (resolutions.length === 0) {
+        return;
+      }
 
-    const next = { ...targetCacheRef.current };
-    for (const resolution of resolutions) {
-      next[resolution.phoneE164] = resolution;
-    }
+      const next = { ...targetCacheRef.current };
+      for (const resolution of resolutions) {
+        next[resolution.phoneE164] = resolution;
+      }
 
-    targetCacheRef.current = next;
-    setTargetCache(next);
-  }, []);
+      targetCacheRef.current = next;
+      updateWarmContactScanTargetCache(session.userId, next);
+      setTargetCache(next);
+    },
+    [session.userId],
+  );
 
   const persistTargetResolutions = useCallback(
     (resolutions: readonly PeopleTargetResolution[]) => {
@@ -289,33 +343,52 @@ export function useAddPersonContactsSheetController({
     }
   }
 
-  function resetContactScan(runId: number) {
+  function resetContactScan(runId: number, warmCache: WarmContactScanCache | null = null) {
     scanRunIdRef.current = runId;
     pendingResolutionQueueRef.current = [];
     pendingResolutionSetRef.current.clear();
     inFlightResolutionSetRef.current.clear();
     visibleResolutionPhonesRef.current.clear();
-    targetCacheRef.current = {};
-    setContacts([]);
-    setTargetCache({});
-    setContactsLoadedCount(0);
+    const nextContacts = warmCache?.contacts ?? [];
+    const nextTargetCache = warmCache?.targetCache ?? {};
+
+    contactsRef.current = nextContacts;
+    targetCacheRef.current = nextTargetCache;
+    setContacts(nextContacts);
+    setTargetCache(nextTargetCache);
+    setContactsLoadedCount(nextContacts.length);
     setContactsLoading(false);
-    setContactsScanComplete(false);
+    setContactsScanComplete(Boolean(warmCache));
+
+    if (warmCache) {
+      setContactsPermissionStatus(warmCache.contactsPermissionStatus);
+    }
   }
 
   const loadContacts = useCallback(async () => {
     const runId = scanRunIdRef.current + 1;
-    resetContactScan(runId);
+    const warmCache = readWarmContactScanCache(session.userId);
+    const hasWarmContacts = Boolean(
+      warmCache &&
+      canReadContactsPermissionStatus(warmCache.contactsPermissionStatus) &&
+      warmCache.contacts.length > 0,
+    );
+
+    resetContactScan(runId, warmCache);
 
     if (Platform.OS === 'web') {
       setContactsPermissionStatus('unavailable');
+      contactsRef.current = [];
       setContacts([]);
       setContactsScanComplete(true);
       return;
     }
 
-    setBusyKey('load-contacts');
-    setContactsLoading(true);
+    if (!hasWarmContacts) {
+      setBusyKey('load-contacts');
+      setContactsLoading(true);
+    }
+
     try {
       const nextStatus = await getContactsPermissionStatus();
       if (scanRunIdRef.current !== runId) {
@@ -325,7 +398,12 @@ export function useAddPersonContactsSheetController({
       setContactsPermissionStatus(nextStatus);
 
       if (!canReadContactsPermissionStatus(nextStatus)) {
+        contactsRef.current = [];
+        targetCacheRef.current = {};
+        clearWarmContactScanCache(session.userId);
         setContacts([]);
+        setTargetCache({});
+        setContactsLoadedCount(0);
         setContactsScanComplete(true);
         return;
       }
@@ -336,6 +414,8 @@ export function useAddPersonContactsSheetController({
       let hasNextPage = true;
       let loadedCount = 0;
       let isFirstPage = true;
+      const refreshedContacts: ContactCandidate[] = [];
+      const refreshedContactIds = new Set<string>();
 
       while (hasNextPage && scanRunIdRef.current === runId) {
         const page = await readContactsPageFromDevice({
@@ -347,21 +427,31 @@ export function useAddPersonContactsSheetController({
         }
 
         if (page.contacts.length > 0) {
-          setContacts((current) => {
-            const existingContactIds = new Set(current.map((contact) => contact.contactId));
-            const nextContacts = [...current];
+          if (hasWarmContacts) {
             for (const contact of page.contacts) {
-              if (!existingContactIds.has(contact.contactId)) {
-                existingContactIds.add(contact.contactId);
-                nextContacts.push(contact);
+              if (!refreshedContactIds.has(contact.contactId)) {
+                refreshedContactIds.add(contact.contactId);
+                refreshedContacts.push(contact);
               }
             }
+          } else {
+            setContacts((current) => {
+              const existingContactIds = new Set(current.map((contact) => contact.contactId));
+              const nextContacts = [...current];
+              for (const contact of page.contacts) {
+                if (!existingContactIds.has(contact.contactId)) {
+                  existingContactIds.add(contact.contactId);
+                  nextContacts.push(contact);
+                }
+              }
 
-            return nextContacts;
-          });
+              contactsRef.current = nextContacts;
+              return nextContacts;
+            });
 
-          loadedCount += page.contacts.length;
-          setContactsLoadedCount(loadedCount);
+            loadedCount += page.contacts.length;
+            setContactsLoadedCount(loadedCount);
+          }
 
           const pagePhones = uniqueContactPhoneE164List(page.contacts);
           await loadCachedTargetResolutionsForPhones(runId, pagePhones);
@@ -383,7 +473,19 @@ export function useAddPersonContactsSheetController({
       }
 
       if (scanRunIdRef.current === runId) {
+        if (hasWarmContacts) {
+          contactsRef.current = refreshedContacts;
+          setContacts(refreshedContacts);
+          setContactsLoadedCount(refreshedContacts.length);
+        }
+
         setContactsScanComplete(true);
+        writeWarmContactScanCache({
+          contacts: contactsRef.current,
+          contactsPermissionStatus: nextStatus,
+          targetCache: targetCacheRef.current,
+          userId: session.userId ?? null,
+        });
       }
     } catch (error) {
       if (scanRunIdRef.current === runId) {

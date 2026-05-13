@@ -15,7 +15,7 @@ import {
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AppText } from '@/components/app-text';
-import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
+import type { AppTextInputRef } from '@/components/app-text-input';
 import {
   IdentityFlowField,
   IdentityFlowForm,
@@ -28,6 +28,7 @@ import {
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { OtpCodeInput } from '@/components/otp-code-input';
+import { PasswordTextInput } from '@/components/password-text-input';
 import { PrimaryAction } from '@/components/primary-action';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { prepareAvatarImageForUpload } from '@/lib/avatar-image';
@@ -905,13 +906,12 @@ export function SetupAccountScreen() {
                 ) : null}
                 {showTrustPasswordFallback ? (
                   <>
-                    <AppTextInput
+                    <PasswordTextInput
                       autoCapitalize="none"
                       onChangeText={setTrustPassword}
                       placeholder="Tu clave actual"
                       placeholderTextColor={theme.colors.muted}
                       ref={trustPasswordInputRef}
-                      secureTextEntry
                       value={trustPassword}
                     />
                     <View style={styles.inlineActionRow}>

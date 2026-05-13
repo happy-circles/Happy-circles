@@ -9,6 +9,7 @@ import {
   transactionCategoryIcon,
 } from '@/lib/transaction-categories';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
@@ -51,14 +52,27 @@ export function TransactionSummaryRow({
   title,
   unread = false,
 }: TransactionSummaryRowProps) {
+  const activeTheme = useAppTheme();
+  const resolvedAmountColor = amountColor === theme.colors.text ? activeTheme.colors.text : amountColor;
   const categoryIcon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
 
   return (
     <View
       style={[
         styles.row,
+        surface
+          ? {
+              backgroundColor: activeTheme.colors.surface,
+              borderColor: activeTheme.colors.hairline,
+            }
+          : null,
         surface ? styles.surfaceRow : null,
-        surface && highlighted ? styles.surfaceRowHighlighted : null,
+        surface && highlighted
+          ? {
+              backgroundColor: activeTheme.colors.warningSoft,
+              borderColor: activeTheme.colors.warningSoft,
+            }
+          : null,
       ]}
     >
       {showCategoryIcon ? (
@@ -74,7 +88,7 @@ export function TransactionSummaryRow({
 
       <View style={styles.copy}>
         <View style={styles.titleRow}>
-          <AppText numberOfLines={1} style={styles.title}>
+          <AppText numberOfLines={1} style={[styles.title, { color: activeTheme.colors.text }]}>
             {title}
           </AppText>
           {statusLabel ? (
@@ -82,7 +96,10 @@ export function TransactionSummaryRow({
           ) : null}
         </View>
         {meta ? (
-          <AppText numberOfLines={1} style={styles.meta}>
+          <AppText
+            numberOfLines={1}
+            style={[styles.meta, { color: activeTheme.colors.textMuted }]}
+          >
             {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
           </AppText>
         ) : null}
@@ -95,7 +112,7 @@ export function TransactionSummaryRow({
               numberOfLines={1}
               style={[
                 styles.amount,
-                { color: amountColor },
+                { color: resolvedAmountColor },
                 amountStruckThrough ? styles.amountStruckThrough : null,
               ]}
             >
@@ -104,14 +121,19 @@ export function TransactionSummaryRow({
           ) : null}
           {chevron ? (
             <Ionicons
-              color={theme.colors.textMuted}
+              color={activeTheme.colors.textMuted}
               name={chevron === 'up' ? 'chevron-up' : 'chevron-forward'}
               size={16}
             />
           ) : null}
         </View>
       </View>
-      {unread ? <View pointerEvents="none" style={styles.unreadDot} /> : null}
+      {unread ? (
+        <View
+          pointerEvents="none"
+          style={[styles.unreadDot, { backgroundColor: activeTheme.colors.cycle }]}
+        />
+      ) : null}
     </View>
   );
 }
@@ -134,8 +156,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   surfaceRowHighlighted: {
-    backgroundColor: '#fffaf0',
-    borderColor: 'rgba(249, 115, 22, 0.14)',
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: theme.colors.warningSoft,
   },
   categoryIcon: {
     alignItems: 'center',
@@ -165,7 +187,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   unreadDot: {
-    backgroundColor: '#2f80ed',
+    backgroundColor: theme.colors.cycle,
     borderRadius: theme.radius.pill,
     height: 6,
     position: 'absolute',

@@ -5,6 +5,7 @@ import { Platform, Pressable, ScrollView, View, type ViewStyle } from 'react-nat
 import { AppText } from '@/components/app-text';
 import {
   IdentityFlowField,
+  IdentityFlowPasswordInput,
   IdentityFlowPrimaryAction,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
@@ -116,14 +117,13 @@ export function AccountCreateAccountEmailForm({
               : 'idle'
         }
       >
-        <IdentityFlowTextInput
+        <IdentityFlowPasswordInput
           autoCapitalize="none"
           autoComplete="password"
           onBlur={() => markFieldTouched('password')}
           onChangeText={setPassword}
           placeholder="Tu contrasena"
           placeholderTextColor={theme.colors.muted}
-          secureTextEntry
           value={password}
         />
       </IdentityFlowField>

@@ -8,6 +8,29 @@
   --brand-coral: #f0644d;
   --line: rgba(23, 32, 51, 0.1);
   --shadow: 0 24px 70px rgba(23, 32, 51, 0.12);
+  --button-inverse-bg: #000000;
+  --button-inverse-text: #ffffff;
+  --button-glass-bg: rgba(255, 255, 255, 0.9);
+  --mark-detail: #ffffff;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #09111f;
+    --surface: #121d31;
+    --text: #f7f9fd;
+    --muted: #aab6c8;
+    --brand-navy: #dbe5ff;
+    --brand-green: #64d98e;
+    --brand-coral: #ff806d;
+    --line: rgba(226, 232, 240, 0.12);
+    --shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+    --button-inverse-bg: #f7f9fd;
+    --button-inverse-text: #09111f;
+    --button-glass-bg: rgba(18, 29, 49, 0.9);
+    --mark-detail: #ffffff;
+  }
 }
 
 * {
@@ -115,11 +138,11 @@ a {
 }
 
 .markFaceDetail {
-  fill: #ffffff;
+  fill: var(--mark-detail);
 }
 
 .markSmile {
-  stroke: #ffffff;
+  stroke: var(--mark-detail);
   stroke-width: 6.5;
 }
 
@@ -185,7 +208,7 @@ a {
 .primaryButton {
   background: var(--brand-green);
   box-shadow: 0 16px 26px rgba(55, 181, 108, 0.22);
-  color: #ffffff;
+  color: var(--mark-detail);
   font-size: 18px;
   font-weight: 800;
   padding: 0 24px;
@@ -322,12 +345,12 @@ a {
 }
 
 .storeButton-apple {
-  background: #000000;
-  color: #ffffff;
+  background: var(--button-inverse-bg);
+  color: var(--button-inverse-text);
 }
 
 .storeButton-play {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--button-glass-bg);
   border-color: var(--line);
   color: var(--brand-navy);
 }

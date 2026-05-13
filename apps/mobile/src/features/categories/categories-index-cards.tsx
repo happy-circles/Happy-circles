@@ -13,7 +13,7 @@ import { AppText } from '@/components/app-text';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { formatCop } from '@/lib/data';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import { categoriesIndexScreenStyles as styles } from './categories-index-screen-styles';
 import {
   transactionCategoryBackgroundColor,
@@ -35,6 +35,7 @@ import {
   transactionInitialsBackgroundColor,
   transactionPersonForItem,
 } from '@/lib/transaction-people';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type CategoryInsightTone =
   | 'positive'
@@ -77,6 +78,18 @@ function amountToneStyle(amountMinor: number) {
   return styles.neutral;
 }
 
+function amountToneColor(amountMinor: number, activeTheme: AppTheme = theme): string {
+  if (amountMinor > 0) {
+    return activeTheme.colors.success;
+  }
+
+  if (amountMinor < 0) {
+    return activeTheme.colors.warning;
+  }
+
+  return activeTheme.colors.text;
+}
+
 function toneStyle(tone: CategoryInsightTone) {
   if (tone === 'positive') {
     return styles.positive;
@@ -101,52 +114,52 @@ function toneStyle(tone: CategoryInsightTone) {
   return styles.neutral;
 }
 
-function toneColor(tone: CategoryInsightTone): string {
+function toneColor(tone: CategoryInsightTone, activeTheme: AppTheme = theme): string {
   if (tone === 'positive') {
-    return theme.colors.success;
+    return activeTheme.colors.success;
   }
 
   if (tone === 'negative') {
-    return theme.colors.warning;
+    return activeTheme.colors.warning;
   }
 
   if (tone === 'pending') {
-    return '#ca8a04';
+    return activeTheme.colors.pending;
   }
 
   if (tone === 'danger') {
-    return theme.colors.danger;
+    return activeTheme.colors.danger;
   }
 
   if (tone === 'cycle') {
-    return '#2563eb';
+    return activeTheme.colors.cycle;
   }
 
-  return theme.colors.primary;
+  return activeTheme.colors.primary;
 }
 
-function toneSoftColor(tone: CategoryInsightTone): string {
+function toneSoftColor(tone: CategoryInsightTone, activeTheme: AppTheme = theme): string {
   if (tone === 'positive') {
-    return theme.colors.successSoft;
+    return activeTheme.colors.successSoft;
   }
 
   if (tone === 'negative') {
-    return theme.colors.warningSoft;
+    return activeTheme.colors.warningSoft;
   }
 
   if (tone === 'pending') {
-    return '#fef3c7';
+    return activeTheme.colors.pendingSoft;
   }
 
   if (tone === 'danger') {
-    return theme.colors.dangerSoft;
+    return activeTheme.colors.dangerSoft;
   }
 
   if (tone === 'cycle') {
-    return '#eaf1ff';
+    return activeTheme.colors.cycleSoft;
   }
 
-  return theme.colors.primarySoft;
+  return activeTheme.colors.primarySoft;
 }
 
 function movementCountLabel(count: number): string {
@@ -278,11 +291,15 @@ export function CategoryRow({
   readonly onPress: () => void;
   readonly row: BalanceAnalyticsCategoryRowDto;
 }) {
+  const activeTheme = useAppTheme();
   const icon = transactionCategoryIcon(row.category) as keyof typeof Ionicons.glyphMap;
   const color = transactionCategoryColor(row.category);
   const backgroundColor = transactionCategoryBackgroundColor(row.category);
   const resolvedMetricLabel = metricLabel ?? formatCop(row.netMinor);
   const resolvedMetricStyle = metricTone ? toneStyle(metricTone) : amountToneStyle(row.netMinor);
+  const resolvedMetricColor = metricTone
+    ? toneColor(metricTone, activeTheme)
+    : amountToneColor(row.netMinor, activeTheme);
 
   return (
     <Pressable
@@ -291,7 +308,16 @@ export function CategoryRow({
       onPress={onPress}
       style={({ pressed }) => [pressed ? styles.pressed : null]}
     >
-      <SurfaceCard padding="md" style={styles.categoryCard}>
+      <SurfaceCard
+        padding="md"
+        style={[
+          styles.categoryCard,
+          {
+            backgroundColor: activeTheme.colors.surface,
+            borderColor: activeTheme.colors.hairline,
+          },
+        ]}
+      >
         <View style={styles.leading}>
           <View style={[styles.categoryIcon, { backgroundColor }]}>
             <Ionicons color={color} name={icon} size={20} />
@@ -311,11 +337,11 @@ export function CategoryRow({
             adjustsFontSizeToFit
             minimumFontScale={0.78}
             numberOfLines={1}
-            style={[styles.amount, resolvedMetricStyle]}
+            style={[styles.amount, resolvedMetricStyle, { color: resolvedMetricColor }]}
           >
             {resolvedMetricLabel}
           </AppText>
-          <Ionicons color={theme.colors.textMuted} name={actionIcon} size={15} />
+          <Ionicons color={activeTheme.colors.textMuted} name={actionIcon} size={15} />
         </View>
       </SurfaceCard>
     </Pressable>
@@ -335,6 +361,7 @@ export function CategoriesPodiumCard({
   readonly selectedCategory: BalanceAnalyticsCategoryRowDto['category'] | null;
   readonly selectedInsight: CategoryInsightRow | null;
 }) {
+  const activeTheme = useAppTheme();
   const bodyProgress = useRef(new Animated.Value(1)).current;
   const podiumItems = useMemo(
     () => categoryPodiumVisualItems(ranking, selectedInsight),
@@ -410,6 +437,10 @@ export function CategoriesPodiumCard({
                         styles.podiumRankMedal,
                         styles.podiumRankMedalEmpty,
                         visualPlace === 1 ? styles.podiumRankMedalFirst : null,
+                        {
+                          backgroundColor: activeTheme.colors.surfaceMuted,
+                          borderColor: activeTheme.colors.border,
+                        },
                       ]}
                     >
                       <AppText
@@ -421,22 +452,39 @@ export function CategoriesPodiumCard({
                         {rankLabel}
                       </AppText>
                     </View>
-                    <View style={[styles.podiumIconRing, styles.podiumIconRingEmpty]}>
+                    <View
+                      style={[
+                        styles.podiumIconRing,
+                        styles.podiumIconRingEmpty,
+                        { borderColor: activeTheme.colors.border },
+                      ]}
+                    >
                       <View
                         style={[
                           styles.emptyPodiumIcon,
                           visualPlace === 1 ? styles.emptyPodiumIconFirst : null,
+                          { backgroundColor: activeTheme.colors.floatingSurface },
                         ]}
                       >
                         <Ionicons
-                          color={theme.colors.textMuted}
+                          color={activeTheme.colors.textMuted}
                           name="hourglass-outline"
                           size={visualPlace === 1 ? 21 : 18}
                         />
                       </View>
                     </View>
                   </View>
-                  <View style={[styles.podiumStep, styles.podiumStepEmpty, stepStyle]}>
+                  <View
+                    style={[
+                      styles.podiumStep,
+                      styles.podiumStepEmpty,
+                      stepStyle,
+                      {
+                        backgroundColor: activeTheme.colors.inputGlass,
+                        borderColor: activeTheme.colors.border,
+                      },
+                    ]}
+                  >
                     <AppText numberOfLines={1} style={styles.podiumNameEmpty}>
                       Esperando
                     </AppText>
@@ -448,8 +496,8 @@ export function CategoriesPodiumCard({
             const categoryIcon = transactionCategoryIcon(
               insight.row.category,
             ) as keyof typeof Ionicons.glyphMap;
-            const color = toneColor(insight.tone);
-            const softColor = toneSoftColor(insight.tone);
+            const color = toneColor(insight.tone, activeTheme);
+            const softColor = toneSoftColor(insight.tone, activeTheme);
             const categoryColor = transactionCategoryColor(insight.row.category);
             const categoryBackground = transactionCategoryBackgroundColor(insight.row.category);
             const selected = insight.row.category === selectedCategory;

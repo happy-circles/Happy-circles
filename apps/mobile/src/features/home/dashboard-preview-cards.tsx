@@ -11,6 +11,7 @@ import {
 } from '@/features/home/dashboard-screen.styles';
 import { notificationViewKeyForItem } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import {
   isCycleTransactionItem,
   transactionAmountIsVoided,
@@ -27,8 +28,6 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 import type { TransactionTargetPanel } from './dashboard-helpers';
 import { AppText } from '@/components/app-text';
 
-const AVATAR_COLORS = ['#e8604a', '#3dba6e', '#2563eb', '#7c3aed', '#f59e0b', '#0f8a5f'];
-
 export function initialsBackgroundColor(
   person: Pick<PersonCardDto, 'userId' | 'displayName'>,
 ): string {
@@ -39,7 +38,9 @@ export function initialsBackgroundColor(
     hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
   }
 
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? theme.colors.primary;
+  return (
+    theme.palette.previewAvatar[hash % theme.palette.previewAvatar.length] ?? theme.colors.primary
+  );
 }
 
 function personDebtBorderColor(person: PersonCardDto): string {
@@ -167,13 +168,26 @@ export function ShortcutTile({
   readonly dashed?: boolean;
   readonly onPress?: () => void;
 }) {
+  const activeTheme = useAppTheme();
   const content = (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.peopleTile, pressed ? styles.quickActionPressed : null]}
     >
-      <View style={[styles.shortcutCircle, dashed ? styles.shortcutCircleDashed : null]}>
-        <Ionicons color={theme.colors.primary} name={icon} size={22} />
+      <View
+        style={[
+          styles.shortcutCircle,
+          {
+            backgroundColor:
+              activeTheme.scheme === 'dark'
+                ? activeTheme.colors.surface
+                : activeTheme.colors.background,
+            borderColor: dashed ? activeTheme.colors.border : activeTheme.colors.accent,
+          },
+          dashed ? styles.shortcutCircleDashed : null,
+        ]}
+      >
+        <Ionicons color={activeTheme.colors.primary} name={icon} size={22} />
         {typeof badgeCount === 'number' && badgeCount > 0 ? (
           <View style={styles.requestBadge}>
             <AppText style={styles.requestBadgeText}>{badgeLabel(badgeCount)}</AppText>
@@ -198,12 +212,22 @@ export function ShortcutTile({
 }
 
 export function PersonTile({ person }: { readonly person: PersonCardDto }) {
+  const activeTheme = useAppTheme();
+
   return (
     <Link href={`/person/${person.userId}` as Href} asChild>
       <Pressable
         style={({ pressed }) => [styles.peopleTile, pressed ? styles.quickActionPressed : null]}
       >
-        <View style={[styles.personAvatarRing, { borderColor: personDebtBorderColor(person) }]}>
+        <View
+          style={[
+            styles.personAvatarRing,
+            {
+              backgroundColor: activeTheme.colors.background,
+              borderColor: personDebtBorderColor(person),
+            },
+          ]}
+        >
           <AppAvatar
             fallbackBackgroundColor={initialsBackgroundColor(person)}
             fallbackTextColor={theme.colors.white}
@@ -281,7 +305,6 @@ export function TransactionPreviewCard({
       statusTone={transactionStatusTone(item)}
       unread={unread}
       variant="elevated"
-      style={styles.transactionPreviewCard}
     />
   );
 }

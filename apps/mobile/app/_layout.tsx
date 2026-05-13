@@ -72,6 +72,7 @@ import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
+import { useAppTheme, useThemeScheme } from '@/providers/theme-provider';
 import { AppText } from '@/components/app-text';
 
 SplashScreen.setOptions({ duration: 140, fade: true });
@@ -358,6 +359,7 @@ async function readMinimumSupportedVersion(): Promise<MinimumSupportedVersionSet
 }
 
 function MandatoryUpdateGate() {
+  const activeTheme = useAppTheme();
   const currentVersion = getCurrentAppVersion();
   const minimumVersionQuery = useQuery({
     queryKey: ['app_settings', 'mobile_min_supported_version'],
@@ -381,11 +383,15 @@ function MandatoryUpdateGate() {
     'Actualiza Happy Circles para seguir usando esta version de la app.';
 
   return (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, { backgroundColor: activeTheme.colors.overlay }]}>
       <SurfaceCard padding="lg" style={styles.lockCard} variant="elevated">
-        <AppText style={styles.lockTitle}>Actualizacion obligatoria</AppText>
-        <AppText style={styles.lockSubtitle}>{message}</AppText>
-        <AppText style={styles.lockMessage}>
+        <AppText style={[styles.lockTitle, { color: activeTheme.colors.text }]}>
+          Actualizacion obligatoria
+        </AppText>
+        <AppText style={[styles.lockSubtitle, { color: activeTheme.colors.textMuted }]}>
+          {message}
+        </AppText>
+        <AppText style={[styles.lockMessage, { color: activeTheme.colors.warning }]}>
           Version actual: {currentVersion} · Version minima: {minimumVersion}
         </AppText>
         <PrimaryAction
@@ -403,6 +409,7 @@ function LaunchIntroOverlay({
 }: {
   readonly onVisibleChange: (visible: boolean) => void;
 }) {
+  const activeTheme = useAppTheme();
   const session = useSession();
   const reducedMotion = useReducedMotion();
   const segments = useSegments();
@@ -829,7 +836,12 @@ function LaunchIntroOverlay({
       pointerEvents="auto"
       style={[styles.launchOverlay, { opacity: rootOpacity }]}
     >
-      <Animated.View style={[styles.launchOverlayBackdrop, { opacity: backdropOpacity }]} />
+      <Animated.View
+        style={[
+          styles.launchOverlayBackdrop,
+          { backgroundColor: activeTheme.colors.background, opacity: backdropOpacity },
+        ]}
+      />
       <Animated.View
         style={[
           styles.launchLogoGroup,
@@ -903,6 +915,7 @@ function HomeEntryHandoffOverlay({
   readonly disabled: boolean;
   readonly onVisibleChange: (visible: boolean) => void;
 }) {
+  const activeTheme = useAppTheme();
   const reducedMotion = useReducedMotion();
   const targets = useLaunchIntroTargets();
   const { height, width } = useWindowDimensions();
@@ -1024,18 +1037,24 @@ function HomeEntryHandoffOverlay({
       }
 
       completing = true;
-      onVisibleChange(false);
 
       void waitForNextFrame().then(() => {
         if (!active) {
           return;
         }
 
+        function finishHandoffVisibility() {
+          if (!active) {
+            return;
+          }
+
+          setVisible(false);
+          onVisibleChange(false);
+        }
+
         const fadeFallbackTimer = setTimeout(() => {
           completionTimers.delete(fadeFallbackTimer);
-          if (active) {
-            setVisible(false);
-          }
+          finishHandoffVisibility();
         }, HOME_ENTRY_FADE_MS + 220);
         completionTimers.add(fadeFallbackTimer);
         Animated.timing(handoffMotion, {
@@ -1046,9 +1065,7 @@ function HomeEntryHandoffOverlay({
         }).start(() => {
           clearTimeout(fadeFallbackTimer);
           completionTimers.delete(fadeFallbackTimer);
-          if (active) {
-            setVisible(false);
-          }
+          finishHandoffVisibility();
         });
       });
     }
@@ -1299,7 +1316,12 @@ function HomeEntryHandoffOverlay({
       pointerEvents="auto"
       style={[styles.launchOverlay, { opacity: rootOpacity }]}
     >
-      <Animated.View style={[styles.launchOverlayBackdrop, { opacity: backdropOpacity }]} />
+      <Animated.View
+        style={[
+          styles.launchOverlayBackdrop,
+          { backgroundColor: activeTheme.colors.background, opacity: backdropOpacity },
+        ]}
+      />
       <Animated.View
         style={[
           styles.launchLogoGroup,
@@ -1355,6 +1377,7 @@ function SetupEntryHandoffOverlay({
   readonly disabled: boolean;
   readonly onVisibleChange: (visible: boolean) => void;
 }) {
+  const activeTheme = useAppTheme();
   const reducedMotion = useReducedMotion();
   const targets = useLaunchIntroTargets();
   const { height, width } = useWindowDimensions();
@@ -1695,7 +1718,12 @@ function SetupEntryHandoffOverlay({
       pointerEvents="auto"
       style={[styles.launchOverlay, { opacity: rootOpacity }]}
     >
-      <Animated.View style={[styles.launchOverlayBackdrop, { opacity: backdropOpacity }]} />
+      <Animated.View
+        style={[
+          styles.launchOverlayBackdrop,
+          { backgroundColor: activeTheme.colors.background, opacity: backdropOpacity },
+        ]}
+      />
       <Animated.View
         style={[
           styles.launchLogoGroup,
@@ -1889,6 +1917,8 @@ function SessionRouteGuard() {
 }
 
 function RootNavigator() {
+  const activeTheme = useAppTheme();
+  const scheme = useThemeScheme();
   const [launchIntroVisible, setLaunchIntroVisible] = useState(true);
   const [homeEntryHandoffVisible, setHomeEntryHandoffVisible] = useState(false);
   const [setupEntryHandoffVisible, setSetupEntryHandoffVisible] = useState(false);
@@ -1905,14 +1935,14 @@ function RootNavigator() {
     <LaunchIntroVisibilityProvider
       value={launchIntroVisible || homeEntryHandoffVisible || setupEntryHandoffVisible}
     >
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <NotificationBridge />
       <SessionRouteGuard />
       <Stack
         screenOptions={{
           animationMatchesGesture: true,
           contentStyle: {
-            backgroundColor: theme.colors.background,
+            backgroundColor: activeTheme.colors.background,
           },
           fullScreenGestureEnabled: false,
           gestureDirection: 'horizontal',
@@ -1920,9 +1950,9 @@ function RootNavigator() {
           headerBackButtonMenuEnabled: false,
           headerShown: false,
           headerStyle: {
-            backgroundColor: theme.colors.background,
+            backgroundColor: activeTheme.colors.background,
           },
-          headerTintColor: theme.colors.text,
+          headerTintColor: activeTheme.colors.text,
         }}
       >
         <Stack.Screen name="(tabs)" dangerouslySingular options={{ animation: 'none' }} />
@@ -2006,7 +2036,6 @@ const styles = StyleSheet.create({
     top: 0,
   },
   launchOverlayBackdrop: {
-    backgroundColor: theme.colors.background,
     bottom: 0,
     elevation: 0,
     left: 0,
@@ -2044,7 +2073,6 @@ const styles = StyleSheet.create({
   },
   overlay: {
     alignItems: 'center',
-    backgroundColor: theme.colors.overlay,
     bottom: 0,
     justifyContent: 'center',
     left: 0,
@@ -2060,7 +2088,6 @@ const styles = StyleSheet.create({
     ...theme.shadow.floating,
   },
   lockTitle: {
-    color: theme.colors.text,
     fontSize: theme.typography.title2,
     fontWeight: '800',
   },
@@ -2068,12 +2095,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lockSubtitle: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
   },
   lockMessage: {
-    color: theme.colors.warning,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
   },

@@ -82,7 +82,7 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
 const styles = StyleSheet.create({
   root: {
     alignItems: 'center',
-    backgroundColor: 'rgba(14, 20, 29, 0.78)',
+    backgroundColor: theme.colors.inverseOverlay,
     flex: 1,
     justifyContent: 'center',
     padding: theme.spacing.lg,
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   closeButton: {
     alignItems: 'center',
     alignSelf: 'flex-end',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: theme.colors.whiteAlphaStrong,
     borderRadius: theme.radius.pill,
     height: 42,
     justifyContent: 'center',
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: 'rgba(255, 255, 255, 0.32)',
+    borderColor: theme.glass.softEdge,
     borderRadius: 120,
     borderWidth: 2,
     height: 240,

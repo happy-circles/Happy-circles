@@ -56,7 +56,7 @@ export const transactionsScreenStyles = StyleSheet.create({
   },
   filterPillSelected: {
     backgroundColor: theme.colors.primaryGhost,
-    borderColor: 'rgba(26, 39, 68, 0.22)',
+    borderColor: theme.colors.primaryGhost,
   },
   filterPillPressed: {
     opacity: 0.76,

@@ -10,7 +10,8 @@ import {
   type SurfaceCardVariant,
 } from '@/components/surface-card';
 import { triggerAppHaptic, type AppHapticFeedback } from '@/lib/app-haptics';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type CardTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
 
@@ -19,6 +20,7 @@ export interface CardPressableProps extends PropsWithChildren {
   readonly accessibilityRole?: AccessibilityRole;
   readonly disabled?: boolean;
   readonly haptic?: AppHapticFeedback;
+  readonly hapticTrigger?: 'press' | 'pressIn';
   readonly onPress?: (event: GestureResponderEvent) => void;
   readonly style?: StyleProp<ViewStyle>;
 }
@@ -29,6 +31,7 @@ export function CardPressable({
   children,
   disabled = false,
   haptic = 'none',
+  hapticTrigger = 'press',
   onPress,
   style,
 }: CardPressableProps) {
@@ -42,8 +45,16 @@ export function CardPressable({
           return;
         }
 
-        triggerAppHaptic(haptic);
+        if (hapticTrigger === 'press') {
+          triggerAppHaptic(haptic);
+        }
+
         onPress?.(event);
+      }}
+      onPressIn={() => {
+        if (!disabled && hapticTrigger === 'pressIn') {
+          triggerAppHaptic(haptic);
+        }
       }}
       style={({ pressed }) => [
         styles.pressable,
@@ -76,6 +87,7 @@ export interface AppCardShellProps extends PropsWithChildren {
   readonly style?: StyleProp<ViewStyle>;
   readonly title: ReactNode;
   readonly titleAccessoryNode?: ReactNode;
+  readonly underlay?: ReactNode;
   readonly unread?: boolean;
   readonly unreadSurfaceColor?: string;
   readonly variant?: SurfaceCardVariant;
@@ -101,13 +113,16 @@ export function AppCardShell({
   style,
   title,
   titleAccessoryNode,
+  underlay,
   unread = false,
   unreadSurfaceColor,
   variant = 'default',
 }: AppCardShellProps) {
+  const activeTheme = useAppTheme();
   const hasLeadingAction = Boolean(onLeadingPress);
   const unreadTintColor =
-    unreadSurfaceColor ?? (accentColor ? withAlpha(accentColor, 0.1) : theme.colors.primaryGhost);
+    unreadSurfaceColor ??
+    (accentColor ? withAlpha(accentColor, 0.1) : activeTheme.colors.primaryGhost);
   const leadingContent = (
     <>
       {leadingNode}
@@ -116,7 +131,11 @@ export function AppCardShell({
           {typeof title === 'string' ? (
             <AppText
               numberOfLines={1}
-              style={[styles.title, compact ? styles.titleCompact : null]}
+              style={[
+                styles.title,
+                { color: activeTheme.colors.text },
+                compact ? styles.titleCompact : null,
+              ]}
             >
               {title}
             </AppText>
@@ -138,11 +157,8 @@ export function AppCardShell({
     <SurfaceCard
       padding={padding ?? (compact ? 'sm' : 'md')}
       shape="pill"
-      style={[
-        styles.card,
-        compact ? styles.cardCompact : null,
-        style,
-      ]}
+      style={[styles.card, compact ? styles.cardCompact : null, style]}
+      underlay={underlay}
       variant={variant}
     >
       {unread ? (
@@ -176,7 +192,12 @@ export function AppCardShell({
           <View style={[styles.side, compact ? styles.sideCompact : null]}>{sideNode}</View>
         ) : null}
       </View>
-      {attentionDot ? <View pointerEvents="none" style={styles.pendingCornerDot} /> : null}
+      {attentionDot ? (
+        <View
+          pointerEvents="none"
+          style={[styles.pendingCornerDot, { backgroundColor: activeTheme.colors.cycle }]}
+        />
+      ) : null}
       {children ? <View style={styles.footer}>{children}</View> : null}
     </SurfaceCard>
   );
@@ -214,30 +235,54 @@ export interface CardTimelineStep {
 }
 
 export function CardTimeline({ steps }: { readonly steps: readonly CardTimelineStep[] }) {
+  const activeTheme = useAppTheme();
+
   return (
-    <View style={styles.timeline}>
+    <View style={[styles.timeline, { borderTopColor: activeTheme.colors.hairline }]}>
       {steps.map((step, index) => (
         <View key={step.id} style={styles.timelineRow}>
           <View style={styles.timelineRail}>
-            <View style={[styles.timelineMarker, timelineToneStyle(step.tone ?? 'neutral')]} />
-            {index < steps.length - 1 ? <View style={styles.timelineLine} /> : null}
+            <View
+              style={[
+                styles.timelineMarker,
+                { backgroundColor: timelineToneColor(activeTheme, step.tone ?? 'neutral') },
+              ]}
+            />
+            {index < steps.length - 1 ? (
+              <View
+                style={[styles.timelineLine, { backgroundColor: activeTheme.colors.hairline }]}
+              />
+            ) : null}
           </View>
           <View style={styles.timelineBody}>
             <View style={styles.timelineTop}>
               <View style={styles.timelineTitleRow}>
                 {step.leadingNode}
-                <AppText style={styles.timelineTitle}>{step.title}</AppText>
+                <AppText style={[styles.timelineTitle, { color: activeTheme.colors.text }]}>
+                  {step.title}
+                </AppText>
               </View>
               {step.amountLabel ? (
                 <AppText
-                  style={[styles.timelineAmount, timelineTextToneStyle(step.tone ?? 'neutral')]}
+                  style={[
+                    styles.timelineAmount,
+                    { color: timelineTextToneColor(activeTheme, step.tone ?? 'neutral') },
+                  ]}
                 >
                   {step.amountLabel}
                 </AppText>
               ) : null}
             </View>
-            {step.detail ? <AppText style={styles.timelineDetail}>{step.detail}</AppText> : null}
-            {step.meta ? <AppText style={styles.timelineMeta}>{step.meta}</AppText> : null}
+            {step.detail ? (
+              <AppText style={[styles.timelineDetail, { color: activeTheme.colors.text }]}>
+                {step.detail}
+              </AppText>
+            ) : null}
+            {step.meta ? (
+              <AppText style={[styles.timelineMeta, { color: activeTheme.colors.textMuted }]}>
+                {step.meta}
+              </AppText>
+            ) : null}
           </View>
         </View>
       ))}
@@ -245,44 +290,44 @@ export function CardTimeline({ steps }: { readonly steps: readonly CardTimelineS
   );
 }
 
-function timelineToneStyle(tone: CardTone) {
+function timelineToneColor(activeTheme: AppTheme, tone: CardTone) {
   if (tone === 'primary') {
-    return styles.timelineMarkerPrimary;
+    return activeTheme.colors.primary;
   }
   if (tone === 'success') {
-    return styles.timelineMarkerSuccess;
+    return activeTheme.colors.success;
   }
   if (tone === 'warning') {
-    return styles.timelineMarkerWarning;
+    return activeTheme.colors.warning;
   }
   if (tone === 'danger') {
-    return styles.timelineMarkerDanger;
+    return activeTheme.colors.danger;
   }
   if (tone === 'cycle') {
-    return styles.timelineMarkerCycle;
+    return activeTheme.colors.cycle;
   }
 
-  return styles.timelineMarkerNeutral;
+  return activeTheme.colors.textMuted;
 }
 
-function timelineTextToneStyle(tone: CardTone) {
+function timelineTextToneColor(activeTheme: AppTheme, tone: CardTone) {
   if (tone === 'primary') {
-    return styles.timelineTextPrimary;
+    return activeTheme.colors.primary;
   }
   if (tone === 'success') {
-    return styles.timelineTextSuccess;
+    return activeTheme.colors.success;
   }
   if (tone === 'warning') {
-    return styles.timelineTextWarning;
+    return activeTheme.colors.warning;
   }
   if (tone === 'danger') {
-    return styles.timelineTextDanger;
+    return activeTheme.colors.danger;
   }
   if (tone === 'cycle') {
-    return styles.timelineTextCycle;
+    return activeTheme.colors.cycle;
   }
 
-  return styles.timelineTextNeutral;
+  return activeTheme.colors.textMuted;
 }
 
 const styles = StyleSheet.create({
@@ -368,7 +413,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   pendingCornerDot: {
-    backgroundColor: '#2f80ed',
+    backgroundColor: theme.colors.cycle,
     borderRadius: theme.radius.pill,
     height: 9,
     position: 'absolute',
@@ -413,10 +458,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.textMuted,
   },
   timelineMarkerDanger: {
-    backgroundColor: theme.colors.warning,
+    backgroundColor: theme.colors.danger,
   },
   timelineMarkerCycle: {
-    backgroundColor: '#2563eb',
+    backgroundColor: theme.colors.cycle,
   },
   timelineLine: {
     backgroundColor: theme.colors.hairline,
@@ -478,9 +523,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   timelineTextDanger: {
-    color: theme.colors.warning,
+    color: theme.colors.danger,
   },
   timelineTextCycle: {
-    color: '#2563eb',
+    color: theme.colors.cycle,
   },
 });

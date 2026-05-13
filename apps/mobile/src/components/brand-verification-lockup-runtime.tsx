@@ -15,7 +15,7 @@ import {
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
 import { brandVerificationLockupStyles as styles } from './brand-verification-lockup-styles';
-import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type BrandVerificationState = 'idle' | 'loading' | 'success' | 'error';
 
@@ -25,8 +25,6 @@ const DEFAULT_SIZE = 74;
 const DEFAULT_RESULT_MS = 520;
 const AVATAR_MARK_FACE_VIEW_BOX = '290 290 100 100';
 const SPIN_FULL_TURN_MS = 1200;
-const SPIN_RELEASE_MIN_MS = 220;
-const SPIN_RELEASE_MAX_MS = 640;
 const SPIN_RELEASE_EPSILON = 0.025;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
@@ -72,6 +70,7 @@ export function BrandVerificationMark({
   outerRotationDegrees = 0,
   replaceCenterOnResult,
   resultTone,
+  releaseSpinOnExit = true,
   showOuterInIdle = false,
   size = DEFAULT_SIZE,
   state,
@@ -84,11 +83,13 @@ export function BrandVerificationMark({
   readonly outerRotationDegrees?: number;
   readonly replaceCenterOnResult?: boolean;
   readonly resultTone?: string;
+  readonly releaseSpinOnExit?: boolean;
   readonly showOuterInIdle?: boolean;
   readonly size?: number;
   readonly state: BrandVerificationState;
   readonly style?: StyleProp<ViewStyle>;
 }) {
+  const activeTheme = useAppTheme();
   const reducedMotion = useReducedMotion();
   const hasCustomCenter = center !== undefined;
   const shouldReplaceCenterOnResult = replaceCenterOnResult ?? true;
@@ -104,30 +105,38 @@ export function BrandVerificationMark({
   const spinReleaseRef = useRef<Animated.CompositeAnimation | null>(null);
   const spinWasLoadingRef = useRef(state === 'loading');
   const maskId = useMemo(() => createMaskId('brand-verification'), []);
-  const brandPalette = useMemo(() => resolveHappyCirclesPalette('brand'), []);
+  const brandPalette = useMemo(() => resolveHappyCirclesPalette('brand'), [activeTheme]);
   const idlePalette = useMemo(
     () => ({
       ...brandPalette,
-      face: theme.colors.brandNavy,
-      faceDetail: theme.colors.white,
+      face: brandPalette.face,
+      faceDetail: activeTheme.colors.white,
     }),
-    [brandPalette],
+    [activeTheme.colors.white, brandPalette],
   );
   const loadingPalette = useMemo(
     () => ({
       ...brandPalette,
-      face: theme.colors.brandCoral,
-      faceDetail: theme.colors.white,
+      face: activeTheme.colors.brandCoral,
+      faceDetail: activeTheme.colors.white,
     }),
-    [brandPalette],
+    [activeTheme.colors.brandCoral, activeTheme.colors.white, brandPalette],
   );
   const resultPalette = useMemo(
     () => ({
       ...brandPalette,
-      face: resultTone ?? (state === 'error' ? theme.colors.danger : theme.colors.success),
-      faceDetail: theme.colors.white,
+      face:
+        resultTone ?? (state === 'error' ? activeTheme.colors.danger : activeTheme.colors.success),
+      faceDetail: activeTheme.colors.white,
     }),
-    [brandPalette, resultTone, state],
+    [
+      activeTheme.colors.danger,
+      activeTheme.colors.success,
+      activeTheme.colors.white,
+      brandPalette,
+      resultTone,
+      state,
+    ],
   );
 
   useEffect(() => {
@@ -186,7 +195,7 @@ export function BrandVerificationMark({
     }
 
     if (state !== 'loading' || reducedMotion) {
-      const shouldReleaseSpin = spinWasLoadingRef.current && !reducedMotion;
+      const shouldReleaseSpin = spinWasLoadingRef.current && !reducedMotion && releaseSpinOnExit;
       spinWasLoadingRef.current = false;
 
       spinMotion.stopAnimation((currentValue) => {
@@ -204,13 +213,10 @@ export function BrandVerificationMark({
         spinMotion.setValue(normalizedSpin);
 
         const remainingTurn = 1 - normalizedSpin;
-        const releaseDuration = Math.max(
-          SPIN_RELEASE_MIN_MS,
-          Math.min(SPIN_RELEASE_MAX_MS, remainingTurn * SPIN_FULL_TURN_MS),
-        );
+        const releaseDuration = Math.max(1, Math.round(remainingTurn * SPIN_FULL_TURN_MS));
         const releaseAnimation = Animated.timing(spinMotion, {
           duration: releaseDuration,
-          easing: BRAND_VERIFICATION_EASING,
+          easing: Easing.linear,
           toValue: 1,
           useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         });
@@ -246,7 +252,7 @@ export function BrandVerificationMark({
     return () => {
       spinLoop.stop();
     };
-  }, [reducedMotion, spinMotion, state]);
+  }, [reducedMotion, releaseSpinOnExit, spinMotion, state]);
 
   const rotate = spinMotion.interpolate({
     inputRange: [0, 1],

@@ -3,6 +3,7 @@ import type { ScrollViewProps } from 'react-native';
 import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const DEFAULT_REFRESH_PROGRESS_OFFSET = theme.spacing.xl + theme.spacing.md;
 const TRANSPARENT_REFRESH_COLOR = 'rgba(0, 0, 0, 0)';
@@ -22,6 +23,8 @@ export interface BrandedRefreshScrollViewProps extends Omit<ScrollViewProps, 're
 }
 
 export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRefreshProps }) {
+  const activeTheme = useAppTheme();
+
   function handleRefresh() {
     if (refresh.refreshing) {
       return;
@@ -38,23 +41,27 @@ export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRe
       key={`refresh-control-${Math.round(progressViewOffset)}`}
       colors={
         nativeIndicatorVisible
-          ? [theme.colors.primary, theme.colors.brandGreen, theme.colors.brandCoral]
+          ? [
+              activeTheme.colors.primary,
+              activeTheme.colors.brandGreen,
+              activeTheme.colors.brandCoral,
+            ]
           : [TRANSPARENT_REFRESH_COLOR]
       }
       enabled
       onRefresh={handleRefresh}
       progressBackgroundColor={
-        nativeIndicatorVisible ? theme.colors.surface : TRANSPARENT_REFRESH_COLOR
+        nativeIndicatorVisible ? activeTheme.colors.surface : TRANSPARENT_REFRESH_COLOR
       }
       progressViewOffset={progressViewOffset}
       refreshing={refresh.refreshing}
-      tintColor={nativeIndicatorVisible ? theme.colors.primary : TRANSPARENT_REFRESH_COLOR}
+      tintColor={nativeIndicatorVisible ? activeTheme.colors.primary : TRANSPARENT_REFRESH_COLOR}
       title={
         Platform.OS === 'ios' && nativeIndicatorVisible
           ? (refresh.label ?? 'Sincronizando')
           : undefined
       }
-      titleColor={nativeIndicatorVisible ? theme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
+      titleColor={nativeIndicatorVisible ? activeTheme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
     />
   );
 }

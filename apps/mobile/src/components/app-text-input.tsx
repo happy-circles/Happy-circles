@@ -8,6 +8,7 @@ import {
 
 import { theme } from '@/lib/theme';
 import { typographyScaleRoleMaxFontSizeMultiplier } from '@/lib/typography';
+import { useAppTheme } from '@/providers/theme-provider';
 
 type InputChrome = 'default' | 'glass' | 'plain';
 type InputDensity = 'compact' | 'identity' | 'regular';
@@ -37,6 +38,7 @@ export const AppTextInput = forwardRef<AppTextInputRef, AppTextInputProps>(funct
   },
   ref,
 ) {
+  const activeTheme = useAppTheme();
   const [focused, setFocused] = useState(false);
   const showsChrome = chrome !== 'plain';
   const singleLineStyle =
@@ -50,7 +52,7 @@ export const AppTextInput = forwardRef<AppTextInputRef, AppTextInputProps>(funct
     <NativeTextInput
       {...props}
       allowFontScaling
-      cursorColor={theme.colors.primary}
+      cursorColor={activeTheme.colors.primary}
       maxFontSizeMultiplier={typographyScaleRoleMaxFontSizeMultiplier.input}
       multiline={multiline}
       onBlur={(event) => {
@@ -62,15 +64,18 @@ export const AppTextInput = forwardRef<AppTextInputRef, AppTextInputProps>(funct
         onFocus?.(event);
       }}
       ref={ref}
-      selectionColor={selectionColor ?? theme.colors.primary}
+      placeholderTextColor={props.placeholderTextColor ?? activeTheme.colors.muted}
+      selectionColor={selectionColor ?? activeTheme.colors.primary}
       style={[
         styles.base,
+        { color: activeTheme.colors.text },
         styles[density],
         multiline ? styles.multiline : singleLineStyle,
         styles[chrome],
-        showsChrome && focused ? styles.focused : null,
-        showsChrome && hasError ? styles.error : null,
-        showsChrome && focused && hasError ? styles.focusedError : null,
+        showsChrome ? themedChromeStyle(activeTheme, chrome) : null,
+        showsChrome && focused ? themedFocusedStyle(activeTheme) : null,
+        showsChrome && hasError ? { borderColor: activeTheme.colors.danger } : null,
+        showsChrome && focused && hasError ? themedFocusedErrorStyle(activeTheme) : null,
         style,
       ]}
     />
@@ -83,7 +88,6 @@ export function getCurrentlyFocusedTextInput() {
 
 const styles = StyleSheet.create({
   base: {
-    color: theme.colors.text,
     includeFontPadding: false,
   },
   regular: {
@@ -125,14 +129,10 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   default: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
   },
   glass: {
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
-    borderColor: 'rgba(15, 23, 40, 0.08)',
     borderRadius: theme.radius.medium,
     borderWidth: 1,
   },
@@ -141,37 +141,61 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   focused: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.primary,
+    ...Platform.select({ default: { elevation: 2 } }),
+  },
+});
+
+function themedChromeStyle(activeTheme: ReturnType<typeof useAppTheme>, chrome: InputChrome) {
+  if (chrome === 'glass') {
+    return {
+      backgroundColor: activeTheme.colors.inputGlass,
+      borderColor: activeTheme.colors.border,
+    };
+  }
+
+  if (chrome === 'plain') {
+    return null;
+  }
+
+  return {
+    backgroundColor: activeTheme.colors.surfaceMuted,
+    borderColor: activeTheme.colors.border,
+  };
+}
+
+function themedFocusedStyle(activeTheme: ReturnType<typeof useAppTheme>) {
+  return {
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.primary,
     ...Platform.select({
       web: {
-        boxShadow: '0 0 10px rgba(26, 39, 68, 0.14)',
+        boxShadow: `0 0 10px ${activeTheme.colors.primaryGhost}`,
       },
       ios: {
-        shadowColor: theme.colors.primary,
+        shadowColor: activeTheme.colors.primary,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.14,
+        shadowOpacity: activeTheme.scheme === 'dark' ? 0.2 : 0.14,
         shadowRadius: 10,
       },
       default: {
         elevation: 2,
       },
     }),
-  },
-  error: {
-    borderColor: theme.colors.danger,
-  },
-  focusedError: {
-    borderColor: theme.colors.danger,
+  };
+}
+
+function themedFocusedErrorStyle(activeTheme: ReturnType<typeof useAppTheme>) {
+  return {
+    borderColor: activeTheme.colors.danger,
     ...Platform.select({
       web: {
-        boxShadow: '0 0 10px rgba(232, 96, 74, 0.12)',
+        boxShadow: `0 0 10px ${activeTheme.colors.dangerSoft}`,
       },
       ios: {
-        shadowColor: theme.colors.danger,
-        shadowOpacity: 0.12,
+        shadowColor: activeTheme.colors.danger,
+        shadowOpacity: activeTheme.scheme === 'dark' ? 0.2 : 0.12,
         shadowRadius: 10,
       },
     }),
-  },
-});
+  };
+}

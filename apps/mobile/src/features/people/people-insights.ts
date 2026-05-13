@@ -257,12 +257,12 @@ export function buildPeopleInsightActivitySections({
   readonly pending: readonly ActivityItemDto[];
 } {
   return {
-    pending: pendingItems.filter(isPendingTransactionItem).filter((item) =>
-      matchesPeoplePendingFilter(item, filter),
-    ),
-    history: historyItems.filter(isConsolidatedTransactionItem).filter((item) =>
-      matchesPeopleHistoryFilter(item, filter),
-    ),
+    pending: pendingItems
+      .filter(isPendingTransactionItem)
+      .filter((item) => matchesPeoplePendingFilter(item, filter)),
+    history: historyItems
+      .filter(isConsolidatedTransactionItem)
+      .filter((item) => matchesPeopleHistoryFilter(item, filter)),
   };
 }
 
@@ -295,90 +295,51 @@ function personDisplayData(
   };
 }
 
-function pendingScoreForPerson(
-  person: PersonCardDto,
-  pendingItems: readonly ActivityItemDto[],
-): {
+type PeopleInsightRowsInput = {
+  readonly activeCircleProposals: readonly ActiveSettlementPreviewDto[];
+  readonly analyticsPeople: readonly BalanceAnalyticsPersonRowDto[];
+  readonly filter: PeopleInsightFilter;
+  readonly historyItems: readonly ActivityItemDto[];
+  readonly pendingItems: readonly ActivityItemDto[];
+  readonly people: readonly PersonCardDto[];
+};
+
+type PeopleInsightRowsByFilterInput = Omit<PeopleInsightRowsInput, 'filter'>;
+
+type ActivityScore = {
   readonly amountMinor: number;
   readonly count: number;
-} {
-  const matchingItems = pendingItems.filter((item) => activityMatchesPerson(item, person));
+};
 
-  return {
-    amountMinor: matchingItems.reduce((total, item) => total + Math.abs(item.amountMinor ?? 0), 0),
-    count: matchingItems.length,
-  };
-}
+type CircleHistoryCounts = {
+  readonly completedCount: number;
+  readonly notCompletedCount: number;
+  readonly replacedCount: number;
+};
 
-function rejectedScoreForPerson(
-  person: PersonCardDto,
-  historyItems: readonly ActivityItemDto[],
-): {
-  readonly amountMinor: number;
-  readonly count: number;
-} {
-  const matchingItems = historyItems.filter(
-    (item) =>
-      item.status === 'rejected' &&
-      isConsolidatedTransactionItem(item) &&
-      activityMatchesPerson(item, person),
-  );
+type PeopleInsightIndexes = {
+  readonly activeCircleGroupKeysByPerson: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly analyticsPeopleById: ReadonlyMap<string, BalanceAnalyticsPersonRowDto>;
+  readonly circleHistoryCountsByPerson: ReadonlyMap<string, CircleHistoryCounts>;
+  readonly pendingScoresByPerson: ReadonlyMap<string, ActivityScore>;
+  readonly peopleById: ReadonlyMap<string, PersonCardDto>;
+  readonly rejectedScoresByPerson: ReadonlyMap<string, ActivityScore>;
+};
 
-  return {
-    amountMinor: matchingItems.reduce((total, item) => total + Math.abs(item.amountMinor ?? 0), 0),
-    count: matchingItems.length,
-  };
-}
+const EMPTY_ACTIVITY_SCORE: ActivityScore = { amountMinor: 0, count: 0 };
+const EMPTY_CIRCLE_HISTORY_COUNTS: CircleHistoryCounts = {
+  completedCount: 0,
+  notCompletedCount: 0,
+  replacedCount: 0,
+};
 
 function isPeopleCircleActivityItem(item: ActivityItemDto): boolean {
   return isSemanticCircleActivityItem(item) || transactionVisualCategory(item) === 'cycle';
 }
 
-function activeCircleGroupKeysForPerson(
-  person: PersonCardDto,
-  activeCircleProposals: readonly ActiveSettlementPreviewDto[],
-): Set<string> {
-  return new Set(
-    activeCircleProposals.flatMap((proposal) => {
-      if (!proposal.participantUserIds.includes(person.userId)) {
-        return [];
-      }
-
-      return [
-        proposal.happyCircleCaseId
-          ? `happy_circle_case:${proposal.happyCircleCaseId}`
-          : `settlement:${proposal.proposalId}`,
-      ];
-    }),
-  );
-}
-
-function circleHistoryCountsForPerson(
-  person: PersonCardDto,
-  historyItems: readonly ActivityItemDto[],
-  activeCircleGroupKeys: ReadonlySet<string>,
-): {
-  readonly completedCount: number;
-  readonly notCompletedCount: number;
-  readonly replacedCount: number;
-} {
-  const kindsByGroupId = new Map<string, Set<ReturnType<typeof cycleActivityKind>>>();
-
-  for (const item of historyItems) {
-    if (!isPeopleCircleActivityItem(item) || !activityMatchesPerson(item, person)) {
-      continue;
-    }
-
-    const groupKey = circleHistoryGroupKey(item);
-    if (activeCircleGroupKeys.has(groupKey)) {
-      continue;
-    }
-
-    const kinds = kindsByGroupId.get(groupKey) ?? new Set<ReturnType<typeof cycleActivityKind>>();
-    kinds.add(cycleActivityKind(item));
-    kindsByGroupId.set(groupKey, kinds);
-  }
-
+function countCircleHistoryGroups(
+  kindsByGroupId: ReadonlyMap<string, ReadonlySet<ReturnType<typeof cycleActivityKind>>>,
+): CircleHistoryCounts {
   return Array.from(kindsByGroupId.values()).reduce(
     (counts, kinds) => {
       if (kinds.has('executed_proposal')) {
@@ -403,6 +364,157 @@ function circleHistoryCountsForPerson(
   );
 }
 
+function activeCircleGroupKey(proposal: ActiveSettlementPreviewDto): string {
+  return proposal.happyCircleCaseId
+    ? `happy_circle_case:${proposal.happyCircleCaseId}`
+    : `settlement:${proposal.proposalId}`;
+}
+
+function buildPeopleIdsByName(people: readonly PersonCardDto[]): Map<string, string[]> {
+  const peopleIdsByName = new Map<string, string[]>();
+
+  for (const person of people) {
+    const nameKey = normalizedText(person.displayName);
+    const existingIds = peopleIdsByName.get(nameKey) ?? [];
+    existingIds.push(person.userId);
+    peopleIdsByName.set(nameKey, existingIds);
+  }
+
+  return peopleIdsByName;
+}
+
+function personIdsForActivity(
+  item: ActivityItemDto,
+  peopleById: ReadonlyMap<string, PersonCardDto>,
+  peopleIdsByName: ReadonlyMap<string, readonly string[]>,
+): readonly string[] {
+  const personIds = new Set<string>();
+
+  for (const participantUserId of item.participantUserIds ?? []) {
+    if (peopleById.has(participantUserId)) {
+      personIds.add(participantUserId);
+    }
+  }
+
+  const hrefPersonId = personIdFromActivityHref(item.href);
+  if (hrefPersonId) {
+    if (peopleById.has(hrefPersonId)) {
+      personIds.add(hrefPersonId);
+    }
+
+    return Array.from(personIds);
+  }
+
+  for (const personId of peopleIdsByName.get(normalizedText(item.counterpartyLabel)) ?? []) {
+    personIds.add(personId);
+  }
+
+  return Array.from(personIds);
+}
+
+function incrementActivityScore(
+  scoresByPerson: Map<string, ActivityScore>,
+  personId: string,
+  item: ActivityItemDto,
+) {
+  const previousScore = scoresByPerson.get(personId) ?? EMPTY_ACTIVITY_SCORE;
+
+  scoresByPerson.set(personId, {
+    amountMinor: previousScore.amountMinor + Math.abs(item.amountMinor ?? 0),
+    count: previousScore.count + 1,
+  });
+}
+
+function buildPeopleInsightIndexes({
+  activeCircleProposals,
+  analyticsPeople,
+  historyItems,
+  pendingItems,
+  people,
+}: PeopleInsightRowsByFilterInput): PeopleInsightIndexes {
+  const peopleById = new Map(people.map((person) => [person.userId, person]));
+  const peopleIdsByName = buildPeopleIdsByName(people);
+  const analyticsPeopleById = new Map(analyticsPeople.map((row) => [row.userId, row]));
+  const pendingScoresByPerson = new Map<string, ActivityScore>();
+  const rejectedScoresByPerson = new Map<string, ActivityScore>();
+  const activeCircleGroupKeysByPerson = new Map<string, Set<string>>();
+  const circleHistoryKindsByPerson = new Map<
+    string,
+    Map<string, Set<ReturnType<typeof cycleActivityKind>>>
+  >();
+
+  for (const item of pendingItems) {
+    if (!isPendingTransactionItem(item)) {
+      continue;
+    }
+
+    for (const personId of personIdsForActivity(item, peopleById, peopleIdsByName)) {
+      incrementActivityScore(pendingScoresByPerson, personId, item);
+    }
+  }
+
+  for (const item of historyItems) {
+    if (item.status !== 'rejected' || !isConsolidatedTransactionItem(item)) {
+      continue;
+    }
+
+    for (const personId of personIdsForActivity(item, peopleById, peopleIdsByName)) {
+      incrementActivityScore(rejectedScoresByPerson, personId, item);
+    }
+  }
+
+  for (const proposal of activeCircleProposals) {
+    const groupKey = activeCircleGroupKey(proposal);
+
+    for (const participantUserId of proposal.participantUserIds) {
+      if (!peopleById.has(participantUserId)) {
+        continue;
+      }
+
+      const groupKeys = activeCircleGroupKeysByPerson.get(participantUserId) ?? new Set<string>();
+      groupKeys.add(groupKey);
+      activeCircleGroupKeysByPerson.set(participantUserId, groupKeys);
+    }
+  }
+
+  for (const item of historyItems) {
+    if (!isPeopleCircleActivityItem(item)) {
+      continue;
+    }
+
+    const groupKey = circleHistoryGroupKey(item);
+    const activityKind = cycleActivityKind(item);
+
+    for (const personId of personIdsForActivity(item, peopleById, peopleIdsByName)) {
+      if (activeCircleGroupKeysByPerson.get(personId)?.has(groupKey)) {
+        continue;
+      }
+
+      const groupsByPerson =
+        circleHistoryKindsByPerson.get(personId) ??
+        new Map<string, Set<ReturnType<typeof cycleActivityKind>>>();
+      const kinds = groupsByPerson.get(groupKey) ?? new Set<ReturnType<typeof cycleActivityKind>>();
+      kinds.add(activityKind);
+      groupsByPerson.set(groupKey, kinds);
+      circleHistoryKindsByPerson.set(personId, groupsByPerson);
+    }
+  }
+
+  return {
+    activeCircleGroupKeysByPerson,
+    analyticsPeopleById,
+    circleHistoryCountsByPerson: new Map(
+      Array.from(circleHistoryKindsByPerson.entries()).map(([personId, groupsByPerson]) => [
+        personId,
+        countCircleHistoryGroups(groupsByPerson),
+      ]),
+    ),
+    pendingScoresByPerson,
+    peopleById,
+    rejectedScoresByPerson,
+  };
+}
+
 function circleMetricLabel(input: {
   readonly activeCount: number;
   readonly completedCount: number;
@@ -415,28 +527,14 @@ function circleMetricLabel(input: {
   return countLabel(totalCount, 'Circle', 'Circles');
 }
 
-export function buildPeopleInsightRows({
-  activeCircleProposals,
-  analyticsPeople,
-  filter,
-  historyItems,
-  pendingItems,
-  people,
-}: {
-  readonly activeCircleProposals: readonly ActiveSettlementPreviewDto[];
-  readonly analyticsPeople: readonly BalanceAnalyticsPersonRowDto[];
-  readonly filter: PeopleInsightFilter;
-  readonly historyItems: readonly ActivityItemDto[];
-  readonly pendingItems: readonly ActivityItemDto[];
-  readonly people: readonly PersonCardDto[];
-}): PeopleInsightPerson[] {
-  const peopleById = new Map(people.map((person) => [person.userId, person]));
-  const analyticsPeopleById = new Map(analyticsPeople.map((row) => [row.userId, row]));
-  const pendingTransactionItems = pendingItems.filter(isPendingTransactionItem);
+function buildPeopleInsightRowsForFilter(
+  { filter, people }: Pick<PeopleInsightRowsInput, 'filter' | 'people'>,
+  indexes: PeopleInsightIndexes,
+): PeopleInsightPerson[] {
   const rankedPeople = people.flatMap((person): PeopleInsightPerson[] => {
-    const row = analyticsPeopleById.get(person.userId);
+    const row = indexes.analyticsPeopleById.get(person.userId);
     const displayData = row
-      ? personDisplayData(peopleById, row)
+      ? personDisplayData(indexes.peopleById, row)
       : {
           avatarUrl: person.avatarUrl ?? null,
           label: person.displayName,
@@ -492,7 +590,7 @@ export function buildPeopleInsightRows({
     }
 
     if (filter === 'pending') {
-      const pendingScore = pendingScoreForPerson(person, pendingTransactionItems);
+      const pendingScore = indexes.pendingScoresByPerson.get(person.userId) ?? EMPTY_ACTIVITY_SCORE;
       if (pendingScore.count <= 0) {
         return [];
       }
@@ -511,7 +609,8 @@ export function buildPeopleInsightRows({
     }
 
     if (filter === 'rejected') {
-      const rejectedScore = rejectedScoreForPerson(person, historyItems);
+      const rejectedScore =
+        indexes.rejectedScoresByPerson.get(person.userId) ?? EMPTY_ACTIVITY_SCORE;
       if (rejectedScore.count <= 0) {
         return [];
       }
@@ -530,13 +629,11 @@ export function buildPeopleInsightRows({
     }
 
     if (filter === 'circles') {
-      const activeCircleGroupKeys = activeCircleGroupKeysForPerson(person, activeCircleProposals);
+      const activeCircleGroupKeys: ReadonlySet<string> =
+        indexes.activeCircleGroupKeysByPerson.get(person.userId) ?? new Set<string>();
       const activeCircleCount = activeCircleGroupKeys.size;
-      const circleHistoryCounts = circleHistoryCountsForPerson(
-        person,
-        historyItems,
-        activeCircleGroupKeys,
-      );
+      const circleHistoryCounts =
+        indexes.circleHistoryCountsByPerson.get(person.userId) ?? EMPTY_CIRCLE_HISTORY_COUNTS;
       const circleCount =
         activeCircleCount +
         circleHistoryCounts.completedCount +
@@ -576,15 +673,37 @@ export function buildPeopleInsightRows({
     ];
   });
 
-  return rankedPeople
-    .sort((left, right) => {
-      const scoreDiff = right.score - left.score;
-      if (scoreDiff !== 0) {
-        return scoreDiff;
-      }
+  return rankedPeople.sort((left, right) => {
+    const scoreDiff = right.score - left.score;
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
 
-      return left.label.localeCompare(right.label, 'es-CO');
-    });
+    return left.label.localeCompare(right.label, 'es-CO');
+  });
+}
+
+export function buildPeopleInsightRows(input: PeopleInsightRowsInput): PeopleInsightPerson[] {
+  return buildPeopleInsightRowsForFilter(input, buildPeopleInsightIndexes(input));
+}
+
+export function buildPeopleInsightRowsByFilter(
+  input: PeopleInsightRowsByFilterInput,
+): Record<PeopleInsightFilter, PeopleInsightPerson[]> {
+  const indexes = buildPeopleInsightIndexes(input);
+  const rowsByFilter = {} as Record<PeopleInsightFilter, PeopleInsightPerson[]>;
+
+  for (const option of PEOPLE_INSIGHT_OPTIONS) {
+    rowsByFilter[option.value] = buildPeopleInsightRowsForFilter(
+      {
+        filter: option.value,
+        people: input.people,
+      },
+      indexes,
+    );
+  }
+
+  return rowsByFilter;
 }
 
 export function buildPeopleInsightRanking(

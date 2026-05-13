@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
-import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 type StatusChipTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'cycle';
 
@@ -88,7 +88,9 @@ export function StatusChip({
   compact = false,
   iconOnly = false,
 }: StatusChipProps) {
+  const activeTheme = useAppTheme();
   const iconName = statusIconName(label, tone);
+  const colors = statusColors(activeTheme, tone);
 
   return (
     <View
@@ -98,29 +100,15 @@ export function StatusChip({
         styles.chip,
         compact ? styles.compactChip : null,
         iconOnly ? styles.iconChip : null,
-        tone === 'primary' ? styles.primary : null,
-        tone === 'success' ? styles.success : null,
-        tone === 'warning' ? styles.warning : null,
-        tone === 'danger' ? styles.danger : null,
-        tone === 'neutral' ? styles.neutral : null,
-        tone === 'cycle' ? styles.cycle : null,
+        { backgroundColor: colors.backgroundColor },
       ]}
     >
       {iconOnly ? (
-        <Ionicons color={statusTextColor(tone)} name={iconName} size={compact ? 13 : 15} />
+        <Ionicons color={colors.color} name={iconName} size={compact ? 13 : 15} />
       ) : (
         <AppText
           numberOfLines={1}
-          style={[
-            styles.label,
-            compact ? styles.compactLabel : null,
-            tone === 'primary' ? styles.primaryText : null,
-            tone === 'success' ? styles.successText : null,
-            tone === 'warning' ? styles.warningText : null,
-            tone === 'danger' ? styles.dangerText : null,
-            tone === 'neutral' ? styles.neutralText : null,
-            tone === 'cycle' ? styles.cycleText : null,
-          ]}
+          style={[styles.label, compact ? styles.compactLabel : null, { color: colors.color }]}
         >
           {label}
         </AppText>
@@ -129,24 +117,42 @@ export function StatusChip({
   );
 }
 
-function statusTextColor(tone: StatusChipTone): string {
+function statusColors(activeTheme: ReturnType<typeof useAppTheme>, tone: StatusChipTone) {
   if (tone === 'primary') {
-    return theme.colors.primary;
+    return {
+      backgroundColor: activeTheme.colors.primarySoft,
+      color: activeTheme.colors.primary,
+    };
   }
   if (tone === 'success') {
-    return theme.colors.success;
+    return {
+      backgroundColor: activeTheme.colors.successSoft,
+      color: activeTheme.colors.success,
+    };
   }
   if (tone === 'warning') {
-    return theme.colors.warning;
+    return {
+      backgroundColor: activeTheme.colors.warningSoft,
+      color: activeTheme.colors.warning,
+    };
   }
   if (tone === 'danger') {
-    return theme.colors.danger;
+    return {
+      backgroundColor: activeTheme.colors.dangerSoft,
+      color: activeTheme.colors.danger,
+    };
   }
   if (tone === 'cycle') {
-    return transactionCategoryColor('cycle');
+    return {
+      backgroundColor: activeTheme.colors.cycleSoft,
+      color: activeTheme.colors.cycle,
+    };
   }
 
-  return theme.colors.textMuted;
+  return {
+    backgroundColor: activeTheme.colors.surfaceSoft,
+    color: activeTheme.colors.textMuted,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -180,41 +186,5 @@ const styles = StyleSheet.create({
   compactLabel: {
     fontSize: 11,
     lineHeight: 12,
-  },
-  primary: {
-    backgroundColor: theme.colors.primarySoft,
-  },
-  success: {
-    backgroundColor: theme.colors.successSoft,
-  },
-  warning: {
-    backgroundColor: theme.colors.warningSoft,
-  },
-  danger: {
-    backgroundColor: theme.colors.dangerSoft,
-  },
-  neutral: {
-    backgroundColor: theme.colors.surfaceSoft,
-  },
-  cycle: {
-    backgroundColor: '#eaf1ff',
-  },
-  primaryText: {
-    color: theme.colors.primary,
-  },
-  successText: {
-    color: theme.colors.success,
-  },
-  warningText: {
-    color: theme.colors.warning,
-  },
-  dangerText: {
-    color: theme.colors.danger,
-  },
-  neutralText: {
-    color: theme.colors.textMuted,
-  },
-  cycleText: {
-    color: transactionCategoryColor('cycle'),
   },
 });

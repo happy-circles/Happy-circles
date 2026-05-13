@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Animated, Easing, Pressable, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, Line } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import type {
   ActiveSettlementPreviewDto,
@@ -12,12 +12,18 @@ import type {
 
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
+import {
+  HappyCircleRing,
+  type HappyCircleRingParticipant,
+} from '@/components/happy-circle-ring';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
+import { StateAuraLayer } from '@/components/state-aura-layer';
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import { toneVisual } from '@/lib/direction-ui';
 import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
@@ -27,7 +33,6 @@ import {
   amountTone,
   balanceTone,
   firstName,
-  formatCompactCop,
   formatHomeBalanceCop,
   personLensAmount,
   signedFormatCompactCop,
@@ -35,10 +40,10 @@ import {
 import { balanceOverviewStyles as styles } from './balance-overview-screen.styles';
 
 const VISUAL_SWATCHES = [
-  { color: '#3dba6e', soft: '#e8f8ef' },
-  { color: '#e8604a', soft: '#fceae7' },
-  { color: '#2563eb', soft: '#eaf1ff' },
-  { color: '#7c3aed', soft: '#f0eaff' },
+  { color: theme.colors.success, soft: theme.colors.successSoft },
+  { color: theme.colors.danger, soft: theme.colors.dangerSoft },
+  { color: theme.colors.cycle, soft: theme.colors.cycleSoft },
+  { color: theme.palette.category.fun.color, soft: theme.palette.category.fun.backgroundColor },
 ] as const;
 
 const CATEGORY_PARTICLE_LIMIT = 6;
@@ -148,6 +153,7 @@ export function TrendChip({
   readonly centered?: boolean;
   readonly contextLabel?: string;
 }) {
+  const activeTheme = useAppTheme();
   const hasComparison =
     amountMinor !== undefined || (changeRatio !== undefined && changeRatio !== null);
   const comparable = amountMinor ?? changeRatio ?? 0;
@@ -163,6 +169,13 @@ export function TrendChip({
     <View
       style={[
         styles.trendChip,
+        {
+          backgroundColor:
+            activeTheme.scheme === 'dark'
+              ? activeTheme.colors.surfaceSoft
+              : activeTheme.glass.accentBackground,
+          borderColor: activeTheme.colors.hairline,
+        },
         centered ? styles.trendChipCentered : null,
         tone === 'positive' ? styles.trendChipPositive : null,
         tone === 'negative' ? styles.trendChipNegative : null,
@@ -211,6 +224,7 @@ function BalanceCarouselMetricItem({
   readonly amountMinor: number;
   readonly tone: 'positive' | 'negative';
 }) {
+  const activeTheme = useAppTheme();
   const visual = toneVisual(tone);
 
   if (!visual) {
@@ -218,7 +232,18 @@ function BalanceCarouselMetricItem({
   }
 
   return (
-    <View style={styles.balanceMetricItem}>
+    <View
+      style={[
+        styles.balanceMetricItem,
+        {
+          backgroundColor:
+            activeTheme.scheme === 'dark'
+              ? activeTheme.colors.surfaceSoft
+              : activeTheme.glass.background,
+          borderColor: activeTheme.colors.hairline,
+        },
+      ]}
+    >
       <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
       <AppText numberOfLines={1} style={[styles.balanceMetricLabel, { color: visual.accentColor }]}>
         {visual.label}
@@ -968,15 +993,13 @@ export function CategoriesFocusCard({
   );
 }
 
-type CircleRadarTone = 'needs_me' | 'new' | 'waiting' | 'ready' | 'done' | 'empty';
+type CircleRadarTone = 'needs_me' | 'new' | 'waiting' | 'ready';
 
 type CircleRadarItem = {
-  readonly approvedCount: number;
-  readonly icon: keyof typeof Ionicons.glyphMap;
   readonly isNew: boolean;
   readonly key: string;
-  readonly participantCount: number;
   readonly priority: number;
+  readonly proposal: ActiveSettlementPreviewDto;
   readonly tone: CircleRadarTone;
 };
 
@@ -988,56 +1011,14 @@ type CircleRadarLayout = {
 
 const CIRCLE_RADAR_WIDTH = 280;
 const CIRCLE_RADAR_HEIGHT = 146;
-const CIRCLE_RADAR_LAYOUTS: readonly CircleRadarLayout[] = [
-  { left: 101, size: 78, top: 34 },
-  { left: 28, size: 54, top: 24 },
-  { left: 202, size: 56, top: 22 },
-  { left: 44, size: 48, top: 96 },
-  { left: 198, size: 48, top: 96 },
+const CIRCLE_RADAR_RING_SIZE = 126;
+const CIRCLE_RADAR_IDLE_NODES: readonly CircleRadarLayout[] = [
+  { left: 135, size: 12, top: 19 },
+  { left: 74, size: 10, top: 43 },
+  { left: 198, size: 11, top: 45 },
+  { left: 97, size: 9, top: 106 },
+  { left: 180, size: 10, top: 103 },
 ];
-
-function circleRadarToneVisual(tone: CircleRadarTone): {
-  readonly color: string;
-  readonly soft: string;
-} {
-  if (tone === 'needs_me') {
-    return { color: theme.colors.warning, soft: theme.colors.warningSoft };
-  }
-
-  if (tone === 'new') {
-    return { color: '#2563eb', soft: '#eaf1ff' };
-  }
-
-  if (tone === 'ready' || tone === 'done') {
-    return { color: theme.colors.success, soft: theme.colors.successSoft };
-  }
-
-  if (tone === 'empty') {
-    return { color: theme.colors.textMuted, soft: theme.colors.surfaceSoft };
-  }
-
-  return { color: theme.colors.brandNavy, soft: theme.colors.primarySoft };
-}
-
-function circleRadarIcon(tone: CircleRadarTone): keyof typeof Ionicons.glyphMap {
-  if (tone === 'needs_me') {
-    return 'checkmark';
-  }
-
-  if (tone === 'new') {
-    return 'sparkles-outline';
-  }
-
-  if (tone === 'ready' || tone === 'done') {
-    return 'checkmark-done-outline';
-  }
-
-  if (tone === 'empty') {
-    return 'radio-button-off-outline';
-  }
-
-  return 'ellipsis-horizontal';
-}
 
 function proposalRadarTone(
   proposal: ActiveSettlementPreviewDto,
@@ -1096,138 +1077,224 @@ function buildCircleRadarItem(
 ): CircleRadarItem {
   const isNew = Boolean(newCircleProposalIds?.has(proposal.proposalId));
   const tone = proposalRadarTone(proposal, currentUserId, isNew);
-  const approvedCount = proposal.participantDecisions.filter(
-    (participant) => participant.decision === 'approved',
-  ).length;
 
   return {
-    approvedCount,
-    icon: circleRadarIcon(tone),
     isNew,
     key: proposal.proposalId,
-    participantCount: Math.max(proposal.participantCount, 1),
     priority: circleRadarPriority(tone, isNew),
+    proposal,
     tone,
   };
 }
 
-function circleRadarSummary(input: {
-  readonly closedCircleCount: number;
+function circleRadarPrimaryLabel(input: {
+  readonly activeCount: number;
   readonly needsMeCount: number;
-  readonly newCount: number;
-  readonly readyCount: number;
-  readonly waitingCount: number;
 }): string {
   if (input.needsMeCount > 0) {
-    return `OK ${input.needsMeCount}`;
+    return input.needsMeCount === 1 ? 'Responde el Circle' : 'Responde tus Circles';
   }
 
-  if (input.newCount > 0) {
-    return `Nuevo ${input.newCount}`;
+  if (input.activeCount > 0) {
+    return 'Esperando respuestas';
   }
 
-  if (input.readyCount > 0) {
-    return `Listo ${input.readyCount}`;
-  }
-
-  if (input.waitingCount > 0) {
-    return `Espera ${input.waitingCount}`;
-  }
-
-  if (input.closedCircleCount > 0) {
-    return `Hechos ${input.closedCircleCount}`;
-  }
-
-  return 'Sin vueltas';
+  return 'Todo claro por ahora';
 }
 
-function CircleRadarBubble({
-  item,
-  layout,
-  pulse,
+function circleRadarSecondaryLabel(activeCount: number): string {
+  if (activeCount > 1) {
+    return `${activeCount} Circles activos`;
+  }
+
+  if (activeCount === 1) {
+    return 'Circle activo';
+  }
+
+  return 'Buscando vueltas';
+}
+
+function fallbackRingDecision(proposal: ActiveSettlementPreviewDto): 'approved' | 'pending' {
+  return proposal.status === 'approved' ? 'approved' : 'pending';
+}
+
+function anonymizedCircleParticipants(
+  proposal: ActiveSettlementPreviewDto,
+  currentUserId: string | null | undefined,
+): readonly HappyCircleRingParticipant[] {
+  const fallbackDecision = fallbackRingDecision(proposal);
+  const currentParticipant = currentUserId
+    ? proposal.participantDecisions.find((participant) => participant.userId === currentUserId)
+    : undefined;
+  const nodes: HappyCircleRingParticipant[] = [];
+
+  if (currentParticipant) {
+    nodes.push({
+      decision: currentParticipant.decision,
+      label: 'Tu',
+      userId: currentParticipant.userId,
+    });
+  }
+
+  for (const participant of proposal.participantDecisions) {
+    if (participant.userId === currentParticipant?.userId || nodes.length >= 5) {
+      continue;
+    }
+
+    nodes.push({
+      decision: participant.decision,
+      label: 'Happy',
+      userId: participant.userId,
+    });
+  }
+
+  while (nodes.length < 5) {
+    nodes.push({
+      decision: fallbackDecision,
+      label: 'Happy',
+      userId: `${proposal.proposalId}:anonymous:${nodes.length}`,
+    });
+  }
+
+  return nodes;
+}
+
+function CircleRadarBackdrop({
+  active,
+  rotate,
 }: {
-  readonly item: CircleRadarItem;
-  readonly layout: CircleRadarLayout;
-  readonly pulse: Animated.AnimatedInterpolation<number>;
+  readonly active: boolean;
+  readonly rotate: Animated.AnimatedInterpolation<string>;
 }) {
-  const visual = circleRadarToneVisual(item.tone);
-  const radius = layout.size / 2 - 3;
-  const circumference = 2 * Math.PI * radius;
-  const approvalRatio = Math.min(item.approvedCount / Math.max(item.participantCount, 1), 1);
-  const dashOffset = circumference * (1 - approvalRatio);
-  const shouldPulse = item.tone === 'needs_me' || item.isNew;
+  const activeTheme = useAppTheme();
+  const radarColor = active ? activeTheme.colors.cycle : activeTheme.colors.primary;
+  const ringStroke = activeTheme.scheme === 'dark' ? activeTheme.colors.border : radarColor;
+  const sweepOpacity = active ? 0.5 : 0.34;
 
   return (
-    <Animated.View
-      style={[
-        styles.circleRadarBubble,
-        {
-          height: layout.size,
-          left: layout.left,
-          top: layout.top,
-          transform: shouldPulse ? [{ scale: pulse }] : undefined,
-          width: layout.size,
-        },
-      ]}
-    >
-      <Svg height={layout.size} style={styles.circleRadarProgressSvg} width={layout.size}>
-        <Circle
-          cx={layout.size / 2}
-          cy={layout.size / 2}
-          fill="none"
-          r={radius}
-          stroke={visual.soft}
-          strokeWidth={5}
-        />
-        <Circle
-          cx={layout.size / 2}
-          cy={layout.size / 2}
-          fill="none"
-          r={radius}
-          stroke={visual.color}
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={dashOffset}
+    <View pointerEvents="none" style={styles.circleRadarCanvas}>
+      <Svg height={CIRCLE_RADAR_HEIGHT} style={styles.circleRadarSvg} width={CIRCLE_RADAR_WIDTH}>
+        {[28, 52, 76].map((radius, index) => (
+          <Circle
+            cx={CIRCLE_RADAR_WIDTH / 2}
+            cy={CIRCLE_RADAR_HEIGHT / 2}
+            fill="none"
+            key={radius}
+            r={radius}
+            stroke={ringStroke}
+            strokeOpacity={active ? 0.22 - index * 0.035 : 0.16 - index * 0.025}
+            strokeWidth={1.4}
+          />
+        ))}
+        <Path
+          d={`M ${CIRCLE_RADAR_WIDTH / 2 - 84} ${CIRCLE_RADAR_HEIGHT / 2} H ${
+            CIRCLE_RADAR_WIDTH / 2 + 84
+          }`}
+          stroke={ringStroke}
           strokeLinecap="round"
-          strokeWidth={5}
-          transform={`rotate(-90 ${layout.size / 2} ${layout.size / 2})`}
+          strokeOpacity={0.1}
+          strokeWidth={1}
+        />
+        <Path
+          d={`M ${CIRCLE_RADAR_WIDTH / 2} ${CIRCLE_RADAR_HEIGHT / 2 - 84} V ${
+            CIRCLE_RADAR_HEIGHT / 2 + 84
+          }`}
+          stroke={ringStroke}
+          strokeLinecap="round"
+          strokeOpacity={0.1}
+          strokeWidth={1}
         />
       </Svg>
-      <View style={[styles.circleRadarOrb, { backgroundColor: visual.soft }]}>
-        <Ionicons color={visual.color} name={item.icon} size={Math.max(18, layout.size * 0.34)} />
-      </View>
-      {item.isNew ? <View style={styles.circleRadarNewDot} /> : null}
-    </Animated.View>
+      <Animated.View
+        style={[
+          styles.circleRadarSweepBeam,
+          {
+            opacity: sweepOpacity,
+            transform: [{ rotate }],
+          },
+        ]}
+      >
+        <Svg height={172} width={172}>
+          <Path d="M 86 86 L 86 9 A 77 77 0 0 1 153 48 Z" fill={radarColor} opacity={0.18} />
+          <Path
+            d="M 86 86 L 86 8"
+            stroke={radarColor}
+            strokeLinecap="round"
+            strokeOpacity={0.58}
+            strokeWidth={2}
+          />
+        </Svg>
+      </Animated.View>
+    </View>
   );
 }
 
-function CircleRadarChip({
-  accessibilityLabel,
-  color,
-  icon,
-  label,
+function CircleRadarIdleNodes({
+  pulse,
 }: {
-  readonly accessibilityLabel: string;
-  readonly color: string;
-  readonly icon: keyof typeof Ionicons.glyphMap;
-  readonly label: string;
+  readonly pulse: Animated.AnimatedInterpolation<number>;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
-    <View accessibilityLabel={accessibilityLabel} accessible style={styles.circleRadarChip}>
-      <Ionicons color={color} name={icon} size={15} />
-      <AppText numberOfLines={1} style={styles.circleRadarChipText}>
-        {label}
-      </AppText>
-    </View>
+    <>
+      {CIRCLE_RADAR_IDLE_NODES.map((node, index) => (
+        <Animated.View
+          key={`${node.left}:${node.top}`}
+          style={[
+            styles.circleRadarGhostNode,
+            {
+              backgroundColor:
+                activeTheme.scheme === 'dark'
+                  ? activeTheme.colors.surfaceSoft
+                  : activeTheme.colors.surface,
+              borderColor: `${activeTheme.colors.cycle}${index === 0 ? '5C' : '30'}`,
+              height: node.size,
+              left: node.left,
+              top: node.top,
+              transform: index === 0 ? [{ scale: pulse }] : undefined,
+              width: node.size,
+            },
+          ]}
+        />
+      ))}
+    </>
+  );
+}
+
+function CircleRadarDetectedGraph({
+  activeCount,
+  currentUserId,
+  pulse,
+  proposal,
+}: {
+  readonly activeCount: number;
+  readonly currentUserId?: string | null;
+  readonly pulse: Animated.AnimatedInterpolation<number>;
+  readonly proposal: ActiveSettlementPreviewDto;
+}) {
+  const activeTheme = useAppTheme();
+  const participants = anonymizedCircleParticipants(proposal, currentUserId);
+
+  return (
+    <Animated.View style={[styles.circleRadarDetectedGraph, { transform: [{ scale: pulse }] }]}>
+      <HappyCircleRing
+        centerColor={activeTheme.colors.cycle}
+        centerLabel={activeCount > 1 ? String(activeCount) : 'Circle'}
+        centerSubLabel={activeCount > 1 ? 'activos' : 'activo'}
+        decisions={participants}
+        ringSize={CIRCLE_RADAR_RING_SIZE}
+        showLabels={false}
+        style={styles.circleRadarDetectedRing}
+      />
+    </Animated.View>
   );
 }
 
 export function SettlementsFocusCard({
   activeProposals = [],
-  changeRatio,
-  closedCircleCount = 0,
   currentUserId,
   newCircleProposalIds,
-  resolvedMinor,
 }: {
   readonly activeProposals?: readonly ActiveSettlementPreviewDto[];
   readonly changeRatio: number | null;
@@ -1236,141 +1303,123 @@ export function SettlementsFocusCard({
   readonly newCircleProposalIds?: ReadonlySet<string>;
   readonly resolvedMinor: number;
 }) {
-  const progress = useLoopingProgress(7800);
+  const activeTheme = useAppTheme();
+  const progress = useLoopingProgress(6200);
   const pulse = progress.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [1, 1.035, 1],
+    outputRange: [1, 1.04, 1],
   });
-  const flowOpacity = progress.interpolate({
-    inputRange: [0, 0.18, 0.78, 1],
-    outputRange: [0, 1, 1, 0],
+  const sweepRotate = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
   });
-  const allRadarItems = activeProposals
+  const prioritizedItems = activeProposals
     .map((proposal) => buildCircleRadarItem(proposal, currentUserId, newCircleProposalIds))
     .sort((left, right) => left.priority - right.priority);
-  const radarItems = allRadarItems.slice(0, CIRCLE_RADAR_LAYOUTS.length);
-  const hiddenCircleCount = Math.max(allRadarItems.length - CIRCLE_RADAR_LAYOUTS.length, 0);
-  const needsMeCount = allRadarItems.filter((item) => item.tone === 'needs_me').length;
-  const newCount = allRadarItems.filter((item) => item.isNew).length;
-  const waitingCount = allRadarItems.filter((item) => item.tone === 'waiting').length;
-  const readyCount = allRadarItems.filter((item) => item.tone === 'ready').length;
-  const primaryLabel = circleRadarSummary({
-    closedCircleCount,
+  const heroItem = prioritizedItems[0];
+  const activeCount = prioritizedItems.length;
+  const needsMeCount = prioritizedItems.filter((item) => item.tone === 'needs_me').length;
+  const newCount = prioritizedItems.filter((item) => item.isNew).length;
+  const hasNewCircles = newCount > 0;
+  const hasActiveCircles = activeCount > 0 && heroItem !== undefined;
+  const primaryLabel = circleRadarPrimaryLabel({
+    activeCount,
     needsMeCount,
-    newCount,
-    readyCount,
-    waitingCount,
   });
-  const trendTone =
-    changeRatio === null
-      ? 'neutral'
-      : changeRatio > 0
-        ? 'positive'
-        : changeRatio < 0
-          ? 'negative'
-          : 'neutral';
-  const fallbackItem: CircleRadarItem = {
-    approvedCount: closedCircleCount > 0 ? 1 : 0,
-    icon: circleRadarIcon(closedCircleCount > 0 ? 'done' : 'empty'),
-    isNew: false,
-    key: 'circle-empty',
-    participantCount: 1,
-    priority: 4,
-    tone: closedCircleCount > 0 ? 'done' : 'empty',
-  };
-  const visibleItems = radarItems.length > 0 ? radarItems : [fallbackItem];
-  const centerLayout = CIRCLE_RADAR_LAYOUTS[0];
-  const centerX = centerLayout.left + centerLayout.size / 2;
-  const centerY = centerLayout.top + centerLayout.size / 2;
+  const secondaryLabel = circleRadarSecondaryLabel(activeCount);
+  const statusLabel = hasActiveCircles
+    ? activeCount === 1
+      ? 'Detectado'
+      : `${activeCount} activos`
+    : 'Buscando';
+  const footerIcon: keyof typeof Ionicons.glyphMap = hasActiveCircles
+    ? needsMeCount > 0
+      ? 'radio-button-on-outline'
+      : 'time-outline'
+    : 'scan-outline';
 
   return (
-    <SurfaceCard padding="lg" style={[styles.focusCard, styles.visualFocusCard]}>
+    <SurfaceCard
+      padding="lg"
+      style={[styles.focusCard, styles.visualFocusCard, styles.circleRadarCard]}
+      underlay={
+        hasNewCircles ? <StateAuraLayer size="hero" variant="newCircle" /> : undefined
+      }
+    >
       <View style={styles.circleRadarHeader}>
         <FocusCardTitle>Circles</FocusCardTitle>
-        <View style={styles.circleRadarStatusPill}>
-          <AppText numberOfLines={1} style={styles.circleRadarStatusText}>
-            {primaryLabel}
+        <View
+          style={[
+            styles.circleRadarStatusPill,
+            {
+              backgroundColor: hasActiveCircles
+                ? activeTheme.colors.cycleSoft
+                : activeTheme.glass.flatMutedBackground,
+              borderColor: activeTheme.colors.hairline,
+            },
+          ]}
+        >
+          <AppText
+            numberOfLines={1}
+            style={[styles.circleRadarStatusText, { color: activeTheme.colors.text }]}
+          >
+            {statusLabel}
           </AppText>
         </View>
       </View>
       <View style={styles.circleRadarScene}>
-        <Svg height={CIRCLE_RADAR_HEIGHT} style={styles.circleRadarSvg} width={CIRCLE_RADAR_WIDTH}>
-          {visibleItems.slice(1).map((item, index) => {
-            const layout = CIRCLE_RADAR_LAYOUTS[index + 1];
-            const visual = circleRadarToneVisual(item.tone);
-            const targetX = layout.left + layout.size / 2;
-            const targetY = layout.top + layout.size / 2;
-
-            return (
-              <Line
-                key={item.key}
-                stroke={visual.color}
-                strokeLinecap="round"
-                strokeOpacity={0.2}
-                strokeWidth={2}
-                x1={centerX}
-                x2={targetX}
-                y1={centerY}
-                y2={targetY}
-              />
-            );
-          })}
-        </Svg>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.circleRadarSweep,
-            {
-              opacity: flowOpacity,
-              transform: [{ scale: pulse }],
-            },
-          ]}
-        />
-        {visibleItems.map((item, index) => (
-          <CircleRadarBubble
-            item={item}
-            key={item.key}
-            layout={CIRCLE_RADAR_LAYOUTS[index]}
+        <CircleRadarBackdrop active={hasActiveCircles} rotate={sweepRotate} />
+        {heroItem ? (
+          <CircleRadarDetectedGraph
+            activeCount={activeCount}
+            currentUserId={currentUserId}
+            proposal={heroItem.proposal}
             pulse={pulse}
           />
-        ))}
-        {hiddenCircleCount > 0 ? (
-          <View style={styles.circleRadarMoreBubble}>
-            <AppText style={styles.circleRadarMoreText}>+{hiddenCircleCount}</AppText>
-          </View>
-        ) : null}
+        ) : (
+          <CircleRadarIdleNodes pulse={pulse} />
+        )}
       </View>
-      <View style={styles.circleRadarChipRow}>
-        <CircleRadarChip
-          accessibilityLabel={`Necesitan tu aprobacion: ${needsMeCount}`}
-          color={theme.colors.warning}
-          icon="checkmark"
-          label={String(needsMeCount)}
-        />
-        <CircleRadarChip
-          accessibilityLabel={`Circles nuevos: ${newCount}`}
-          color="#2563eb"
-          icon="sparkles-outline"
-          label={String(newCount)}
-        />
-        <CircleRadarChip
-          accessibilityLabel={`Esperando aprobacion de otras personas: ${waitingCount}`}
-          color={theme.colors.brandNavy}
-          icon="ellipsis-horizontal"
-          label={String(waitingCount)}
-        />
-        <CircleRadarChip
-          accessibilityLabel={
-            closedCircleCount > 0
-              ? `Circles hechos: ${closedCircleCount}`
-              : `Monto resuelto: ${formatCompactCop(resolvedMinor)}`
-          }
-          color={trendTone === 'negative' ? theme.colors.warning : theme.colors.success}
-          icon="checkmark-done-outline"
-          label={
-            closedCircleCount > 0 ? String(closedCircleCount) : formatCompactCop(resolvedMinor)
-          }
-        />
+      <View
+        style={[
+          styles.circleRadarFooter,
+          {
+            backgroundColor: activeTheme.glass.flatMutedBackground,
+            borderColor: activeTheme.colors.hairline,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.circleRadarFooterIcon,
+            {
+              backgroundColor: hasActiveCircles
+                ? activeTheme.colors.cycleSoft
+                : activeTheme.colors.surfaceSoft,
+            },
+          ]}
+        >
+          <Ionicons
+            color={hasActiveCircles ? activeTheme.colors.cycle : activeTheme.colors.textMuted}
+            name={footerIcon}
+            size={17}
+          />
+        </View>
+        <View style={styles.circleRadarFooterCopy}>
+          <AppText
+            numberOfLines={1}
+            style={[styles.circleRadarFooterTitle, { color: activeTheme.colors.text }]}
+          >
+            {primaryLabel}
+          </AppText>
+          <AppText
+            numberOfLines={1}
+            style={[styles.circleRadarFooterDetail, { color: activeTheme.colors.textMuted }]}
+          >
+            {secondaryLabel}
+          </AppText>
+        </View>
+        <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={17} />
       </View>
     </SurfaceCard>
   );

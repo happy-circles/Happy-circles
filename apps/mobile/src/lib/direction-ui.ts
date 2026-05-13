@@ -1,4 +1,4 @@
-import { theme } from './theme';
+import { theme, type AppTheme } from './theme';
 
 export type LedgerDirection = 'i_owe' | 'owes_me';
 export type LedgerTone = 'positive' | 'negative' | 'neutral';
@@ -12,33 +12,42 @@ export interface DirectionVisual {
   readonly borderColor: string;
 }
 
-const NEGATIVE_DIRECTION_VISUAL: DirectionVisual = {
-  label: 'Debes',
-  icon: 'arrow-up-circle-outline',
-  accentColor: theme.colors.brandCoral,
-  softBackgroundColor: '#fff4ef',
-  borderColor: theme.colors.brandCoral,
-};
-
-const POSITIVE_DIRECTION_VISUAL: DirectionVisual = {
-  label: 'Te deben',
-  icon: 'arrow-down-circle-outline',
-  accentColor: theme.colors.brandGreen,
-  softBackgroundColor: '#f1f8eb',
-  borderColor: theme.colors.brandGreen,
-};
-
-export function directionVisual(direction: LedgerDirection): DirectionVisual {
-  return direction === 'owes_me' ? POSITIVE_DIRECTION_VISUAL : NEGATIVE_DIRECTION_VISUAL;
+function negativeDirectionVisual(activeTheme: AppTheme = theme): DirectionVisual {
+  return {
+    label: 'Debes',
+    icon: 'arrow-up-circle-outline',
+    accentColor: activeTheme.colors.brandCoral,
+    softBackgroundColor: activeTheme.colors.dangerSoft,
+    borderColor: activeTheme.colors.brandCoral,
+  };
 }
 
-export function toneVisual(tone: LedgerTone): DirectionVisual | null {
+function positiveDirectionVisual(activeTheme: AppTheme = theme): DirectionVisual {
+  return {
+    label: 'Te deben',
+    icon: 'arrow-down-circle-outline',
+    accentColor: activeTheme.colors.brandGreen,
+    softBackgroundColor: activeTheme.colors.successSoft,
+    borderColor: activeTheme.colors.brandGreen,
+  };
+}
+
+export function directionVisual(
+  direction: LedgerDirection,
+  activeTheme: AppTheme = theme,
+): DirectionVisual {
+  return direction === 'owes_me'
+    ? positiveDirectionVisual(activeTheme)
+    : negativeDirectionVisual(activeTheme);
+}
+
+export function toneVisual(tone: LedgerTone, activeTheme: AppTheme = theme): DirectionVisual | null {
   if (tone === 'positive') {
-    return POSITIVE_DIRECTION_VISUAL;
+    return positiveDirectionVisual(activeTheme);
   }
 
   if (tone === 'negative') {
-    return NEGATIVE_DIRECTION_VISUAL;
+    return negativeDirectionVisual(activeTheme);
   }
 
   return null;

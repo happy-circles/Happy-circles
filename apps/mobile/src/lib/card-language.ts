@@ -1,4 +1,5 @@
 import type { StatusChipProps } from '@/components/status-chip';
+import { getRuntimeTheme } from '@/lib/theme';
 
 export type CardStateIntent =
   | 'needsAction'
@@ -12,23 +13,6 @@ export type CardStateIntent =
 
 export type CardHaloIntensity = 'strong' | 'soft' | 'none';
 export type CardStatusTone = NonNullable<StatusChipProps['tone']>;
-
-const CARD_LANGUAGE_COLORS = {
-  cycle: '#2563eb',
-  cycleSoft: '#eaf1ff',
-  danger: '#e8604a',
-  dangerSoft: '#fceae7',
-  neutral: '#667085',
-  neutralSoft: '#edf5f0',
-  pending: '#facc15',
-  pendingSoft: '#fef3c7',
-  primary: '#1a2744',
-  primarySoft: '#e9edf5',
-  success: '#3dba6e',
-  successSoft: '#e8f8ef',
-  warning: '#f97316',
-  warningSoft: '#ffedd5',
-} as const;
 
 export const moneyStatusCopy = {
   amended: 'Monto modificado',
@@ -84,62 +68,66 @@ export function cardStateTone(intent: CardStateIntent): CardStatusTone {
 }
 
 export function cardStateColor(intent: CardStateIntent, tone: CardStatusTone = cardStateTone(intent)) {
+  const activeTheme = getRuntimeTheme();
+
   if (tone === 'cycle' || intent === 'ready') {
-    return CARD_LANGUAGE_COLORS.cycle;
+    return activeTheme.colors.cycle;
   }
 
   if (tone === 'primary') {
-    return CARD_LANGUAGE_COLORS.primary;
+    return activeTheme.colors.primary;
   }
 
   if (tone === 'success') {
-    return CARD_LANGUAGE_COLORS.success;
+    return activeTheme.colors.success;
   }
 
   if (tone === 'warning') {
-    return CARD_LANGUAGE_COLORS.pending;
+    return activeTheme.colors.pending;
   }
 
   if (tone === 'danger') {
-    return CARD_LANGUAGE_COLORS.danger;
+    return activeTheme.colors.danger;
   }
 
   if (intent === 'needsAction' || intent === 'waiting') {
-    return CARD_LANGUAGE_COLORS.pending;
+    return activeTheme.colors.pending;
   }
 
-  return CARD_LANGUAGE_COLORS.neutral;
+  return activeTheme.colors.textMuted;
 }
 
 export function cardStateSoftColor(
   intent: CardStateIntent,
   tone: CardStatusTone = cardStateTone(intent),
 ) {
+  const activeTheme = getRuntimeTheme();
+
   if (tone === 'cycle' || intent === 'ready') {
-    return CARD_LANGUAGE_COLORS.cycleSoft;
+    return activeTheme.colors.cycleSoft;
   }
 
   if (tone === 'primary') {
-    return CARD_LANGUAGE_COLORS.primarySoft;
+    return activeTheme.colors.primarySoft;
   }
 
   if (tone === 'success') {
-    return CARD_LANGUAGE_COLORS.successSoft;
+    return activeTheme.colors.successSoft;
   }
 
   if (tone === 'warning') {
-    return CARD_LANGUAGE_COLORS.pendingSoft;
+    return activeTheme.colors.pendingSoft;
   }
 
   if (tone === 'danger') {
-    return CARD_LANGUAGE_COLORS.dangerSoft;
+    return activeTheme.colors.dangerSoft;
   }
 
   if (intent === 'needsAction' || intent === 'waiting') {
-    return CARD_LANGUAGE_COLORS.pendingSoft;
+    return activeTheme.colors.pendingSoft;
   }
 
-  return CARD_LANGUAGE_COLORS.neutralSoft;
+  return activeTheme.colors.surfaceSoft;
 }
 
 export function cardStateIntentFromStatus(

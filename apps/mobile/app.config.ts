@@ -62,7 +62,7 @@ const config: ExpoConfig = {
     resizeMode: 'contain',
     backgroundColor: '#fbfcff',
   },
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'automatic',
   plugins: [
     'expo-router',
     'expo-dev-client',
@@ -73,6 +73,9 @@ const config: ExpoConfig = {
         imageWidth: 208,
         resizeMode: 'contain',
         backgroundColor: '#fbfcff',
+        dark: {
+          backgroundColor: '#09111f',
+        },
       },
     ],
     'expo-asset',
@@ -126,6 +129,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.happycircles.app',
+    softwareKeyboardLayoutMode: 'pan',
     versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',

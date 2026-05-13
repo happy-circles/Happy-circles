@@ -2,12 +2,8 @@ import type { ActivityItemDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
 import { formatCop } from './data';
-import {
-  cycleActivityKind,
-  isCircleActivityItem,
-  isCircleLifecycleOnly,
-} from './cycle-activity';
-import { circleStatusCopy, moneyStatusCopy } from './card-language';
+import { cycleActivityKind, isCircleActivityItem, isCircleLifecycleOnly } from './cycle-activity';
+import { cardStateColor, circleStatusCopy, moneyStatusCopy } from './card-language';
 import { theme } from './theme';
 import {
   normalizeTransactionCategory,
@@ -159,7 +155,34 @@ export function transactionAccentColor(item: ActivityItemDto): string {
 
 export function transactionToneColor(item: ActivityItemDto): string {
   if (isCycleTransactionItem(item)) {
-    return transactionCategoryColor('cycle');
+    const circleKind = cycleActivityKind(item);
+
+    if (
+      circleKind === 'lifecycle_rejected' ||
+      item.status === 'rejected' ||
+      item.status === 'canceled' ||
+      item.status === 'expired'
+    ) {
+      return theme.colors.danger;
+    }
+
+    if (item.status === 'pending_approvals') {
+      return cardStateColor('needsAction', 'warning');
+    }
+
+    if (
+      item.status === 'approved' ||
+      circleKind === 'executed_proposal' ||
+      circleKind === 'ledger_posted'
+    ) {
+      return theme.colors.success;
+    }
+
+    if (circleKind === 'lifecycle_replaced' || item.status === 'waiting_other_side') {
+      return cardStateColor('ready', 'cycle');
+    }
+
+    return cardStateColor('ready', 'cycle');
   }
 
   if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
@@ -240,7 +263,6 @@ export function transactionStatusLabel(item: ActivityItemDto): string | null {
     if (item.status === 'approved') {
       return circleStatusCopy.approved;
     }
-
   }
 
   if (item.status === 'requires_you') {

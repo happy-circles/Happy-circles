@@ -45,12 +45,12 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   },
   topVisualBand: {
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
     width: '100%',
   },
   podiumPager: {
     height: CATEGORY_INSIGHT_PAGER_HEIGHT,
     overflow: 'hidden',
+    width: '100%',
   },
   syncedPodiumTrack: {
     flexDirection: 'row',
@@ -179,7 +179,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   },
   emptyPodiumIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(248, 250, 252, 0.86)',
+    backgroundColor: theme.colors.floatingSurface,
     borderRadius: theme.radius.pill,
     height: 50,
     justifyContent: 'center',
@@ -214,7 +214,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     width: '72%',
   },
   podiumStepEmpty: {
-    backgroundColor: 'rgba(248, 250, 252, 0.76)',
+    backgroundColor: theme.colors.inputGlass,
     borderColor: theme.colors.border,
     borderStyle: 'dashed',
   },
@@ -242,7 +242,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     textAlign: 'center',
   },
   filterStack: {
-    marginHorizontal: -theme.spacing.sm,
     marginTop: -4,
     overflow: 'visible',
   },
@@ -283,7 +282,7 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     textAlign: 'center',
   },
   metricCarouselShadow: {
-    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+    backgroundColor: theme.colors.pressedOverlay,
     borderRadius: theme.radius.pill,
     bottom: -1,
     height: 7,
@@ -412,8 +411,8 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   },
   positive: { color: theme.colors.success },
   negative: { color: theme.colors.warning },
-  pending: { color: '#ca8a04' },
+  pending: { color: theme.colors.pending },
   danger: { color: theme.colors.danger },
-  cycle: { color: '#2563eb' },
+  cycle: { color: theme.colors.cycle },
   neutral: { color: theme.colors.text },
 });

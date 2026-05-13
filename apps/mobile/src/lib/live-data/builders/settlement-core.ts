@@ -74,8 +74,7 @@ export function settlementParticipantLegAmount(
 
   if (
     shouldValidateBalance &&
-    (summary.paidMinor !== summary.receivedMinor ||
-      (options.requireBalanced && !hasPayAndReceive))
+    (summary.paidMinor !== summary.receivedMinor || (options.requireBalanced && !hasPayAndReceive))
   ) {
     throw new Error(
       `${options.context}: Happy Circle participant amount mismatch ` +
@@ -95,8 +94,36 @@ export function settlementProposalParticipantAmount(
 
   return settlementParticipantLegAmount(summary, {
     context: `Settlement proposal ${proposal.id} participant ${participantUserId}`,
-    requireBalanced: proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+    requireBalanced:
+      proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
   });
+}
+
+export function settlementProposalCounterpartyImpactAmount(
+  proposal: SettlementProposalRow,
+  currentUserId: string,
+  counterpartyUserId: string,
+): number {
+  const movements = parseSettlementMovements(proposal.movements_json);
+  const summary = movements.reduce(
+    (totals, movement) => ({
+      paidMinor:
+        totals.paidMinor +
+        (movement.debtor_user_id === currentUserId &&
+        movement.creditor_user_id === counterpartyUserId
+          ? movement.amount_minor
+          : 0),
+      receivedMinor:
+        totals.receivedMinor +
+        (movement.creditor_user_id === currentUserId &&
+        movement.debtor_user_id === counterpartyUserId
+          ? movement.amount_minor
+          : 0),
+    }),
+    { paidMinor: 0, receivedMinor: 0 },
+  );
+
+  return Math.max(summary.paidMinor, summary.receivedMinor);
 }
 
 export function settlementSavedMovementsCount(

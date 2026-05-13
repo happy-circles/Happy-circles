@@ -8,6 +8,7 @@ import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar, type AppAvatarVariant } from '@/components/app-avatar';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
+import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
 import { StatusFaceBadge } from '@/components/status-face-badge';
 import type { StatusChipProps } from '@/components/status-chip';
 import type { AppHapticFeedback } from '@/lib/app-haptics';
@@ -22,6 +23,7 @@ import {
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
@@ -93,6 +95,7 @@ export function TransactionEventCard({
   compactMetaLayout = 'inline',
   directionLayout = 'stacked',
 }: TransactionEventCardProps) {
+  const activeTheme = useAppTheme();
   const router = useRouter();
   type CompactMetaSegment = {
     readonly key: 'context' | 'time' | 'category';
@@ -122,6 +125,9 @@ export function TransactionEventCard({
           ? cardStateColor('ready', statusTone)
           : amountColor;
   const effectiveHaptic = haptic ?? (hasAction || hasContentAction ? 'selection' : 'none');
+  const isSystemAura = actorAvatarVariant === 'system' || safeCategory === 'cycle';
+  const shouldShowAura =
+    isSystemAura && (Boolean(amountLabel) || statusTone !== 'neutral' || unread);
 
   function handleContentPress() {
     if (onContentPress) {
@@ -183,7 +189,7 @@ export function TransactionEventCard({
         ) : (
           <AppAvatar
             fallbackBackgroundColor={actorFallbackColor}
-            fallbackTextColor={theme.colors.white}
+            fallbackTextColor={activeTheme.colors.white}
             imageUrl={actorAvatarUrl}
             label={actorLabel}
             size={avatarSize}
@@ -198,7 +204,7 @@ export function TransactionEventCard({
             compact ? styles.categoryBadgeCompact : null,
             {
               backgroundColor: resolvedBadgeBackgroundColor,
-              borderColor: theme.colors.surface,
+              borderColor: activeTheme.colors.surface,
             },
           ]}
         >
@@ -213,15 +219,30 @@ export function TransactionEventCard({
       <View
         style={[
           styles.contextBadge,
-          amountColor === theme.colors.success ? styles.contextBadgePositive : null,
-          amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
-          amountColor === transactionCategoryColor('cycle') ? styles.contextBadgeCycle : null,
+          amountColor === activeTheme.colors.success
+            ? { backgroundColor: activeTheme.colors.successSoft }
+            : null,
+          amountColor === activeTheme.colors.warning
+            ? { backgroundColor: activeTheme.colors.warningSoft }
+            : null,
+          amountColor === transactionCategoryColor('cycle')
+            ? { backgroundColor: activeTheme.colors.cycleSoft }
+            : null,
         ]}
       >
-        <AppText style={styles.contextBadgeText}>{context}</AppText>
+        <AppText style={[styles.contextBadgeText, { color: activeTheme.colors.text }]}>
+          {context}
+        </AppText>
       </View>
     ) : (
-      <AppText numberOfLines={1} style={[styles.context, compact ? styles.contextCompact : null]}>
+      <AppText
+        numberOfLines={1}
+        style={[
+          styles.context,
+          { color: activeTheme.colors.text },
+          compact ? styles.contextCompact : null,
+        ]}
+      >
         {context}
       </AppText>
     )
@@ -237,16 +258,39 @@ export function TransactionEventCard({
               .filter((segment) => segment.key !== 'context')
               .map((segment, index) => (
                 <View key={segment.key} style={styles.compactMetaSegment}>
-                  {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+                  {index > 0 ? (
+                    <View
+                      style={[
+                        styles.compactMetaDot,
+                        { backgroundColor: activeTheme.colors.muted },
+                      ]}
+                    />
+                  ) : null}
                   {segment.kind === 'category' ? (
                     <View style={styles.compactMetaCategory}>
-                      <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
-                      <AppText numberOfLines={1} style={styles.compactMetaText}>
+                      <Ionicons
+                        color={activeTheme.colors.textMuted}
+                        name={categoryIcon}
+                        size={11}
+                      />
+                      <AppText
+                        numberOfLines={1}
+                        style={[
+                          styles.compactMetaText,
+                          { color: activeTheme.colors.textMuted },
+                        ]}
+                      >
                         {segment.label}
                       </AppText>
                     </View>
                   ) : (
-                    <AppText numberOfLines={1} style={styles.compactMetaText}>
+                    <AppText
+                      numberOfLines={1}
+                      style={[
+                        styles.compactMetaText,
+                        { color: activeTheme.colors.textMuted },
+                      ]}
+                    >
                       {segment.label}
                     </AppText>
                   )}
@@ -258,29 +302,45 @@ export function TransactionEventCard({
         <View style={styles.compactMetaRow}>
           {compactMetaSegments.map((segment, index) => (
             <View key={segment.key} style={styles.compactMetaSegment}>
-              {index > 0 ? <View style={styles.compactMetaDot} /> : null}
+              {index > 0 ? (
+                <View
+                  style={[styles.compactMetaDot, { backgroundColor: activeTheme.colors.muted }]}
+                />
+              ) : null}
               {segment.kind === 'badge' ? (
                 <View
                   style={[
                     styles.contextBadge,
-                    amountColor === theme.colors.success ? styles.contextBadgePositive : null,
-                    amountColor === theme.colors.warning ? styles.contextBadgeNegative : null,
+                    amountColor === activeTheme.colors.success
+                      ? { backgroundColor: activeTheme.colors.successSoft }
+                      : null,
+                    amountColor === activeTheme.colors.warning
+                      ? { backgroundColor: activeTheme.colors.warningSoft }
+                      : null,
                     amountColor === transactionCategoryColor('cycle')
-                      ? styles.contextBadgeCycle
+                      ? { backgroundColor: activeTheme.colors.cycleSoft }
                       : null,
                   ]}
                 >
-                  <AppText style={styles.contextBadgeText}>{segment.label}</AppText>
+                  <AppText style={[styles.contextBadgeText, { color: activeTheme.colors.text }]}>
+                    {segment.label}
+                  </AppText>
                 </View>
               ) : segment.kind === 'category' ? (
                 <View style={styles.compactMetaCategory}>
-                  <Ionicons color={theme.colors.textMuted} name={categoryIcon} size={11} />
-                  <AppText numberOfLines={1} style={styles.compactMetaText}>
+                  <Ionicons color={activeTheme.colors.textMuted} name={categoryIcon} size={11} />
+                  <AppText
+                    numberOfLines={1}
+                    style={[styles.compactMetaText, { color: activeTheme.colors.textMuted }]}
+                  >
                     {segment.label}
                   </AppText>
                 </View>
               ) : (
-                <AppText numberOfLines={1} style={styles.compactMetaText}>
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.compactMetaText, { color: activeTheme.colors.textMuted }]}
+                >
                   {segment.label}
                 </AppText>
               )}
@@ -292,7 +352,14 @@ export function TransactionEventCard({
       <>
         {contextNode}
         {meta ? (
-          <AppText numberOfLines={1} style={[styles.meta, compact ? styles.metaCompact : null]}>
+          <AppText
+            numberOfLines={1}
+            style={[
+              styles.meta,
+              { color: activeTheme.colors.textMuted },
+              compact ? styles.metaCompact : null,
+            ]}
+          >
             {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
           </AppText>
         ) : null}
@@ -338,7 +405,7 @@ export function TransactionEventCard({
         ) : null}
       </View>
       {hasAction ? (
-        <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={16} />
+        <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={16} />
       ) : null}
     </View>
   );
@@ -358,6 +425,14 @@ export function TransactionEventCard({
       style={style}
       title={actorLabel}
       titleAccessoryNode={null}
+      underlay={
+        shouldShowAura ? (
+          <StateAuraLayer
+            size={unread ? 'large' : compact ? 'compact' : 'regular'}
+            variant={stateAuraVariantFromTone(statusTone)}
+          />
+        ) : undefined
+      }
       unread={unread}
       unreadSurfaceColor={unreadSurfaceColor}
       variant={variant}

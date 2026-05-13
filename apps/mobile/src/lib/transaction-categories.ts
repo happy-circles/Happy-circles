@@ -1,6 +1,6 @@
 import type { TransactionCategory } from '@happy-circles/shared';
 
-import { theme } from './theme';
+import { getRuntimeTheme, type AppTheme } from './theme';
 
 export type UserTransactionCategory = Exclude<TransactionCategory, 'cycle'>;
 
@@ -31,74 +31,72 @@ const EXTRA_TRANSACTION_CATEGORY_LABELS = {
   access_key: 'Acceso',
 } as const;
 
+type TransactionCategoryVisual = {
+  readonly icon: string;
+  readonly color: string;
+  readonly backgroundColor: string;
+};
+
 const TRANSACTION_CATEGORY_VISUALS: Record<
   TransactionCategory,
-  {
-    readonly icon: string;
-    readonly color: string;
-    readonly backgroundColor: string;
-  }
+  (activeTheme: AppTheme) => TransactionCategoryVisual
 > = {
-  food_drinks: {
+  food_drinks: (activeTheme) => ({
     icon: 'restaurant-outline',
-    color: '#d33f2f',
-    backgroundColor: '#fff0e8',
-  },
-  transport: {
+    color: activeTheme.palette.category.food.color,
+    backgroundColor: activeTheme.palette.category.food.backgroundColor,
+  }),
+  transport: (activeTheme) => ({
     icon: 'car-sport-outline',
-    color: '#2563eb',
-    backgroundColor: '#eaf1ff',
-  },
-  entertainment: {
+    color: activeTheme.palette.category.cycle.color,
+    backgroundColor: activeTheme.palette.category.cycle.backgroundColor,
+  }),
+  entertainment: (activeTheme) => ({
     icon: 'film-outline',
-    color: '#7c3aed',
-    backgroundColor: '#f0eaff',
-  },
-  services: {
+    color: activeTheme.palette.category.fun.color,
+    backgroundColor: activeTheme.palette.category.fun.backgroundColor,
+  }),
+  services: (activeTheme) => ({
     icon: 'calculator-outline',
-    color: '#a35f19',
-    backgroundColor: '#fff4dd',
-  },
-  home: {
+    color: activeTheme.palette.category.transport.color,
+    backgroundColor: activeTheme.palette.category.transport.backgroundColor,
+  }),
+  home: (activeTheme) => ({
     icon: 'home-outline',
-    color: '#0f8a5f',
-    backgroundColor: '#e6f7ef',
-  },
-  other: {
+    color: activeTheme.palette.category.home.color,
+    backgroundColor: activeTheme.palette.category.home.backgroundColor,
+  }),
+  other: (activeTheme) => ({
     icon: 'ellipsis-horizontal-circle-outline',
-    color: '#141e33',
-    backgroundColor: '#e9edf5',
-  },
-  cycle: {
+    color: activeTheme.palette.category.other.color,
+    backgroundColor: activeTheme.palette.category.other.backgroundColor,
+  }),
+  cycle: (activeTheme) => ({
     icon: 'happy-outline',
-    color: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
-  },
+    color: activeTheme.colors.cycle,
+    backgroundColor: activeTheme.colors.cycleSoft,
+  }),
 };
 
 const EXTRA_TRANSACTION_CATEGORY_VISUALS: Record<
   keyof typeof EXTRA_TRANSACTION_CATEGORY_LABELS,
-  {
-    readonly icon: string;
-    readonly color: string;
-    readonly backgroundColor: string;
-  }
+  (activeTheme: AppTheme) => TransactionCategoryVisual
 > = {
-  friendship: {
+  friendship: (activeTheme) => ({
     icon: 'person-add-outline',
-    color: '#2563eb',
-    backgroundColor: '#eaf1ff',
-  },
-  friendship_qr: {
+    color: activeTheme.palette.category.cycle.color,
+    backgroundColor: activeTheme.palette.category.cycle.backgroundColor,
+  }),
+  friendship_qr: (activeTheme) => ({
     icon: 'qr-code-outline',
-    color: '#047857',
-    backgroundColor: '#e6f7ef',
-  },
-  access_key: {
+    color: activeTheme.palette.category.home.color,
+    backgroundColor: activeTheme.palette.category.home.backgroundColor,
+  }),
+  access_key: (activeTheme) => ({
     icon: 'key-outline',
-    color: '#7c3aed',
-    backgroundColor: '#f0eaff',
-  },
+    color: activeTheme.palette.category.fun.color,
+    backgroundColor: activeTheme.palette.category.fun.backgroundColor,
+  }),
 };
 
 function resolveTransactionCategoryVisual(value: string | null | undefined): {
@@ -107,14 +105,15 @@ function resolveTransactionCategoryVisual(value: string | null | undefined): {
   readonly backgroundColor: string;
 } {
   const normalized = value?.trim();
+  const activeTheme = getRuntimeTheme();
 
   if (normalized && normalized in EXTRA_TRANSACTION_CATEGORY_VISUALS) {
     return EXTRA_TRANSACTION_CATEGORY_VISUALS[
       normalized as keyof typeof EXTRA_TRANSACTION_CATEGORY_VISUALS
-    ];
+    ](activeTheme);
   }
 
-  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(normalized)];
+  return TRANSACTION_CATEGORY_VISUALS[normalizeTransactionCategory(normalized)](activeTheme);
 }
 
 export function isUserTransactionCategory(

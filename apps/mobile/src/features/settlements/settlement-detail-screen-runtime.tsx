@@ -5,7 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 
 import { EmptyState } from '@/components/empty-state';
-import { HappyCircleFaceIcon, HappyCircleRing } from '@/components/happy-circle-ring';
+import {
+  HappyCircleFaceIcon,
+  HappyCircleRing,
+  type HappyCircleDecision,
+  type HappyCircleRingParticipant,
+} from '@/components/happy-circle-ring';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
@@ -90,41 +95,29 @@ function versionTimelineTone(status: string): CardTone {
   return 'neutral';
 }
 
-function orderParticipantsForCircle(
+function circleFallbackDecision(
   participants: readonly SettlementDetailParticipantDto[],
-  movements: readonly SettlementDetailMovementDto[],
-  currentUserId: string | null,
-): readonly SettlementDetailParticipantDto[] {
-  if (!currentUserId) {
-    return participants;
+): HappyCircleDecision {
+  if (participants.some((participant) => participant.decision === 'rejected')) {
+    return 'rejected';
   }
 
-  const byUserId = new Map(participants.map((participant) => [participant.userId, participant]));
-  const nextByDebtorId = new Map(
-    movements.map((movement) => [movement.debtorUserId, movement.creditorUserId]),
-  );
-  const ordered: SettlementDetailParticipantDto[] = [];
-  const visited = new Set<string>();
-  let cursor: string | null = currentUserId;
-
-  while (
-    cursor &&
-    byUserId.has(cursor) &&
-    !visited.has(cursor) &&
-    ordered.length < participants.length
-  ) {
-    ordered.push(byUserId.get(cursor)!);
-    visited.add(cursor);
-    cursor = nextByDebtorId.get(cursor) ?? null;
+  if (participants.some((participant) => participant.decision === 'pending')) {
+    return 'pending';
   }
 
-  for (const participant of participants) {
-    if (!visited.has(participant.userId)) {
-      ordered.push(participant);
-    }
-  }
+  return 'approved';
+}
 
-  return ordered.length > 0 ? ordered : participants;
+function anonymousGraphParticipant(
+  key: string,
+  decision: HappyCircleDecision,
+): HappyCircleRingParticipant {
+  return {
+    decision,
+    label: 'Happy',
+    userId: key,
+  };
 }
 
 function personalMovementsForUser(
@@ -156,6 +149,36 @@ function participantById(
       decision: 'pending',
     }
   );
+}
+
+function privateCircleParticipants(
+  participants: readonly SettlementDetailParticipantDto[],
+  movements: readonly SettlementDetailMovementDto[],
+  currentUserId: string | null,
+): readonly HappyCircleRingParticipant[] {
+  const fallbackDecision = circleFallbackDecision(participants);
+  const personalMovements = personalMovementsForUser(movements, currentUserId);
+  const incomingMovement =
+    personalMovements.find((movement) => movement.creditorUserId === currentUserId) ?? null;
+  const outgoingMovement =
+    personalMovements.find((movement) => movement.debtorUserId === currentUserId) ?? null;
+  const currentParticipant =
+    participantById(participants, currentUserId, 'Tu') ??
+    anonymousGraphParticipant('happy-circle:self', fallbackDecision);
+  const outgoingParticipant = outgoingMovement
+    ? participantById(participants, outgoingMovement.creditorUserId, outgoingMovement.creditorLabel)
+    : null;
+  const incomingParticipant = incomingMovement
+    ? participantById(participants, incomingMovement.debtorUserId, incomingMovement.debtorLabel)
+    : null;
+
+  return [
+    { ...currentParticipant, label: 'Tu' },
+    outgoingParticipant ?? anonymousGraphParticipant('happy-circle:outgoing', fallbackDecision),
+    anonymousGraphParticipant('happy-circle:hidden:right', fallbackDecision),
+    anonymousGraphParticipant('happy-circle:hidden:left', fallbackDecision),
+    incomingParticipant ?? anonymousGraphParticipant('happy-circle:incoming', fallbackDecision),
+  ];
 }
 
 function FocusedConnectionNode({
@@ -297,11 +320,13 @@ function FocusedCircleConnections({
 }
 
 function SettlementCircleGraph({
+  amountLabel,
   currentUserId,
   focused,
   movements,
   participants,
 }: {
+  readonly amountLabel: string;
   readonly currentUserId: string | null;
   readonly focused: boolean;
   readonly movements: readonly SettlementDetailMovementDto[];
@@ -317,12 +342,18 @@ function SettlementCircleGraph({
     );
   }
 
-  const ringSize = 180;
-  const orderedParticipants = orderParticipantsForCircle(participants, movements, currentUserId);
+  const ringSize = 260;
+  const visibleParticipants = privateCircleParticipants(participants, movements, currentUserId);
 
   return (
     <View style={styles.circleGraph}>
-      <HappyCircleRing decisions={orderedParticipants} ringSize={ringSize} />
+      <HappyCircleRing
+        centerColor={transactionCategoryColor('cycle')}
+        centerLabel={amountLabel}
+        centerSubLabel="a solucionar"
+        decisions={visibleParticipants}
+        ringSize={ringSize}
+      />
     </View>
   );
 }
@@ -358,9 +389,6 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   }, [proposalId, settlement?.status]);
 
   async function handleAction(action: 'approve' | 'reject') {
-    if (action === 'approve') {
-      triggerAppActionHaptic();
-    }
     setBusyAction(action);
     setBanner(null);
     actionFeedback.clear();
@@ -544,7 +572,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <AppText style={styles.circleGraphSubtitle}>
               {graphFocused
                 ? 'Tus conexiones directas dentro del cierre.'
-                : 'Vista completa del Circle.'}
+                : 'Solo ves tus conexiones directas.'}
             </AppText>
           </View>
           <Pressable
@@ -553,9 +581,9 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             }
             hitSlop={10}
             onPress={() => {
-              triggerAppSelectionHaptic();
               setGraphFocused((current) => !current);
             }}
+            onPressIn={triggerAppSelectionHaptic}
             style={({ pressed }) => [
               styles.circleGraphInfoButton,
               graphFocused ? styles.circleGraphInfoButtonActive : null,
@@ -570,6 +598,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           </Pressable>
         </View>
         <SettlementCircleGraph
+          amountLabel={formatCop(settlement.personalAmountMinor)}
           currentUserId={session.userId}
           focused={graphFocused}
           movements={settlement.movementDetails}
@@ -583,7 +612,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <PrimaryAction
               label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
               loading={busyAction === 'approve'}
-              onPress={busyAction ? undefined : () => void handleAction('approve')}
+              onPress={
+                busyAction
+                  ? undefined
+                  : () => {
+                      triggerAppActionHaptic();
+                      void handleAction('approve');
+                    }
+              }
             />
           </View>
           <View style={styles.actionSlot}>
@@ -594,7 +630,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                 busyAction
                   ? undefined
                   : () => {
-                      triggerAppSelectionHaptic();
+                      triggerAppWarningHaptic();
                       Alert.alert(
                         '¿Seguro quieres rechazar este Happy Circle?',
                         'Si rechazas, este Circle se cerrará para todos. No se aplicará ningún movimiento.',

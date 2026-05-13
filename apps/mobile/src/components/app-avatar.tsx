@@ -7,16 +7,16 @@ import {
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
 import {
+  avatarImageCacheKey,
   buildAvatarLabel,
   isAvatarImageReady,
   rememberAvatarImageReady,
   useResolvedAvatarUrl,
 } from '@/lib/avatar';
-import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const SYSTEM_AVATAR_FACE_VIEW_BOX = '290 290 100 100';
-const SYSTEM_AVATAR_PALETTE = resolveHappyCirclesPalette('brand');
 
 export type AppAvatarVariant = 'person' | 'system';
 
@@ -38,9 +38,11 @@ export function AppAvatar({
   fallbackTextColor,
   variant = 'person',
 }: AppAvatarProps) {
+  const activeTheme = useAppTheme();
   const radius = size / 2;
   const avatarLabel = buildAvatarLabel(label);
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
+  const stableImageCacheKey = avatarImageCacheKey(imageUrl);
   const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
   const [hasImageError, setHasImageError] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(initialImageReady);
@@ -52,13 +54,14 @@ export function AppAvatar({
   }, [imageUrl, resolvedImageUrl]);
 
   const isSystemAvatar = variant === 'system';
+  const systemAvatarPalette = resolveHappyCirclesPalette('brand');
   const canShowImage = Boolean(
     !isSystemAvatar && hasImageSource && resolvedImageUrl && !hasImageError,
   );
   const backgroundColor = isSystemAvatar
-    ? theme.colors.successSoft
-    : (fallbackBackgroundColor ?? theme.colors.surfaceSoft);
-  const labelColor = fallbackTextColor ?? theme.colors.text;
+    ? activeTheme.colors.successSoft
+    : (fallbackBackgroundColor ?? activeTheme.colors.surfaceSoft);
+  const labelColor = fallbackTextColor ?? activeTheme.colors.text;
   const systemAvatarSize = Math.max(1, size - 6);
 
   return (
@@ -77,7 +80,7 @@ export function AppAvatar({
     >
       {isSystemAvatar ? (
         <HappyCirclesCenterSvg
-          palette={SYSTEM_AVATAR_PALETTE}
+          palette={systemAvatarPalette}
           size={systemAvatarSize}
           viewBox={SYSTEM_AVATAR_FACE_VIEW_BOX}
         />
@@ -106,8 +109,8 @@ export function AppAvatar({
                 rememberAvatarImageReady(imageUrl, resolvedImageUrl);
                 setIsImageLoaded(true);
               }}
-              recyclingKey={resolvedImageUrl}
-              source={resolvedImageUrl}
+              recyclingKey={stableImageCacheKey ?? resolvedImageUrl}
+              source={{ uri: resolvedImageUrl ?? undefined, cacheKey: stableImageCacheKey }}
               style={[
                 styles.avatarImage,
                 {

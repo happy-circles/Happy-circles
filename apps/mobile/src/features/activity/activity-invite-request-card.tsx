@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { Href } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
+import { CardPressable } from '@/components/card-shell';
 import {
   displayNameForInvite,
   inviteAccentBackgroundColor,
   inviteAccentColor,
   inviteCardIcon,
+  inviteRequestPersonHref,
   inviteRequestMeta,
   isActiveQrInvite,
   shouldShowRespondingInviteProfile,
@@ -19,20 +22,12 @@ import {
 import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { cardStateIntentFromStatus } from '@/lib/card-language';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 import { activityScreenStyles as styles } from './activity-screen.styles';
 
-const NOTIFICATION_AVATAR_COLORS = [
-  '#0f8a5f',
-  '#2563eb',
-  '#a35f19',
-  '#7c3aed',
-  '#b24338',
-  '#141e33',
-];
-
-function avatarColorForLabel(label: string): string {
+function avatarColorForLabel(label: string, activeTheme: AppTheme = theme): string {
   let hash = 0;
 
   for (let index = 0; index < label.length; index += 1) {
@@ -40,7 +35,8 @@ function avatarColorForLabel(label: string): string {
   }
 
   return (
-    NOTIFICATION_AVATAR_COLORS[hash % NOTIFICATION_AVATAR_COLORS.length] ?? theme.colors.primary
+    activeTheme.palette.notificationAvatar[hash % activeTheme.palette.notificationAvatar.length] ??
+    activeTheme.colors.primary
   );
 }
 
@@ -48,15 +44,20 @@ export function ActivityInviteRequestCard({
   busyKey,
   item,
   onAction,
+  onOpenPerson,
 }: {
   readonly busyKey: string | null;
   readonly item: InviteRequestItem;
   readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
+  readonly onOpenPerson?: (href: Href) => void;
 }) {
+  const activeTheme = useAppTheme();
   const displayName = displayNameForInvite(item);
   const meta = inviteRequestMeta(item);
   const accentColor = inviteAccentColor(item);
   const accentBackgroundColor = inviteAccentBackgroundColor(item);
+  const personHref = inviteRequestPersonHref(item);
+  const canOpenPerson = Boolean(personHref && onOpenPerson);
   const busyPrefix = `${item.kind}:${item.inviteId}:`;
   const isBusy = Boolean(busyKey?.startsWith(busyPrefix));
   const showRespondingProfile = shouldShowRespondingInviteProfile(item);
@@ -98,11 +99,15 @@ export function ActivityInviteRequestCard({
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.tabButtonPressed : null,
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aceptar solicitud"
@@ -115,11 +120,15 @@ export function ActivityInviteRequestCard({
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonPrimary,
+            {
+              backgroundColor: activeTheme.colors.primarySoft,
+              borderColor: activeTheme.colors.primaryGhost,
+            },
             pressed ? styles.tabButtonPressed : null,
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
         </Pressable>
       </View>
     ) : item.actionState === 'requires_you_review' ? (
@@ -135,11 +144,15 @@ export function ActivityInviteRequestCard({
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.tabButtonPressed : null,
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aprobar solicitud"
@@ -152,11 +165,15 @@ export function ActivityInviteRequestCard({
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonPrimary,
+            {
+              backgroundColor: activeTheme.colors.primarySoft,
+              borderColor: activeTheme.colors.primaryGhost,
+            },
             pressed ? styles.tabButtonPressed : null,
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
         </Pressable>
       </View>
     ) : (item.kind === 'friendship_invite' && item.actionState === 'pending_claim') ||
@@ -175,16 +192,20 @@ export function ActivityInviteRequestCard({
           style={({ pressed }) => [
             styles.notificationInviteIconButton,
             styles.notificationInviteIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.tabButtonPressed : null,
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={15} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={15} />
         </Pressable>
       </View>
     ) : null;
 
-  return (
+  const card = (
     <ActivityItemCard
       accentColor={accentColor}
       attentionDot={requiresAction}
@@ -197,8 +218,8 @@ export function ActivityInviteRequestCard({
           size={42}
         >
           <AppAvatar
-            fallbackBackgroundColor={avatarColorForLabel(displayName)}
-            fallbackTextColor={theme.colors.white}
+            fallbackBackgroundColor={avatarColorForLabel(displayName, activeTheme)}
+            fallbackTextColor={activeTheme.colors.white}
             imageUrl={avatarUrl}
             label={displayName}
             size={42}
@@ -214,10 +235,28 @@ export function ActivityInviteRequestCard({
         <View style={styles.notificationInviteSide}>
           {actionContent && isActiveQrInvite(item) ? typeIcon : null}
           {actionContent ?? typeIcon}
+          {!actionContent && canOpenPerson ? (
+            <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={18} />
+          ) : null}
         </View>
       }
       title={displayName}
       unread={requiresAction}
     />
+  );
+
+  if (!personHref || !onOpenPerson) {
+    return card;
+  }
+
+  return (
+    <CardPressable
+      accessibilityLabel={`Abrir perfil de ${displayName}`}
+      accessibilityRole="button"
+      haptic="selection"
+      onPress={() => onOpenPerson(personHref)}
+    >
+      {card}
+    </CardPressable>
   );
 }

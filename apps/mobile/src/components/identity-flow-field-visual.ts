@@ -1,24 +1,25 @@
-import { theme } from '@/lib/theme';
+import type { AppTheme } from '@/lib/theme';
 
 export type IdentityFlowFieldStatus = 'danger' | 'idle' | 'success' | 'warning';
 
-export function resolveFieldVisual(status: IdentityFlowFieldStatus) {
+export function resolveFieldVisual(status: IdentityFlowFieldStatus, activeTheme: AppTheme) {
   if (status === 'success') {
     return {
-      backgroundColor: theme.colors.successSoft,
-      borderColor: theme.colors.border,
-      color: theme.colors.success,
-      panelColor: 'rgba(61, 186, 110, 0.08)',
+      backgroundColor: activeTheme.colors.successSoft,
+      borderColor: activeTheme.colors.border,
+      color: activeTheme.colors.success,
+      panelColor: activeTheme.colors.successSoft,
     };
   }
 
   if (status === 'danger' || status === 'warning') {
-    const color = status === 'warning' ? theme.colors.warning : theme.colors.danger;
+    const color = status === 'warning' ? activeTheme.colors.warning : activeTheme.colors.danger;
     const panelColor =
-      status === 'warning' ? 'rgba(249, 115, 22, 0.08)' : 'rgba(232, 96, 74, 0.08)';
+      status === 'warning' ? activeTheme.colors.warningSoft : activeTheme.colors.dangerSoft;
 
     return {
-      backgroundColor: status === 'warning' ? theme.colors.warningSoft : theme.colors.dangerSoft,
+      backgroundColor:
+        status === 'warning' ? activeTheme.colors.warningSoft : activeTheme.colors.dangerSoft,
       borderColor: color,
       color,
       panelColor,
@@ -26,9 +27,9 @@ export function resolveFieldVisual(status: IdentityFlowFieldStatus) {
   }
 
   return {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
-    color: theme.colors.primary,
-    panelColor: theme.colors.primaryGhost,
+    backgroundColor: activeTheme.colors.primarySoft,
+    borderColor: activeTheme.colors.border,
+    color: activeTheme.colors.primary,
+    panelColor: activeTheme.colors.primaryGhost,
   };
 }

@@ -5,6 +5,7 @@ import { Animated, StyleSheet } from 'react-native';
 import { HappyCirclesGlyph } from '@/components/happy-circles-glyph';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 type LockupViewStyle = StyleProp<ViewStyle> | object | readonly unknown[];
 
@@ -39,6 +40,8 @@ export function BrandLockup({
   readonly titleSize?: number;
   readonly titleStyle?: StyleProp<TextStyle>;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
     <Animated.View
       accessibilityLabel={accessibilityLabel}
@@ -53,7 +56,11 @@ export function BrandLockup({
           minimumFontScale={0.82}
           numberOfLines={1}
           scaleRole="display"
-          style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }, titleStyle]}
+          style={[
+            styles.title,
+            { color: activeTheme.colors.text, fontSize: titleSize, lineHeight: titleLineHeight },
+            titleStyle,
+          ]}
         >
           {title}
         </AppText>
@@ -74,7 +81,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   title: {
-    color: theme.colors.text,
     flexShrink: 1,
     fontWeight: '800',
     letterSpacing: 0,

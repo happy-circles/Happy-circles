@@ -5,8 +5,9 @@ import {
   type UserTransactionCategory,
   USER_TRANSACTION_CATEGORIES,
 } from '@/lib/transaction-categories';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const CATEGORY_VISUALS: Record<
   UserTransactionCategory,
@@ -14,53 +15,66 @@ const CATEGORY_VISUALS: Record<
     readonly label: string;
     readonly compactLabel: string;
     readonly icon: keyof typeof Ionicons.glyphMap;
-    readonly color: string;
-    readonly backgroundColor: string;
   }
 > = {
   food_drinks: {
     label: 'Comida & Bebidas',
     compactLabel: 'Comida',
     icon: 'restaurant-outline',
-    color: '#d33f2f',
-    backgroundColor: '#fff0e8',
   },
   transport: {
     label: 'Transporte',
     compactLabel: 'Transporte',
     icon: 'car-sport-outline',
-    color: '#2563eb',
-    backgroundColor: '#eaf1ff',
   },
   entertainment: {
     label: 'Entretenimiento',
     compactLabel: 'Entretenimiento',
     icon: 'film-outline',
-    color: '#7c3aed',
-    backgroundColor: '#f0eaff',
   },
   services: {
     label: 'Servicios',
     compactLabel: 'Servicios',
     icon: 'calculator-outline',
-    color: '#a35f19',
-    backgroundColor: '#fff4dd',
   },
   home: {
     label: 'Hogar',
     compactLabel: 'Hogar',
     icon: 'home-outline',
-    color: '#0f8a5f',
-    backgroundColor: '#e6f7ef',
   },
   other: {
     label: 'Otra',
     compactLabel: 'Otra',
     icon: 'ellipsis-horizontal-circle-outline',
-    color: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
   },
 };
+
+function categoryVisualColors(category: UserTransactionCategory, activeTheme: AppTheme) {
+  if (category === 'food_drinks') {
+    return activeTheme.palette.category.food;
+  }
+
+  if (category === 'transport') {
+    return activeTheme.palette.category.cycle;
+  }
+
+  if (category === 'entertainment') {
+    return activeTheme.palette.category.fun;
+  }
+
+  if (category === 'services') {
+    return activeTheme.palette.category.transport;
+  }
+
+  if (category === 'home') {
+    return activeTheme.palette.category.home;
+  }
+
+  return {
+    backgroundColor: activeTheme.colors.primarySoft,
+    color: activeTheme.colors.primary,
+  };
+}
 
 export interface TransactionCategoryPickerProps {
   readonly value: UserTransactionCategory;
@@ -73,8 +87,10 @@ export function TransactionCategoryPicker({
   onChange,
   variant = 'grid',
 }: TransactionCategoryPickerProps) {
+  const activeTheme = useAppTheme();
   const content = USER_TRANSACTION_CATEGORIES.map((category) => {
     const item = CATEGORY_VISUALS[category];
+    const colors = categoryVisualColors(category, activeTheme);
     const selected = category === value;
 
     return (
@@ -89,7 +105,12 @@ export function TransactionCategoryPicker({
             : variant === 'inline-grid'
               ? styles.inlineGridOption
               : styles.option,
-          selected ? styles.optionSelected : null,
+          {
+            backgroundColor: selected
+              ? activeTheme.colors.primarySoft
+              : activeTheme.colors.surface,
+            borderColor: selected ? activeTheme.colors.primary : activeTheme.colors.border,
+          },
           pressed ? styles.optionPressed : null,
         ]}
       >
@@ -97,17 +118,18 @@ export function TransactionCategoryPicker({
           style={[
             styles.iconBubble,
             {
-              backgroundColor: item.backgroundColor,
+              backgroundColor: colors.backgroundColor,
             },
           ]}
         >
-          <Ionicons color={item.color} name={item.icon} size={22} />
+          <Ionicons color={colors.color} name={item.icon} size={22} />
         </View>
         <AppText
           numberOfLines={variant === 'grid' ? 2 : 1}
           style={[
             styles.label,
             variant === 'inline-grid' ? styles.inlineGridLabel : null,
+            { color: selected ? activeTheme.colors.primary : activeTheme.colors.text },
             selected ? styles.labelSelected : null,
           ]}
         >

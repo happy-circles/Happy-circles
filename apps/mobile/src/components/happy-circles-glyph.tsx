@@ -3,7 +3,8 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { View } from 'react-native';
 import Svg, { Circle, Defs, G, Mask, Path, Rect } from 'react-native-svg';
 
-import { theme } from '@/lib/theme';
+import { getRuntimeTheme, theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const GLYPH_VIEW_BOX = '120 120 440 440';
 
@@ -27,24 +28,26 @@ export interface HappyCirclesPalette {
 
 export function resolveHappyCirclesPalette(
   tone: HappyCirclesTone = 'brand',
-  color = theme.colors.text,
+  color: string = theme.colors.text,
 ): HappyCirclesPalette {
+  const activeTheme = getRuntimeTheme();
+
   if (tone === 'mono') {
     return {
       navy: color,
       green: color,
       coral: color,
       face: color,
-      faceDetail: theme.colors.white,
+      faceDetail: activeTheme.colors.white,
     };
   }
 
   return {
-    navy: theme.colors.brandNavy,
-    green: theme.colors.brandGreen,
-    coral: theme.colors.brandCoral,
-    face: theme.colors.brandGreen,
-    faceDetail: theme.colors.white,
+    navy: activeTheme.colors.brandNavy,
+    green: activeTheme.colors.brandGreen,
+    coral: activeTheme.colors.brandCoral,
+    face: activeTheme.colors.brandGreen,
+    faceDetail: activeTheme.colors.white,
   };
 }
 
@@ -258,7 +261,23 @@ export function HappyCirclesGlyph({
   style,
   tone = 'brand',
 }: HappyCirclesGlyphProps) {
-  const palette = resolveHappyCirclesPalette(tone, color);
+  const activeTheme = useAppTheme();
+  const palette =
+    tone === 'mono'
+      ? {
+          navy: color ?? activeTheme.colors.text,
+          green: color ?? activeTheme.colors.text,
+          coral: color ?? activeTheme.colors.text,
+          face: color ?? activeTheme.colors.text,
+          faceDetail: activeTheme.colors.white,
+        }
+      : {
+          navy: activeTheme.colors.brandNavy,
+          green: activeTheme.colors.brandGreen,
+          coral: activeTheme.colors.brandCoral,
+          face: activeTheme.colors.brandGreen,
+          faceDetail: activeTheme.colors.white,
+        };
   const maskId = useSvgId('happy-circles-head-gaps');
 
   return (

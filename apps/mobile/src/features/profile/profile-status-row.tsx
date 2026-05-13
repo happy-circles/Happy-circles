@@ -5,36 +5,37 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { StatusChip, type StatusChipProps } from '@/components/status-chip';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 import type { RowTone } from './profile-helpers';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
-function resolveRowTone(tone: RowTone) {
+function resolveRowTone(activeTheme: ReturnType<typeof useAppTheme>, tone: RowTone) {
   if (tone === 'success') {
     return {
-      backgroundColor: theme.colors.successSoft,
-      color: theme.colors.success,
+      backgroundColor: activeTheme.colors.successSoft,
+      color: activeTheme.colors.success,
     };
   }
 
   if (tone === 'danger') {
     return {
-      backgroundColor: theme.colors.dangerSoft,
-      color: theme.colors.danger,
+      backgroundColor: activeTheme.colors.dangerSoft,
+      color: activeTheme.colors.danger,
     };
   }
 
   if (tone === 'primary') {
     return {
-      backgroundColor: theme.colors.primarySoft,
-      color: theme.colors.primary,
+      backgroundColor: activeTheme.colors.primarySoft,
+      color: activeTheme.colors.primary,
     };
   }
 
   return {
-    backgroundColor: theme.colors.surfaceSoft,
-    color: theme.colors.textMuted,
+    backgroundColor: activeTheme.colors.surfaceSoft,
+    color: activeTheme.colors.textMuted,
   };
 }
 
@@ -69,7 +70,8 @@ export function ProfileStatusRow({
   readonly tone?: RowTone;
   readonly trailing?: ReactNode;
 }) {
-  const visual = resolveRowTone(tone);
+  const activeTheme = useAppTheme();
+  const visual = resolveRowTone(activeTheme, tone);
 
   return (
     <View style={styles.statusRow}>
@@ -77,8 +79,12 @@ export function ProfileStatusRow({
         <Ionicons color={visual.color} name={icon} size={20} />
       </View>
       <View style={styles.textWrap}>
-        <AppText style={styles.rowTitle}>{title}</AppText>
-        {subtitle ? <AppText style={styles.rowSubtitle}>{subtitle}</AppText> : null}
+        <AppText style={[styles.rowTitle, { color: activeTheme.colors.text }]}>{title}</AppText>
+        {subtitle ? (
+          <AppText style={[styles.rowSubtitle, { color: activeTheme.colors.textMuted }]}>
+            {subtitle}
+          </AppText>
+        ) : null}
       </View>
       {trailing ??
         (status ? <StatusChip compact label={status} tone={rowStatusTone(tone)} /> : null)}
@@ -106,12 +112,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   rowTitle: {
-    color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '700',
   },
   rowSubtitle: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },

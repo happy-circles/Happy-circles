@@ -4,17 +4,19 @@ import { StyleSheet, View } from 'react-native';
 
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
+import { StateAuraLayer, stateAuraVariantFromIntent } from '@/components/state-aura-layer';
 import type { AppHapticFeedback } from '@/lib/app-haptics';
 import {
   cardStateIntentFromTone,
   type CardHaloIntensity,
   type CardStateIntent,
 } from '@/lib/card-language';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { StatusChip } from './status-chip';
 import { SurfaceCard } from './surface-card';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const META_SEPARATOR = ` ${String.fromCharCode(183)} `;
 
@@ -42,6 +44,7 @@ export interface PendingSnippetCardProps extends PropsWithChildren {
   readonly tone?: PendingSnippetTone;
   readonly padding?: PendingSnippetPadding;
   readonly stateIntent?: CardStateIntent;
+  readonly stateAura?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly onPress?: () => void;
 }
@@ -65,10 +68,12 @@ export function PendingSnippetCard({
   tone = 'neutral',
   padding = 'md',
   stateIntent,
+  stateAura = false,
   style,
   onPress,
   children,
 }: PendingSnippetCardProps) {
+  const activeTheme = useAppTheme();
   const resolvedStateIntent = stateIntent ?? cardStateIntentFromTone(statusTone);
   const body = (
     <>
@@ -86,8 +91,10 @@ export function PendingSnippetCard({
           </CardActorAvatar>
         ) : null}
         <View style={styles.copy}>
-          <AppText style={styles.eyebrow}>{eyebrow}</AppText>
-          <AppText style={styles.title}>{title}</AppText>
+          <AppText style={[styles.eyebrow, { color: activeTheme.colors.primary }]}>
+            {eyebrow}
+          </AppText>
+          <AppText style={[styles.title, { color: activeTheme.colors.text }]}>{title}</AppText>
         </View>
         <StatusChip compact iconOnly label={statusLabel} tone={statusTone} />
       </View>
@@ -96,20 +103,25 @@ export function PendingSnippetCard({
         <AppText
           style={[
             styles.amount,
-            amountTone === 'positive' ? styles.amountPositive : null,
-            amountTone === 'negative' ? styles.amountNegative : null,
-            amountTone === 'neutral' ? styles.amountNeutral : null,
-            amountTone === 'danger' ? styles.amountDanger : null,
+            { color: pendingSnippetAmountColor(activeTheme, amountTone) },
           ]}
         >
           {amountLabel}
         </AppText>
       ) : null}
-      {detail ? <AppText style={styles.detail}>{detail}</AppText> : null}
-      {meta ? (
-        <AppText style={styles.meta}>{meta.replace(/\s*\|\s*/g, META_SEPARATOR)}</AppText>
+      {detail ? (
+        <AppText style={[styles.detail, { color: activeTheme.colors.text }]}>{detail}</AppText>
       ) : null}
-      {helperText ? <AppText style={styles.helper}>{helperText}</AppText> : null}
+      {meta ? (
+        <AppText style={[styles.meta, { color: activeTheme.colors.textMuted }]}>
+          {meta.replace(/\s*\|\s*/g, META_SEPARATOR)}
+        </AppText>
+      ) : null}
+      {helperText ? (
+        <AppText style={[styles.helper, { color: activeTheme.colors.textMuted }]}>
+          {helperText}
+        </AppText>
+      ) : null}
     </>
   );
 
@@ -117,16 +129,19 @@ export function PendingSnippetCard({
     <SurfaceCard
       style={[
         styles.card,
-        tone === 'primary' ? styles.cardPrimary : null,
-        tone === 'success' ? styles.cardSuccess : null,
-        tone === 'warning' ? styles.cardWarning : null,
-        tone === 'neutral' ? styles.cardNeutral : null,
-        tone === 'danger' ? styles.cardDanger : null,
-        tone === 'cycle' ? styles.cardCycle : null,
-        focused ? styles.cardFocused : null,
+        pendingSnippetToneStyle(activeTheme, tone),
+        focused ? pendingSnippetFocusedStyle(activeTheme) : null,
         style,
       ]}
       padding={padding}
+      underlay={
+        stateAura ? (
+          <StateAuraLayer
+            size={focused || statusTone === 'warning' ? 'large' : 'regular'}
+            variant={stateAuraVariantFromIntent(resolvedStateIntent, tone)}
+          />
+        ) : undefined
+      }
       variant={variant}
     >
       {onPress ? (
@@ -144,6 +159,51 @@ export function PendingSnippetCard({
       {children ? <View style={styles.actions}>{children}</View> : null}
     </SurfaceCard>
   );
+}
+
+function pendingSnippetAmountColor(
+  activeTheme: AppTheme,
+  amountTone: PendingSnippetAmountTone,
+): string {
+  if (amountTone === 'positive') {
+    return activeTheme.colors.success;
+  }
+  if (amountTone === 'negative') {
+    return activeTheme.colors.warning;
+  }
+  if (amountTone === 'danger') {
+    return activeTheme.colors.danger;
+  }
+
+  return activeTheme.colors.text;
+}
+
+function pendingSnippetToneStyle(activeTheme: AppTheme, tone: PendingSnippetTone) {
+  if (tone === 'primary') {
+    return { borderLeftColor: activeTheme.colors.primary, borderLeftWidth: 3 };
+  }
+  if (tone === 'success') {
+    return { borderLeftColor: activeTheme.colors.success, borderLeftWidth: 3 };
+  }
+  if (tone === 'warning') {
+    return { borderLeftColor: activeTheme.colors.warning, borderLeftWidth: 3 };
+  }
+  if (tone === 'danger') {
+    return { borderLeftColor: activeTheme.colors.danger, borderLeftWidth: 3 };
+  }
+  if (tone === 'cycle') {
+    return { borderLeftColor: transactionCategoryColor('cycle'), borderLeftWidth: 3 };
+  }
+
+  return { borderLeftColor: activeTheme.colors.textMuted, borderLeftWidth: 3 };
+}
+
+function pendingSnippetFocusedStyle(activeTheme: AppTheme) {
+  return {
+    backgroundColor: activeTheme.colors.primaryGhost,
+    borderColor: activeTheme.colors.primaryGhost,
+    ...activeTheme.shadow.card,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -241,7 +301,7 @@ const styles = StyleSheet.create({
   },
   cardFocused: {
     backgroundColor: theme.colors.primaryGhost,
-    borderColor: 'rgba(26, 39, 68, 0.26)',
+    borderColor: theme.colors.primaryGhost,
     ...theme.shadow.card,
   },
 });

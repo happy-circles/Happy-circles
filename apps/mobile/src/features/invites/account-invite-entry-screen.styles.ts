@@ -42,8 +42,19 @@ export const accountInviteEntryStyles = StyleSheet.create({
     gap: theme.spacing.xs,
     width: '100%',
   },
+  emailAuthForm: {
+    gap: theme.spacing.md,
+  },
+  emailAccordionToggle: {
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  emailCredentialFields: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
   passwordFieldGroup: {
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.xs,
     width: '100%',
   },
   recoveryCodeBlock: {
@@ -110,8 +121,8 @@ export const accountInviteEntryStyles = StyleSheet.create({
     flexGrow: 1,
   },
   appleProviderButton: {
-    backgroundColor: '#000000',
-    borderColor: '#000000',
+    backgroundColor: theme.colors.appleButton,
+    borderColor: theme.colors.appleButton,
   },
   googleProviderButton: {
     backgroundColor: theme.colors.surface,

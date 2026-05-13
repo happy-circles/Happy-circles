@@ -1,24 +1,28 @@
 import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Animated, Easing, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
 import { CardPressable } from '@/components/card-shell';
-import { HappyCircleRing, happyCircleDecisionColor } from '@/components/happy-circle-ring';
+import {
+  HappyCircleRing,
+  type HappyCircleDecision,
+  type HappyCircleRingParticipant,
+  happyCircleDecisionColor,
+} from '@/components/happy-circle-ring';
 import { LiquidGlassDisc } from '@/components/liquid-glass-disc';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { PrimaryAction } from '@/components/primary-action';
-import { StatusChip } from '@/components/status-chip';
+import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCop } from '@/lib/data';
 import {
   triggerAppActionHaptic,
   triggerAppErrorHaptic,
-  triggerAppSelectionHaptic,
   triggerAppWarningHaptic,
 } from '@/lib/app-haptics';
 import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
@@ -27,83 +31,9 @@ import { showBlockedActionAlert, useActionFeedbackOverlay } from '@/lib/action-f
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { useApproveSettlementMutation, useRejectSettlementMutation } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
-import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
-
-const CYCLE_COLOR = transactionCategoryColor('cycle');
-
-function CircleStateGlow({
-  color,
-  strength,
-}: {
-  readonly color: string;
-  readonly strength: 'strong' | 'soft';
-}) {
-  const progress = useRef(new Animated.Value(0)).current;
-  const isStrong = strength === 'strong';
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(progress, {
-          duration: isStrong ? 1600 : 2200,
-          easing: Easing.inOut(Easing.cubic),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(progress, {
-          duration: isStrong ? 1600 : 2200,
-          easing: Easing.inOut(Easing.cubic),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => {
-      animation.stop();
-      progress.stopAnimation();
-    };
-  }, [isStrong, progress]);
-
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-180, 180],
-  });
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [isStrong ? 0.16 : 0.08, isStrong ? 0.44 : 0.24, isStrong ? 0.16 : 0.08],
-  });
-
-  return (
-    <View pointerEvents="none" style={styles.treasureLayer}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.treasureBloom,
-          {
-            backgroundColor: color,
-            opacity: isStrong ? 0.16 : 0.09,
-          },
-        ]}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.treasureSweep,
-          {
-            backgroundColor: color,
-            opacity,
-            transform: [{ translateX }, { rotate: '-18deg' }],
-          },
-        ]}
-      />
-    </View>
-  );
-}
+import { useAppTheme } from '@/providers/theme-provider';
 
 function ApprovalDots({
   decisions,
@@ -122,12 +52,108 @@ function ApprovalDots({
   );
 }
 
+function CircleStatusIcon({
+  label,
+  tone,
+}: {
+  readonly label: string;
+  readonly tone: string | null | undefined;
+}) {
+  const activeTheme = useAppTheme();
+  const icon: keyof typeof Ionicons.glyphMap =
+    tone === 'success'
+      ? 'checkmark-done-circle-outline'
+      : tone === 'danger'
+        ? 'close-circle-outline'
+        : tone === 'warning'
+          ? 'alert-circle-outline'
+          : 'radio-button-on-outline';
+  const color =
+    tone === 'success'
+      ? activeTheme.colors.success
+      : tone === 'danger'
+        ? activeTheme.colors.danger
+        : tone === 'warning'
+          ? activeTheme.colors.warning
+          : activeTheme.colors.cycle;
+
+  return (
+    <View
+      accessibilityLabel={label}
+      accessible
+      style={[styles.statusIcon, { backgroundColor: `${color}12` }]}
+    >
+      <Ionicons color={color} name={icon} size={18} />
+    </View>
+  );
+}
+
+function anonymousCircleParticipant(
+  key: string,
+  decision: HappyCircleDecision,
+): HappyCircleRingParticipant {
+  return {
+    decision,
+    label: 'Happy',
+    userId: key,
+  };
+}
+
+function circleCardDecision(
+  proposal: ActiveSettlementPreviewDto,
+  userId: string | null | undefined,
+  fallbackDecision: HappyCircleDecision,
+): HappyCircleDecision {
+  return (
+    proposal.participantDecisions.find((participant) => participant.userId === userId)?.decision ??
+    fallbackDecision
+  );
+}
+
+function directCircleCardParticipants(
+  proposal: ActiveSettlementPreviewDto,
+  currentUserId: string | null | undefined,
+  fallbackDecision: HappyCircleDecision,
+): readonly HappyCircleRingParticipant[] {
+  const currentParticipant =
+    proposal.participantDecisions.find((participant) => participant.userId === currentUserId) ??
+    anonymousCircleParticipant('happy-circle:self', fallbackDecision);
+  const outgoing = proposal.outgoingConnection;
+  const incoming = proposal.incomingConnection;
+
+  return [
+    { ...currentParticipant, label: 'Tu' },
+    outgoing
+      ? {
+          decision: circleCardDecision(proposal, outgoing.userId, fallbackDecision),
+          label: outgoing.label,
+          userId: outgoing.userId,
+        }
+      : anonymousCircleParticipant('happy-circle:outgoing', fallbackDecision),
+    anonymousCircleParticipant('happy-circle:hidden:right', fallbackDecision),
+    anonymousCircleParticipant('happy-circle:hidden:left', fallbackDecision),
+    incoming
+      ? {
+          decision: circleCardDecision(proposal, incoming.userId, fallbackDecision),
+          label: incoming.label,
+          userId: incoming.userId,
+        }
+      : anonymousCircleParticipant('happy-circle:incoming', fallbackDecision),
+  ];
+}
+
 export interface HappyCircleCardProps {
   readonly proposal: ActiveSettlementPreviewDto;
+  readonly unread?: boolean;
   readonly variant?: 'full' | 'compact' | 'showcase';
 }
 
-export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardProps) {
+export function HappyCircleCard({
+  proposal,
+  unread = false,
+  variant = 'full',
+}: HappyCircleCardProps) {
+  const activeTheme = useAppTheme();
   const router = useRouter();
   const session = useSession();
   const approveSettlement = useApproveSettlementMutation();
@@ -137,15 +163,11 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
 
   const isCompact = variant === 'compact';
   const isShowcase = variant === 'showcase';
-  const ringSize = isShowcase ? 142 : isCompact ? 118 : 168;
+  const ringSize = isShowcase ? 260 : isCompact ? 166 : 220;
+  const amountLabel = formatCop(proposal.personalAmountMinor);
   const approvedCount = proposal.participantCount - proposal.approvalsPending;
   const participantCount = Math.max(proposal.participantCount, 1);
   const approvalRatio = Math.min(Math.max(approvedCount / participantCount, 0), 1);
-  const optimizedMovementCount = Math.max(0, proposal.movementCount);
-  const originalMovementCount = Math.max(
-    optimizedMovementCount,
-    optimizedMovementCount + proposal.savedMovementsCount,
-  );
   const myDecision = proposal.participantDecisions.find(
     (p) => p.userId === session.userId,
   )?.decision;
@@ -156,33 +178,24 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
   });
   const canDecide = presentation.actionability === 'can_decide';
   const circleIntent = cardStateIntentFromTone(presentation.tone ?? 'neutral');
-  const circleGlowColor = cardStateColor(circleIntent, presentation.tone ?? 'neutral');
-  const circleGlowStrength =
-    canDecide || presentation.tone === 'danger' || presentation.tone === 'success'
-      ? 'strong'
-      : 'soft';
+  const cycleColor = activeTheme.colors.cycle;
+  const circleGlowColor = isShowcase
+    ? cycleColor
+    : cardStateColor(circleIntent, presentation.tone ?? 'neutral');
+  const auraSize = unread
+    ? isShowcase
+      ? 'hero'
+      : 'large'
+    : isShowcase
+      ? 'large'
+      : isCompact
+        ? 'compact'
+        : 'regular';
 
   const orderedDecisions = useMemo(() => {
-    const arr = [...proposal.participantDecisions];
-    const myIndex = arr.findIndex((p) => p.userId === session.userId);
-    if (myIndex > 0) {
-      return [...arr.slice(myIndex), ...arr.slice(0, myIndex)];
-    }
-    return arr;
-  }, [proposal.participantDecisions, session.userId]);
-  const participantLabel = orderedDecisions
-    .map((participant) =>
-      participant.userId === session.userId
-        ? 'Tú'
-        : (participant.label.trim().split(/\s+/)[0] ?? participant.label),
-    )
-    .slice(0, 4)
-    .join(' · ');
-
+    return directCircleCardParticipants(proposal, session.userId, myDecision ?? 'pending');
+  }, [myDecision, proposal, session.userId]);
   async function handleAction(action: 'approve' | 'reject') {
-    if (action === 'approve') {
-      triggerAppActionHaptic();
-    }
     setBusyAction(action);
     actionFeedback.clear();
 
@@ -241,51 +254,56 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
       padding="none"
       style={[
         styles.card,
+        { borderLeftColor: cycleColor },
         isCompact ? styles.cardCompact : null,
         isShowcase ? styles.cardShowcase : null,
       ]}
+      underlay={
+        <StateAuraLayer
+          size={auraSize}
+          variant={unread ? 'newCircle' : stateAuraVariantFromTone(presentation.tone)}
+        />
+      }
       variant="elevated"
     >
       <Link href={`/settlements/${proposal.proposalId}` as Href} asChild>
         <CardPressable
           haptic="selection"
+          hapticTrigger="pressIn"
           style={[
             styles.cardPressable,
             isCompact ? styles.cardPressableCompact : null,
             isShowcase ? styles.cardPressableShowcase : null,
           ]}
         >
-          <CircleStateGlow color={circleGlowColor} strength={circleGlowStrength} />
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderCopy}>
-              {isShowcase ? null : (
+          {isShowcase ? null : (
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderCopy}>
                 <View style={styles.brandRow}>
-                  <Ionicons color={CYCLE_COLOR} name="happy-outline" size={18} />
-                  <AppText style={styles.brandLabel}>Happy Circle</AppText>
+                  <Ionicons color={cycleColor} name="happy-outline" size={18} />
+                  <AppText style={[styles.brandLabel, { color: cycleColor }]}>
+                    Happy Circle
+                  </AppText>
                 </View>
-              )}
-              <StatusChip
-                compact
-                label={presentation.label}
-                tone={presentation.tone}
-              />
+                <CircleStatusIcon label={presentation.label} tone={presentation.tone} />
+              </View>
             </View>
-          </View>
+          )}
 
           {isShowcase ? (
             <View style={styles.showcaseBody}>
               <View style={styles.showcaseSummary}>
-                <AppText numberOfLines={1} style={styles.showcaseParticipants}>
-                  {participantLabel || proposal.title}
-                </AppText>
-                <AppText adjustsFontSizeToFit numberOfLines={1} style={styles.showcaseAmount}>
-                  {formatCop(proposal.personalAmountMinor)}
-                </AppText>
-                <View style={styles.movementPill}>
-                  <Ionicons color={CYCLE_COLOR} name="swap-horizontal-outline" size={15} />
-                  <AppText style={styles.movementPillText}>
-                    {originalMovementCount} movs {'->'} {optimizedMovementCount}
+                <View style={styles.showcaseHeader}>
+                  <AppText
+                    adjustsFontSizeToFit
+                    numberOfLines={1}
+                    style={[styles.showcaseTitle, { color: activeTheme.colors.text }]}
+                  >
+                    Happy Circle
                   </AppText>
+                  <View style={styles.showcaseStatusSlot}>
+                    <CircleStatusIcon label={presentation.label} tone={presentation.tone} />
+                  </View>
                 </View>
               </View>
 
@@ -293,19 +311,15 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
                 style={[
                   styles.ringHaloWrap,
                   {
-                    height: ringSize + 18,
-                    width: ringSize + 18,
+                    height: ringSize + 76,
+                    width: ringSize + 104,
                   },
                 ]}
               >
-                <LiquidGlassDisc
-                  color={circleGlowColor}
-                  intensity={canDecide ? 'strong' : 'soft'}
-                  intent={circleIntent}
-                  size={ringSize + 18}
-                  tone={presentation.tone}
-                />
                 <HappyCircleRing
+                  centerColor={cycleColor}
+                  centerLabel={amountLabel}
+                  centerSubLabel="a solucionar"
                   decisions={orderedDecisions}
                   ringSize={ringSize}
                   style={styles.showcaseRing}
@@ -314,35 +328,58 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
 
               <View style={styles.showcaseProgressBlock}>
                 <View style={styles.showcaseProgressMeta}>
-                  <AppText style={styles.approvalSummary}>
+                  <AppText style={[styles.approvalSummary, { color: activeTheme.colors.success }]}>
                     {approvedCount}/{proposal.participantCount} aprobadas
                   </AppText>
                 </View>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${approvalRatio * 100}%` }]} />
+                <View
+                  style={[
+                    styles.progressTrack,
+                    { backgroundColor: activeTheme.colors.surfaceSoft },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { backgroundColor: cycleColor, width: `${approvalRatio * 100}%` },
+                    ]}
+                  />
                 </View>
               </View>
 
               <View style={styles.detailCta}>
-                <AppText style={styles.detailCtaText}>Ver detalle</AppText>
-                <Ionicons color={CYCLE_COLOR} name="chevron-forward" size={17} />
+                <AppText style={[styles.detailCtaText, { color: cycleColor }]}>
+                  Ver detalle
+                </AppText>
+                <Ionicons color={cycleColor} name="chevron-forward" size={17} />
               </View>
             </View>
           ) : (
             <View style={[styles.body, isCompact ? styles.bodyCompact : null]}>
               <View style={styles.metricsColumn}>
                 <View style={styles.metricBlock}>
-                  <AppText style={styles.metricEyebrow}>Evitas mover</AppText>
                   <AppText
-                    style={[styles.metricAmount, isCompact ? styles.metricAmountCompact : null]}
+                    style={[styles.metricEyebrow, { color: activeTheme.colors.textMuted }]}
                   >
-                    {formatCop(proposal.personalAmountMinor)}
+                    Evitas mover
+                  </AppText>
+                  <AppText
+                    style={[
+                      styles.metricAmount,
+                      { color: activeTheme.colors.text },
+                      isCompact ? styles.metricAmountCompact : null,
+                    ]}
+                  >
+                    {amountLabel}
                   </AppText>
                 </View>
-                <AppText style={styles.approvalSummary}>
+                <AppText style={[styles.approvalSummary, { color: activeTheme.colors.success }]}>
                   {approvedCount}/{proposal.participantCount} aprobadas
                 </AppText>
-                <AppText numberOfLines={2} style={styles.stateSummary}>
+                <AppText
+                  numberOfLines={2}
+                  style={[styles.stateSummary, { color: activeTheme.colors.textMuted }]}
+                >
                   {presentation.summary}
                 </AppText>
 
@@ -367,7 +404,13 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
                   size={ringSize + 16}
                   tone={presentation.tone}
                 />
-                <HappyCircleRing decisions={orderedDecisions} ringSize={ringSize} />
+                <HappyCircleRing
+                  centerColor={cycleColor}
+                  centerLabel={amountLabel}
+                  centerSubLabel="a solucionar"
+                  decisions={orderedDecisions}
+                  ringSize={ringSize}
+                />
               </View>
             </View>
           )}
@@ -375,46 +418,130 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
       </Link>
 
       {canDecide ? (
-        <View style={[styles.actionsFooter, isShowcase ? styles.actionsFooterShowcase : null]}>
-          <PrimaryAction
-            color={CYCLE_COLOR}
-            compact
-            disabled={busyAction !== null}
-            fullWidth={false}
-            icon="checkmark"
-            label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
-            loading={busyAction === 'approve'}
-            onPress={() => void handleAction('approve')}
-            style={styles.actionButton}
-          />
-          <PrimaryAction
-            compact
-            disabled={busyAction !== null}
-            fullWidth={false}
-            icon="close"
-            label={busyAction === 'reject' ? 'Rechazando...' : 'No aprobar'}
-            loading={busyAction === 'reject'}
-            onPress={() => {
-              triggerAppSelectionHaptic();
-              Alert.alert(
-                '¿Seguro quieres rechazar este Happy Circle?',
-                'Si rechazas, este Circle se cerrará para todos. No se aplicará ningún movimiento.',
-                [
+        <View
+          style={[
+            styles.actionsFooter,
+            { borderTopColor: activeTheme.colors.border },
+            isShowcase ? styles.actionsFooterShowcase : null,
+          ]}
+        >
+          {isShowcase ? (
+            <>
+              <Pressable
+                accessibilityLabel="Rechazar Happy Circle"
+                accessibilityRole="button"
+                disabled={busyAction !== null}
+                onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
+                onPress={() => {
+                  Alert.alert(
+                    'Seguro quieres rechazar este Happy Circle?',
+                    'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
+                    [
+                      {
+                        text: 'Volver',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Rechazar Circle',
+                        style: 'destructive',
+                        onPress: () => void handleAction('reject'),
+                      },
+                    ],
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.iconActionButton,
+                  styles.iconActionButtonGhost,
                   {
-                    text: 'Volver',
-                    style: 'cancel',
+                    backgroundColor: `${activeTheme.colors.danger}12`,
+                    borderColor: `${activeTheme.colors.danger}2E`,
                   },
+                  pressed ? styles.iconActionButtonPressed : null,
+                  busyAction !== null ? styles.iconActionButtonDisabled : null,
+                ]}
+              >
+                <Ionicons
+                  color={activeTheme.colors.danger}
+                  name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
+                  size={20}
+                />
+                <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.danger }]}>
+                  Rechazar
+                </AppText>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Aprobar Happy Circle"
+                accessibilityRole="button"
+                disabled={busyAction !== null}
+                onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
+                onPress={() => void handleAction('approve')}
+                style={({ pressed }) => [
+                  styles.iconActionButton,
                   {
-                    text: 'Rechazar Circle',
-                    style: 'destructive',
-                    onPress: () => void handleAction('reject'),
+                    backgroundColor: cycleColor,
+                    borderColor: cycleColor,
+                    ...activeTheme.shadow.card,
                   },
-                ],
-              );
-            }}
-            variant="ghost"
-            style={styles.actionButton}
-          />
+                  pressed ? styles.iconActionButtonPressed : null,
+                  busyAction !== null ? styles.iconActionButtonDisabled : null,
+                ]}
+              >
+                <Ionicons
+                  color={activeTheme.colors.white}
+                  name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
+                  size={20}
+                />
+                <AppText style={[styles.iconActionLabel, { color: activeTheme.colors.white }]}>
+                  Aprobar
+                </AppText>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <PrimaryAction
+                color={cycleColor}
+                compact
+                disabled={busyAction !== null}
+                fullWidth={false}
+                icon="checkmark"
+                label={busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
+                loading={busyAction === 'approve'}
+                onPress={() => {
+                  triggerAppActionHaptic();
+                  void handleAction('approve');
+                }}
+                style={styles.actionButton}
+              />
+              <PrimaryAction
+                compact
+                disabled={busyAction !== null}
+                fullWidth={false}
+                icon="close"
+                label={busyAction === 'reject' ? 'Rechazando...' : 'No aprobar'}
+                loading={busyAction === 'reject'}
+                onPress={() => {
+                  triggerAppWarningHaptic();
+                  Alert.alert(
+                    '¿Seguro quieres rechazar este Happy Circle?',
+                    'Si rechazas, este Circle se cerrará para todos. No se aplicará ningún movimiento.',
+                    [
+                      {
+                        text: 'Volver',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Rechazar Circle',
+                        style: 'destructive',
+                        onPress: () => void handleAction('reject'),
+                      },
+                    ],
+                  );
+                }}
+                variant="ghost"
+                style={styles.actionButton}
+              />
+            </>
+          )}
         </View>
       ) : null}
       <LoadingOverlay {...actionFeedback.overlayProps} />
@@ -424,7 +551,7 @@ export function HappyCircleCard({ proposal, variant = 'full' }: HappyCircleCardP
 
 const styles = StyleSheet.create({
   card: {
-    borderLeftColor: CYCLE_COLOR,
+    borderLeftColor: theme.colors.cycle,
     borderLeftWidth: 3,
     overflow: 'visible',
   },
@@ -434,7 +561,7 @@ const styles = StyleSheet.create({
   cardShowcase: {
     borderLeftWidth: 0,
     borderRadius: theme.radius.large,
-    minHeight: 360,
+    minHeight: 560,
   },
   cardPressable: {
     gap: theme.spacing.md,
@@ -449,8 +576,8 @@ const styles = StyleSheet.create({
   cardPressableShowcase: {
     gap: theme.spacing.md,
     paddingBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xxl,
   },
   cardPressed: {
     opacity: 0.9,
@@ -466,7 +593,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  statusIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.small,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
   brandRow: {
     alignItems: 'center',
@@ -474,7 +608,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   brandLabel: {
-    color: CYCLE_COLOR,
+    color: theme.colors.cycle,
     fontSize: theme.typography.callout,
     fontWeight: '800',
     letterSpacing: -0.2,
@@ -490,68 +624,32 @@ const styles = StyleSheet.create({
   },
   showcaseBody: {
     alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: 22,
     zIndex: 2,
-  },
-  treasureLayer: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-    zIndex: 0,
-  },
-  treasureBloom: {
-    borderRadius: theme.radius.pill,
-    height: 220,
-    position: 'absolute',
-    right: -76,
-    top: 58,
-    width: 220,
-  },
-  treasureSweep: {
-    borderRadius: theme.radius.pill,
-    bottom: -40,
-    position: 'absolute',
-    top: -40,
-    width: 92,
   },
   showcaseSummary: {
     alignItems: 'center',
-    gap: 3,
     width: '100%',
   },
-  showcaseParticipants: {
+  showcaseHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 46,
+    position: 'relative',
+    width: '100%',
+  },
+  showcaseStatusSlot: {
+    position: 'absolute',
+    right: theme.spacing.xs,
+    top: 5,
+  },
+  showcaseTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.title3,
-    fontWeight: '800',
-    lineHeight: 24,
-    maxWidth: '100%',
-    textAlign: 'center',
-  },
-  showcaseAmount: {
-    color: theme.colors.primary,
-    fontSize: 33,
     fontWeight: '900',
-    letterSpacing: -0.6,
-    lineHeight: 39,
-    maxWidth: '100%',
+    lineHeight: 24,
     textAlign: 'center',
-  },
-  movementPill: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.hairline,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 5,
-    marginTop: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-  },
-  movementPillText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '800',
-    lineHeight: 17,
   },
   showcaseRing: {
     marginRight: 0,
@@ -578,7 +676,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   progressFill: {
-    backgroundColor: CYCLE_COLOR,
+    backgroundColor: theme.colors.cycle,
     borderRadius: theme.radius.pill,
     height: '100%',
   },
@@ -590,7 +688,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
   },
   detailCtaText: {
-    color: CYCLE_COLOR,
+    color: theme.colors.cycle,
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 20,
@@ -653,10 +751,51 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   actionsFooterShowcase: {
+    borderTopWidth: 0,
+    justifyContent: 'flex-end',
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
   },
   actionButton: {
     flex: 1,
     justifyContent: 'center',
+  },
+  iconActionButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    height: 46,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  iconActionButtonPrimary: {
+    backgroundColor: theme.colors.cycle,
+    borderColor: theme.colors.cycle,
+    borderWidth: 1,
+    ...theme.shadow.card,
+  },
+  iconActionButtonGhost: {
+    backgroundColor: `${theme.colors.danger}12`,
+    borderColor: `${theme.colors.danger}2E`,
+    borderWidth: 1,
+  },
+  iconActionLabel: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  iconActionLabelApprove: {
+    color: theme.colors.white,
+  },
+  iconActionLabelReject: {
+    color: theme.colors.danger,
+  },
+  iconActionButtonPressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.97 }],
+  },
+  iconActionButtonDisabled: {
+    opacity: 0.55,
   },
 });

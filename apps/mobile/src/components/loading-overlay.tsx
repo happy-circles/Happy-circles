@@ -4,6 +4,7 @@ import { Animated, Easing, Modal, Platform, StyleSheet, View } from 'react-nativ
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface LoadingOverlayProps {
   readonly visible: boolean;
@@ -30,10 +31,11 @@ function motionVariant(variant: OverlayState['variant']) {
 }
 
 function StatusVisual({ variant }: { readonly variant: OverlayState['variant'] }) {
+  const activeTheme = useAppTheme();
   const isDanger = variant === 'danger';
   return (
     <HappyCirclesMotion
-      color={isDanger ? theme.colors.danger : undefined}
+      color={isDanger ? activeTheme.colors.danger : undefined}
       size={64}
       tone={isDanger ? 'mono' : 'brand'}
       variant={motionVariant(variant)}
@@ -47,6 +49,7 @@ export function LoadingOverlay({
   variant = 'loading',
   visible,
 }: LoadingOverlayProps) {
+  const activeTheme = useAppTheme();
   const [mounted, setMounted] = useState(visible);
   const [displayState, setDisplayState] = useState<OverlayState>({
     message,
@@ -229,11 +232,16 @@ export function LoadingOverlay({
 
   return (
     <Modal animationType="none" transparent visible={mounted}>
-      <Animated.View style={[styles.scrim, { opacity }]}>
+      <Animated.View
+        style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}
+      >
         <Animated.View
           style={[
             styles.card,
             {
+              backgroundColor: activeTheme.colors.surface,
+              borderColor: activeTheme.colors.border,
+              ...activeTheme.shadow.floating,
               transform: [{ translateY: cardTranslateY }, { scale: cardScale }],
             },
           ]}
@@ -264,7 +272,7 @@ export function LoadingOverlay({
                 adjustsFontSizeToFit
                 minimumFontScale={0.88}
                 numberOfLines={1}
-                style={styles.title}
+                style={[styles.title, { color: activeTheme.colors.text }]}
               >
                 {displayState.title}
               </AppText>
@@ -272,13 +280,13 @@ export function LoadingOverlay({
             <View style={styles.messageSlot}>
               <AppText
                 adjustsFontSizeToFit
-                  minimumFontScale={0.82}
-                  numberOfLines={1}
-                  style={[
-                    styles.message,
-                    isDanger ? styles.messageDanger : null,
-                    !displayState.message ? styles.messageEmpty : null,
-                  ]}
+                minimumFontScale={0.82}
+                numberOfLines={1}
+                style={[
+                  styles.message,
+                  { color: isDanger ? activeTheme.colors.danger : activeTheme.colors.textMuted },
+                  !displayState.message ? styles.messageEmpty : null,
+                ]}
               >
                 {displayState.message ?? ' '}
               </AppText>
@@ -293,15 +301,12 @@ export function LoadingOverlay({
 const styles = StyleSheet.create({
   scrim: {
     alignItems: 'center',
-    backgroundColor: 'rgba(247, 248, 251, 0.72)',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.lg,
   },
   card: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
     borderRadius: theme.radius.large,
     borderWidth: 1,
     flexDirection: 'row',
@@ -311,7 +316,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     width: '100%',
-    ...theme.shadow.floating,
   },
   copy: {
     alignItems: 'flex-start',
@@ -320,17 +324,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   message: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '700',
     lineHeight: 18,
     textAlign: 'left',
   },
-  messageDanger: {
-    color: theme.colors.danger,
-  },
+  messageDanger: {},
   messageEmpty: {
-    color: 'transparent',
+    color: theme.colors.transparent,
   },
   messageSlot: {
     alignItems: 'flex-start',
@@ -339,7 +340,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   title: {
-    color: theme.colors.text,
     fontSize: theme.typography.title3,
     fontWeight: '800',
     lineHeight: 24,

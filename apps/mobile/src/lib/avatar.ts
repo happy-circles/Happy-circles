@@ -115,6 +115,11 @@ export function buildAvatarLabel(value: string | null | undefined): string {
   return firstCharacter ? firstCharacter.toUpperCase() : '?';
 }
 
+export function avatarImageCacheKey(source: string | null | undefined): string | undefined {
+  const normalized = normalizeStoredAvatarPath(source);
+  return normalized || undefined;
+}
+
 export function isAvatarImageReady(
   source: string | null | undefined,
   resolvedUrl?: string | null,

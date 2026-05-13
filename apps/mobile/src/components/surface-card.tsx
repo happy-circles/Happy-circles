@@ -1,9 +1,10 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type SurfaceCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
 export type SurfaceCardPadding = 'none' | 'sm' | 'md' | 'lg';
@@ -12,72 +13,14 @@ export type SurfaceCardShape = 'rounded' | 'pill';
 
 const shouldMountNativeGlass = Platform.OS === 'ios';
 const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
-const standardGlassBorderColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.72)'
-  : 'rgba(255, 255, 255, 0.94)';
-const fallbackGlassBorderColor = 'rgba(255, 255, 255, 0.96)';
-const fallbackGlassBorderStrongColor = 'rgba(255, 255, 255, 1)';
-const fallbackGlassInnerEdgeColor = 'rgba(255, 255, 255, 0.82)';
-const liquidGlassPlatformStyle = Platform.select({
-  web: {
-    WebkitBackdropFilter: 'blur(38px) saturate(220%)',
-    backdropFilter: 'blur(38px) saturate(220%)',
-    boxShadow:
-      '0 0 0 1px rgba(255, 255, 255, 0.84), 0 0 22px rgba(255, 255, 255, 0.54), 0 18px 28px -18px rgba(15, 23, 40, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
-  },
-  ios: {
-    shadowColor: '#ffffff',
-    shadowOffset: { height: 0, width: 0 },
-    shadowOpacity: hasNativeLiquidGlass ? 0 : 0.38,
-    shadowRadius: hasNativeLiquidGlass ? 0 : 13,
-  },
-  default: {},
-}) as object | undefined;
-const flatGlassPlatformStyle = Platform.select({
-  web: {
-    WebkitBackdropFilter: 'blur(34px) saturate(210%)',
-    backdropFilter: 'blur(34px) saturate(210%)',
-    boxShadow:
-      '0 0 0 1px rgba(255, 255, 255, 0.82), 0 0 22px rgba(255, 255, 255, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(15, 23, 40, 0.025)',
-  },
-  default: {},
-}) as object | undefined;
-const flatGlassSoftPlatformStyle = Platform.select({
-  web: {
-    WebkitBackdropFilter: 'blur(30px) saturate(190%)',
-    backdropFilter: 'blur(30px) saturate(190%)',
-    boxShadow:
-      '0 0 0 1px rgba(255, 255, 255, 0.78), 0 0 22px rgba(255, 255, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.86)',
-  },
-  ios: {
-    shadowColor: '#ffffff',
-    shadowOffset: { height: 0, width: 0 },
-    shadowOpacity: 0.42,
-    shadowRadius: 12,
-  },
-  default: {},
-}) as object | undefined;
-
-const liquidGlassBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.12)'
-  : 'rgba(255, 255, 255, 0.78)';
-const liquidGlassMutedBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.1)'
-  : 'rgba(255, 255, 255, 0.66)';
-const liquidGlassAccentBackgroundColor = hasNativeLiquidGlass
-  ? 'rgba(255, 255, 255, 0.11)'
-  : 'rgba(255, 255, 255, 0.72)';
-
-const flatGlassBackgroundColor = 'rgba(255, 255, 255, 0.72)';
-const flatGlassMutedBackgroundColor = 'rgba(255, 255, 255, 0.62)';
-const flatGlassAccentBackgroundColor = 'rgba(255, 255, 255, 0.68)';
-const flatGlassSoftBackgroundColor = 'rgba(255, 255, 255, 0.68)';
 
 function SurfaceLiquidGlassLayer({
+  activeTheme,
   shape,
   treatment,
   variant,
 }: {
+  readonly activeTheme: AppTheme;
   readonly shape: SurfaceCardShape;
   readonly treatment: SurfaceCardGlassTreatment;
   readonly variant: SurfaceCardVariant;
@@ -86,51 +29,221 @@ function SurfaceLiquidGlassLayer({
   const isFlatSolid = treatment === 'flatSolid' || treatment === 'flatSoft';
   const isFlatSoft = treatment === 'flatSoft';
   const shouldRenderFallbackEdge = isFlat || !hasNativeLiquidGlass;
+  const shouldRenderFallbackDepth =
+    !hasNativeLiquidGlass && (treatment === 'standard' || treatment === 'flatSoft');
 
   return (
     <View
       pointerEvents="none"
       style={[
         styles.glassLayer,
-        variant === 'muted' ? styles.glassLayerMuted : null,
-        variant === 'accent' ? styles.glassLayerAccent : null,
-        isFlat ? styles.glassLayerFlat : null,
-        isFlat && variant === 'muted' ? styles.glassLayerFlatMuted : null,
-        isFlat && variant === 'accent' ? styles.glassLayerFlatAccent : null,
-        isFlatSoft ? styles.glassLayerFlatSoft : null,
+        { backgroundColor: resolveGlassBackgroundColor(activeTheme, treatment, variant) },
       ]}
     >
       {shouldMountNativeGlass && !isFlat ? (
         <GlassView
-          colorScheme="light"
+          colorScheme={activeTheme.scheme}
           glassEffectStyle="regular"
           pointerEvents="none"
           style={[styles.nativeGlass, shape === 'pill' ? styles.nativeGlassPill : null]}
-          tintColor="rgba(255, 255, 255, 0.04)"
+          tintColor={activeTheme.glass.tint}
         />
       ) : null}
       {isFlat ? (
         isFlatSolid ? null : (
           <>
-            <View pointerEvents="none" style={styles.flatGlassSheen} />
-            <View pointerEvents="none" style={styles.flatGlassDepth} />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.flatGlassSheen,
+                {
+                  backgroundColor: activeTheme.glass.flatSheen,
+                  opacity: activeTheme.glass.flatSheenOpacity,
+                },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.flatGlassDepth, { backgroundColor: activeTheme.glass.flatDepth }]}
+            />
           </>
         )
       ) : (
-        <View pointerEvents="none" style={styles.glassTopGlow} />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.glassTopGlow,
+            {
+              backgroundColor: hasNativeLiquidGlass
+                ? activeTheme.glass.nativeTopGlow
+                : activeTheme.glass.topGlow,
+              opacity: hasNativeLiquidGlass
+                ? activeTheme.glass.nativeTopGlowOpacity
+                : activeTheme.glass.topGlowOpacity,
+            },
+          ]}
+        />
       )}
+      {shouldRenderFallbackDepth ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fallbackGlassDepth,
+            {
+              backgroundColor: activeTheme.glass.fallbackDepth,
+              opacity: activeTheme.glass.fallbackDepthOpacity,
+            },
+          ]}
+        />
+      ) : null}
       {shouldRenderFallbackEdge ? (
         <View
           pointerEvents="none"
           style={[
             styles.glassInnerEdge,
+            {
+              borderColor: isFlatSoft
+                ? activeTheme.glass.softEdge
+                : activeTheme.glass.fallbackInnerEdge,
+              opacity: isFlatSoft
+                ? activeTheme.glass.softInnerEdgeOpacity
+                : activeTheme.glass.innerEdgeOpacity,
+            },
             shape === 'pill' ? styles.glassInnerEdgePill : null,
-            isFlatSoft ? styles.glassInnerEdgeSoft : null,
           ]}
         />
       ) : null}
     </View>
   );
+}
+
+function resolveGlassBackgroundColor(
+  activeTheme: AppTheme,
+  treatment: SurfaceCardGlassTreatment,
+  variant: SurfaceCardVariant,
+) {
+  if (treatment === 'flatSoft') {
+    return activeTheme.glass.flatSoftBackground;
+  }
+
+  if (treatment !== 'standard') {
+    if (variant === 'muted') {
+      return activeTheme.glass.flatMutedBackground;
+    }
+
+    if (variant === 'accent') {
+      return activeTheme.glass.flatAccentBackground;
+    }
+
+    return activeTheme.glass.flatBackground;
+  }
+
+  if (variant === 'muted') {
+    return hasNativeLiquidGlass
+      ? activeTheme.glass.nativeMutedBackground
+      : activeTheme.glass.mutedBackground;
+  }
+
+  if (variant === 'accent') {
+    return hasNativeLiquidGlass
+      ? activeTheme.glass.nativeAccentBackground
+      : activeTheme.glass.accentBackground;
+  }
+
+  return hasNativeLiquidGlass ? activeTheme.glass.nativeBackground : activeTheme.glass.background;
+}
+
+function resolveGlassBorderColor(
+  activeTheme: AppTheme,
+  treatment: SurfaceCardGlassTreatment,
+  variant: SurfaceCardVariant,
+) {
+  if (treatment === 'flatSoft') {
+    return activeTheme.glass.fallbackBorder;
+  }
+
+  if (treatment !== 'standard') {
+    return activeTheme.glass.fallbackBorderStrong;
+  }
+
+  if (variant === 'muted') {
+    return hasNativeLiquidGlass
+      ? activeTheme.glass.nativeMutedBorder
+      : activeTheme.glass.mutedBorder;
+  }
+
+  if (variant === 'accent') {
+    return hasNativeLiquidGlass
+      ? activeTheme.glass.nativeAccentBorder
+      : activeTheme.glass.accentBorder;
+  }
+
+  if (variant === 'elevated') {
+    return hasNativeLiquidGlass
+      ? activeTheme.glass.nativeStandardBorder
+      : activeTheme.glass.fallbackBorder;
+  }
+
+  return hasNativeLiquidGlass
+    ? activeTheme.glass.nativeStandardBorder
+    : activeTheme.glass.standardBorder;
+}
+
+function resolveGlassPlatformStyle(activeTheme: AppTheme, treatment: SurfaceCardGlassTreatment) {
+  if (treatment === 'flatSoft') {
+    return Platform.select({
+      web: {
+        WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+        backdropFilter: 'blur(30px) saturate(190%)',
+        boxShadow: activeTheme.glass.flatSoftWebShadow,
+      },
+      ios: {
+        shadowColor: activeTheme.glass.shadowColor,
+        shadowOffset: { height: 8, width: 0 },
+        shadowOpacity: activeTheme.glass.flatSoftShadowOpacity,
+        shadowRadius: activeTheme.glass.flatSoftShadowRadius,
+      },
+      default: {
+        elevation: 2,
+      },
+    }) as object | undefined;
+  }
+
+  if (treatment !== 'standard') {
+    return Platform.select({
+      web: {
+        WebkitBackdropFilter: 'blur(34px) saturate(210%)',
+        backdropFilter: 'blur(34px) saturate(210%)',
+        boxShadow: activeTheme.glass.flatWebShadow,
+      },
+      ios: {
+        shadowColor: activeTheme.glass.shadowColor,
+        shadowOffset: { height: 7, width: 0 },
+        shadowOpacity: activeTheme.glass.flatSoftShadowOpacity,
+        shadowRadius: activeTheme.glass.flatSoftShadowRadius,
+      },
+      default: {
+        elevation: 2,
+      },
+    }) as object | undefined;
+  }
+
+  return Platform.select({
+    web: {
+      WebkitBackdropFilter: 'blur(38px) saturate(220%)',
+      backdropFilter: 'blur(38px) saturate(220%)',
+      boxShadow: activeTheme.glass.webShadow,
+    },
+    ios: {
+      shadowColor: activeTheme.glass.shadowColor,
+      shadowOffset: { height: hasNativeLiquidGlass ? 0 : 10, width: 0 },
+      shadowOpacity: hasNativeLiquidGlass ? 0 : activeTheme.glass.shadowOpacity,
+      shadowRadius: hasNativeLiquidGlass ? 0 : activeTheme.glass.shadowRadius,
+    },
+    default: {
+      elevation: 3,
+    },
+  }) as object | undefined;
 }
 
 export interface SurfaceCardProps extends PropsWithChildren {
@@ -139,6 +252,7 @@ export interface SurfaceCardProps extends PropsWithChildren {
   readonly padding?: SurfaceCardPadding;
   readonly glassTreatment?: SurfaceCardGlassTreatment;
   readonly shape?: SurfaceCardShape;
+  readonly underlay?: ReactNode;
 }
 
 export function SurfaceCard({
@@ -146,22 +260,23 @@ export function SurfaceCard({
   glassTreatment = 'standard',
   shape = 'rounded',
   style,
+  underlay,
   variant = 'default',
   padding = 'md',
 }: SurfaceCardProps) {
+  const activeTheme = useAppTheme();
+  const glassBackgroundColor = resolveGlassBackgroundColor(activeTheme, glassTreatment, variant);
+  const glassBorderColor = resolveGlassBorderColor(activeTheme, glassTreatment, variant);
+  const glassPlatformStyle = resolveGlassPlatformStyle(activeTheme, glassTreatment);
+
   return (
     <View
       style={[
         styles.base,
+        glassPlatformStyle,
+        { backgroundColor: glassBackgroundColor, borderColor: glassBorderColor },
         shape === 'pill' ? styles.shapePill : null,
-        variant === 'default' ? styles.default : null,
-        variant === 'muted' ? styles.muted : null,
-        variant === 'accent' ? styles.accent : null,
-        variant === 'elevated' ? styles.elevated : null,
         glassTreatment !== 'standard' ? styles.flat : null,
-        glassTreatment !== 'standard' && variant === 'muted' ? styles.flatMuted : null,
-        glassTreatment !== 'standard' && variant === 'accent' ? styles.flatAccent : null,
-        glassTreatment === 'flatSoft' ? styles.flatSoft : null,
         padding === 'none' ? styles.paddingNone : null,
         padding === 'sm' ? styles.paddingSm : null,
         padding === 'md' ? styles.paddingMd : null,
@@ -169,7 +284,17 @@ export function SurfaceCard({
         style,
       ]}
     >
-      <SurfaceLiquidGlassLayer shape={shape} treatment={glassTreatment} variant={variant} />
+      {underlay ? (
+        <View pointerEvents="none" style={styles.underlay}>
+          {underlay}
+        </View>
+      ) : null}
+      <SurfaceLiquidGlassLayer
+        activeTheme={activeTheme}
+        shape={shape}
+        treatment={glassTreatment}
+        variant={variant}
+      />
       {children}
     </View>
   );
@@ -177,90 +302,31 @@ export function SurfaceCard({
 
 const styles = StyleSheet.create({
   base: {
-    borderColor: standardGlassBorderColor,
     borderRadius: theme.radius.large,
     borderWidth: 1,
     gap: theme.spacing.sm,
     overflow: 'hidden',
     position: 'relative',
-    ...liquidGlassPlatformStyle,
   },
   shapePill: {
     borderRadius: theme.radius.pill,
   },
-  default: {
-    backgroundColor: liquidGlassBackgroundColor,
-  },
-  muted: {
-    backgroundColor: liquidGlassMutedBackgroundColor,
-    borderColor: hasNativeLiquidGlass
-      ? 'rgba(255, 255, 255, 0.6)'
-      : 'rgba(255, 255, 255, 0.88)',
-  },
-  accent: {
-    backgroundColor: liquidGlassAccentBackgroundColor,
-    borderColor: hasNativeLiquidGlass
-      ? 'rgba(255, 255, 255, 0.62)'
-      : 'rgba(255, 255, 255, 0.9)',
-  },
-  elevated: {
-    backgroundColor: liquidGlassBackgroundColor,
-    borderColor: hasNativeLiquidGlass
-      ? 'rgba(255, 255, 255, 0.72)'
-      : fallbackGlassBorderColor,
+  underlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   flat: {
-    backgroundColor: flatGlassBackgroundColor,
-    borderColor: fallbackGlassBorderStrongColor,
     borderWidth: 1,
-    ...flatGlassPlatformStyle,
-  },
-  flatMuted: {
-    backgroundColor: flatGlassMutedBackgroundColor,
-  },
-  flatAccent: {
-    backgroundColor: flatGlassAccentBackgroundColor,
-  },
-  flatSoft: {
-    backgroundColor: flatGlassSoftBackgroundColor,
-    borderColor: fallbackGlassBorderColor,
-    ...flatGlassSoftPlatformStyle,
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: liquidGlassBackgroundColor,
-  },
-  glassLayerMuted: {
-    backgroundColor: liquidGlassMutedBackgroundColor,
-  },
-  glassLayerAccent: {
-    backgroundColor: liquidGlassAccentBackgroundColor,
-  },
-  glassLayerFlat: {
-    backgroundColor: flatGlassBackgroundColor,
-  },
-  glassLayerFlatMuted: {
-    backgroundColor: flatGlassMutedBackgroundColor,
-  },
-  glassLayerFlatAccent: {
-    backgroundColor: flatGlassAccentBackgroundColor,
-  },
-  glassLayerFlatSoft: {
-    backgroundColor: flatGlassSoftBackgroundColor,
   },
   glassInnerEdge: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: fallbackGlassInnerEdgeColor,
     borderRadius: theme.radius.large - 1,
     borderWidth: 1,
-    opacity: 0.9,
   },
   glassInnerEdgePill: {
     borderRadius: theme.radius.pill,
-  },
-  glassInnerEdgeSoft: {
-    borderColor: 'rgba(255, 255, 255, 0.72)',
-    opacity: 0.78,
   },
   nativeGlass: {
     ...StyleSheet.absoluteFillObject,
@@ -270,31 +336,31 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   glassTopGlow: {
-    backgroundColor: hasNativeLiquidGlass
-      ? 'rgba(255, 255, 255, 0.22)'
-      : 'rgba(255, 255, 255, 0.76)',
     borderRadius: theme.radius.pill,
     height: 8,
     left: 14,
-    opacity: hasNativeLiquidGlass ? 0.42 : 0.92,
     position: 'absolute',
     right: 14,
     top: 5,
   },
   flatGlassSheen: {
-    backgroundColor: 'rgba(255, 255, 255, 0.42)',
     borderRadius: theme.radius.pill,
     height: 10,
     left: theme.spacing.md,
-    opacity: 0.8,
     position: 'absolute',
     right: theme.spacing.md,
     top: 6,
   },
   flatGlassDepth: {
-    backgroundColor: 'rgba(15, 23, 40, 0.022)',
     bottom: 0,
     height: '44%',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  fallbackGlassDepth: {
+    bottom: 0,
+    height: '48%',
     left: 0,
     position: 'absolute',
     right: 0,

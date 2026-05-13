@@ -23,11 +23,39 @@ import {
   formatPendingRequestTitle,
 } from './financial-requests';
 import { buildSettlementProposalHistoryTimelineItems } from './settlements';
+import { settlementProposalCounterpartyImpactAmount } from './settlement-core';
 import { upsertInviteProfilePeople } from './invite-profiles';
 import { deriveDirection, requestDirectionForUser } from '../utils/money-and-direction';
 import { sortByNewest, sortPeople, actionableItemToActivityItem } from '../utils/sorting';
 import { formatRelativeLabel } from '../utils/dates';
 import { normalizeTransactionCategory } from '../../transaction-categories';
+
+function settlementItemForCounterparty(
+  item: ActionableItem,
+  settlementProposalsById: ReadonlyMap<string, SettlementProposalRow>,
+  currentUserId: string,
+  counterpartyUserId: string,
+): ActionableItem | null {
+  const proposalId = item.originSettlementProposalId ?? item.id;
+  const proposal = settlementProposalsById.get(proposalId);
+  if (!proposal) {
+    return null;
+  }
+
+  const amountMinor = settlementProposalCounterpartyImpactAmount(
+    proposal,
+    currentUserId,
+    counterpartyUserId,
+  );
+  if (amountMinor <= 0) {
+    return null;
+  }
+
+  return {
+    ...item,
+    amountMinor,
+  };
+}
 
 export function buildPeopleState(input: {
   readonly currentUserId: string;
@@ -58,9 +86,16 @@ export function buildPeopleState(input: {
   const people = Array.from(input.relationshipsByCounterpartyId.entries())
     .map(([counterpartyUserId, relationship]): PersonCardDto => {
       const requests = input.requestsByRelationshipId.get(relationship.id) ?? [];
-      const relatedSettlements = input.pendingSettlements.filter((item) =>
-        item.participantUserIds?.includes(counterpartyUserId),
-      );
+      const relatedSettlements = input.pendingSettlements.flatMap((item) => {
+        const settlementItem = settlementItemForCounterparty(
+          item,
+          settlementProposalsById,
+          input.currentUserId,
+          counterpartyUserId,
+        );
+
+        return settlementItem ? [settlementItem] : [];
+      });
       const latestRequest = requests[0];
       const edge = input.openDebtsByRelationshipId.get(relationship.id);
       const direction = deriveDirection(input.currentUserId, edge);
@@ -136,9 +171,16 @@ export function buildPeopleState(input: {
             createdAt: request.created_at,
           }),
         );
-      const personPendingSettlements = input.pendingSettlements.filter((item) =>
-        item.participantUserIds?.includes(person.userId),
-      );
+      const personPendingSettlements = input.pendingSettlements.flatMap((item) => {
+        const settlementItem = settlementItemForCounterparty(
+          item,
+          settlementProposalsById,
+          input.currentUserId,
+          person.userId,
+        );
+
+        return settlementItem ? [settlementItem] : [];
+      });
       const pendingItems = sortByNewest([
         ...personPendingRequests,
         ...personPendingSettlements,

@@ -8,6 +8,7 @@ import {
 
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface ChoiceChipProps {
   readonly label: string;
@@ -24,17 +25,29 @@ export function ChoiceChip({
   style,
   labelStyle,
 }: ChoiceChipProps) {
+  const activeTheme = useAppTheme();
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
-        selected ? styles.selected : null,
+        {
+          backgroundColor: selected ? activeTheme.colors.primarySoft : activeTheme.colors.surface,
+          borderColor: selected ? activeTheme.colors.primary : activeTheme.colors.border,
+        },
         pressed ? styles.pressed : null,
         style,
       ]}
     >
-      <AppText style={[styles.label, selected ? styles.selectedLabel : null, labelStyle]}>
+      <AppText
+        style={[
+          styles.label,
+          { color: selected ? activeTheme.colors.text : activeTheme.colors.text },
+          selected ? styles.selectedLabel : null,
+          labelStyle,
+        ]}
+      >
         {label}
       </AppText>
     </Pressable>

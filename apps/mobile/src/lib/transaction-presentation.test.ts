@@ -9,12 +9,14 @@ vi.mock('react-native', () => ({
   },
 }));
 
+import { theme } from './theme';
 import {
   transactionContextLabel,
   transactionShouldSurfaceStatus,
   transactionStatusLabel,
   transactionStatusTone,
   transactionSummaryMetaLabel,
+  transactionToneColor,
 } from './transaction-presentation';
 
 function item(value: Partial<ActivityItemDto>): ActivityItemDto {
@@ -100,6 +102,23 @@ describe('transaction presentation', () => {
     expect(transactionStatusTone(circleItem('rejected'))).toBe('danger');
     expect(transactionStatusTone(circleItem('stale'))).toBe('cycle');
     expect(transactionStatusTone(circleItem('expired'))).toBe('danger');
+  });
+
+  it('keeps happy circle value colors aligned to state', () => {
+    const circleItem = (status: ActivityItemDto['status']) =>
+      item({
+        category: 'cycle',
+        kind: 'settlement_proposal',
+        status,
+      });
+
+    expect(transactionToneColor(circleItem('pending_approvals'))).toBe(theme.colors.pending);
+    expect(transactionToneColor(circleItem('waiting_other_side'))).toBe(theme.colors.cycle);
+    expect(transactionToneColor(circleItem('approved'))).toBe(theme.colors.success);
+    expect(transactionToneColor(circleItem('executed'))).toBe(theme.colors.success);
+    expect(transactionToneColor(circleItem('rejected'))).toBe(theme.colors.danger);
+    expect(transactionToneColor(circleItem('stale'))).toBe(theme.colors.cycle);
+    expect(transactionToneColor(circleItem('expired'))).toBe(theme.colors.danger);
   });
 
   it('uses directional copy for posted Circle ledger rows', () => {

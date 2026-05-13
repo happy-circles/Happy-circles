@@ -4,10 +4,11 @@ import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } fro
 import { AppAvatar } from '@/components/app-avatar';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardTimeline, type CardTone, type CardTimelineStep } from '@/components/card-shell';
+import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
 import { StatusFaceBadge } from '@/components/status-face-badge';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { cardStateColor, cardStateIntentFromTone } from '@/lib/card-language';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/transaction-categories';
 import { SurfaceCard } from './surface-card';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | 'cycle';
 export type HistoryCaseExpandedLayout = 'panel' | 'showcase';
@@ -46,8 +48,10 @@ export interface HistoryCaseCardProps {
   readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
   readonly tone: HistoryCaseTone;
   readonly isCycleSnippet?: boolean;
+  readonly expandable?: boolean;
   readonly isExpanded: boolean;
-  readonly onToggle: () => void;
+  readonly onPress?: () => void;
+  readonly onToggle?: () => void;
   readonly steps: readonly HistoryCaseStepViewModel[];
 }
 
@@ -98,10 +102,13 @@ export function HistoryCaseCard({
   statusTone = 'neutral',
   tone,
   isCycleSnippet = false,
+  expandable = true,
   isExpanded,
+  onPress,
   onToggle,
   steps,
 }: HistoryCaseCardProps) {
+  const activeTheme = useAppTheme();
   const impactSign = tone === 'positive' ? '+' : tone === 'negative' ? '-' : null;
   const displayAmountLabel = amountLabel
     ? `${impactSign ? `${impactSign} ` : ''}${amountLabel}`
@@ -110,11 +117,15 @@ export function HistoryCaseCard({
   const detailTitle = primaryLabel !== title ? title : null;
   const showExpandedSummary = Boolean(detailTitle || description);
   const isExpandedShowcase = expandedLayout === 'showcase';
+  const canExpand = expandable && steps.length > 0 && typeof onToggle === 'function';
+  const isActionable = canExpand || typeof onPress === 'function';
+  const showExpanded = canExpand && isExpanded;
   const avatarSize = 34;
   const metaLabel = meta ? meta.replace(/\s*\|\s*/g, META_SEPARATOR) : null;
   const avatarIntent = cardStateIntentFromTone(statusTone);
   const avatarHaloIntensity = statusTone === 'warning' ? 'strong' : 'soft';
-  const avatarHaloColor = historyCaseHaloColor(tone, statusTone);
+  const avatarHaloColor = historyCaseHaloColor(activeTheme, tone, statusTone);
+  const cardAuraSize = statusTone === 'warning' || focused ? 'regular' : 'compact';
   const leadingNode =
     isCycleSnippet && statusLabel ? (
       <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
@@ -123,15 +134,27 @@ export function HistoryCaseCard({
         fallbackBackgroundColor={
           isCycleSnippet
             ? transactionCategoryColor('cycle')
-            : (actorFallbackColor ?? toneColor(tone))
+            : (actorFallbackColor ?? toneColor(activeTheme, tone))
         }
-        fallbackTextColor={theme.colors.white}
+        fallbackTextColor={activeTheme.colors.white}
         imageUrl={isCycleSnippet ? null : actorAvatarUrl}
         label={primaryLabel}
         size={avatarSize}
         variant={isCycleSnippet ? 'system' : 'person'}
       />
     );
+
+  function handleHeaderPress() {
+    if (canExpand) {
+      animateHistoryToggle(showExpanded, onToggle);
+      return;
+    }
+
+    if (onPress) {
+      triggerAppSelectionHaptic();
+      onPress();
+    }
+  }
 
   return (
     <View style={styles.caseWrap}>
@@ -142,19 +165,36 @@ export function HistoryCaseCard({
           styles.card,
           isCycleSnippet ? styles.cycleSnippet : null,
           tone === 'danger' ? styles.rejectedSnippet : null,
-          focused ? styles.cardFocused : null,
-          isExpanded ? styles.cardActive : null,
+          focused
+            ? {
+                backgroundColor: activeTheme.glass.background,
+                borderColor: activeTheme.glass.fallbackBorder,
+              }
+            : null,
+          showExpanded ? styles.cardActive : null,
         ]}
+        underlay={
+          isCycleSnippet ? (
+            <StateAuraLayer
+              size={cardAuraSize}
+              variant={stateAuraVariantFromTone(statusTone)}
+            />
+          ) : undefined
+        }
         variant={isCycleSnippet ? 'muted' : 'default'}
       >
         <Pressable
           accessibilityLabel={[primaryLabel, displayAmountLabel, metaLabel]
             .filter(Boolean)
             .join(', ')}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: isExpanded }}
-          onPress={() => animateHistoryToggle(isExpanded, onToggle)}
-          style={({ pressed }) => [styles.header, pressed ? styles.headerPressed : null]}
+          accessibilityRole={isActionable ? 'button' : undefined}
+          accessibilityState={canExpand ? { expanded: showExpanded } : undefined}
+          disabled={!isActionable}
+          onPress={isActionable ? handleHeaderPress : undefined}
+          style={({ pressed }) => [
+            styles.header,
+            isActionable && pressed ? styles.headerPressed : null,
+          ]}
         >
           <View style={styles.headerRow}>
             <View style={styles.avatarWrap}>
@@ -170,11 +210,17 @@ export function HistoryCaseCard({
               </CardActorAvatar>
             </View>
             <View style={styles.headerCopy}>
-              <AppText numberOfLines={1} style={styles.headerTitle}>
+              <AppText
+                numberOfLines={1}
+                style={[styles.headerTitle, { color: activeTheme.colors.text }]}
+              >
                 {primaryLabel}
               </AppText>
               {metaLabel ? (
-                <AppText numberOfLines={1} style={styles.headerMeta}>
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.headerMeta, { color: activeTheme.colors.textMuted }]}
+                >
                   {metaLabel}
                 </AppText>
               ) : null}
@@ -188,25 +234,27 @@ export function HistoryCaseCard({
                     numberOfLines={1}
                     style={[
                       styles.headerAmount,
-                      { color: toneColor(tone) },
+                      { color: toneColor(activeTheme, tone) },
                       amountStruckThrough ? styles.headerAmountStruckThrough : null,
                     ]}
                   >
                     {displayAmountLabel}
                   </AppText>
                 ) : null}
-                <Ionicons
-                  color={theme.colors.textMuted}
-                  name={isExpanded ? 'chevron-up' : 'chevron-forward'}
-                  size={16}
-                />
+                {isActionable ? (
+                  <Ionicons
+                    color={activeTheme.colors.textMuted}
+                    name={showExpanded ? 'chevron-up' : 'chevron-forward'}
+                    size={16}
+                  />
+                ) : null}
               </View>
             </View>
           </View>
         </Pressable>
       </SurfaceCard>
 
-      {isExpanded ? (
+      {showExpanded ? (
         <SurfaceCard
           glassTreatment={isExpandedShowcase ? 'standard' : 'flatSoft'}
           padding={isExpandedShowcase ? 'lg' : 'md'}
@@ -215,9 +263,20 @@ export function HistoryCaseCard({
         >
           {showExpandedSummary ? (
             <View style={styles.expandedSummary}>
-              {detailTitle ? <AppText style={styles.expandedTitle}>{detailTitle}</AppText> : null}
+              {detailTitle ? (
+                <AppText style={[styles.expandedTitle, { color: activeTheme.colors.text }]}>
+                  {detailTitle}
+                </AppText>
+              ) : null}
               {description ? (
-                <AppText style={styles.expandedDescription}>{description}</AppText>
+                <AppText
+                  style={[
+                    styles.expandedDescription,
+                    { color: activeTheme.colors.textMuted },
+                  ]}
+                >
+                  {description}
+                </AppText>
               ) : null}
             </View>
           ) : null}
@@ -269,43 +328,42 @@ function historyTimelineTone(tone: HistoryCaseTone): CardTone {
   return tone;
 }
 
-const toneStyles = StyleSheet.create({
-  positive: {
-    color: theme.colors.success,
-  },
-  negative: {
-    color: theme.colors.warning,
-  },
-  neutral: {
-    color: theme.colors.textMuted,
-  },
-  danger: {
-    color: theme.colors.warning,
-  },
-  cycle: {
-    color: transactionCategoryColor('cycle'),
-  },
-});
+function toneColor(activeTheme: AppTheme, tone: HistoryCaseTone): string {
+  if (tone === 'positive') {
+    return activeTheme.colors.success;
+  }
+  if (tone === 'negative') {
+    return activeTheme.colors.warning;
+  }
+  if (tone === 'danger') {
+    return activeTheme.colors.danger;
+  }
+  if (tone === 'cycle') {
+    return transactionCategoryColor('cycle');
+  }
 
-function toneColor(tone: HistoryCaseTone): string {
-  return toneStyles[tone].color;
+  return activeTheme.colors.textMuted;
 }
 
-function historyCaseHaloColor(tone: HistoryCaseTone, statusTone: CardTone): string {
+function historyCaseHaloColor(
+  activeTheme: AppTheme,
+  tone: HistoryCaseTone,
+  statusTone: CardTone,
+): string {
   if (statusTone === 'warning') {
     return cardStateColor('needsAction', 'warning');
   }
 
   if (statusTone === 'danger' || tone === 'danger') {
-    return theme.colors.danger;
+    return activeTheme.colors.danger;
   }
 
   if (tone === 'positive' || statusTone === 'success') {
-    return theme.colors.success;
+    return activeTheme.colors.success;
   }
 
   if (tone === 'negative') {
-    return theme.colors.warning;
+    return activeTheme.colors.warning;
   }
 
   if (tone === 'cycle' || statusTone === 'cycle' || statusTone === 'primary') {
@@ -336,8 +394,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   cardFocused: {
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
-    borderColor: 'rgba(255, 255, 255, 0.98)',
+    backgroundColor: theme.glass.background,
+    borderColor: theme.glass.fallbackBorder,
   },
   header: {
     borderRadius: theme.radius.pill,

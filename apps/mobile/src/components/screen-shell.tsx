@@ -10,6 +10,7 @@ import {
 } from '@/components/branded-refresh-control';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface ScreenShellProps extends PropsWithChildren {
   readonly title: string;
@@ -65,6 +66,7 @@ export function ScreenShell({
   contentContainerStyle,
   contentWidthStyle,
 }: ScreenShellProps) {
+  const activeTheme = useAppTheme();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(0, insets.bottom);
   const shouldUseScroll = scrollEnabled || Boolean(refresh);
@@ -80,10 +82,25 @@ export function ScreenShell({
             : styles.compactTitle;
 
   const headerNode = headerVisible ? (
-    <View style={[styles.hero, headerVariant === 'card' ? styles.heroCard : styles.heroPlain]}>
+    <View
+      style={[
+        styles.hero,
+        headerVariant === 'card'
+          ? [
+              styles.heroCard,
+              {
+                backgroundColor: activeTheme.colors.floatingSurface,
+                borderColor: activeTheme.colors.hairline,
+              },
+            ]
+          : styles.heroPlain,
+      ]}
+    >
       {eyebrow ? (
-        <View style={styles.eyebrowBadge}>
-          <AppText style={styles.eyebrowText}>{eyebrow}</AppText>
+        <View style={[styles.eyebrowBadge, { backgroundColor: activeTheme.colors.surfaceSoft }]}>
+          <AppText style={[styles.eyebrowText, { color: activeTheme.colors.textMuted }]}>
+            {eyebrow}
+          </AppText>
         </View>
       ) : null}
       <View style={[styles.heroHeader, headerTitle ? styles.heroHeaderCentered : null]}>
@@ -99,6 +116,7 @@ export function ScreenShell({
             <AppText
               style={[
                 styles.title,
+                { color: activeTheme.colors.text },
                 titleAlign === 'center' ? styles.titleCentered : null,
                 resolvedTitleStyle,
               ]}
@@ -109,7 +127,11 @@ export function ScreenShell({
           </>
         )}
       </View>
-      {subtitle ? <AppText style={styles.subtitle}>{subtitle}</AppText> : null}
+      {subtitle ? (
+        <AppText style={[styles.subtitle, { color: activeTheme.colors.textMuted }]}>
+          {subtitle}
+        </AppText>
+      ) : null}
     </View>
   ) : null;
 
@@ -130,18 +152,27 @@ export function ScreenShell({
     styles.content,
     !shouldUseScroll ? styles.contentFixed : null,
     contentMode === 'full' ? styles.contentFull : null,
+    contentContainerStyle,
+    // Footer clearance must win over screen-specific padding so fixed footers
+    // cannot cover the last actionable controls on short screens.
     footer ? styles.contentWithFooter : null,
     footer ? { paddingBottom: SCREEN_SHELL_FOOTER_SCROLL_CLEARANCE + bottomInset } : null,
-    contentContainerStyle,
   ];
   const footerStyle = [
     styles.footer,
+    {
+      backgroundColor: activeTheme.colors.background,
+      borderTopColor: activeTheme.colors.hairline,
+    },
     { paddingBottom: theme.spacing.lg + bottomInset },
     !footerDivider ? styles.footerNoDivider : null,
   ];
 
   return (
-    <SafeAreaView edges={safeAreaEdges} style={styles.safeArea}>
+    <SafeAreaView
+      edges={safeAreaEdges}
+      style={[styles.safeArea, { backgroundColor: activeTheme.colors.background }]}
+    >
       {shouldUseScroll ? (
         <BrandedRefreshScrollView
           ref={scrollViewRef}
@@ -173,7 +204,6 @@ export function ScreenShell({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   scrollView: {
     flex: 1,
@@ -212,8 +242,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   heroCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    borderColor: theme.colors.hairline,
     borderRadius: theme.radius.large,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.lg,
@@ -225,13 +253,11 @@ const styles = StyleSheet.create({
   },
   eyebrowBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: theme.colors.surfaceSoft,
     borderRadius: theme.radius.small,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 6,
   },
   eyebrowText: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '800',
     letterSpacing: 0.4,
@@ -251,7 +277,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: theme.colors.text,
     flex: 1,
     fontWeight: '800',
   },
@@ -274,14 +299,11 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   subtitle: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.callout,
     lineHeight: 22,
     maxWidth: 470,
   },
   footer: {
-    backgroundColor: theme.colors.background,
-    borderTopColor: theme.colors.hairline,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: theme.spacing.lg,
     paddingTop: theme.spacing.sm,

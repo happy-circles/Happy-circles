@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   },
   photoRequirementReady: {
     backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(61, 186, 110, 0.2)',
+    borderColor: theme.colors.successSoft,
   },
   photoRequirementIcon: {
     alignItems: 'center',

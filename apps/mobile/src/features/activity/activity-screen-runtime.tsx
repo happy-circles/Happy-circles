@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { SwipePager } from '@/components/swipe-pager';
 import {
+  inviteRequestPersonHrefAfterSuccessfulAction,
   inviteRequestEmptyDescription,
   inviteRequestEmptyTitle,
   type InviteRequestItem,
@@ -42,7 +43,7 @@ import {
   buildNotificationsReminderItem,
   buildPasswordAuthReminderItem,
 } from '@/lib/setup-reminder';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   transactionCategoryBackgroundColor,
@@ -70,6 +71,7 @@ import {
 } from './activity-helpers';
 import { ActivityInviteRequestCard } from './activity-invite-request-card';
 import { activityScreenStyles as styles } from './activity-screen.styles';
+import { useAppTheme } from '@/providers/theme-provider';
 
 interface PendingSnippetContent {
   readonly detail?: string;
@@ -89,10 +91,13 @@ interface NotificationActionCardContent {
   readonly title: string;
 }
 
-interface NotificationCategoryMeta {
+interface NotificationCategoryDefinition {
   readonly key: NotificationCategoryKey;
   readonly label: string;
   readonly icon: keyof typeof Ionicons.glyphMap;
+}
+
+interface NotificationCategoryMeta extends NotificationCategoryDefinition {
   readonly color: string;
   readonly backgroundColor: string;
 }
@@ -102,43 +107,26 @@ interface NotificationActor {
   readonly avatarUrl: string | null;
 }
 
-const NOTIFICATION_AVATAR_COLORS = [
-  '#0f8a5f',
-  '#2563eb',
-  '#a35f19',
-  '#7c3aed',
-  '#b24338',
-  '#141e33',
-];
-
-const NOTIFICATION_CATEGORIES: readonly NotificationCategoryMeta[] = [
+const NOTIFICATION_CATEGORIES: readonly NotificationCategoryDefinition[] = [
   {
     key: 'all',
     label: 'Todas',
     icon: 'notifications-outline',
-    color: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
   },
   {
     key: 'transactions',
     label: 'Transacciones',
     icon: 'cash-outline',
-    color: theme.colors.warning,
-    backgroundColor: theme.colors.warningSoft,
   },
   {
     key: 'friends',
     label: 'Amigos',
     icon: 'person-add-outline',
-    color: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
   },
   {
     key: 'reminders',
     label: 'Recordatorios',
     icon: 'alarm-outline',
-    color: theme.colors.success,
-    backgroundColor: theme.colors.successSoft,
   },
 ];
 const NOTIFICATION_CATEGORY_KEYS: readonly NotificationCategoryKey[] = [
@@ -182,7 +170,7 @@ function inviteRequestSectionTitle(tab: InviteRequestsTab, count: number): strin
   return 'Historial';
 }
 
-function avatarColorForLabel(label: string): string {
+function avatarColorForLabel(label: string, activeTheme: AppTheme = theme): string {
   let hash = 0;
 
   for (let index = 0; index < label.length; index += 1) {
@@ -190,15 +178,31 @@ function avatarColorForLabel(label: string): string {
   }
 
   return (
-    NOTIFICATION_AVATAR_COLORS[hash % NOTIFICATION_AVATAR_COLORS.length] ?? theme.colors.primary
+    activeTheme.palette.notificationAvatar[hash % activeTheme.palette.notificationAvatar.length] ??
+    activeTheme.colors.primary
   );
 }
 
-function notificationCategoryMeta(item: ActivityItemDto): NotificationCategoryMeta {
+function notificationCategoryVisual(key: NotificationCategoryKey, activeTheme: AppTheme = theme) {
+  if (key === 'transactions') {
+    return { backgroundColor: activeTheme.colors.warningSoft, color: activeTheme.colors.warning };
+  }
+
+  if (key === 'reminders') {
+    return { backgroundColor: activeTheme.colors.successSoft, color: activeTheme.colors.success };
+  }
+
+  return { backgroundColor: activeTheme.colors.primarySoft, color: activeTheme.colors.primary };
+}
+
+function notificationCategoryMeta(
+  item: ActivityItemDto,
+  activeTheme: AppTheme = theme,
+): NotificationCategoryMeta {
   const category = notificationCategoryForItem(item);
-  return (
-    NOTIFICATION_CATEGORIES.find((option) => option.key === category) ?? NOTIFICATION_CATEGORIES[0]
-  );
+  const meta =
+    NOTIFICATION_CATEGORIES.find((option) => option.key === category) ?? NOTIFICATION_CATEGORIES[0];
+  return { ...meta, ...notificationCategoryVisual(meta.key, activeTheme) };
 }
 
 function setupReminderBadgeIcon(
@@ -374,28 +378,37 @@ function NotificationCategoryTab({
   onPress,
 }: {
   readonly count: number;
-  readonly meta: NotificationCategoryMeta;
+  readonly meta: NotificationCategoryDefinition;
   readonly selected: boolean;
   readonly onPress: () => void;
 }) {
+  const activeTheme = useAppTheme();
+  const visual = notificationCategoryVisual(meta.key, activeTheme);
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.notificationTab,
-        selected ? styles.notificationTabActive : null,
+        selected ? [styles.notificationTabActive, { borderBottomColor: visual.color }] : null,
         pressed ? styles.tabButtonPressed : null,
       ]}
     >
       <AppText
         numberOfLines={1}
-        style={[styles.notificationTabLabel, selected ? styles.notificationTabLabelActive : null]}
+        style={[
+          styles.notificationTabLabel,
+          { color: selected ? activeTheme.colors.text : activeTheme.colors.textMuted },
+          selected ? styles.notificationTabLabelActive : null,
+        ]}
       >
         {meta.label}
       </AppText>
       {count > 0 ? (
-        <View style={styles.notificationTabBadge}>
-          <AppText style={styles.notificationTabBadgeText}>{count > 99 ? '99+' : count}</AppText>
+        <View style={[styles.notificationTabBadge, { backgroundColor: activeTheme.colors.danger }]}>
+          <AppText style={[styles.notificationTabBadgeText, { color: activeTheme.colors.white }]}>
+            {count > 99 ? '99+' : count}
+          </AppText>
         </View>
       ) : null}
     </Pressable>
@@ -590,6 +603,7 @@ function inviteNotificationTitle(item: ActivityItemDto): string {
 }
 
 export function ActivityScreen() {
+  const activeTheme = useAppTheme();
   const session = useSession();
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string; domain?: string }>();
@@ -757,6 +771,10 @@ export function ActivityScreen() {
     returnToRoute(router, target.href);
   }
 
+  function openInvitePersonTarget(href: Href) {
+    returnToRoute(router, href);
+  }
+
   function renderNotificationActionCard(
     item: ActivityItemDto,
     actor: NotificationActor,
@@ -783,8 +801,8 @@ export function ActivityScreen() {
           >
             {content.leading === 'avatar' ? (
               <AppAvatar
-                fallbackBackgroundColor={avatarColorForLabel(actor.label)}
-                fallbackTextColor={theme.colors.white}
+                fallbackBackgroundColor={avatarColorForLabel(actor.label, activeTheme)}
+                fallbackTextColor={activeTheme.colors.white}
                 imageUrl={actor.avatarUrl}
                 label={actor.label}
                 size={42}
@@ -793,11 +811,11 @@ export function ActivityScreen() {
               <View
                 style={[
                   styles.notificationActionIconBubble,
-                  { backgroundColor: content.iconBackgroundColor ?? theme.colors.surfaceSoft },
+                  { backgroundColor: content.iconBackgroundColor ?? activeTheme.colors.surfaceSoft },
                 ]}
               >
                 <Ionicons
-                  color={content.iconColor ?? theme.colors.textMuted}
+                  color={content.iconColor ?? activeTheme.colors.textMuted}
                   name={content.iconName ?? 'information-circle-outline'}
                   size={24}
                 />
@@ -828,7 +846,7 @@ export function ActivityScreen() {
                 </AppText>
               ) : null}
               {detailHref ? (
-                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+                <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={18} />
               ) : null}
             </View>
           ) : null
@@ -854,13 +872,13 @@ export function ActivityScreen() {
   }
 
   function renderSetupReminderCard(item: ActivityItemDto, unread: boolean) {
-    const category = notificationCategoryMeta(item);
+    const category = notificationCategoryMeta(item, activeTheme);
     const detailHref = pendingDetailHref(item, people);
     const iconColor = SETUP_REMINDER_WARNING_IDS.has(item.id)
-      ? theme.colors.warning
+      ? activeTheme.colors.warning
       : category.color;
     const iconBackgroundColor = SETUP_REMINDER_WARNING_IDS.has(item.id)
-      ? theme.colors.warningSoft
+      ? activeTheme.colors.warningSoft
       : category.backgroundColor;
     const iconName = setupReminderBadgeIcon(item, category.icon);
     const card = (
@@ -878,7 +896,7 @@ export function ActivityScreen() {
         }
         sideNode={
           detailHref ? (
-            <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
+            <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={18} />
           ) : null
         }
         title={item.title}
@@ -902,7 +920,7 @@ export function ActivityScreen() {
   }
 
   function renderPendingCard(item: ActivityItemDto, unread: boolean) {
-    const category = notificationCategoryMeta(item);
+    const category = notificationCategoryMeta(item, activeTheme);
     const actor = notificationActorForItem(item, people);
     const detailHref = pendingDetailHref(item, people);
 
@@ -1002,9 +1020,16 @@ export function ActivityScreen() {
             busyKey={inviteRequests.busyKey}
             item={item}
             key={`${tab}:${item.kind}:${item.inviteId}`}
-            onAction={(requestItem, action) =>
-              void inviteRequests.handleAction(requestItem, action)
-            }
+            onAction={async (requestItem, action) => {
+              const didCreateConnection = await inviteRequests.handleAction(requestItem, action);
+              const href = didCreateConnection
+                ? inviteRequestPersonHrefAfterSuccessfulAction(requestItem, action)
+                : null;
+              if (href) {
+                openInvitePersonTarget(href);
+              }
+            }}
+            onOpenPerson={openInvitePersonTarget}
           />
         ))}
       </NotificationSection>
@@ -1020,11 +1045,14 @@ export function ActivityScreen() {
     return (
       <BrandedRefreshScrollView
         fillViewport
-        contentContainerStyle={styles.sheetScrollContent}
+        contentContainerStyle={[
+          styles.sheetScrollContent,
+          { backgroundColor: activeTheme.colors.surface },
+        ]}
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
         showsVerticalScrollIndicator={false}
-        style={styles.pageScroll}
+        style={[styles.pageScroll, { backgroundColor: activeTheme.colors.surface }]}
       >
         {inviteRequests.message ? (
           <MessageBanner message={inviteRequests.message} tone="neutral" />
@@ -1064,11 +1092,14 @@ export function ActivityScreen() {
     return (
       <BrandedRefreshScrollView
         fillViewport
-        contentContainerStyle={styles.sheetScrollContent}
+        contentContainerStyle={[
+          styles.sheetScrollContent,
+          { backgroundColor: activeTheme.colors.surface },
+        ]}
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
         showsVerticalScrollIndicator={false}
-        style={styles.pageScroll}
+        style={[styles.pageScroll, { backgroundColor: activeTheme.colors.surface }]}
       >
         {!hasNotifications ? (
           <EmptyState
@@ -1105,8 +1136,11 @@ export function ActivityScreen() {
 
   if (snapshotQuery.isLoading) {
     return (
-      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
-        <View style={styles.loadingState}>
+      <SafeAreaView
+        edges={['left', 'right']}
+        style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
+      >
+        <View style={[styles.loadingState, { backgroundColor: activeTheme.colors.surface }]}>
           <View style={styles.loadingMotion}>
             <HappyCirclesMotion size={108} variant="loading" />
           </View>
@@ -1120,8 +1154,11 @@ export function ActivityScreen() {
 
   if (snapshotQuery.error) {
     return (
-      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
-        <View style={styles.loadingState}>
+      <SafeAreaView
+        edges={['left', 'right']}
+        style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
+      >
+        <View style={[styles.loadingState, { backgroundColor: activeTheme.colors.surface }]}>
           <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
         </View>
       </SafeAreaView>
@@ -1129,9 +1166,12 @@ export function ActivityScreen() {
   }
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+    <SafeAreaView
+      edges={['left', 'right']}
+      style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
+    >
       <Pressable onPress={closeNotifications} style={styles.backdropTapTarget} />
-      <View style={styles.layout}>
+      <View style={[styles.layout, { backgroundColor: activeTheme.colors.surface }]}>
         <View style={styles.sheetContent}>
           <View style={styles.fixedTop}>
             <View style={styles.heroRow}>
@@ -1143,7 +1183,7 @@ export function ActivityScreen() {
                   pressed ? styles.tabButtonPressed : null,
                 ]}
               >
-                <Ionicons color={theme.colors.text} name="close" size={22} />
+                <Ionicons color={activeTheme.colors.text} name="close" size={22} />
               </Pressable>
             </View>
           </View>
@@ -1151,7 +1191,10 @@ export function ActivityScreen() {
           <View style={styles.panelArea}>
             <ScrollView
               horizontal
-              contentContainerStyle={styles.notificationTabs}
+              contentContainerStyle={[
+                styles.notificationTabs,
+                { borderBottomColor: activeTheme.colors.hairline },
+              ]}
               showsHorizontalScrollIndicator={false}
               style={styles.notificationTabsScroll}
             >
@@ -1170,7 +1213,10 @@ export function ActivityScreen() {
               accessibilityLabel="Categorias de notificaciones"
               onChange={changeActiveCategory}
               onPreviewChange={setVisualActiveCategory}
-              pageStyle={styles.notificationPage}
+              pageStyle={[
+                styles.notificationPage,
+                { backgroundColor: activeTheme.colors.surface },
+              ]}
               renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
               style={styles.sheetScrollWrap}
               value={activeCategory}

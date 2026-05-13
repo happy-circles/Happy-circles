@@ -3,7 +3,7 @@ import type { Href } from 'expo-router';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
 import { TransactionEventCard } from '@/components/transaction-event-card';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import {
   isCycleTransactionItem,
   transactionAmountIsVoided,
@@ -16,10 +16,12 @@ import {
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
+import { useAppTheme } from '@/providers/theme-provider';
 
-const AVATAR_COLORS = ['#c026d3', '#047857', '#2563eb', '#334155', '#dc2626', '#7c3aed'];
-
-function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'displayName'>): string {
+function initialsBackgroundColor(
+  person: Pick<PersonCardDto, 'userId' | 'displayName'>,
+  activeTheme: AppTheme = theme,
+): string {
   const source = `${person.userId}:${person.displayName}`;
   let hash = 0;
 
@@ -27,7 +29,10 @@ function initialsBackgroundColor(person: Pick<PersonCardDto, 'userId' | 'display
     hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
   }
 
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? theme.colors.primary;
+  return (
+    activeTheme.palette.avatar[hash % activeTheme.palette.avatar.length] ??
+    activeTheme.colors.primary
+  );
 }
 
 function personIdFromHref(href: string | undefined): string | null {
@@ -92,6 +97,7 @@ export function PendingTransactionCard({
   readonly people: readonly PersonCardDto[];
   readonly unread: boolean;
 }) {
+  const activeTheme = useAppTheme();
   const isSystemTransaction = isCycleTransactionItem(item);
   const actorLabel = isSystemTransaction ? 'Happy Circle' : (item.counterpartyLabel ?? 'Persona');
   const matchedPerson = transactionPersonForItem(people, item);
@@ -106,7 +112,9 @@ export function PendingTransactionCard({
       actorAvatarUrl={isSystemTransaction ? null : (matchedPerson?.avatarUrl ?? null)}
       actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
       actorFallbackColor={
-        isSystemTransaction ? transactionToneColor(item) : initialsBackgroundColor(fallbackPerson)
+        isSystemTransaction
+          ? transactionToneColor(item)
+          : initialsBackgroundColor(fallbackPerson, activeTheme)
       }
       actorLabel={actorLabel}
       amountColor={transactionToneColor(item)}

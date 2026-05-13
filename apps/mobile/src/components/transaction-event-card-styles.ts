@@ -99,7 +99,7 @@ export const transactionEventCardStyles = StyleSheet.create({
     backgroundColor: theme.colors.warningSoft,
   },
   contextBadgeCycle: {
-    backgroundColor: '#eaf1ff',
+    backgroundColor: theme.colors.cycleSoft,
   },
   contextBadgeText: {
     color: theme.colors.text,

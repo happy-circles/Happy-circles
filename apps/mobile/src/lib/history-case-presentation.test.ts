@@ -12,8 +12,10 @@ import {
   historyAmountIsVoided,
   historyCaseImpactLabel,
   historyCaseAmountLabel,
+  historyCaseStatusTone,
   historyCaseStatusLabel,
   historyImpactLabel,
+  historyImpactTone,
   historyStepAmountLabel,
   historyTimelineStepMetaLabel,
   type HistoryCaseItem,
@@ -146,6 +148,37 @@ describe('history case presentation', () => {
         steps: [pendingCircle],
       }),
     ).toBe('Por aprobar');
+  });
+
+  it('keeps Circle history tones coordinated with final state', () => {
+    const rejectedCircle = item({
+      category: 'cycle',
+      kind: 'settlement',
+      status: 'rejected',
+    });
+    const replacedCircle = item({
+      category: 'cycle',
+      kind: 'settlement',
+      status: 'stale',
+    });
+    const executedCircle = item({
+      category: 'cycle',
+      kind: 'settlement',
+      status: 'executed',
+    });
+
+    expect(historyImpactTone(rejectedCircle)).toBe('danger');
+    expect(historyImpactTone(replacedCircle)).toBe('cycle');
+    expect(historyImpactTone(executedCircle)).toBe('positive');
+    expect(
+      historyCaseStatusTone({
+        earliest: replacedCircle,
+        id: 'circle-case',
+        isCycleSnippet: true,
+        latest: replacedCircle,
+        steps: [replacedCircle],
+      }),
+    ).toBe('cycle');
   });
 
   it('does not show stale update time as a later event inside completed Circle history', () => {

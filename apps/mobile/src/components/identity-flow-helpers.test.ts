@@ -94,4 +94,28 @@ describe('identity flow helpers', () => {
       topIdentityY: 52,
     });
   });
+
+  it('keeps centered measured content inside the available body height', () => {
+    expect(
+      resolveIdentityFlowLayout({
+        bodyHeight: 500,
+        centerLayout: 'balanced',
+        contentHeight: 240,
+        hasMessage: true,
+        identityPosition: 'center',
+        layoutReady: true,
+        stageSize: 208,
+        topOffset: 40,
+        verticalGap: 8,
+      }),
+    ).toEqual({
+      centerContentY: 260,
+      centerIdentityY: 44,
+      isCenterIdentity: true,
+      resolvedIdentityPosition: 'center',
+      shouldReserveMessageSlot: true,
+      topContentY: 256,
+      topIdentityY: 40,
+    });
+  });
 });

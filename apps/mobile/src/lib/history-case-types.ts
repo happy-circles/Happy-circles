@@ -24,6 +24,7 @@ export interface HistoryCaseItem {
   readonly replacedByProposalId?: string | null;
   readonly staleReason?: string | null;
   readonly counterpartyLabel?: string;
+  readonly participantUserIds?: readonly string[];
 }
 
 export interface HistoryCase<T extends HistoryCaseItem = HistoryCaseItem> {

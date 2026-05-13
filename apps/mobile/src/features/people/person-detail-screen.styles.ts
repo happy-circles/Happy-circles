@@ -160,9 +160,6 @@ export const personDetailScreenStyles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     fontWeight: '700',
   },
-  tabLabelActive: {
-    color: theme.colors.text,
-  },
   pendingActionStack: {
     gap: theme.spacing.xs,
   },

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-nat
 import { directionVisual, type LedgerDirection } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface DirectionPillProps {
   readonly direction: LedgerDirection;
@@ -13,7 +14,8 @@ export interface DirectionPillProps {
 }
 
 export function DirectionPill({ direction, onPress, selected = true, style }: DirectionPillProps) {
-  const visual = directionVisual(direction);
+  const activeTheme = useAppTheme();
+  const visual = directionVisual(direction, activeTheme);
 
   return (
     <Pressable
@@ -25,7 +27,10 @@ export function DirectionPill({ direction, onPress, selected = true, style }: Di
               backgroundColor: visual.softBackgroundColor,
               borderColor: visual.borderColor,
             }
-          : styles.baseUnselected,
+          : {
+              backgroundColor: activeTheme.colors.surface,
+              borderColor: activeTheme.colors.border,
+            },
         pressed ? styles.pressed : null,
         style,
       ]}
@@ -47,10 +52,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-  },
-  baseUnselected: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
   },
   label: {
     fontSize: theme.typography.callout,

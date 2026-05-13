@@ -2,7 +2,6 @@ import type { PropsWithChildren } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 
-import { LiquidGlassDisc } from '@/components/liquid-glass-disc';
 import type { CardHaloIntensity, CardStateIntent, CardStatusTone } from '@/lib/card-language';
 
 export interface CardActorAvatarProps extends PropsWithChildren {
@@ -15,16 +14,7 @@ export interface CardActorAvatarProps extends PropsWithChildren {
   readonly tone?: CardStatusTone;
 }
 
-export function CardActorAvatar({
-  children,
-  haloColor,
-  haloIntensity = 'strong',
-  haloSize,
-  intent = 'neutral',
-  size,
-  style,
-  tone,
-}: CardActorAvatarProps) {
+export function CardActorAvatar({ children, haloSize, size, style }: CardActorAvatarProps) {
   const resolvedHaloSize = haloSize ?? Math.round(size * 1.34);
 
   return (
@@ -38,13 +28,6 @@ export function CardActorAvatar({
         style,
       ]}
     >
-      <LiquidGlassDisc
-        color={haloColor}
-        intensity={haloIntensity}
-        intent={intent}
-        size={resolvedHaloSize}
-        tone={tone}
-      />
       <View style={[styles.content, { minHeight: size, minWidth: size }]}>{children}</View>
     </View>
   );

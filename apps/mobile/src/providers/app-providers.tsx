@@ -5,12 +5,14 @@ import { AppState, Platform } from 'react-native';
 import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '@/lib/query-client';
-import { theme } from '@/lib/theme';
 import { installGlobalErrorReporting } from '@/lib/support-errors';
+import { ThemeProvider, useAppTheme } from './theme-provider';
 
 import { SessionProvider } from './session-provider';
 
-export function AppProviders({ children }: PropsWithChildren) {
+function AppProvidersContent({ children }: PropsWithChildren) {
+  const activeTheme = useAppTheme();
+
   useEffect(() => installGlobalErrorReporting(), []);
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export function AppProviders({ children }: PropsWithChildren) {
     }
 
     const root = document.getElementById('root');
-    const backgroundColor = theme.colors.background;
+    const backgroundColor = activeTheme.colors.background;
     document.documentElement.style.backgroundColor = backgroundColor;
     document.documentElement.style.margin = '0';
     document.documentElement.style.minHeight = '100%';
@@ -30,7 +32,7 @@ export function AppProviders({ children }: PropsWithChildren) {
     root?.style.setProperty('min-height', '100%');
 
     return undefined;
-  }, []);
+  }, [activeTheme.colors.background]);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -58,5 +60,13 @@ export function AppProviders({ children }: PropsWithChildren) {
         <SessionProvider>{children}</SessionProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
+  );
+}
+
+export function AppProviders({ children }: PropsWithChildren) {
+  return (
+    <ThemeProvider>
+      <AppProvidersContent>{children}</AppProvidersContent>
+    </ThemeProvider>
   );
 }

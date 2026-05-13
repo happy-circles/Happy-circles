@@ -27,15 +27,15 @@ export const accountCreateAccountStyles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   socialProviderButtonApple: {
-    backgroundColor: '#111111',
-    borderColor: '#111111',
+    backgroundColor: theme.colors.appleButton,
+    borderColor: theme.colors.appleButton,
   },
   socialProviderButtonGoogle: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
   },
   socialProviderButtonTextApple: {
-    color: '#ffffff',
+    color: theme.colors.white,
     fontSize: theme.typography.callout,
     fontWeight: '800',
   },
@@ -60,7 +60,7 @@ export const accountCreateAccountStyles = StyleSheet.create({
   callingCodeBox: {
     alignItems: 'center',
     backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(61, 186, 110, 0.24)',
+    borderColor: theme.colors.successSoft,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
@@ -105,7 +105,7 @@ export const accountCreateAccountStyles = StyleSheet.create({
     maxHeight: COUNTRY_MENU_HEIGHT,
   },
   countryMenuScrollbarTrack: {
-    backgroundColor: 'rgba(61, 186, 110, 0.14)',
+    backgroundColor: theme.colors.successSoft,
     borderRadius: theme.radius.pill,
     bottom: theme.spacing.xxs,
     position: 'absolute',

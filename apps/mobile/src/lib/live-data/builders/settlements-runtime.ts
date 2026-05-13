@@ -10,6 +10,7 @@ import type {
 import { formatRelativeLabel } from '../utils/dates';
 import {
   parseSettlementMovements,
+  settlementProposalCounterpartyImpactAmount,
   settlementParticipantLegAmount,
   settlementProposalParticipantAmount,
   settlementProposalTotalAmount,
@@ -23,7 +24,11 @@ import {
 } from './settlement-versions';
 
 function personalMovementAmount(
-  movements: readonly { readonly amountMinor: number; readonly creditorUserId: string; readonly debtorUserId: string }[],
+  movements: readonly {
+    readonly amountMinor: number;
+    readonly creditorUserId: string;
+    readonly debtorUserId: string;
+  }[],
   currentUserId: string,
   options: { readonly context: string; readonly requireBalanced: boolean },
 ): number {
@@ -46,7 +51,8 @@ function personalMovementCount(
   currentUserId: string,
 ): number {
   return movements.filter(
-    (movement) => movement.debtorUserId === currentUserId || movement.creditorUserId === currentUserId,
+    (movement) =>
+      movement.debtorUserId === currentUserId || movement.creditorUserId === currentUserId,
   ).length;
 }
 
@@ -351,6 +357,15 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
       return [];
     }
 
+    const counterpartyAmountMinor = settlementProposalCounterpartyImpactAmount(
+      proposal,
+      input.currentUserId,
+      input.counterpartyUserId,
+    );
+    if (counterpartyAmountMinor <= 0) {
+      return [];
+    }
+
     const actorParticipant = participants.find(
       (participant) => participant.participant_user_id === input.currentUserId,
     );
@@ -361,8 +376,9 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
     const otherNames = participants
       .map((participant) => input.names.get(participant.participant_user_id) ?? 'Persona')
       .filter((name) => name !== 'Tu');
-    const pendingCount = participants.filter((participant) => participant.decision === 'pending')
-      .length;
+    const pendingCount = participants.filter(
+      (participant) => participant.decision === 'pending',
+    ).length;
     const lifecycleCopy = settlementLifecycleCopy({
       actorDecision: actorParticipant?.decision,
       participantCount: participants.length,
@@ -371,17 +387,17 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
       staleReason: proposal.stale_reason,
     });
     const peopleLabel = otherNames.length > 0 ? `Con ${otherNames.join(', ')}` : 'Happy Circle';
-    const personalAmountMinor = settlementProposalParticipantAmount(
-      proposal,
-      input.currentUserId,
-    );
 
     return [
       {
         id: `${proposal.id}:${proposal.status}`,
         title: lifecycleCopy.title,
-        subtitle: [peopleLabel, lifecycleCopy.detail, formatRelativeLabel(happenedAt, input.nowMs)].join(' | '),
-        amountMinor: personalAmountMinor,
+        subtitle: [
+          peopleLabel,
+          lifecycleCopy.detail,
+          formatRelativeLabel(happenedAt, input.nowMs),
+        ].join(' | '),
+        amountMinor: counterpartyAmountMinor,
         category: 'cycle',
         tone: 'neutral',
         kind: 'settlement',
@@ -451,7 +467,8 @@ export function buildSettlementDetail(
   const totalAmountMinor = settlementProposalTotalAmount(proposal);
   const personalAmountMinor = personalMovementAmount(movementDetails, currentUserId, {
     context: `Settlement detail ${proposal.id} participant ${currentUserId}`,
-    requireBalanced: proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+    requireBalanced:
+      proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
   });
   const movementCount = movementDetails.length;
   const personalFinalMovementCount = personalMovementCount(movementDetails, currentUserId);

@@ -6,9 +6,6 @@ import { theme } from '@/lib/theme';
 type StatusFaceTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'cycle';
 type StatusFaceMood = 'happy' | 'pending' | 'sad' | 'softSad';
 
-const CYCLE_BLUE = '#2563eb';
-const CYCLE_BLUE_SOFT = '#eaf1ff';
-
 export interface StatusFaceBadgeProps {
   readonly compact?: boolean;
   readonly label: string;
@@ -59,8 +56,8 @@ function statusFaceVisual(
 
   if (normalized.includes('reemplaz')) {
     return {
-      backgroundColor: theme.colors.surfaceSoft,
-      color: theme.colors.textMuted,
+      backgroundColor: theme.colors.cycleSoft,
+      color: theme.colors.cycle,
       mood: 'softSad',
     };
   }
@@ -91,13 +88,21 @@ function statusFaceVisual(
 
   if (isOwnPending) {
     return {
-      backgroundColor: theme.colors.warningSoft,
-      color: theme.colors.warning,
+      backgroundColor: theme.colors.pendingSoft,
+      color: theme.colors.pending,
       mood: 'pending',
     };
   }
 
   if (isWaiting) {
+    if (tone === 'cycle') {
+      return {
+        backgroundColor: theme.colors.cycleSoft,
+        color: theme.colors.cycle,
+        mood: 'pending',
+      };
+    }
+
     return {
       backgroundColor: theme.colors.surfaceSoft,
       color: theme.colors.textMuted,
@@ -107,8 +112,8 @@ function statusFaceVisual(
 
   if (isReady) {
     return {
-      backgroundColor: CYCLE_BLUE_SOFT,
-      color: CYCLE_BLUE,
+      backgroundColor: theme.colors.cycleSoft,
+      color: theme.colors.cycle,
       mood: 'pending',
     };
   }

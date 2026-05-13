@@ -22,6 +22,7 @@ export interface ActivityItemCardProps extends PropsWithChildren {
   readonly style?: StyleProp<ViewStyle>;
   readonly title: string;
   readonly titleAccessoryNode?: ReactNode;
+  readonly underlay?: ReactNode;
   readonly unread?: boolean;
   readonly unreadSurfaceColor?: string;
   readonly variant?: ActivityItemCardVariant;
@@ -44,6 +45,7 @@ export function ActivityItemCard({
   style,
   title,
   titleAccessoryNode,
+  underlay,
   unread = false,
   unreadSurfaceColor,
   variant = 'default',
@@ -65,6 +67,7 @@ export function ActivityItemCard({
       style={style}
       title={title}
       titleAccessoryNode={titleAccessoryNode}
+      underlay={underlay}
       unread={unread}
       unreadSurfaceColor={unreadSurfaceColor}
       variant={variant}

@@ -9,6 +9,7 @@ import {
   type CardStatusTone,
 } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const canUseNativeGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
 
@@ -29,13 +30,15 @@ export function LiquidGlassDisc({
   style,
   tone,
 }: LiquidGlassDiscProps) {
+  const activeTheme = useAppTheme();
+
   if (intensity === 'none') {
     return null;
   }
 
   const resolvedColor = color ?? cardStateColor(intent, tone);
   const isSoft = intensity === 'soft';
-  const glassTint = isSoft ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.06)';
+  const glassTint = isSoft ? activeTheme.glass.softTint : activeTheme.glass.tint;
 
   return (
     <View
@@ -52,15 +55,28 @@ export function LiquidGlassDisc({
       <View pointerEvents="none" style={[styles.solidFill, { backgroundColor: resolvedColor }]} />
       {canUseNativeGlass ? (
         <GlassView
-          colorScheme="light"
+          colorScheme={activeTheme.scheme}
           glassEffectStyle="regular"
           pointerEvents="none"
           style={styles.nativeGlass}
           tintColor={glassTint}
         />
       ) : null}
-      <View pointerEvents="none" style={[styles.sheen, isSoft ? styles.sheenSoft : null]} />
-      <View pointerEvents="none" style={[styles.edge, isSoft ? styles.edgeSoft : null]} />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.sheen,
+          { backgroundColor: activeTheme.glass.discSheen },
+          isSoft ? styles.sheenSoft : null,
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.edge,
+          { borderColor: isSoft ? activeTheme.glass.softEdge : activeTheme.glass.strongEdge },
+        ]}
+      />
     </View>
   );
 }
@@ -84,7 +100,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   sheen: {
-    backgroundColor: 'rgba(255, 255, 255, 0.76)',
     borderRadius: theme.radius.pill,
     height: '32%',
     left: '18%',
@@ -98,11 +113,7 @@ const styles = StyleSheet.create({
   },
   edge: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-  },
-  edgeSoft: {
-    borderColor: 'rgba(255, 255, 255, 0.68)',
   },
 });

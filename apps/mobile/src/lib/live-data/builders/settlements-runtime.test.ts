@@ -130,4 +130,67 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
       title: 'Circle cerrado',
     });
   });
+
+  it('omits proposal history for counterparties without a direct Circle movement', () => {
+    const executedProposal = proposal({
+      executed_at: '2026-05-05T11:00:00.000Z',
+      movements_json: [
+        {
+          amount_minor: 5000000,
+          creditor_user_id: 'user-ana',
+          debtor_user_id: CURRENT_USER_ID,
+        },
+        {
+          amount_minor: 5000000,
+          creditor_user_id: CURRENT_USER_ID,
+          debtor_user_id: 'user-carlos',
+        },
+        {
+          amount_minor: 5000000,
+          creditor_user_id: 'user-carlos',
+          debtor_user_id: 'user-sofia',
+        },
+        {
+          amount_minor: 5000000,
+          creditor_user_id: 'user-sofia',
+          debtor_user_id: 'user-ana',
+        },
+      ],
+      status: 'executed',
+    });
+    const participants = [
+      participant(executedProposal.id, CURRENT_USER_ID, 'approved'),
+      participant(executedProposal.id, 'user-ana', 'approved'),
+      participant(executedProposal.id, 'user-carlos', 'approved'),
+      participant(executedProposal.id, 'user-sofia', 'approved'),
+    ];
+    const baseInput = {
+      currentUserId: CURRENT_USER_ID,
+      names: new Map([
+        [CURRENT_USER_ID, 'Tu'],
+        ['user-ana', 'Ana'],
+        ['user-carlos', 'Carlos'],
+        ['user-sofia', 'Sofia'],
+      ]),
+      nowMs: NOW,
+      participantsByProposalId: new Map([[executedProposal.id, participants]]),
+      proposals: [executedProposal],
+    };
+
+    expect(
+      buildSettlementProposalHistoryTimelineItems({
+        ...baseInput,
+        counterpartyUserId: 'user-sofia',
+      }),
+    ).toEqual([]);
+    expect(
+      buildSettlementProposalHistoryTimelineItems({
+        ...baseInput,
+        counterpartyUserId: 'user-ana',
+      })[0],
+    ).toMatchObject({
+      amountMinor: 5000000,
+      status: 'executed',
+    });
+  });
 });

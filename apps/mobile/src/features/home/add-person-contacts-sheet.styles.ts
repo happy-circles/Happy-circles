@@ -133,6 +133,11 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: theme.spacing.sm,
   },
+  searchStickyWrap: {
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 1,
+    zIndex: 2,
+  },
   searchWrapSpaced: {
     marginTop: theme.spacing.md,
   },
@@ -187,7 +192,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   },
   contactRowInApp: {
     backgroundColor: theme.colors.successSoft,
-    borderColor: 'rgba(15, 138, 95, 0.18)',
+    borderColor: theme.colors.successSoft,
     borderWidth: 1,
   },
   contactCopy: {
@@ -217,7 +222,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
   contactActionInvite: {
-    backgroundColor: '#f97316',
+    backgroundColor: theme.colors.warning,
   },
   contactActionMuted: {
     backgroundColor: theme.colors.muted,
@@ -270,7 +275,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   },
   optionScrim: {
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 40, 0.38)',
+    backgroundColor: theme.colors.overlay,
     flex: 1,
     justifyContent: 'center',
     padding: theme.spacing.lg,
@@ -278,7 +283,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   floatingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 40, 0.38)',
+    backgroundColor: theme.colors.overlay,
     elevation: 10,
     justifyContent: 'center',
     padding: theme.spacing.lg,

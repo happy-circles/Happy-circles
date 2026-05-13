@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import { AppText } from '@/components/app-text';
 
 export type MessageBannerTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
@@ -11,41 +12,57 @@ export interface MessageBannerProps {
 }
 
 export function MessageBanner({ message, tone = 'primary' }: MessageBannerProps) {
+  const activeTheme = useAppTheme();
+  const toneStyle = messageBannerToneStyle(activeTheme, tone);
+
   return (
-    <View
-      style={[
-        styles.base,
-        tone === 'primary' ? styles.primary : null,
-        tone === 'success' ? styles.success : null,
-        tone === 'warning' ? styles.warning : null,
-        tone === 'danger' ? styles.danger : null,
-        tone === 'neutral' ? styles.neutral : null,
-      ]}
-    >
-      <View
-        style={[
-          styles.sideBar,
-          tone === 'primary' ? styles.primaryBar : null,
-          tone === 'success' ? styles.successBar : null,
-          tone === 'warning' ? styles.warningBar : null,
-          tone === 'danger' ? styles.dangerBar : null,
-          tone === 'neutral' ? styles.neutralBar : null,
-        ]}
-      />
-      <AppText
-        style={[
-          styles.text,
-          tone === 'primary' ? styles.primaryText : null,
-          tone === 'success' ? styles.successText : null,
-          tone === 'warning' ? styles.warningText : null,
-          tone === 'danger' ? styles.dangerText : null,
-          tone === 'neutral' ? styles.neutralText : null,
-        ]}
-      >
+    <View style={[styles.base, { backgroundColor: toneStyle.backgroundColor }]}>
+      <View style={[styles.sideBar, { backgroundColor: toneStyle.barColor }]} />
+      <AppText style={[styles.text, { color: toneStyle.textColor }]}>
         {message}
       </AppText>
     </View>
   );
+}
+
+function messageBannerToneStyle(activeTheme: AppTheme, tone: MessageBannerTone) {
+  if (tone === 'success') {
+    return {
+      backgroundColor: activeTheme.colors.successSoft,
+      barColor: activeTheme.colors.success,
+      textColor: activeTheme.colors.success,
+    };
+  }
+
+  if (tone === 'warning') {
+    return {
+      backgroundColor: activeTheme.colors.warningSoft,
+      barColor: activeTheme.colors.warning,
+      textColor: activeTheme.colors.warning,
+    };
+  }
+
+  if (tone === 'danger') {
+    return {
+      backgroundColor: activeTheme.colors.dangerSoft,
+      barColor: activeTheme.colors.danger,
+      textColor: activeTheme.colors.danger,
+    };
+  }
+
+  if (tone === 'neutral') {
+    return {
+      backgroundColor: activeTheme.colors.surfaceSoft,
+      barColor: activeTheme.colors.textMuted,
+      textColor: activeTheme.colors.textMuted,
+    };
+  }
+
+  return {
+    backgroundColor: activeTheme.colors.primarySoft,
+    barColor: activeTheme.colors.primary,
+    textColor: activeTheme.colors.primary,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -69,50 +86,5 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     fontWeight: '700',
     lineHeight: 18,
-  },
-  primary: {
-    backgroundColor: theme.colors.primarySoft,
-  },
-  success: {
-    backgroundColor: theme.colors.successSoft,
-  },
-  warning: {
-    backgroundColor: theme.colors.warningSoft,
-  },
-  danger: {
-    backgroundColor: theme.colors.dangerSoft,
-  },
-  neutral: {
-    backgroundColor: theme.colors.surfaceSoft,
-  },
-  primaryBar: {
-    backgroundColor: theme.colors.primary,
-  },
-  successBar: {
-    backgroundColor: theme.colors.success,
-  },
-  warningBar: {
-    backgroundColor: theme.colors.warning,
-  },
-  dangerBar: {
-    backgroundColor: theme.colors.danger,
-  },
-  neutralBar: {
-    backgroundColor: theme.colors.textMuted,
-  },
-  primaryText: {
-    color: theme.colors.primary,
-  },
-  successText: {
-    color: theme.colors.success,
-  },
-  warningText: {
-    color: theme.colors.warning,
-  },
-  dangerText: {
-    color: theme.colors.danger,
-  },
-  neutralText: {
-    color: theme.colors.textMuted,
   },
 });

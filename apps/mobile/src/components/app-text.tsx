@@ -1,13 +1,14 @@
 import { forwardRef } from 'react';
 import { StyleSheet, Text as NativeText, type TextProps, type TextStyle } from 'react-native';
 
-import { theme } from '@/lib/theme';
 import {
   getTypographyMaxFontSizeMultiplier,
   typographyVariants,
   type TypographyScaleRole,
   type TypographyVariant,
 } from '@/lib/typography';
+import { darkTheme, lightTheme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export type AppTextRef = NativeText;
 export type AppTextTone =
@@ -35,6 +36,7 @@ export const AppText = forwardRef<AppTextRef, AppTextProps>(function AppText(
   { align, color, scaleRole, style, tone, variant, ...props },
   ref,
 ) {
+  const activeTheme = useAppTheme();
   const variantDefinition = variant ? typographyVariants[variant] : undefined;
   const variantStyle = variantDefinition
     ? {
@@ -42,11 +44,14 @@ export const AppText = forwardRef<AppTextRef, AppTextProps>(function AppText(
         lineHeight: variantDefinition.lineHeight,
       }
     : null;
-  const flattenedStyle = StyleSheet.flatten([variantStyle, style]);
+  const flattenedStyle = StyleSheet.flatten([variantStyle, style]) as TextStyle | undefined;
   const fontSize =
     flattenedStyle && typeof flattenedStyle.fontSize === 'number'
       ? flattenedStyle.fontSize
       : undefined;
+  const styleColor =
+    flattenedStyle && typeof flattenedStyle.color === 'string' ? flattenedStyle.color : undefined;
+  const themedStyleColor = resolveStyleTokenColor(activeTheme, styleColor);
 
   return (
     <NativeText
@@ -59,39 +64,104 @@ export const AppText = forwardRef<AppTextRef, AppTextProps>(function AppText(
       })}
       ref={ref}
       style={[
+        { color: activeTheme.colors.text },
         variantStyle,
-        tone ? textToneStyles[tone] : null,
+        style,
+        themedStyleColor ? { color: themedStyleColor } : null,
+        tone ? { color: resolveTextToneColor(activeTheme, tone) } : null,
         align ? { textAlign: align } : null,
         color ? { color } : null,
-        style,
       ]}
     />
   );
 });
 
-const textToneStyles = StyleSheet.create({
-  default: {
-    color: theme.colors.text,
-  },
-  muted: {
-    color: theme.colors.textMuted,
-  },
-  subtle: {
-    color: theme.colors.muted,
-  },
-  primary: {
-    color: theme.colors.primary,
-  },
-  success: {
-    color: theme.colors.success,
-  },
-  warning: {
-    color: theme.colors.warning,
-  },
-  danger: {
-    color: theme.colors.danger,
-  },
-  inverse: {
-    color: theme.colors.white,
-  },
-});
+type ColorTokenTheme = typeof lightTheme | typeof darkTheme;
+type CategoryPaletteKey = keyof AppTheme['palette']['category'];
+
+function resolveStyleTokenColor(
+  activeTheme: AppTheme,
+  color: string | undefined,
+): string | null {
+  if (!color) {
+    return null;
+  }
+
+  for (const sourceTheme of [lightTheme, darkTheme]) {
+    const mappedColor = resolveThemeColorToken(activeTheme, sourceTheme, color);
+    if (mappedColor) {
+      return mappedColor;
+    }
+  }
+
+  return null;
+}
+
+function resolveThemeColorToken(
+  activeTheme: AppTheme,
+  sourceTheme: ColorTokenTheme,
+  color: string,
+): string | null {
+  const normalizedColor = normalizeColorValue(color);
+  const sourceColors = sourceTheme.colors as Record<string, string>;
+  const activeColors = activeTheme.colors as Record<string, string>;
+
+  for (const [tokenName, tokenValue] of Object.entries(sourceColors)) {
+    if (normalizeColorValue(tokenValue) === normalizedColor) {
+      return activeColors[tokenName] ?? null;
+    }
+  }
+
+  const sourceCategories = sourceTheme.palette.category;
+  const activeCategories = activeTheme.palette.category;
+  for (const tokenName of Object.keys(sourceCategories) as CategoryPaletteKey[]) {
+    const sourceCategory = sourceCategories[tokenName];
+    const activeCategory = activeCategories[tokenName];
+
+    if (normalizeColorValue(sourceCategory.color) === normalizedColor) {
+      return activeCategory.color;
+    }
+
+    if (normalizeColorValue(sourceCategory.backgroundColor) === normalizedColor) {
+      return activeCategory.backgroundColor;
+    }
+  }
+
+  return null;
+}
+
+function normalizeColorValue(color: string): string {
+  return color.trim().toLowerCase();
+}
+
+function resolveTextToneColor(activeTheme: ReturnType<typeof useAppTheme>, tone: AppTextTone) {
+  if (tone === 'muted') {
+    return activeTheme.colors.textMuted;
+  }
+
+  if (tone === 'subtle') {
+    return activeTheme.colors.muted;
+  }
+
+  if (tone === 'primary') {
+    return activeTheme.colors.primary;
+  }
+
+  if (tone === 'success') {
+    return activeTheme.colors.success;
+  }
+
+  if (tone === 'warning') {
+    return activeTheme.colors.warning;
+  }
+
+  if (tone === 'danger') {
+    return activeTheme.colors.danger;
+  }
+
+  if (tone === 'inverse') {
+    return activeTheme.colors.white;
+  }
+
+  return activeTheme.colors.text;
+}

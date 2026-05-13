@@ -7,10 +7,10 @@ import {
   IdentityFlowIdentity,
   IdentityFlowLogoCopy,
   IdentityFlowMessageSlot,
+  IdentityFlowPasswordInput,
   IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowSecondaryAction,
-  IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
@@ -132,7 +132,7 @@ export function ResetPasswordScreen() {
               label="Nueva contraseña"
               status={errors.password ? 'danger' : password.length >= 8 ? 'success' : 'idle'}
             >
-              <IdentityFlowTextInput
+              <IdentityFlowPasswordInput
                 autoCapitalize="none"
                 autoComplete="new-password"
                 onBlur={() =>
@@ -149,7 +149,6 @@ export function ResetPasswordScreen() {
                   setErrors((current) => ({ ...current, password: undefined }));
                 }}
                 placeholder="Mínimo 8 caracteres"
-                secureTextEntry
                 value={password}
               />
             </IdentityFlowField>
@@ -166,7 +165,7 @@ export function ResetPasswordScreen() {
                     : 'idle'
               }
             >
-              <IdentityFlowTextInput
+              <IdentityFlowPasswordInput
                 autoCapitalize="none"
                 autoComplete="new-password"
                 onBlur={() =>
@@ -183,7 +182,6 @@ export function ResetPasswordScreen() {
                   setErrors((current) => ({ ...current, confirmPassword: undefined }));
                 }}
                 placeholder="Repite la nueva clave"
-                secureTextEntry
                 value={confirmPassword}
               />
             </IdentityFlowField>

@@ -33,6 +33,7 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-url-polyfill/auto', () => ({}));
 
 import {
+  avatarImageCacheKey,
   clearAvatarImageReadyCacheForTests,
   getCachedResolvedAvatarUrl,
   hydrateSignedAvatarUrlCache,
@@ -82,6 +83,11 @@ describe('avatar URL cache', () => {
     expect(resolveAvatarUrl('file:///local/avatar.jpg', '2026-05-06T00:00:00.000Z')).toBe(
       'file:///local/avatar.jpg',
     );
+  });
+
+  it('derives stable image cache keys from avatar sources', () => {
+    expect(avatarImageCacheKey('/avatars/user-d/photo.jpg')).toBe('avatars/user-d/photo.jpg');
+    expect(avatarImageCacheKey('')).toBeUndefined();
   });
 
   it('remembers loaded avatar sources for future mounts', () => {

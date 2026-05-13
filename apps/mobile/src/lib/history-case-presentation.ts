@@ -71,11 +71,11 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
     const circleKind = cycleActivityKind(item);
 
     if (circleKind === 'lifecycle_rejected') {
-      return item.title;
+      return 'Circle no completado';
     }
 
     if (circleKind === 'lifecycle_replaced') {
-      return item.title;
+      return 'Version anterior de Circle';
     }
 
     if (circleKind === 'executed_proposal') {
@@ -135,10 +135,6 @@ export function historyImpactTone(
     return 'danger';
   }
 
-  if (isCircleActivityItem(item) && cycleActivityKind(item) === 'lifecycle_replaced') {
-    return 'neutral';
-  }
-
   if (item.status === 'rejected') {
     return 'danger';
   }
@@ -148,6 +144,22 @@ export function historyImpactTone(
   }
 
   if (isCircleActivityItem(item)) {
+    const circleKind = cycleActivityKind(item);
+
+    if (circleKind === 'lifecycle_replaced' || item.status === 'waiting_other_side') {
+      return 'cycle';
+    }
+
+    if (
+      circleKind === 'executed_proposal' ||
+      circleKind === 'ledger_posted' ||
+      item.status === 'approved' ||
+      item.status === 'executed' ||
+      item.status === 'posted'
+    ) {
+      return 'positive';
+    }
+
     return 'cycle';
   }
 
@@ -294,7 +306,7 @@ export function historyCardTitle<T extends HistoryCaseItem>(itemCase: HistoryCas
     }
 
     if (circleKind === 'lifecycle_replaced') {
-    return 'Versión reemplazada';
+      return 'Versión reemplazada';
     }
 
     if (circleKind === 'executed_proposal') {
@@ -376,16 +388,12 @@ export function historyCaseStatusTone<T extends HistoryCaseItem>(
 
   const circleKind = cycleActivityKind(itemCase.latest);
 
-  if (circleKind === 'lifecycle_rejected') {
-    if (itemCase.latest.status === 'expired') {
-      return 'neutral';
-    }
-
+  if (circleKind === 'lifecycle_rejected' || itemCase.latest.status === 'expired') {
     return 'danger';
   }
 
   if (circleKind === 'lifecycle_replaced' || itemCase.latest.status === 'waiting_other_side') {
-    return 'neutral';
+    return 'cycle';
   }
 
   if (itemCase.latest.status === 'pending_approvals') {

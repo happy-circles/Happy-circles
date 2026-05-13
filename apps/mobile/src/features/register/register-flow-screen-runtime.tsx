@@ -48,6 +48,7 @@ import {
   transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
+import { useAppTheme } from '@/providers/theme-provider';
 import {
   AMOUNT_SUGGESTIONS,
   buildDraftPreview,
@@ -85,11 +86,14 @@ function QuickPersonChip({
   readonly person: RegisterPerson;
   readonly onPress: (personId: string) => void;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
     <Pressable
       onPress={() => onPress(person.userId)}
       style={({ pressed }) => [
         styles.quickPersonChip,
+        { backgroundColor: activeTheme.colors.surface, borderColor: activeTheme.colors.border },
         pressed ? styles.quickPersonChipPressed : null,
       ]}
     >
@@ -147,6 +151,9 @@ export function RegisterFlowScreen() {
   });
   const completedSaveRef = useRef(false);
   const actionFeedback = useActionFeedbackOverlay();
+  const activeTheme = useAppTheme();
+  const surfaceCardStyle = { backgroundColor: activeTheme.colors.surface, borderColor: activeTheme.colors.border };
+  const errorBorderStyle = { borderColor: activeTheme.colors.danger };
 
   const allPeople = snapshotQuery.data?.people ?? [];
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
@@ -202,7 +209,7 @@ export function RegisterFlowScreen() {
   }, [allPeople, selectedPerson]);
   const amountMinor = Math.max(Number.parseInt(amount || '0', 10) * 100, 0);
   const amountDisplay = formatAmountInput(amount);
-  const activeDirectionVisual = directionVisual(direction);
+  const activeDirectionVisual = directionVisual(direction, activeTheme);
   const categoryIconName = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
   const categoryIconColor = transactionCategoryColor(category);
   const categoryIconBackground = transactionCategoryBackgroundColor(category);
@@ -235,6 +242,7 @@ export function RegisterFlowScreen() {
   const canShowForm = !snapshotQuery.isLoading && !snapshotQuery.error && allPeople.length > 0;
   const keyboardAwareScrollContentStyle = [
     styles.sheetScrollContent,
+    { backgroundColor: activeTheme.colors.surface },
     keyboardOverlap > 0 ? { paddingBottom: theme.spacing.xxl + keyboardOverlap } : null,
   ];
   const isDirty =
@@ -269,7 +277,7 @@ export function RegisterFlowScreen() {
   });
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS !== 'ios') {
       return undefined;
     }
 
@@ -499,22 +507,23 @@ export function RegisterFlowScreen() {
   const refreshConfig: BrandedRefreshProps | undefined = canShowForm ? refresh : undefined;
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}>
       <Pressable onPress={closeRegister} style={styles.backdropTapTarget} />
 
-      <View style={styles.layout}>
+      <View style={[styles.layout, { backgroundColor: activeTheme.colors.surface }, activeTheme.shadow.floating]}>
         <View style={styles.fixedTop}>
-          <View style={styles.sheetHandle} />
+          <View style={[styles.sheetHandle, { backgroundColor: activeTheme.colors.accent }]} />
           <View style={styles.heroRow}>
             <AppText style={styles.heroTitle}>Nuevo movimiento</AppText>
             <Pressable
               onPress={closeRegister}
               style={({ pressed }) => [
                 styles.closeButton,
+                { backgroundColor: activeTheme.colors.surfaceMuted },
                 pressed ? styles.closeButtonPressed : null,
               ]}
             >
-              <Ionicons color={theme.colors.text} name="close" size={20} />
+              <Ionicons color={activeTheme.colors.text} name="close" size={20} />
             </Pressable>
           </View>
         </View>
@@ -570,7 +579,7 @@ export function RegisterFlowScreen() {
                   <View style={styles.formContent}>
                     <View
                       onLayout={recordFieldOffset('amount')}
-                      style={[styles.amountCard, errors.amount ? styles.amountCardError : null]}
+                      style={[styles.amountCard, surfaceCardStyle, errors.amount ? errorBorderStyle : null]}
                     >
                       <View style={styles.amountDisplayRow}>
                         <AppText
@@ -659,7 +668,8 @@ export function RegisterFlowScreen() {
                         }}
                         style={({ pressed }) => [
                           styles.personPrimaryCard,
-                          errors.personId ? styles.personPrimaryCardError : null,
+                          surfaceCardStyle,
+                          errors.personId ? errorBorderStyle : null,
                           pressed ? styles.personPrimaryCardPressed : null,
                         ]}
                       >
@@ -688,7 +698,7 @@ export function RegisterFlowScreen() {
                           </View>
                         )}
                         <Ionicons
-                          color={theme.colors.textMuted}
+                          color={activeTheme.colors.textMuted}
                           name={personSearchExpanded ? 'chevron-up' : 'chevron-forward'}
                           size={20}
                         />
@@ -702,7 +712,7 @@ export function RegisterFlowScreen() {
                             onFocus={() => scrollFormToField('person')}
                             onChangeText={setQuery}
                             placeholder="Buscar otra persona"
-                            placeholderTextColor={theme.colors.muted}
+                            placeholderTextColor={activeTheme.colors.muted}
                             ref={searchInputRef}
                             value={query}
                           />
@@ -719,6 +729,7 @@ export function RegisterFlowScreen() {
                                     }}
                                     style={({ pressed }) => [
                                       styles.personOption,
+                                      surfaceCardStyle,
                                       pressed ? styles.personOptionPressed : null,
                                     ]}
                                   >
@@ -806,7 +817,7 @@ export function RegisterFlowScreen() {
                           clearFieldError('description');
                         }}
                         placeholder="Ej. Pizza del viernes"
-                        placeholderTextColor={theme.colors.muted}
+                        placeholderTextColor={activeTheme.colors.muted}
                         ref={descriptionInputRef}
                         returnKeyType="done"
                         value={description}
@@ -827,7 +838,7 @@ export function RegisterFlowScreen() {
             }}
             style={styles.footer}
           >
-            <View style={styles.footerSummary}>
+            <View style={[styles.footerSummary, { backgroundColor: activeTheme.colors.primarySoft }]}>
               <AppText numberOfLines={1} style={styles.footerSummaryText}>
                 {summaryText
                   ? summaryText
@@ -1121,7 +1132,7 @@ const styles = StyleSheet.create({
   },
   footerSummary: {
     alignItems: 'center',
-    backgroundColor: '#f5f2fb',
+    backgroundColor: theme.colors.primarySoft,
     borderRadius: theme.radius.medium,
     flexDirection: 'row',
     gap: theme.spacing.xs,

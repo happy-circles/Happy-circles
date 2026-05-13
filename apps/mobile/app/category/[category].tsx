@@ -1,10 +1,11 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { CategoryDetailScreen } from '@/features/categories/category-detail-screen';
-import { theme } from '@/lib/theme';
 import { transactionCategoryLabel } from '@/lib/transaction-categories';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export default function CategoryDetailRoute() {
+  const activeTheme = useAppTheme();
   const params = useLocalSearchParams<{
     category?: string;
     period?: string | string[];
@@ -19,9 +20,9 @@ export default function CategoryDetailRoute() {
           title: transactionCategoryLabel(category),
           headerBackTitle: '',
           headerShadowVisible: false,
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.text,
-          headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
+          headerStyle: { backgroundColor: activeTheme.colors.background },
+          headerTintColor: activeTheme.colors.text,
+          headerTitleStyle: { color: activeTheme.colors.text, fontWeight: '700' },
         }}
       />
       <CategoryDetailScreen category={category} initialPeriod={rawPeriod} />

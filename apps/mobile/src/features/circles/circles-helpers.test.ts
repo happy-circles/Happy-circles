@@ -1,5 +1,12 @@
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('react-native', () => ({
+  Platform: {
+    OS: 'web',
+    select: (options: Record<string, unknown>) => options.web ?? options.default,
+  },
+}));
 
 import {
   buildCircleProposalViewModels,

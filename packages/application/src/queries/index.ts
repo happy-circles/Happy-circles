@@ -50,6 +50,14 @@ export interface ActiveSettlementPreviewDto {
   readonly participantUserIds: readonly string[];
   readonly participantLabels: readonly string[];
   readonly participantDecisions: readonly SettlementParticipantDecisionDto[];
+  readonly incomingConnection?: ActiveSettlementDirectConnectionDto | null;
+  readonly outgoingConnection?: ActiveSettlementDirectConnectionDto | null;
+}
+
+export interface ActiveSettlementDirectConnectionDto {
+  readonly userId: string;
+  readonly label: string;
+  readonly amountMinor: number;
 }
 
 export interface BalanceProjectionDto {

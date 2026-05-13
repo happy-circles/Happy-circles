@@ -59,6 +59,7 @@ import { toneVisual } from '@/lib/direction-ui';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { useAppTheme } from '@/providers/theme-provider';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
@@ -114,6 +115,7 @@ const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const activeTheme = useAppTheme();
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -141,14 +143,19 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
   const topInset = Math.max(0, insets.top);
+  const screenBackgroundStyle = useMemo(
+    () => ({ backgroundColor: activeTheme.colors.background }),
+    [activeTheme],
+  );
   const screenContentStyle = useMemo(
     () => [
       styles.screenContent,
+      screenBackgroundStyle,
       {
         paddingTop: topInset + theme.spacing.xs,
       },
     ],
-    [topInset],
+    [screenBackgroundStyle, topInset],
   );
   const pendingItems = person?.pendingItems ?? [];
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
@@ -231,21 +238,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       )?.id ?? null
     );
   }, [focusCandidates, historyCases]);
-  const orderedHistoryCases = useMemo(() => {
-    if (!focusedHistoryCaseId) {
-      return historyCases;
-    }
-
-    const focusedCase = historyCases.find((itemCase) => itemCase.id === focusedHistoryCaseId);
-    if (!focusedCase) {
-      return historyCases;
-    }
-
-    return [
-      focusedCase,
-      ...historyCases.filter((itemCase) => itemCase.id !== focusedHistoryCaseId),
-    ];
-  }, [focusedHistoryCaseId, historyCases]);
   const focusedLandingKey = focusedPendingItemId
     ? `pending:${focusedPendingItemId}`
     : focusedHistoryCaseId
@@ -614,6 +606,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         stateIntent={cardStateIntentFromStatus(item.status, {
           circle: item.kind === 'settlement_proposal',
         })}
+        stateAura={item.kind === 'settlement_proposal'}
         statusLabel={statusLabel}
         statusTone={statusTone}
         tone={pendingSnippetTone(item)}
@@ -719,7 +712,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       );
     }
 
-    if (orderedHistoryCases.length === 0) {
+    if (historyCases.length === 0) {
       return (
         <EmptyState
           description="Cuando haya propuestas o movimientos confirmados con esta persona, aparecerán aquí."
@@ -728,7 +721,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       );
     }
 
-    return orderedHistoryCases.map((itemCase) => {
+    return historyCases.map((itemCase) => {
       const isExpanded = expandedCaseIds[0] === itemCase.id;
       const isFocused = focusedLandingActive && focusedHistoryCaseId === itemCase.id;
       const latest = itemCase.latest;
@@ -745,7 +738,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           category={historyCaseVisualCategory(itemCase)}
           description={null}
           eyebrow={person?.displayName ?? null}
-          expandedLayout="showcase"
           focused={isFocused}
           isCycleSnippet={itemCase.isCycleSnippet}
           isExpanded={isExpanded}
@@ -787,7 +779,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         keyboardShouldPersistTaps="handled"
         refresh={refresh}
         showsVerticalScrollIndicator={false}
-        style={styles.panelPageScroll}
+        style={[styles.panelPageScroll, screenBackgroundStyle]}
       >
         {renderPanelSegmentContent(segment)}
       </BrandedRefreshScrollView>
@@ -815,7 +807,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     : person.direction === 'owes_me'
       ? 'positive'
       : 'negative';
-  const balanceVisual = toneVisual(balanceTone);
+  const balanceVisual = toneVisual(balanceTone, activeTheme);
   const balanceSummary = isSettledBalance
     ? 'Estan al dia'
     : person.direction === 'owes_me'
@@ -832,9 +824,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const canRegisterTransactions = relationshipStatus !== 'pending_invite';
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={[styles.safeArea, screenBackgroundStyle]}>
       <View style={screenContentStyle}>
-        <View style={styles.fixedTop}>
+        <View style={[styles.fixedTop, screenBackgroundStyle]}>
           <View style={styles.heroBlock}>
             <Pressable
               onPress={() => setAvatarViewerVisible(true)}
@@ -874,15 +866,32 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
               </AppText>
             ) : null}
             {hasPendingItems ? (
-              <View style={styles.pendingHeroBadge}>
-                <Ionicons color={theme.colors.warning} name="alert-circle-outline" size={12} />
-                <AppText style={styles.pendingHeroBadgeText}>{pendingLabel}</AppText>
+              <View
+                style={[
+                  styles.pendingHeroBadge,
+                  { backgroundColor: activeTheme.colors.warningSoft },
+                ]}
+              >
+                <Ionicons
+                  color={activeTheme.colors.warning}
+                  name="alert-circle-outline"
+                  size={12}
+                />
+                <AppText
+                  style={[styles.pendingHeroBadgeText, { color: activeTheme.colors.warning }]}
+                >
+                  {pendingLabel}
+                </AppText>
               </View>
             ) : null}
             {heroMeta ? (
               <View style={styles.heroMetaRow}>
                 {isSettledBalance && hasPendingItems ? (
-                  <Ionicons color={theme.colors.muted} name="shield-checkmark-outline" size={14} />
+                  <Ionicons
+                    color={activeTheme.colors.muted}
+                    name="shield-checkmark-outline"
+                    size={14}
+                  />
                 ) : null}
                 <AppText style={styles.heroMeta}>{heroMeta}</AppText>
               </View>
@@ -910,7 +919,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           ) : null}
         </View>
 
-        <View style={styles.panelArea}>
+        <View style={[styles.panelArea, screenBackgroundStyle]}>
           <PersonDetailSegmentTabs
             onChange={changePanelSegment}
             visualSegment={visualPanelSegment}
@@ -922,9 +931,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             accessibilityLabel="Paneles de la relación"
             onChange={changePanelSegment}
             onPreviewChange={setVisualPanelSegment}
-            pageStyle={styles.panelPage}
+            pageStyle={[styles.panelPage, screenBackgroundStyle]}
             renderPage={(segment) => renderPanelSegmentPage(segment)}
-            style={styles.panelPager}
+            style={[styles.panelPager, screenBackgroundStyle]}
             value={panelSegment}
             values={PERSON_SEGMENT_KEYS}
           />

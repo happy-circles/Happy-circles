@@ -1,9 +1,10 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { PersonDetailScreen } from '@/features/people/person-detail-screen';
-import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export default function PersonDetailRoute() {
+  const activeTheme = useAppTheme();
   const params = useLocalSearchParams<{
     focus?: string | string[];
     panel?: string | string[];
@@ -22,9 +23,9 @@ export default function PersonDetailRoute() {
           title: 'Persona',
           headerBackTitle: '',
           headerShadowVisible: false,
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.text,
-          headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
+          headerStyle: { backgroundColor: activeTheme.colors.background },
+          headerTintColor: activeTheme.colors.text,
+          headerTitleStyle: { color: activeTheme.colors.text, fontWeight: '700' },
         }}
       />
       <PersonDetailScreen focusItemId={focusItemId} initialPanel={initialPanel} userId={userId} />

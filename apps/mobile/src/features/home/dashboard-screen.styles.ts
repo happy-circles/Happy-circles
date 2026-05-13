@@ -142,10 +142,6 @@ export const dashboardStyles = StyleSheet.create({
   transactionList: {
     gap: theme.spacing.sm,
   },
-  transactionPreviewCard: {
-    borderColor: 'rgba(255, 255, 255, 1)',
-    borderWidth: 1,
-  },
   transactionFooter: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,

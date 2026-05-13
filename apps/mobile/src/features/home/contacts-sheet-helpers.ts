@@ -1,11 +1,9 @@
 import type { FriendshipInviteDeliveryResult, PeopleTargetResolution } from '@/lib/live-data';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
 import type {
   ContactCandidate,
   ContactPhoneOption,
 } from '@/features/invites/people-outreach-utils';
-
-const CONTACT_AVATAR_COLORS = ['#e11d48', '#ea580c', '#059669', '#0891b2', '#2563eb', '#9333ea'];
 
 export const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
 export const CONTACT_RESOLUTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -32,7 +30,7 @@ export type ContactActionIconName =
   | 'time-outline'
   | 'checkmark-outline';
 
-export function contactAvatarColor(contact: ContactCandidate): string {
+export function contactAvatarColor(contact: ContactCandidate, activeTheme: AppTheme = theme): string {
   const source = `${contact.contactId}:${contact.alias}`;
   let hash = 0;
 
@@ -40,7 +38,10 @@ export function contactAvatarColor(contact: ContactCandidate): string {
     hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
   }
 
-  return CONTACT_AVATAR_COLORS[hash % CONTACT_AVATAR_COLORS.length] ?? theme.colors.primary;
+  return (
+    activeTheme.palette.contactAvatar[hash % activeTheme.palette.contactAvatar.length] ??
+    activeTheme.colors.primary
+  );
 }
 
 export function actionMetaForResolution(

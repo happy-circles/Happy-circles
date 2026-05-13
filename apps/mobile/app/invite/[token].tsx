@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
 
 import { InviteLinkScreen } from '@/features/invites/invite-link-screen';
-import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export default function InviteLinkRoute() {
+  const activeTheme = useAppTheme();
+
   return (
     <>
       <Stack.Screen
@@ -12,9 +14,9 @@ export default function InviteLinkRoute() {
           presentation: 'modal',
           headerBackTitle: '',
           headerShadowVisible: false,
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.text,
-          headerTitleStyle: { color: theme.colors.text, fontWeight: '700' },
+          headerStyle: { backgroundColor: activeTheme.colors.background },
+          headerTintColor: activeTheme.colors.text,
+          headerTitleStyle: { color: activeTheme.colors.text, fontWeight: '700' },
         }}
       />
       <InviteLinkScreen />

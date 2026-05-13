@@ -3,7 +3,7 @@ import { Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { IdentityFlowSecondaryAction } from '@/components/identity-flow';
-import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
 import type { SocialProvider } from './account-invite-entry-helpers';
 
@@ -24,6 +24,8 @@ export function AccountCreateAccountSocialOptions({
   showEmailPasswordFallback,
   socialBusyProvider,
 }: AccountCreateAccountSocialOptionsProps) {
+  const activeTheme = useAppTheme();
+
   return (
     <>
       <View style={styles.socialProviderStack}>
@@ -34,12 +36,22 @@ export function AccountCreateAccountSocialOptions({
             style={({ pressed }) => [
               styles.socialProviderButton,
               styles.socialProviderButtonApple,
+              {
+                backgroundColor: activeTheme.colors.appleButton,
+                borderColor:
+                  activeTheme.scheme === 'dark'
+                    ? activeTheme.colors.border
+                    : activeTheme.colors.appleButton,
+              },
               pressed && !authBusy ? styles.pressed : null,
               authBusy ? styles.disabledAction : null,
             ]}
           >
-            <Ionicons color="#ffffff" name="logo-apple" size={18} />
-            <AppText style={styles.socialProviderButtonTextApple}>
+            <Ionicons color={activeTheme.colors.white} name="logo-apple" size={18} />
+            <AppText
+              color={activeTheme.colors.white}
+              style={styles.socialProviderButtonTextApple}
+            >
               {socialBusyProvider === 'apple' ? 'Abriendo Apple...' : 'Continuar con Apple'}
             </AppText>
           </Pressable>
@@ -51,12 +63,21 @@ export function AccountCreateAccountSocialOptions({
           style={({ pressed }) => [
             styles.socialProviderButton,
             styles.socialProviderButtonGoogle,
+            {
+              backgroundColor:
+                activeTheme.scheme === 'dark'
+                  ? activeTheme.colors.surfaceSoft
+                  : activeTheme.colors.surface,
+              borderColor: activeTheme.colors.border,
+            },
             pressed && !authBusy ? styles.pressed : null,
             authBusy ? styles.disabledAction : null,
           ]}
         >
-          <Ionicons color={theme.colors.brandGreen} name="logo-google" size={18} />
-          <AppText style={styles.socialProviderButtonTextGoogle}>
+          <Ionicons color={activeTheme.colors.brandGreen} name="logo-google" size={18} />
+          <AppText
+            style={[styles.socialProviderButtonTextGoogle, { color: activeTheme.colors.text }]}
+          >
             {socialBusyProvider === 'google' ? 'Abriendo Google...' : 'Continuar con Google'}
           </AppText>
         </Pressable>

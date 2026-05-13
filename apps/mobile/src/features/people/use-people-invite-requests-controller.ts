@@ -96,7 +96,7 @@ export function usePeopleInviteRequestsController({
           triggerIdentityWarningHaptic();
         }
         setMessage(action === 'accept' ? 'Invitación aceptada.' : 'Invitación rechazada.');
-        return;
+        return action === 'accept';
       }
 
       if (item.kind === 'friendship_invite' && item.actionState === 'requires_you_review') {
@@ -110,7 +110,7 @@ export function usePeopleInviteRequestsController({
           triggerIdentityWarningHaptic();
         }
         setMessage(action === 'approve' ? 'Conexión confirmada.' : 'Invitación cerrada.');
-        return;
+        return action === 'approve';
       }
 
       if (item.kind === 'account_invite' && item.actionState === 'requires_you_review') {
@@ -124,7 +124,7 @@ export function usePeopleInviteRequestsController({
           triggerIdentityWarningHaptic();
         }
         setMessage(action === 'approve' ? 'Acceso confirmado.' : 'Invitación de acceso cerrada.');
-        return;
+        return action === 'approve';
       }
 
       if (
@@ -135,7 +135,7 @@ export function usePeopleInviteRequestsController({
         await cancelFriendshipInvite.mutateAsync(item.inviteId);
         triggerIdentityWarningHaptic();
         setMessage('Invitación cancelada.');
-        return;
+        return false;
       }
 
       if (
@@ -148,9 +148,11 @@ export function usePeopleInviteRequestsController({
         triggerIdentityWarningHaptic();
         setMessage('Invitación de acceso cancelada.');
       }
+      return false;
     } catch (error) {
       triggerIdentityErrorHaptic();
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la acción.');
+      return false;
     } finally {
       setBusyKey(null);
     }

@@ -7,6 +7,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface PrimaryActionProps {
   readonly label: string;
@@ -37,7 +38,10 @@ export function PrimaryAction({
   icon,
   style,
 }: PrimaryActionProps) {
+  const activeTheme = useAppTheme();
   const isDisabled = loading || disabled;
+  const foregroundColor =
+    variant === 'primary' ? activeTheme.colors.onPrimary : (color ?? activeTheme.colors.text);
   const content = (
     <Pressable
       disabled={isDisabled}
@@ -45,10 +49,9 @@ export function PrimaryAction({
       style={({ pressed }) => [
         styles.base,
         compact ? styles.baseCompact : null,
-        variant === 'primary' ? styles.primary : null,
-        variant === 'primary' && color ? { backgroundColor: color, borderColor: color } : null,
-        variant === 'secondary' ? styles.secondary : null,
-        variant === 'ghost' ? styles.ghost : null,
+        variant === 'primary' ? themedPrimaryStyle(activeTheme, color) : null,
+        variant === 'secondary' ? themedSecondaryStyle(activeTheme) : null,
+        variant === 'ghost' ? themedGhostStyle(activeTheme) : null,
         fullWidth ? styles.fullWidth : null,
         style,
         pressed && !isDisabled ? styles.pressed : null,
@@ -60,8 +63,7 @@ export function PrimaryAction({
           style={[
             styles.label,
             compact ? styles.labelCompact : null,
-            variant === 'primary' ? styles.primaryText : null,
-            variant !== 'primary' ? styles.secondaryText : null,
+            { color: foregroundColor },
             variant !== 'primary' && color ? { color } : null,
           ]}
         >
@@ -72,8 +74,9 @@ export function PrimaryAction({
             style={[
               styles.subtitle,
               compact ? styles.subtitleCompact : null,
-              variant === 'primary' ? styles.primarySubtext : null,
-              variant !== 'primary' ? styles.secondarySubtext : null,
+              variant === 'primary'
+                ? { color: activeTheme.colors.whiteAlphaStrong }
+                : { color: activeTheme.colors.textMuted },
             ]}
           >
             {subtitle}
@@ -82,14 +85,14 @@ export function PrimaryAction({
       </View>
       {loading ? (
         <HappyCirclesMotion
-          color={variant === 'primary' ? theme.colors.white : (color ?? theme.colors.text)}
+          color={foregroundColor}
           size={compact ? 30 : 36}
           tone="mono"
           variant="loading"
         />
       ) : icon || variant !== 'ghost' ? (
         <Ionicons
-          color={variant === 'primary' ? theme.colors.white : (color ?? theme.colors.text)}
+          color={foregroundColor}
           name={icon ?? 'arrow-forward'}
           size={compact ? 16 : 18}
         />
@@ -128,19 +131,12 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
   },
   primary: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primaryStrong,
     borderWidth: 1,
-    ...theme.shadow.card,
   },
   secondary: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
     borderWidth: 1,
   },
-  ghost: {
-    backgroundColor: theme.colors.surfaceMuted,
-  },
+  ghost: {},
   pressed: {
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
@@ -170,16 +166,27 @@ const styles = StyleSheet.create({
   subtitleCompact: {
     lineHeight: 14,
   },
-  primaryText: {
-    color: theme.colors.white,
-  },
-  secondaryText: {
-    color: theme.colors.text,
-  },
-  primarySubtext: {
-    color: 'rgba(255, 255, 255, 0.82)',
-  },
-  secondarySubtext: {
-    color: theme.colors.textMuted,
-  },
 });
+
+function themedPrimaryStyle(activeTheme: ReturnType<typeof useAppTheme>, color?: string) {
+  const backgroundColor = color ?? activeTheme.colors.primary;
+
+  return {
+    backgroundColor,
+    borderColor: color ?? activeTheme.colors.primaryStrong,
+    ...activeTheme.shadow.card,
+  };
+}
+
+function themedSecondaryStyle(activeTheme: ReturnType<typeof useAppTheme>) {
+  return {
+    backgroundColor: activeTheme.colors.surface,
+    borderColor: activeTheme.colors.border,
+  };
+}
+
+function themedGhostStyle(activeTheme: ReturnType<typeof useAppTheme>) {
+  return {
+    backgroundColor: activeTheme.colors.surfaceMuted,
+  };
+}

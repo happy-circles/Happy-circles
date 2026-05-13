@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -11,12 +11,19 @@ import type {
 
 import { AppText } from '@/components/app-text';
 import { EmptyState } from '@/components/empty-state';
-import { HappyCircleRing } from '@/components/happy-circle-ring';
+import { HappyCircleCard } from '@/components/happy-circle-card';
+import {
+  HappyCircleRing,
+  type HappyCircleRingParticipant,
+  type HappyCircleDecision,
+} from '@/components/happy-circle-ring';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HappyFacesCounter, HAPPY_FACES_TREASURE_GOLD } from '@/components/happy-faces-counter';
+import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { StatusChip, type StatusChipProps } from '@/components/status-chip';
+import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
+import type { StatusChipProps } from '@/components/status-chip';
 import { SurfaceCard } from '@/components/surface-card';
 import { formatCompactCop } from '@/features/balance/balance-helpers';
 import {
@@ -25,26 +32,36 @@ import {
   type CirclePersonalMetrics,
   type CircleProposalViewModel,
 } from '@/features/circles/circles-helpers';
+import { PendingTransactionCard } from '@/features/transactions/transactions-pending-card';
 import { triggerAppEmphasisHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
-import { isCircleActivityItem } from '@/lib/cycle-activity';
+import { cycleActivityKind, isCircleActivityItem } from '@/lib/cycle-activity';
 import {
   buildHistoryCases,
+  friendlyHistoryStepLabel,
   historyAmountIsVoided,
   historyCardTitle,
   historyCaseAmountLabel,
+  historyCaseEyebrow,
   historyCaseMeta,
   historyCaseStatusLabel,
   historyCaseStatusTone,
+  historyCaseVisualCategory,
+  historyImpactLabel,
+  historyImpactTone,
+  historyTimelineStepAmountLabel,
+  historyTimelineStepCategory,
+  historyTimelineStepDetailLabel,
+  historyTimelineStepMetaLabel,
   isHistoryCaseItem,
   type HistoryCase,
   type HistoryCaseItem,
 } from '@/lib/history-cases';
-import { formatCop } from '@/lib/data';
 import { notificationViewKeyForItem, useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const CIRCLE_COLOR = transactionCategoryColor('cycle');
 const CYCLE_TRANSACTIONS_HREF = '/transactions?category=cycle' as Href;
@@ -80,6 +97,7 @@ function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
     kind: normalizedKind,
     originRequestId: item.originRequestId,
     originSettlementProposalId: item.originSettlementProposalId,
+    participantUserIds: item.participantUserIds,
     replacedByProposalId: item.replacedByProposalId,
     replacesProposalId: item.replacesProposalId,
     staleReason: item.staleReason,
@@ -94,12 +112,14 @@ function CircleHeaderMetric({
   href,
   icon,
   label,
+  roomy,
   tone = CIRCLE_COLOR,
   value,
 }: {
   readonly href?: Href;
   readonly icon: keyof typeof Ionicons.glyphMap;
   readonly label: string;
+  readonly roomy: boolean;
   readonly tone?: string;
   readonly value: string;
 }) {
@@ -111,6 +131,7 @@ function CircleHeaderMetric({
       onPressIn={triggerAppEmphasisHaptic}
       style={({ pressed }) => [
         styles.headerMetric,
+        roomy ? styles.headerMetricRoomy : null,
         {
           backgroundColor: `${tone}0D`,
           borderColor: `${tone}24`,
@@ -120,8 +141,14 @@ function CircleHeaderMetric({
       ]}
     >
       <View style={styles.headerMetricTop}>
-        <View style={[styles.headerMetricIcon, { backgroundColor: `${tone}1F` }]}>
-          <Ionicons color={tone} name={icon} size={21} />
+        <View
+          style={[
+            styles.headerMetricIcon,
+            roomy ? styles.headerMetricIconRoomy : null,
+            { backgroundColor: `${tone}1F` },
+          ]}
+        >
+          <Ionicons color={tone} name={icon} size={roomy ? 23 : 21} />
         </View>
       </View>
       <View style={styles.headerMetricCopy}>
@@ -133,7 +160,12 @@ function CircleHeaderMetric({
         >
           {value}
         </AppText>
-        <AppText numberOfLines={1} style={styles.headerMetricLabel}>
+        <AppText
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}
+          numberOfLines={1}
+          style={styles.headerMetricLabel}
+        >
           {label}
         </AppText>
       </View>
@@ -158,23 +190,40 @@ function CirclesHeader({
   readonly metrics: CirclePersonalMetrics;
   readonly totalFaces: number;
 }) {
+  const activeTheme = useAppTheme();
+  const { width } = useWindowDimensions();
+  const contentWidth = Math.min(560, Math.max(0, width - theme.spacing.lg * 2));
+  const isTightHeader = contentWidth < 340;
+  const isRoomyMetrics = width >= 390;
+  const heroGap = isTightHeader ? theme.spacing.xs : theme.spacing.md;
+  const rewardSlotWidth = isTightHeader ? 96 : 106;
+  const brandMaxWidth = Math.max(0, contentWidth - rewardSlotWidth - heroGap);
+  const titleColor =
+    activeTheme.scheme === 'dark' ? activeTheme.colors.white : activeTheme.colors.primary;
+
   return (
     <View style={styles.hero}>
-      <View style={styles.heroTop}>
-        <View style={styles.heroBrand}>
-          <HappyCirclesMotion size={46} variant={totalFaces > 0 ? 'wink' : 'idle'} />
-          <AppText adjustsFontSizeToFit numberOfLines={1} style={styles.heroTitle}>
+      <View style={[styles.heroTop, { gap: heroGap }]}>
+        <View style={[styles.heroBrand, { maxWidth: brandMaxWidth, width: brandMaxWidth }]}>
+          <HappyCirclesMotion
+            size={isTightHeader ? 38 : 46}
+            variant={totalFaces > 0 ? 'wink' : 'idle'}
+          />
+          <AppText
+            adjustsFontSizeToFit
+            color={titleColor}
+            minimumFontScale={0.68}
+            numberOfLines={1}
+            style={[styles.heroTitle, isTightHeader ? styles.heroTitleCompact : null]}
+          >
             Happy Circles
           </AppText>
         </View>
-        <View style={styles.heroRewardWrap}>
-          <View style={styles.heroRewardSparkle}>
-            <Ionicons color={HAPPY_FACES_TREASURE_GOLD} name="sparkles" size={12} />
-          </View>
+        <View style={[styles.heroRewardWrap, { width: rewardSlotWidth }]}>
           <HappyFacesCounter
             closedCircleCount={closedCircleCount}
             compact
-            style={styles.heroFacesCounter}
+            style={[styles.heroFacesCounter, { minWidth: rewardSlotWidth }]}
             tone={HAPPY_FACES_TREASURE_GOLD}
             totalFaces={totalFaces}
             variant="reward"
@@ -182,11 +231,17 @@ function CirclesHeader({
         </View>
       </View>
 
-      <View style={styles.headerMetricsGrid}>
+      <View
+        style={[
+          styles.headerMetricsGrid,
+          isRoomyMetrics ? styles.headerMetricsGridRoomy : null,
+        ]}
+      >
         <CircleHeaderMetric
           href={CYCLE_TRANSACTIONS_HREF}
           icon="checkmark-done-outline"
           label="Cerrados"
+          roomy={isRoomyMetrics}
           tone={HAPPY_FACES_TREASURE_GOLD}
           value={String(closedCircleCount)}
         />
@@ -194,6 +249,7 @@ function CirclesHeader({
           href={CYCLE_TRANSACTIONS_HREF}
           icon="swap-horizontal-outline"
           label="Plata cruzada"
+          roomy={isRoomyMetrics}
           tone={theme.colors.success}
           value={formatCompactCop(metrics.ledgerAmountMinor)}
         />
@@ -201,6 +257,7 @@ function CirclesHeader({
           href={CYCLE_TRANSACTIONS_HREF}
           icon="receipt-outline"
           label="Ahorradas"
+          roomy={isRoomyMetrics}
           tone={CIRCLE_COLOR}
           value={String(metrics.savedTransactionCount)}
         />
@@ -209,48 +266,38 @@ function CirclesHeader({
   );
 }
 
-type CircleLibraryItem =
+type PastCircleArchiveItem = {
+  readonly amountLabel: string | null;
+  readonly amountVoided: boolean;
+  readonly decisions: readonly {
+    readonly decision: HappyCircleDecision;
+    readonly label: string;
+    readonly userId: string;
+  }[];
+  readonly href: Href;
+  readonly id: string;
+  readonly metaLabel: string;
+  readonly primaryLabel: string;
+  readonly statusLabel: string;
+  readonly statusTone: StatusChipProps['tone'];
+  readonly titleLabel: string;
+};
+
+type CircleArchiveItem =
   | {
-      readonly amountLabel: string;
-      readonly href: Href;
       readonly id: string;
       readonly kind: 'active';
-      readonly metaLabel: string;
-      readonly primaryLabel: string;
-      readonly proposal: ActiveSettlementPreviewDto;
-      readonly statusLabel: string;
+      readonly proposal: CircleProposalViewModel;
       readonly statusTone: StatusChipProps['tone'];
     }
   | {
-      readonly amountLabel: string | null;
-      readonly amountVoided: boolean;
-      readonly href: Href;
       readonly id: string;
       readonly kind: 'past';
-      readonly metaLabel: string;
-      readonly primaryLabel: string;
-      readonly statusLabel: string;
       readonly statusTone: StatusChipProps['tone'];
-      readonly titleLabel: string;
+      readonly value: PastCircleArchiveItem;
     };
 
-function circleStatusTone(state: CircleProposalViewModel['state']): StatusChipProps['tone'] {
-  if (state === 'needs_me') {
-    return 'warning';
-  }
-
-  if (state === 'ready') {
-    return 'cycle';
-  }
-
-  if (state === 'new') {
-    return 'primary';
-  }
-
-  return 'neutral';
-}
-
-function circleTileToneColor(tone: StatusChipProps['tone']): string {
+function circleToneColor(tone: StatusChipProps['tone']): string {
   if (tone === 'warning') {
     return theme.colors.warning;
   }
@@ -274,135 +321,165 @@ function circleTileToneColor(tone: StatusChipProps['tone']): string {
   return theme.colors.textMuted;
 }
 
-function circleHistoryIcon(tone: StatusChipProps['tone']): keyof typeof Ionicons.glyphMap {
+function CircleArchiveStatusIcon({
+  label,
+  tone,
+}: {
+  readonly label: string;
+  readonly tone: StatusChipProps['tone'];
+}) {
+  const icon: keyof typeof Ionicons.glyphMap =
+    tone === 'success'
+      ? 'checkmark-done-circle-outline'
+      : tone === 'danger'
+        ? 'close-circle-outline'
+        : tone === 'warning'
+          ? 'alert-circle-outline'
+          : tone === 'cycle'
+            ? 'radio-button-on-outline'
+            : 'ellipse-outline';
+  const color = circleToneColor(tone);
+
+  return (
+    <View
+      accessibilityLabel={label}
+      accessible
+      style={[styles.archiveStatusIcon, { backgroundColor: `${color}12` }]}
+    >
+      <Ionicons color={color} name={icon} size={18} />
+    </View>
+  );
+}
+
+function activeCircleStatusTone(state: CircleProposalViewModel['state']): StatusChipProps['tone'] {
+  if (state === 'needs_me' || state === 'new') {
+    return 'warning';
+  }
+
+  if (state === 'ready') {
+    return 'cycle';
+  }
+
+  return 'neutral';
+}
+
+function archiveDecisionForTone(tone: StatusChipProps['tone']): HappyCircleDecision {
   if (tone === 'success') {
-    return 'checkmark-done-circle-outline';
+    return 'approved';
   }
 
   if (tone === 'danger') {
-    return 'close-circle-outline';
+    return 'rejected';
   }
 
-  if (tone === 'warning') {
-    return 'time-outline';
-  }
-
-  if (tone === 'cycle') {
-    return 'happy-outline';
-  }
-
-  return 'refresh-circle-outline';
+  return 'pending';
 }
 
-function subtitleParts(value: string): string[] {
-  return value
-    .split('|')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+function circleCaseDetailHref(itemCase: HistoryCase<HistoryCaseItem>): Href {
+  const proposalId =
+    itemCase.latest.originSettlementProposalId ??
+    itemCase.steps.find((step) => step.originSettlementProposalId)?.originSettlementProposalId;
+
+  return proposalId
+    ? (`/settlements/${proposalId}` as Href)
+    : ((itemCase.latest.href as Href | undefined) ?? CYCLE_TRANSACTIONS_HREF);
 }
 
-function isUsefulCircleContextLabel(value: string): boolean {
-  const normalized = value.toLocaleLowerCase('es-CO');
-
-  if (
-    normalized === 'happy circle' ||
-    normalized === 'sistema' ||
-    normalized === 'usuario' ||
-    normalized.startsWith('hace ') ||
-    normalized === 'hoy' ||
-    normalized === 'ayer'
-  ) {
-    return false;
-  }
-
-  return value.startsWith('Con ') || value.includes('->');
+function isArchivedCircleCase(itemCase: HistoryCase<HistoryCaseItem>): boolean {
+  return cycleActivityKind(itemCase.latest) !== 'lifecycle_replaced';
 }
 
-function circleHistoryPrimaryLabel(itemCase: HistoryCase<HistoryCaseItem>): string {
-  const candidates = itemCase.steps.flatMap((step) => [
-    step.flowLabel ?? '',
-    ...subtitleParts(step.subtitle),
-  ]);
-  const contextLabel = candidates.find(isUsefulCircleContextLabel);
-
-  if (contextLabel) {
-    return contextLabel;
-  }
-
-  const fallbackTitle = historyCardTitle(itemCase)
-    .replace(/^Happy Circle\s*/i, '')
-    .replace(/^Circle\s*/i, '')
-    .trim();
-
-  return fallbackTitle.length > 0 ? fallbackTitle : 'Circle pasado';
-}
-
-function activeCircleLibraryItem(item: CircleProposalViewModel): CircleLibraryItem {
-  return {
-    amountLabel: formatCop(item.proposal.personalAmountMinor),
-    href: `/settlements/${item.proposal.proposalId}` as Href,
-    id: `active:${item.proposal.proposalId}`,
-    kind: 'active',
-    metaLabel: `${item.movementReductionLabel} / ${item.approvalLabel}`,
-    primaryLabel: item.participantLabel || item.proposal.title,
-    proposal: item.proposal,
-    statusLabel: item.statusLabel,
-    statusTone: circleStatusTone(item.state),
+function archiveDecisionsForHistoryCase(
+  itemCase: HistoryCase<HistoryCaseItem>,
+  currentUserId: string | null | undefined,
+  decision: HappyCircleDecision,
+): PastCircleArchiveItem['decisions'] {
+  const currentNode: HappyCircleRingParticipant = {
+    decision,
+    label: 'Tu',
+    userId: currentUserId ?? `${itemCase.id}:self`,
   };
+  let incomingNode: HappyCircleRingParticipant | null = null;
+  let outgoingNode: HappyCircleRingParticipant | null = null;
+
+  for (const step of itemCase.steps) {
+    const [from, to] = (step.flowLabel ?? '').split('->').map((part) => part.trim());
+
+    if (!outgoingNode && from === 'Tu' && to && to !== 'Happy Circle') {
+      outgoingNode = {
+        decision,
+        label: to,
+        userId: `${itemCase.id}:outgoing:${to}`,
+      };
+    }
+
+    if (!incomingNode && to === 'Tu' && from && from !== 'Happy Circle') {
+      incomingNode = {
+        decision,
+        label: from,
+        userId: `${itemCase.id}:incoming:${from}`,
+      };
+    }
+  }
+
+  const anonymousNode = (key: string): HappyCircleRingParticipant => ({
+    decision,
+    label: 'Happy',
+    userId: `${itemCase.id}:${key}`,
+  });
+
+  return [
+    currentNode,
+    outgoingNode ?? anonymousNode('outgoing'),
+    anonymousNode('hidden-right'),
+    anonymousNode('hidden-left'),
+    incomingNode ?? anonymousNode('incoming'),
+  ];
 }
 
-function pastCircleLibraryItem(itemCase: HistoryCase<HistoryCaseItem>): CircleLibraryItem {
+function pastCircleArchiveItem(
+  itemCase: HistoryCase<HistoryCaseItem>,
+  currentUserId: string | null | undefined,
+): PastCircleArchiveItem {
   const statusTone = historyCaseStatusTone(itemCase);
   const metaLabel = historyCaseMeta(itemCase).replace(/\s*\|\s*/g, ' / ');
+  const titleLabel = historyCardTitle(itemCase);
+  const decision = archiveDecisionForTone(statusTone);
 
   return {
     amountLabel: historyCaseAmountLabel(itemCase.latest),
     amountVoided: historyAmountIsVoided(itemCase.latest),
-    href: (itemCase.latest.href as Href | undefined) ?? CYCLE_TRANSACTIONS_HREF,
+    decisions: archiveDecisionsForHistoryCase(itemCase, currentUserId, decision),
+    href: circleCaseDetailHref(itemCase),
     id: `past:${itemCase.id}`,
-    kind: 'past',
     metaLabel,
-    primaryLabel: circleHistoryPrimaryLabel(itemCase),
+    primaryLabel: titleLabel,
     statusLabel: historyCaseStatusLabel(itemCase),
     statusTone,
-    titleLabel: historyCardTitle(itemCase),
+    titleLabel,
   };
 }
 
-function orderedCircleDecisions(
-  proposal: ActiveSettlementPreviewDto,
-  currentUserId: string | null | undefined,
-): ActiveSettlementPreviewDto['participantDecisions'] {
-  const decisions = [...proposal.participantDecisions];
-  const myIndex = currentUserId
-    ? decisions.findIndex((participant) => participant.userId === currentUserId)
-    : -1;
-
-  if (myIndex > 0) {
-    return [...decisions.slice(myIndex), ...decisions.slice(0, myIndex)];
-  }
-
-  return decisions;
-}
-
-function CircleLibraryTile({
-  currentUserId,
+function CircleArchivePastCard({
   item,
   width,
 }: {
-  readonly currentUserId: string | null | undefined;
-  readonly item: CircleLibraryItem;
+  readonly item: PastCircleArchiveItem;
   readonly width: number;
 }) {
-  const toneColor = circleTileToneColor(item.statusTone);
-  const ringSize = Math.min(Math.max(width * 0.38, 84), 110);
+  const ringSize = 260;
 
   return (
     <SurfaceCard
-      glassTreatment="flatSoft"
       padding="none"
-      style={[styles.circleTileCard, { minHeight: width, width }]}
-      variant={item.kind === 'active' ? 'elevated' : 'muted'}
+      style={[styles.archiveCard, { width }]}
+      underlay={
+        <StateAuraLayer
+          size="large"
+          variant={stateAuraVariantFromTone(item.statusTone)}
+        />
+      }
+      variant="elevated"
     >
       <Link href={item.href} asChild>
         <Pressable
@@ -411,62 +488,41 @@ function CircleLibraryTile({
             .join(', ')}
           accessibilityRole="button"
           onPressIn={triggerAppSelectionHaptic}
-          style={({ pressed }) => [
-            styles.circleTilePressable,
-            pressed ? styles.circleTilePressed : null,
-          ]}
+          style={({ pressed }) => [styles.archivePressable, pressed ? styles.archivePressed : null]}
         >
-          <View style={styles.circleTileTop}>
-            <StatusChip compact label={item.statusLabel} tone={item.statusTone} />
-            <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={17} />
-          </View>
-
-          <View style={styles.circleTileVisual}>
-            {item.kind === 'active' ? (
-              <HappyCircleRing
-                decisions={orderedCircleDecisions(item.proposal, currentUserId)}
-                ringSize={ringSize}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.circleHistoryIcon,
-                  { backgroundColor: `${toneColor}14`, borderColor: `${toneColor}26` },
-                ]}
-              >
-                <Ionicons
-                  color={toneColor}
-                  name={circleHistoryIcon(item.statusTone)}
-                  size={Math.round(ringSize * 0.48)}
-                />
+          <View style={styles.archiveBody}>
+            <View style={styles.archiveAmountBlock}>
+              <View style={styles.archiveHeader}>
+                <AppText adjustsFontSizeToFit numberOfLines={1} style={styles.archiveTitle}>
+                  Happy Circle
+                </AppText>
+                <View style={styles.archiveStatusSlot}>
+                  <CircleArchiveStatusIcon label={item.statusLabel} tone={item.statusTone} />
+                </View>
               </View>
-            )}
-          </View>
+            </View>
 
-          <View style={styles.circleTileCopy}>
-            <AppText numberOfLines={1} style={styles.circleTileTitle}>
-              {item.primaryLabel}
-            </AppText>
-            {item.amountLabel ? (
-              <AppText
-                adjustsFontSizeToFit
-                minimumFontScale={0.76}
-                numberOfLines={1}
-                style={[
-                  styles.circleTileAmount,
-                  item.kind === 'past' && item.amountVoided ? styles.circleTileAmountVoided : null,
-                ]}
-              >
-                {item.amountLabel}
-              </AppText>
-            ) : item.kind === 'past' ? (
-              <AppText numberOfLines={1} style={styles.circleTileFallbackTitle}>
-                {item.titleLabel}
-              </AppText>
-            ) : null}
-            <AppText numberOfLines={2} style={styles.circleTileMeta}>
+            <View style={styles.archiveVisual}>
+              <HappyCircleRing
+                centerColor={CIRCLE_COLOR}
+                centerLabel={item.amountLabel}
+                centerSubLabel={
+                  item.amountLabel ? (item.amountVoided ? 'no aplicado' : 'a solucionar') : null
+                }
+                decisions={item.decisions}
+                ringSize={ringSize}
+                style={styles.archiveRing}
+              />
+            </View>
+
+            <AppText numberOfLines={2} style={styles.archiveMeta}>
               {item.metaLabel}
             </AppText>
+
+            <View style={styles.detailCta}>
+              <AppText style={styles.detailCtaText}>Ver detalle</AppText>
+              <Ionicons color={CIRCLE_COLOR} name="chevron-forward" size={17} />
+            </View>
           </View>
         </Pressable>
       </Link>
@@ -474,56 +530,118 @@ function CircleLibraryTile({
   );
 }
 
-function CircleLibraryRail({
-  currentUserId,
-  items,
+function CircleArchiveCard({
+  item,
+  width,
 }: {
-  readonly currentUserId: string | null | undefined;
-  readonly items: readonly CircleLibraryItem[];
+  readonly item: CircleArchiveItem;
+  readonly width: number;
 }) {
+  if (item.kind === 'active') {
+    return (
+      <View style={[styles.archiveCardWrap, { width }]}>
+        <HappyCircleCard
+          proposal={item.proposal.proposal}
+          unread={item.proposal.state === 'new'}
+          variant="showcase"
+        />
+      </View>
+    );
+  }
+
+  return <CircleArchivePastCard item={item.value} width={width} />;
+}
+
+function CircleArchiveRail({ items }: { readonly items: readonly CircleArchiveItem[] }) {
   const { width } = useWindowDimensions();
-  const contentWidth = Math.min(width - theme.spacing.lg * 2, 560);
-  const tileWidth = Math.min(Math.max(contentWidth * 0.68, 232), 296);
-  const snapInterval = tileWidth + theme.spacing.sm;
+  const contentWidth = Math.max(width - theme.spacing.lg * 2, 288);
+  const cardWidth = Math.min(Math.max(contentWidth, 288), 420);
+  const snapInterval = cardWidth + theme.spacing.md;
 
   if (items.length === 0) {
     return (
-      <EmptyState
-        description="Apareceran cuando haya saldos por simplificar o Circles cerrados."
-        title="Sin Circles todavia"
-      />
+      <EmptyState description="No hay tarjetas en este filtro todavia." title="Sin Circles aqui" />
     );
   }
 
   if (items.length === 1) {
     return (
-      <View style={styles.singleCircleTileWrap}>
-        <CircleLibraryTile currentUserId={currentUserId} item={items[0]} width={tileWidth} />
+      <View style={styles.archiveSingleWrap}>
+        <CircleArchiveCard item={items[0]} width={cardWidth} />
       </View>
     );
   }
 
   return (
     <ScrollView
-      contentContainerStyle={styles.circleLibraryRail}
+      contentContainerStyle={styles.archiveRail}
       decelerationRate="fast"
       horizontal
       showsHorizontalScrollIndicator={false}
       snapToInterval={snapInterval}
     >
       {items.map((item) => (
-        <CircleLibraryTile
-          currentUserId={currentUserId}
-          item={item}
-          key={item.id}
-          width={tileWidth}
-        />
+        <CircleArchiveCard item={item} key={item.id} width={cardWidth} />
       ))}
     </ScrollView>
   );
 }
 
+function LatestCircleTransactionCard({
+  expanded,
+  itemCase,
+  onToggle,
+}: {
+  readonly expanded: boolean;
+  readonly itemCase: HistoryCase<HistoryCaseItem>;
+  readonly onToggle: () => void;
+}) {
+  const latest = itemCase.latest;
+  const caseAmountLabel = historyCaseAmountLabel(latest);
+  const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+  const caseTitle = friendlyHistoryStepLabel(latest);
+  const caseDescription = historyCardTitle(itemCase);
+  const caseEyebrow = historyCaseEyebrow(itemCase);
+
+  return (
+    <HistoryCaseCard
+      actorAvatarUrl={null}
+      actorFallbackColor={undefined}
+      amountLabel={caseAmountLabel}
+      amountStruckThrough={historyAmountIsVoided(latest)}
+      category={historyCaseVisualCategory(itemCase)}
+      description={null}
+      eyebrow={caseEyebrow}
+      isCycleSnippet={itemCase.isCycleSnippet}
+      isExpanded={expanded}
+      meta={historyCaseMeta(itemCase)}
+      onToggle={onToggle}
+      statusLabel={historyCaseStatusLabel(itemCase)}
+      statusTone={historyCaseStatusTone(itemCase)}
+      steps={itemCase.steps.map((step, index) => {
+        const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
+        const impact = historyImpactLabel(step);
+
+        return {
+          amountLabel,
+          category: historyTimelineStepCategory(itemCase, step, index),
+          detail: historyTimelineStepDetailLabel(step),
+          id: step.id,
+          impact:
+            !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel) ? null : impact,
+          meta: historyTimelineStepMetaLabel(itemCase, step),
+          title: friendlyHistoryStepLabel(step),
+          tone: historyImpactTone(step) as HistoryCaseTone,
+        };
+      })}
+      title={caseDescription || caseTitle}
+      tone={caseTone}
+    />
+  );
+}
+
 export function CirclesIndexScreen() {
+  const [expandedLatestCaseId, setExpandedLatestCaseId] = useState<string | null>(null);
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -532,6 +650,7 @@ export function CirclesIndexScreen() {
   const happyCircleScore = snapshot?.happyCircleScore ?? EMPTY_HAPPY_CIRCLE_SCORE;
   const pendingSection = snapshot?.activitySections.find((section) => section.key === 'pending');
   const historySection = snapshot?.activitySections.find((section) => section.key === 'history');
+  const people = snapshot?.dashboard.activePeople ?? snapshot?.people ?? [];
   const personalMetrics = useMemo(
     () =>
       buildCirclePersonalMetrics({
@@ -575,13 +694,43 @@ export function CirclesIndexScreen() {
       ),
     [historySection?.items],
   );
-  const circleLibraryItems = useMemo(
+  const archiveItems = useMemo<readonly CircleArchiveItem[]>(
     () => [
-      ...circleItems.map(activeCircleLibraryItem),
-      ...circleHistoryCases.map(pastCircleLibraryItem),
+      ...circleItems.map(
+        (item): CircleArchiveItem => ({
+          id: `active:${item.proposal.proposalId}`,
+          kind: 'active',
+          proposal: item,
+          statusTone: activeCircleStatusTone(item.state),
+        }),
+      ),
+      ...circleHistoryCases.filter(isArchivedCircleCase).map((itemCase): CircleArchiveItem => {
+        const value = pastCircleArchiveItem(itemCase, session.userId);
+
+        return {
+          id: value.id,
+          kind: 'past',
+          statusTone: value.statusTone,
+          value,
+        };
+      }),
     ],
-    [circleHistoryCases, circleItems],
+    [circleHistoryCases, circleItems, session.userId],
   );
+  const latestCircleTransactionCases = useMemo(
+    () => circleHistoryCases.slice(0, 3),
+    [circleHistoryCases],
+  );
+  const pendingCircleTransactions = useMemo(
+    () => (pendingSection?.items ?? []).filter(isCircleActivityItem).slice(0, 3),
+    [pendingSection?.items],
+  );
+  const notificationViewedKeys = useMemo(
+    () => new Set(snapshot?.notificationViewedKeys ?? []),
+    [snapshot?.notificationViewedKeys],
+  );
+  const hasCircleTransactions =
+    pendingCircleTransactions.length > 0 || latestCircleTransactionCases.length > 0;
 
   if (snapshotQuery.error && !snapshot) {
     return (
@@ -616,21 +765,71 @@ export function CirclesIndexScreen() {
         totalFaces={happyCircleScore.totalFaces}
       />
 
-      <SectionBlock
-        action={
-          <Link href={CYCLE_TRANSACTIONS_HREF} asChild>
-            <Pressable
-              style={({ pressed }) => [styles.sectionAction, pressed ? styles.pressed : null]}
-            >
-              <AppText style={styles.sectionActionText}>Ver todo</AppText>
-            </Pressable>
-          </Link>
-        }
-        subtitle={`${circleItems.length} activos / ${circleHistoryCases.length} pasados`}
-        title="Tus Circles"
-      >
-        <CircleLibraryRail currentUserId={session.userId} items={circleLibraryItems} />
-      </SectionBlock>
+      <View style={styles.archiveCardsBlock}>
+        <CircleArchiveRail items={archiveItems} />
+      </View>
+
+      {hasCircleTransactions ? (
+        <SectionBlock
+          action={
+            <Link href={CYCLE_TRANSACTIONS_HREF} asChild>
+              <Pressable
+                onPressIn={triggerAppSelectionHaptic}
+                style={({ pressed }) => [styles.sectionAction, pressed ? styles.pressed : null]}
+              >
+                <AppText style={styles.sectionActionText}>Ver todas</AppText>
+              </Pressable>
+            </Link>
+          }
+          title="Últimas transacciones"
+        >
+          <View style={styles.transactionGroups}>
+            {pendingCircleTransactions.length > 0 ? (
+              <View style={styles.transactionGroup}>
+                <View style={styles.transactionGroupHeader}>
+                  <AppText style={styles.transactionGroupTitle}>Pendientes</AppText>
+                  <View style={styles.transactionGroupBadge}>
+                    <AppText style={styles.transactionGroupBadgeText}>
+                      {pendingCircleTransactions.length}
+                    </AppText>
+                  </View>
+                </View>
+                <View style={styles.latestTransactionsList}>
+                  {pendingCircleTransactions.map((item) => (
+                    <PendingTransactionCard
+                      item={item}
+                      key={item.id}
+                      people={people}
+                      unread={!notificationViewedKeys.has(notificationViewKeyForItem(item))}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {latestCircleTransactionCases.length > 0 ? (
+              <View style={styles.transactionGroup}>
+                <View style={styles.transactionGroupHeader}>
+                  <AppText style={styles.transactionGroupTitle}>Histórico reciente</AppText>
+                </View>
+                <View style={styles.latestTransactionsList}>
+                  {latestCircleTransactionCases.map((itemCase) => (
+                    <LatestCircleTransactionCard
+                      expanded={expandedLatestCaseId === itemCase.id}
+                      itemCase={itemCase}
+                      key={itemCase.id}
+                      onToggle={() =>
+                        setExpandedLatestCaseId((current) =>
+                          current === itemCase.id ? null : itemCase.id,
+                        )
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </SectionBlock>
+      ) : null}
     </ScreenShell>
   );
 }
@@ -653,40 +852,41 @@ const styles = StyleSheet.create({
   heroTop: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.md,
     justifyContent: 'space-between',
   },
   heroBrand: {
     alignItems: 'center',
-    flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
     minWidth: 0,
   },
   heroTitle: {
     color: theme.colors.primary,
+    flexShrink: 1,
     fontSize: theme.typography.title1,
     fontWeight: '900',
     letterSpacing: -0.4,
     lineHeight: 34,
+    minWidth: 0,
+  },
+  heroTitleCompact: {
+    fontSize: 25,
+    lineHeight: 30,
   },
   heroFacesCounter: {
     flexShrink: 0,
   },
   heroRewardWrap: {
+    alignItems: 'flex-end',
     position: 'relative',
-  },
-  heroRewardSparkle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -5,
-    top: -9,
-    zIndex: 2,
   },
   headerMetricsGrid: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+  },
+  headerMetricsGridRoomy: {
+    gap: theme.spacing.md,
   },
   headerMetric: {
     alignItems: 'center',
@@ -701,6 +901,12 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 10, width: 0 },
     shadowOpacity: 0.12,
     shadowRadius: 18,
+  },
+  headerMetricRoomy: {
+    gap: theme.spacing.sm,
+    minHeight: 124,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   headerMetricPressed: {
     opacity: 0.82,
@@ -718,6 +924,10 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     width: 42,
+  },
+  headerMetricIconRoomy: {
+    height: 48,
+    width: 48,
   },
   headerMetricCopy: {
     alignItems: 'center',
@@ -739,84 +949,139 @@ const styles = StyleSheet.create({
     lineHeight: 29,
     textAlign: 'center',
   },
-  singleCircleTileWrap: {
+  archiveCardsBlock: {
+    gap: theme.spacing.sm,
+  },
+  archiveSingleWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
   },
-  circleLibraryRail: {
-    gap: theme.spacing.sm,
-    paddingRight: theme.spacing.sm,
+  archiveRail: {
+    gap: theme.spacing.md,
+    paddingRight: theme.spacing.md,
     paddingVertical: 2,
   },
-  circleTileCard: {
-    borderRadius: theme.radius.large,
+  archiveCardWrap: {
     flexShrink: 0,
   },
-  circleTilePressable: {
-    flex: 1,
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    padding: theme.spacing.md,
+  archiveCard: {
+    borderRadius: theme.radius.large,
+    flexShrink: 0,
+    minHeight: 560,
   },
-  circleTilePressed: {
+  archivePressable: {
+    gap: theme.spacing.lg,
+    minHeight: 560,
+    paddingBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xxl,
+  },
+  archivePressed: {
     opacity: 0.9,
     transform: [{ scale: 0.985 }],
   },
-  circleTileTop: {
+  archiveStatusIcon: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    justifyContent: 'space-between',
-    minHeight: 28,
+    borderRadius: theme.radius.small,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
-  circleTileVisual: {
+  archiveBody: {
+    alignItems: 'center',
+    gap: 22,
+  },
+  archiveAmountBlock: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  archiveHeader: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 98,
+    minHeight: 42,
+    paddingHorizontal: 46,
+    position: 'relative',
+    width: '100%',
   },
-  circleHistoryIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 104,
-    justifyContent: 'center',
-    width: 104,
+  archiveStatusSlot: {
+    position: 'absolute',
+    right: theme.spacing.xs,
+    top: 5,
   },
-  circleTileCopy: {
-    gap: 3,
-    minWidth: 0,
-  },
-  circleTileTitle: {
+  archiveTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  circleTileAmount: {
-    color: theme.colors.primary,
-    fontSize: 24,
+    fontSize: theme.typography.title3,
     fontWeight: '900',
-    lineHeight: 29,
+    lineHeight: 24,
     textAlign: 'center',
   },
-  circleTileAmountVoided: {
-    color: theme.colors.textMuted,
-    textDecorationLine: 'line-through',
+  archiveVisual: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 336,
+    width: '100%',
   },
-  circleTileFallbackTitle: {
-    color: theme.colors.text,
+  archiveRing: {
+    marginRight: 0,
+  },
+  archiveMeta: {
+    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
-    fontWeight: '800',
     lineHeight: 18,
     textAlign: 'center',
   },
-  circleTileMeta: {
+  detailCta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    justifyContent: 'center',
+    paddingTop: theme.spacing.xs,
+  },
+  detailCtaText: {
+    color: CIRCLE_COLOR,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  latestTransactionsList: {
+    gap: theme.spacing.sm,
+  },
+  transactionGroups: {
+    gap: theme.spacing.lg,
+  },
+  transactionGroup: {
+    gap: theme.spacing.sm,
+  },
+  transactionGroupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    minHeight: 28,
+  },
+  transactionGroupTitle: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 16,
-    textAlign: 'center',
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    lineHeight: 17,
+    textTransform: 'uppercase',
+  },
+  transactionGroupBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryGhost,
+    borderColor: theme.colors.hairline,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: 'center',
+    minWidth: 22,
+    paddingHorizontal: 7,
+  },
+  transactionGroupBadgeText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 13,
   },
   sectionAction: {
     borderRadius: theme.radius.pill,

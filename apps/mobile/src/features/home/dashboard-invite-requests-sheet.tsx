@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import type { Href } from 'expo-router';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { ActivityInviteRequestCard } from '@/features/activity/activity-invite-request-card';
 import { MessageBanner } from '@/components/message-banner';
 import { SurfaceCard } from '@/components/surface-card';
 import { SwipePager } from '@/components/swipe-pager';
@@ -13,6 +15,7 @@ import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-hap
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 import {
   INVITE_REQUEST_TABS,
   displayNameForInvite,
@@ -46,6 +49,8 @@ function InviteRequestTabButton({
   readonly selected: boolean;
   readonly onPress: () => void;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
     <Pressable
       onPress={() => {
@@ -54,15 +59,23 @@ function InviteRequestTabButton({
       }}
       style={({ pressed }) => [
         styles.sheetTab,
-        selected ? styles.sheetTabActive : null,
+        selected
+          ? [styles.sheetTabActive, { borderBottomColor: activeTheme.colors.primary }]
+          : null,
         pressed ? styles.quickActionPressed : null,
       ]}
     >
-      <AppText style={[styles.sheetTabText, selected ? styles.sheetTabTextActive : null]}>
+      <AppText
+        style={[
+          styles.sheetTabText,
+          { color: activeTheme.colors.textMuted },
+          selected ? { color: activeTheme.colors.text } : null,
+        ]}
+      >
         {label}
       </AppText>
       {count > 0 ? (
-        <View style={styles.sheetTabBadge}>
+        <View style={[styles.sheetTabBadge, { backgroundColor: activeTheme.colors.danger }]}>
           <AppText style={styles.sheetTabBadgeText}>{badgeLabel(count)}</AppText>
         </View>
       ) : null}
@@ -79,6 +92,7 @@ export function InviteRequestRow({
   readonly busyKey: string | null;
   readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
 }) {
+  const activeTheme = useAppTheme();
   const displayName = displayNameForInvite(item);
   const meta = inviteRequestMeta(item);
   const accentColor = inviteAccentColor(item);
@@ -128,11 +142,15 @@ export function InviteRequestRow({
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.quickActionPressed : null,
             isBusy ? styles.actionDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aceptar solicitud"
@@ -145,11 +163,15 @@ export function InviteRequestRow({
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonPrimary,
+            {
+              backgroundColor: activeTheme.colors.primaryGhost,
+              borderColor: activeTheme.colors.primaryGhost,
+            },
             pressed ? styles.quickActionPressed : null,
             isBusy ? styles.actionDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
         </Pressable>
       </View>
     ) : item.actionState === 'requires_you_review' ? (
@@ -165,11 +187,15 @@ export function InviteRequestRow({
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.quickActionPressed : null,
             isBusy ? styles.actionDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aceptar solicitud"
@@ -182,11 +208,15 @@ export function InviteRequestRow({
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonPrimary,
+            {
+              backgroundColor: activeTheme.colors.primaryGhost,
+              borderColor: activeTheme.colors.primaryGhost,
+            },
             pressed ? styles.quickActionPressed : null,
             isBusy ? styles.actionDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
         </Pressable>
       </View>
     ) : (item.kind === 'friendship_invite' && item.actionState === 'pending_claim') ||
@@ -205,11 +235,15 @@ export function InviteRequestRow({
           style={({ pressed }) => [
             styles.requestIconButton,
             styles.requestIconButtonDanger,
+            {
+              backgroundColor: activeTheme.colors.dangerSoft,
+              borderColor: activeTheme.colors.dangerSoft,
+            },
             pressed ? styles.quickActionPressed : null,
             isBusy ? styles.actionDisabled : null,
           ]}
         >
-          <Ionicons color={theme.colors.danger} name="close-circle-outline" size={15} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={15} />
         </Pressable>
       </View>
     ) : null;
@@ -224,7 +258,7 @@ export function InviteRequestRow({
         <CardActorAvatar haloIntensity={haloIntensity} haloSize={60} intent={actorIntent} size={48}>
           <AppAvatar
             fallbackBackgroundColor={initialsBackgroundColor(fallbackPerson)}
-            fallbackTextColor={theme.colors.white}
+            fallbackTextColor={activeTheme.colors.white}
             imageUrl={avatarUrl}
             label={displayName}
             size={48}
@@ -273,6 +307,7 @@ export function InviteRequestsSheet({
   onAction,
   onChangeTab,
   onClose,
+  onOpenPerson,
   receivedItems,
   sentItems,
   visible,
@@ -284,10 +319,12 @@ export function InviteRequestsSheet({
   readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
   readonly onChangeTab: (tab: InviteRequestsTab) => void;
   readonly onClose: () => void;
+  readonly onOpenPerson?: (href: Href) => void;
   readonly receivedItems: readonly InviteRequestItem[];
   readonly sentItems: readonly InviteRequestItem[];
   readonly visible: boolean;
 }) {
+  const activeTheme = useAppTheme();
   const [visualTab, setVisualTab] = useState<InviteRequestsTab>(activeTab);
 
   useEffect(() => {
@@ -309,7 +346,7 @@ export function InviteRequestsSheet({
           items.length === 0 ? styles.requestListEmpty : null,
         ]}
         showsVerticalScrollIndicator={false}
-        style={styles.requestScroll}
+        style={[styles.requestScroll, { backgroundColor: activeTheme.colors.surface }]}
       >
         {items.length === 0 ? (
           <View style={styles.sheetEmpty}>
@@ -318,11 +355,12 @@ export function InviteRequestsSheet({
           </View>
         ) : (
           items.map((item) => (
-            <InviteRequestRow
+            <ActivityInviteRequestCard
               busyKey={busyKey}
               item={item}
               key={`${item.kind}:${item.inviteId}`}
               onAction={onAction}
+              onOpenPerson={onOpenPerson}
             />
           ))
         )}
@@ -332,16 +370,16 @@ export function InviteRequestsSheet({
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.sheetScrim}>
+      <View style={[styles.sheetScrim, { backgroundColor: activeTheme.colors.overlay }]}>
         <Pressable onPress={onClose} style={styles.sheetBackdrop} />
-        <View style={styles.friendshipSheet}>
+        <View style={[styles.friendshipSheet, { backgroundColor: activeTheme.colors.surface }]}>
           <View style={styles.sheetHeader}>
             <AppText style={styles.sheetTitle}>Solicitudes</AppText>
             <Pressable onPress={onClose} style={styles.sheetCloseButton}>
-              <Ionicons color={theme.colors.text} name="close" size={22} />
+              <Ionicons color={activeTheme.colors.text} name="close" size={22} />
             </Pressable>
           </View>
-          <View style={styles.sheetTabs}>
+          <View style={[styles.sheetTabs, { borderBottomColor: activeTheme.colors.hairline }]}>
             <InviteRequestTabButton
               count={receivedItems.length}
               label="Recibidas"
@@ -366,8 +404,9 @@ export function InviteRequestsSheet({
             accessibilityLabel="Pestañas de solicitudes"
             onChange={changeTab}
             onPreviewChange={setVisualTab}
+            pageStyle={{ backgroundColor: activeTheme.colors.surface }}
             renderPage={(tab) => renderRequestPage(tab)}
-            style={styles.requestPager}
+            style={[styles.requestPager, { backgroundColor: activeTheme.colors.surface }]}
             value={activeTab}
             values={INVITE_REQUEST_TABS}
           />

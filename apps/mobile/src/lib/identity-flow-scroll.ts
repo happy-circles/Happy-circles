@@ -9,12 +9,15 @@ let activeScrollViewRef: RefObject<ScrollView | null> | null = null;
 let activeScrollY = 0;
 let activeViewportHeight = 0;
 const activeTargets = new Map<string, IdentityFlowScrollTargetSnapshot>();
+let nextKeyboardResetRegistrationId = 0;
+let activeKeyboardResetRegistrationId = 0;
+let activeKeyboardResetForHandoff: (() => Promise<void> | void) | null = null;
 const IDENTITY_FLOW_SCROLL_SETTLE_FRAMES = 5;
 const IDENTITY_FLOW_SCROLL_ANIMATED_SETTLE_FRAMES = 18;
 const IDENTITY_FLOW_TARGET_REMEASURE_FRAMES = 8;
 const IDENTITY_FLOW_CENTER_THRESHOLD = 1.25;
 
-export type IdentityFlowTransitionScrollPolicy = 'preserve' | 'reset-top';
+export type IdentityFlowTransitionScrollPolicy = 'preserve' | 'reset-top' | 'reveal-end';
 
 export interface IdentityFlowScrollTargetSnapshot {
   readonly height: number;
@@ -104,6 +107,24 @@ export function registerIdentityFlowScrollView(
   };
 }
 
+export function registerIdentityFlowKeyboardResetForHandoff(
+  resetKeyboardForHandoff: () => Promise<void> | void,
+) {
+  const registrationId = ++nextKeyboardResetRegistrationId;
+
+  activeKeyboardResetRegistrationId = registrationId;
+  activeKeyboardResetForHandoff = resetKeyboardForHandoff;
+
+  return () => {
+    if (activeKeyboardResetRegistrationId !== registrationId) {
+      return;
+    }
+
+    activeKeyboardResetRegistrationId = 0;
+    activeKeyboardResetForHandoff = null;
+  };
+}
+
 export function updateIdentityFlowScrollMetrics(input: {
   readonly scrollY?: number;
   readonly viewportHeight?: number;
@@ -164,6 +185,12 @@ export function centerIdentityFlowTargetForHandoff({
 export async function prepareIdentityFlowTargetForHandoff({
   animated = true,
 }: { readonly animated?: boolean } = {}) {
+  if (activeKeyboardResetForHandoff) {
+    await activeKeyboardResetForHandoff();
+    requestLaunchTargetRemeasure();
+    await waitForFrames(IDENTITY_FLOW_TARGET_REMEASURE_FRAMES);
+  }
+
   const didRequestScroll = centerIdentityFlowTargetForHandoff({ animated });
 
   if (didRequestScroll) {

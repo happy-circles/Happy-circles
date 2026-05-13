@@ -6,11 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type GlobalFeedbackPayload, subscribeGlobalFeedback } from '@/lib/global-feedback';
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 const VISIBLE_MS = 1550;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlobalFeedbackOverlay() {
+  const activeTheme = useAppTheme();
   const [feedback, setFeedback] = useState<GlobalFeedbackPayload | null>(null);
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
@@ -85,20 +87,43 @@ export function GlobalFeedbackOverlay() {
 
   return (
     <View pointerEvents="none" style={[styles.host, { top: insets.top + theme.spacing.md }]}>
-      <Animated.View style={[styles.card, { opacity, transform: [{ translateY }] }]}>
-        <View style={[styles.iconShell, isSuccess ? styles.iconShellSuccess : null]}>
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            backgroundColor: activeTheme.colors.floatingSurface,
+            borderColor: activeTheme.colors.hairline,
+            opacity,
+            transform: [{ translateY }],
+            ...activeTheme.shadow.floating,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.iconShell,
+            {
+              backgroundColor: isSuccess
+                ? activeTheme.colors.successSoft
+                : activeTheme.colors.surfaceMuted,
+            },
+          ]}
+        >
           <Ionicons
-            color={isSuccess ? theme.colors.success : theme.colors.textMuted}
+            color={isSuccess ? activeTheme.colors.success : activeTheme.colors.textMuted}
             name={isSuccess ? 'checkmark' : 'information'}
             size={22}
           />
         </View>
         <View style={styles.copy}>
-          <AppText numberOfLines={1} style={styles.title}>
+          <AppText numberOfLines={1} style={[styles.title, { color: activeTheme.colors.text }]}>
             {feedback.title}
           </AppText>
           {feedback.message ? (
-            <AppText numberOfLines={1} style={styles.message}>
+            <AppText
+              numberOfLines={1}
+              style={[styles.message, { color: activeTheme.colors.textMuted }]}
+            >
               {feedback.message}
             </AppText>
           ) : null}
@@ -120,8 +145,6 @@ const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderColor: theme.colors.hairline,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
@@ -131,7 +154,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.sm,
     width: '100%',
-    ...theme.shadow.floating,
   },
   copy: {
     flex: 1,
@@ -140,23 +162,18 @@ const styles = StyleSheet.create({
   },
   iconShell: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.pill,
     height: 42,
     justifyContent: 'center',
     width: 42,
   },
-  iconShellSuccess: {
-    backgroundColor: theme.colors.successSoft,
-  },
+  iconShellSuccess: {},
   message: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     fontWeight: '600',
     lineHeight: 18,
   },
   title: {
-    color: theme.colors.text,
     fontSize: theme.typography.callout,
     fontWeight: '800',
     lineHeight: 20,

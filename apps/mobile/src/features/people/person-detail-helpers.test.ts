@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { ActivityItemDto } from '@happy-circles/application';
+
+vi.mock('react-native', () => ({
+  Platform: {
+    OS: 'web',
+    select: (options: Record<string, unknown>) => options.web ?? options.default,
+  },
+}));
 
 import {
   buildFinancialRequestPendingContent,

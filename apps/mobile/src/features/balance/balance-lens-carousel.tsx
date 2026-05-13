@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import type {
@@ -114,6 +114,7 @@ export function BalanceLensCarousel({
   const [activeFocus, setActiveFocus] = useState<BalanceFocus>(resolvedInitialFocus);
   const [visualFocus, setVisualFocus] = useState<BalanceFocus>(resolvedInitialFocus);
   const [pagerInteracting, setPagerInteracting] = useState(false);
+  const onSwipeInteractionChangeRef = useRef(onSwipeInteractionChange);
   const selectedPeriod = period ?? analytics.defaultPeriod ?? 'month';
   const currentPeriod = analytics.periods[selectedPeriod];
   const balanceSummary = currentPeriod.summaries.balance;
@@ -136,9 +137,20 @@ export function BalanceLensCarousel({
     setVisualFocus(resolvedInitialFocus);
   }, [resolvedInitialFocus]);
 
+  useEffect(() => {
+    onSwipeInteractionChangeRef.current = onSwipeInteractionChange;
+  }, [onSwipeInteractionChange]);
+
+  useEffect(
+    () => () => {
+      onSwipeInteractionChangeRef.current?.(false);
+    },
+    [],
+  );
+
   function handlePagerInteractionChange(isInteracting: boolean) {
     setPagerInteracting(isInteracting);
-    onSwipeInteractionChange?.(isInteracting);
+    onSwipeInteractionChangeRef.current?.(isInteracting);
   }
 
   function changeActiveFocus(nextFocus: BalanceFocus) {
@@ -152,7 +164,6 @@ export function BalanceLensCarousel({
     }
 
     setPagerInteracting(true);
-    onSwipeInteractionChange?.(true);
     changeActiveFocus(nextFocus);
   }
 
