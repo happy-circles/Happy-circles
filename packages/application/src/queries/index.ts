@@ -193,6 +193,7 @@ export interface PendingActionDto {
   readonly replacesProposalId?: string | null;
   readonly replacedByProposalId?: string | null;
   readonly staleReason?: string | null;
+  readonly createdByCurrentUser?: boolean;
 }
 
 export interface PendingRequestHistoryStepDto {
@@ -230,6 +231,7 @@ export interface ActivityItemDto {
   readonly counterpartyLabel?: string;
   readonly participantUserIds?: readonly string[];
   readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
+  readonly createdByCurrentUser?: boolean;
   readonly kind:
     | 'financial_request'
     | 'settlement_proposal'

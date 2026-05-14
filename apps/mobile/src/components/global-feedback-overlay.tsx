@@ -8,7 +8,7 @@ import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
 
-const VISIBLE_MS = 1550;
+const VISIBLE_MS = 2200;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlobalFeedbackOverlay() {

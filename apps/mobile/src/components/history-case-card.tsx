@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 
@@ -34,6 +35,8 @@ export interface HistoryCaseStepViewModel {
 }
 
 export interface HistoryCaseCardProps {
+  readonly attentionDot?: boolean;
+  readonly attentionDotColor?: string;
   readonly actorFallbackColor?: string;
   readonly actorAvatarUrl?: string | null;
   readonly eyebrow?: string | null;
@@ -42,8 +45,11 @@ export interface HistoryCaseCardProps {
   readonly description?: string | null;
   readonly amountLabel?: string | null;
   readonly amountStruckThrough?: boolean;
+  readonly cardStyle?: StyleProp<ViewStyle>;
   readonly expandedLayout?: HistoryCaseExpandedLayout;
   readonly focused?: boolean;
+  readonly highlightSurface?: boolean;
+  readonly highlightSurfaceColor?: string;
   readonly meta?: string | null;
   readonly statusLabel: string;
   readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
@@ -90,6 +96,8 @@ function animateHistoryToggle(isExpanded: boolean, onToggle: () => void): void {
 }
 
 export function HistoryCaseCard({
+  attentionDot = false,
+  attentionDotColor,
   actorFallbackColor,
   actorAvatarUrl = null,
   eyebrow,
@@ -97,8 +105,11 @@ export function HistoryCaseCard({
   description,
   amountLabel,
   amountStruckThrough = false,
+  cardStyle,
   expandedLayout = 'panel',
   focused = false,
+  highlightSurface = false,
+  highlightSurfaceColor,
   meta,
   statusLabel,
   statusTone = 'neutral',
@@ -129,6 +140,7 @@ export function HistoryCaseCard({
   const avatarHaloIntensity = statusTone === 'warning' ? 'strong' : 'soft';
   const avatarHaloColor = historyCaseHaloColor(activeTheme, tone, statusTone);
   const cardAuraSize = statusTone === 'warning' || focused ? 'regular' : 'compact';
+  const resolvedAttentionDotColor = attentionDotColor ?? activeTheme.colors.cycle;
   const leadingNode =
     isCycleSnippet && statusLabel ? (
       <StatusFaceBadge label={statusLabel} size={avatarSize} tone={statusTone} />
@@ -168,6 +180,11 @@ export function HistoryCaseCard({
           styles.card,
           isCycleSnippet ? styles.cycleSnippet : null,
           tone === 'danger' ? styles.rejectedSnippet : null,
+          highlightSurface
+            ? {
+                backgroundColor: highlightSurfaceColor ?? activeTheme.colors.pendingSoft,
+              }
+            : null,
           focused
             ? {
                 backgroundColor: activeTheme.glass.background,
@@ -175,13 +192,11 @@ export function HistoryCaseCard({
               }
             : null,
           showExpanded ? styles.cardActive : null,
+          cardStyle,
         ]}
         underlay={
           isCycleSnippet ? (
-            <StateAuraLayer
-              size={cardAuraSize}
-              variant={stateAuraVariantFromTone(statusTone)}
-            />
+            <StateAuraLayer size={cardAuraSize} variant={stateAuraVariantFromTone(statusTone)} />
           ) : undefined
         }
         variant={isCycleSnippet ? 'muted' : 'default'}
@@ -255,6 +270,12 @@ export function HistoryCaseCard({
             </View>
           </View>
         </Pressable>
+        {attentionDot ? (
+          <View
+            pointerEvents="none"
+            style={[styles.pendingCornerDot, { backgroundColor: resolvedAttentionDotColor }]}
+          />
+        ) : null}
       </SurfaceCard>
 
       {showExpanded ? (
@@ -284,10 +305,7 @@ export function HistoryCaseCard({
               ) : null}
               {description ? (
                 <AppText
-                  style={[
-                    styles.expandedDescription,
-                    { color: activeTheme.colors.textMuted },
-                  ]}
+                  style={[styles.expandedDescription, { color: activeTheme.colors.textMuted }]}
                 >
                   {description}
                 </AppText>
@@ -415,6 +433,15 @@ const styles = StyleSheet.create({
   cardFocused: {
     backgroundColor: theme.glass.background,
     borderColor: theme.glass.fallbackBorder,
+  },
+  pendingCornerDot: {
+    borderRadius: theme.radius.pill,
+    height: 9,
+    position: 'absolute',
+    right: 12,
+    top: 10,
+    width: 9,
+    zIndex: 3,
   },
   header: {
     borderRadius: theme.radius.pill,

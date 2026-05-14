@@ -44,6 +44,7 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import {
+  transactionDetailHref,
   transactionInitialsBackgroundColor,
   transactionPersonForItem,
 } from '@/lib/transaction-people';
@@ -127,7 +128,11 @@ function CategoryTransactionCard({
       compact
       compactMetaLayout="inline"
       context=""
-      href={(item.href ?? '/transactions') as Href}
+      href={transactionDetailHref(
+        people,
+        item,
+        isPendingTransactionItem(item) ? 'pending' : 'history',
+      )}
       meta={transactionMetaLabel(item)}
       pending={isPendingTransactionItem(item)}
       pendingHighlightColor={toneColor}

@@ -30,10 +30,16 @@ import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { formatCop } from '@/lib/data';
 import {
   markNotificationItemsViewed,
+  notificationItemCanAlert,
   notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
   useAppSnapshot,
 } from '@/lib/live-data';
 import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
+import {
+  pendingNotificationDotColor,
+  pendingNotificationSurfaceColor,
+} from '@/lib/pending-notification-visuals';
 import {
   buildAppleAuthReminderItem,
   buildBiometricsReminderItem,
@@ -625,13 +631,22 @@ export function ActivityScreen() {
   const pendingSection = useMemo(() => sections.find((item) => item.key === 'pending'), [sections]);
   const basePendingItems = pendingSection?.items ?? [];
   const notificationViewedKeys = useMemo(() => {
-    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
+    const keys = new Set(
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    );
     for (const key of optimisticNotificationViewedKeys) {
       keys.add(key);
     }
 
     return keys;
-  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
+  }, [
+    optimisticNotificationViewedKeys,
+    session.userId,
+    snapshotQuery.data?.notificationViewedKeys,
+  ]);
   const accountSetupEligible =
     session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
   const needsContacts =
@@ -671,19 +686,23 @@ export function ActivityScreen() {
     () => [...setupReminderItems, ...basePendingItems],
     [basePendingItems, setupReminderItems],
   );
+  const alertablePendingItems = useMemo(
+    () => allPendingItems.filter(notificationItemCanAlert),
+    [allPendingItems],
+  );
   const unviewedPendingItems = useMemo(
     () =>
-      allPendingItems.filter(
+      alertablePendingItems.filter(
         (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
       ),
-    [allPendingItems, notificationViewedKeys],
+    [alertablePendingItems, notificationViewedKeys],
   );
   const reviewedPendingItems = useMemo(
     () =>
-      allPendingItems.filter((item) =>
+      alertablePendingItems.filter((item) =>
         notificationViewedKeys.has(notificationViewKeyForItem(item)),
       ),
-    [allPendingItems, notificationViewedKeys],
+    [alertablePendingItems, notificationViewedKeys],
   );
   const people = snapshotQuery.data?.people ?? [];
   const inviteRequests = usePeopleInviteRequestsController({
@@ -705,10 +724,8 @@ export function ActivityScreen() {
       counts[category] += 1;
     }
 
-    counts.friends = Math.max(counts.friends, inviteRequests.requestCount);
-
     return counts;
-  }, [inviteRequests.requestCount, unviewedPendingItems]);
+  }, [unviewedPendingItems]);
 
   useEffect(() => {
     setVisualActiveCategory(activeCategory);
@@ -729,33 +746,32 @@ export function ActivityScreen() {
     setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
 
-  useEffect(() => {
-    if (!session.userId || unviewedPendingItems.length === 0) {
+  function markNotificationItemViewed(item: ActivityItemDto) {
+    if (
+      !session.userId ||
+      !notificationItemCanAlert(item) ||
+      notificationViewedKeys.has(notificationViewKeyForItem(item))
+    ) {
       return;
     }
 
-    const nextKeys = unviewedPendingItems.map((item) => notificationViewKeyForItem(item));
-    const nextKeySet = new Set(nextKeys);
+    const notificationKey = notificationViewKeyForItem(item);
     setOptimisticNotificationViewedKeys((current) => {
       const merged = new Set(current);
-      for (const key of nextKeys) {
-        merged.add(key);
-      }
+      merged.add(notificationKey);
 
       return merged;
     });
 
-    void markNotificationItemsViewed(session.userId, unviewedPendingItems).catch(() => {
+    void markNotificationItemsViewed(session.userId, [item]).catch(() => {
       setOptimisticNotificationViewedKeys((current) => {
         const next = new Set(current);
-        for (const key of nextKeySet) {
-          next.delete(key);
-        }
+        next.delete(notificationKey);
 
         return next;
       });
     });
-  }, [session.userId, unviewedPendingItems]);
+  }
 
   function closeNotifications() {
     backOrReturnTo(router, '/home');
@@ -767,7 +783,8 @@ export function ActivityScreen() {
     setActiveCategory(category);
   }
 
-  function openNotificationTarget(target: NotificationTarget) {
+  function openNotificationTarget(target: NotificationTarget, item: ActivityItemDto) {
+    markNotificationItemViewed(item);
     returnToRoute(router, target.href);
   }
 
@@ -789,8 +806,10 @@ export function ActivityScreen() {
     const card = (
       <ActivityItemCard
         accentColor={content.accentColor}
-        attentionDot
+        attentionDot={unread}
+        attentionDotColor={pendingNotificationDotColor(activeTheme)}
         compact
+        highlightSurface={unread}
         key={item.id}
         leadingNode={
           <CardActorAvatar
@@ -811,7 +830,9 @@ export function ActivityScreen() {
               <View
                 style={[
                   styles.notificationActionIconBubble,
-                  { backgroundColor: content.iconBackgroundColor ?? activeTheme.colors.surfaceSoft },
+                  {
+                    backgroundColor: content.iconBackgroundColor ?? activeTheme.colors.surfaceSoft,
+                  },
                 ]}
               >
                 <Ionicons
@@ -853,6 +874,7 @@ export function ActivityScreen() {
         }
         title={content.title}
         unread={unread}
+        unreadSurfaceColor={pendingNotificationSurfaceColor(activeTheme)}
       />
     );
 
@@ -864,7 +886,7 @@ export function ActivityScreen() {
       <CardPressable
         haptic="selection"
         key={item.id}
-        onPress={() => openNotificationTarget(detailHref)}
+        onPress={() => openNotificationTarget(detailHref, item)}
       >
         {card}
       </CardPressable>
@@ -884,8 +906,10 @@ export function ActivityScreen() {
     const card = (
       <ActivityItemCard
         accentColor={iconColor}
-        attentionDot
+        attentionDot={unread}
+        attentionDotColor={pendingNotificationDotColor(activeTheme)}
         compact
+        highlightSurface={unread}
         key={item.id}
         leadingNode={
           <View
@@ -901,6 +925,7 @@ export function ActivityScreen() {
         }
         title={item.title}
         unread={unread}
+        unreadSurfaceColor={pendingNotificationSurfaceColor(activeTheme)}
       />
     );
 
@@ -911,7 +936,7 @@ export function ActivityScreen() {
     return (
       <Pressable
         key={item.id}
-        onPress={() => openNotificationTarget(detailHref)}
+        onPress={() => openNotificationTarget(detailHref, item)}
         style={({ pressed }) => [pressed ? styles.tabButtonPressed : null]}
       >
         {card}
@@ -1119,7 +1144,7 @@ export function ActivityScreen() {
         ) : (
           <>
             {categoryPendingItems.length > 0 ? (
-              <NotificationSection title="Pendientes">
+              <NotificationSection title="Nuevas">
                 {categoryPendingItems.map((item) => renderPendingCard(item, true))}
               </NotificationSection>
             ) : null}
@@ -1213,10 +1238,7 @@ export function ActivityScreen() {
               accessibilityLabel="Categorias de notificaciones"
               onChange={changeActiveCategory}
               onPreviewChange={setVisualActiveCategory}
-              pageStyle={[
-                styles.notificationPage,
-                { backgroundColor: activeTheme.colors.surface },
-              ]}
+              pageStyle={[styles.notificationPage, { backgroundColor: activeTheme.colors.surface }]}
               renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
               style={styles.sheetScrollWrap}
               value={activeCategory}

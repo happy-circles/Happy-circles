@@ -34,6 +34,9 @@ describe('get-app-snapshot contract', () => {
     expect(functionSource).toContain('participantScope(actorUserId)');
     expect(functionSource).toContain('friendshipScope(actorUserId)');
     expect(functionSource).toContain('accountInviteScope(actorUserId)');
+    expect(functionSource).toContain('sanitizeSettlementRowsForActor');
+    expect(functionSource).toContain('privacy_participant_count');
+    expect(functionSource).toContain('actorSettlementMovements(proposal.movements_json');
   });
 
   it('bounds historical reads while keeping active reads independent from history limits', () => {
@@ -71,6 +74,8 @@ describe('get-app-snapshot contract', () => {
     expect(functionSource).toContain(".from('avatars')");
     expect(functionSource).toContain('.createSignedUrls(avatarPaths');
     expect(functionSource).not.toContain('.getPublicUrl(');
-    expect(mobileFetcherSource).toContain('hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath)');
+    expect(mobileFetcherSource).toContain(
+      'hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath)',
+    );
   });
 });

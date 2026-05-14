@@ -3,11 +3,18 @@ import { useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 
+import { pumpAddPersonResolutionQueue } from '@/features/home/add-person-contact-resolution-queue';
+import {
+  clearWarmContactScanCache,
+  readWarmContactScanCache,
+  updateWarmContactScanTargetCache,
+  writeWarmContactScanCache,
+  type WarmContactScanCache,
+} from '@/features/home/add-person-contact-scan-cache';
 import { useAddPersonContactPermissionActions } from '@/features/home/add-person-contact-permissions';
 import { useAddPersonOutreachActions } from '@/features/home/add-person-outreach-actions';
 import { useAddPersonQrActions } from '@/features/home/add-person-qr-actions';
 import {
-  CONTACT_TARGET_RESOLUTION_LIMIT,
   buildContactSectionItems,
   getUnresolvedContactPhoneE164List,
   uniqueContactPhoneE164List,
@@ -35,55 +42,6 @@ import {
   type ContactCandidate,
   readContactsPageFromDevice,
 } from '@/features/invites/people-outreach-utils';
-
-type WarmContactScanCache = {
-  readonly userId: string | null;
-  readonly contactsPermissionStatus: ContactsPermissionStatus;
-  readonly contacts: readonly ContactCandidate[];
-  readonly targetCache: Record<string, PeopleTargetResolution>;
-};
-
-let warmContactScanCache: WarmContactScanCache | null = null;
-
-function readWarmContactScanCache(userId: string | null | undefined): WarmContactScanCache | null {
-  if (!warmContactScanCache || warmContactScanCache.userId !== (userId ?? null)) {
-    return null;
-  }
-
-  return {
-    ...warmContactScanCache,
-    contacts: [...warmContactScanCache.contacts],
-    targetCache: { ...warmContactScanCache.targetCache },
-  };
-}
-
-function writeWarmContactScanCache(cache: WarmContactScanCache) {
-  warmContactScanCache = {
-    ...cache,
-    contacts: [...cache.contacts],
-    targetCache: { ...cache.targetCache },
-  };
-}
-
-function clearWarmContactScanCache(userId: string | null | undefined) {
-  if (warmContactScanCache?.userId === (userId ?? null)) {
-    warmContactScanCache = null;
-  }
-}
-
-function updateWarmContactScanTargetCache(
-  userId: string | null | undefined,
-  targetCache: Record<string, PeopleTargetResolution>,
-) {
-  if (warmContactScanCache?.userId !== (userId ?? null)) {
-    return;
-  }
-
-  warmContactScanCache = {
-    ...warmContactScanCache,
-    targetCache: { ...targetCache },
-  };
-}
 
 export function useAddPersonContactsSheetController({
   initialSearchValue,
@@ -218,76 +176,22 @@ export function useAddPersonContactsSheetController({
     resolvePeopleTargetsMutateRef.current = resolvePeopleTargets.mutateAsync;
   }, [resolvePeopleTargets.mutateAsync]);
 
-  const pumpResolutionQueue = useCallback(async () => {
-    if (resolutionPumpRunningRef.current) {
-      return;
-    }
-
-    resolutionPumpRunningRef.current = true;
-    const activeRunId = scanRunIdRef.current;
-
-    try {
-      while (scanRunIdRef.current === activeRunId && pendingResolutionQueueRef.current.length > 0) {
-        const batch: string[] = [];
-        while (
-          batch.length < CONTACT_TARGET_RESOLUTION_LIMIT &&
-          pendingResolutionQueueRef.current.length > 0
-        ) {
-          const phoneE164 = pendingResolutionQueueRef.current.shift();
-          if (!phoneE164) {
-            continue;
-          }
-
-          pendingResolutionSetRef.current.delete(phoneE164);
-          if (
-            targetCacheRef.current[phoneE164] ||
-            inFlightResolutionSetRef.current.has(phoneE164)
-          ) {
-            continue;
-          }
-
-          batch.push(phoneE164);
-        }
-
-        if (batch.length === 0) {
-          continue;
-        }
-
-        for (const phoneE164 of batch) {
-          inFlightResolutionSetRef.current.add(phoneE164);
-        }
-
-        try {
-          const resolutions = await resolvePeopleTargetsMutateRef.current(batch);
-          if (scanRunIdRef.current === activeRunId) {
-            mergeAndPersistTargetResolutions(resolutions);
-          }
-        } catch (error) {
-          const affectsVisibleContact = batch.some((phoneE164) =>
-            visibleResolutionPhonesRef.current.has(phoneE164),
-          );
-          if (affectsVisibleContact && scanRunIdRef.current === activeRunId) {
-            setMessage(
-              error instanceof Error
-                ? error.message
-                : 'No se pudo revisar esta parte de tu agenda.',
-            );
-          }
-        } finally {
-          if (scanRunIdRef.current === activeRunId) {
-            for (const phoneE164 of batch) {
-              inFlightResolutionSetRef.current.delete(phoneE164);
-            }
-          }
-        }
-      }
-    } finally {
-      resolutionPumpRunningRef.current = false;
-      if (pendingResolutionQueueRef.current.length > 0) {
-        void pumpResolutionQueue();
-      }
-    }
-  }, [mergeAndPersistTargetResolutions]);
+  const pumpResolutionQueue = useCallback(
+    () =>
+      pumpAddPersonResolutionQueue({
+        inFlightResolutionSetRef,
+        mergeAndPersistTargetResolutions,
+        pendingResolutionQueueRef,
+        pendingResolutionSetRef,
+        resolutionPumpRunningRef,
+        resolvePeopleTargetsMutateRef,
+        scanRunIdRef,
+        setMessage,
+        targetCacheRef,
+        visibleResolutionPhonesRef,
+      }),
+    [mergeAndPersistTargetResolutions],
+  );
 
   const enqueueResolutionPhones = useCallback(
     (phoneE164List: readonly string[], priority: 'visible' | 'background') => {

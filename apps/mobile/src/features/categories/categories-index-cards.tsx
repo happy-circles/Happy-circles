@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { Href } from 'expo-router';
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 
@@ -32,6 +31,7 @@ import {
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import {
+  transactionDetailHref,
   transactionInitialsBackgroundColor,
   transactionPersonForItem,
 } from '@/lib/transaction-people';
@@ -624,7 +624,7 @@ export function CategoryTransactionCard({
       compact
       compactMetaLayout="inline"
       context=""
-      href={(item.href ?? '/transactions') as Href}
+      href={transactionDetailHref(people, item, 'history')}
       meta={transactionMetaLabel(item)}
       statusLabel={
         transactionShouldSurfaceStatus(item, { density: 'summary' })

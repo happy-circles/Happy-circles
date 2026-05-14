@@ -2,6 +2,7 @@ import type { Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
+import { transactionCircleHref } from '@/lib/transaction-people';
 import { isPendingTransactionItem, transactionFocusId } from '@/lib/transaction-presentation';
 
 export type ActivityDomainKey = 'transactions' | 'friendships';
@@ -135,6 +136,11 @@ export function pendingDetailHref(
   item: ActivityItemDto,
   people: readonly PersonCardDto[],
 ): NotificationTarget | null {
+  const circleHref = transactionCircleHref(item);
+  if (circleHref) {
+    return { href: circleHref };
+  }
+
   if (item.kind === 'settlement_proposal') {
     return { href: `/settlements/${item.id}` as Href };
   }

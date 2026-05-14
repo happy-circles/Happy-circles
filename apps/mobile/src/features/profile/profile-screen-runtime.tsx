@@ -17,11 +17,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
+import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
 import { AppText } from '@/components/app-text';
 import type { AppTextInputRef } from '@/components/app-text-input';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
-import { LoadingOverlay } from '@/components/loading-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PasswordTextInput } from '@/components/password-text-input';
 import { PrimaryAction } from '@/components/primary-action';
@@ -50,6 +50,7 @@ import {
 } from '@/lib/trusted-device-auth';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
+import { useAppTheme } from '@/providers/theme-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
 import {
   formatContactsPermissionStateLabel,
@@ -85,6 +86,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const session = useSession();
+  const activeTheme = useAppTheme();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const topInset = Math.max(0, insets.top);
@@ -97,6 +99,39 @@ export function ProfileScreen() {
   const avatarMutation = useUpdateProfileAvatarMutation();
   const accountDeletionMutation = useRequestAccountDeletionMutation();
   const actionFeedback = useActionFeedbackOverlay();
+  const headerSignOutButtonThemeStyle = useMemo(
+    () => ({
+      backgroundColor: activeTheme.colors.dangerSoft,
+      borderColor: activeTheme.colors.danger,
+    }),
+    [activeTheme],
+  );
+  const inlineButtonThemeStyle = useMemo(
+    () => ({
+      backgroundColor: activeTheme.colors.surfaceSoft,
+      borderColor: activeTheme.colors.border,
+    }),
+    [activeTheme],
+  );
+  const inlineButtonTextThemeStyle = useMemo(
+    () => ({
+      color: activeTheme.colors.text,
+    }),
+    [activeTheme],
+  );
+  const inlineDangerButtonThemeStyle = useMemo(
+    () => ({
+      backgroundColor: activeTheme.colors.dangerSoft,
+      borderColor: activeTheme.colors.danger,
+    }),
+    [activeTheme],
+  );
+  const inlineDangerButtonTextThemeStyle = useMemo(
+    () => ({
+      color: activeTheme.colors.danger,
+    }),
+    [activeTheme],
+  );
 
   const [message, setMessage] = useState<string | null>(null);
   const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
@@ -682,9 +717,13 @@ export function ProfileScreen() {
           accessibilityRole="button"
           hitSlop={8}
           onPress={confirmSignOut}
-          style={({ pressed }) => [styles.headerSignOutButton, pressed ? styles.rowPressed : null]}
+          style={({ pressed }) => [
+            styles.headerSignOutButton,
+            headerSignOutButtonThemeStyle,
+            pressed ? styles.rowPressed : null,
+          ]}
         >
-          <Ionicons color={theme.colors.danger} name="log-out-outline" size={20} />
+          <Ionicons color={activeTheme.colors.danger} name="log-out-outline" size={20} />
         </Pressable>
       }
       headerVariant="plain"
@@ -728,9 +767,15 @@ export function ProfileScreen() {
           </View>
           <Link href={completeProfileHref} asChild>
             <Pressable
-              style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
+              style={({ pressed }) => [
+                styles.inlineButton,
+                inlineButtonThemeStyle,
+                pressed ? styles.rowPressed : null,
+              ]}
             >
-              <AppText style={styles.inlineButtonText}>Abrir setup</AppText>
+              <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
+                Abrir setup
+              </AppText>
             </Pressable>
           </Link>
         </View>
@@ -765,11 +810,12 @@ export function ProfileScreen() {
                   onPress={() => void handleResendEmailConfirmation()}
                   style={({ pressed }) => [
                     styles.inlineButton,
+                    inlineButtonThemeStyle,
                     pressed && busyAction === null ? styles.rowPressed : null,
                     busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
-                  <AppText style={styles.inlineButtonText}>
+                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                     {busyAction === 'resend-email-confirmation' ? 'Enviando...' : 'Reenviar'}
                   </AppText>
                 </Pressable>
@@ -835,11 +881,12 @@ export function ProfileScreen() {
                   onPress={() => void handleContactsPermission()}
                   style={({ pressed }) => [
                     styles.inlineButton,
+                    inlineButtonThemeStyle,
                     pressed && busyAction === null ? styles.rowPressed : null,
                     busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
-                  <AppText style={styles.inlineButtonText}>
+                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                     {busyAction === 'contacts' ? 'Abriendo...' : contactsActionLabel}
                   </AppText>
                 </Pressable>
@@ -919,9 +966,13 @@ export function ProfileScreen() {
               !session.linkedMethods.hasGoogle ? (
                 <Pressable
                   onPress={() => void runAction('link-google', async () => session.linkGoogle())}
-                  style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
+                  style={({ pressed }) => [
+                    styles.inlineButton,
+                    inlineButtonThemeStyle,
+                    pressed ? styles.rowPressed : null,
+                  ]}
                 >
-                  <AppText style={styles.inlineButtonText}>
+                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                     {busyAction === 'link-google' ? 'Abriendo...' : 'Vincular'}
                   </AppText>
                 </Pressable>
@@ -943,10 +994,11 @@ export function ProfileScreen() {
                       onPress={() => void runAction('link-apple', async () => session.linkApple())}
                       style={({ pressed }) => [
                         styles.inlineButton,
+                        inlineButtonThemeStyle,
                         pressed ? styles.rowPressed : null,
                       ]}
                     >
-                      <AppText style={styles.inlineButtonText}>
+                      <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                         {busyAction === 'link-apple' ? 'Abriendo...' : 'Vincular'}
                       </AppText>
                     </Pressable>
@@ -973,9 +1025,13 @@ export function ProfileScreen() {
                 asChild
               >
                 <Pressable
-                  style={({ pressed }) => [styles.inlineButton, pressed ? styles.rowPressed : null]}
+                  style={({ pressed }) => [
+                    styles.inlineButton,
+                    inlineButtonThemeStyle,
+                    pressed ? styles.rowPressed : null,
+                  ]}
                 >
-                  <AppText style={styles.inlineButtonText}>
+                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                     {session.profile?.phone_e164 ? 'Editar' : 'Completar'}
                   </AppText>
                 </Pressable>
@@ -1059,11 +1115,12 @@ export function ProfileScreen() {
                   }}
                   style={({ pressed }) => [
                     styles.inlineButton,
+                    inlineButtonThemeStyle,
                     pressed && busyAction === null ? styles.rowPressed : null,
                     busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
-                  <AppText style={styles.inlineButtonText}>
+                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
                     {showTrustPasswordFallback ? 'Ocultar clave' : 'Usar clave'}
                   </AppText>
                 </Pressable>
@@ -1131,10 +1188,13 @@ export function ProfileScreen() {
                       }
                       style={({ pressed }) => [
                         styles.inlineButtonDanger,
+                        inlineDangerButtonThemeStyle,
                         pressed ? styles.rowPressed : null,
                       ]}
                     >
-                      <AppText style={styles.inlineButtonDangerText}>
+                      <AppText
+                        style={[styles.inlineButtonDangerText, inlineDangerButtonTextThemeStyle]}
+                      >
                         {busyAction === `revoke-${device.device_id}` ? 'Revocando...' : 'Revocar'}
                       </AppText>
                     </Pressable>
@@ -1231,11 +1291,12 @@ export function ProfileScreen() {
             onPress={confirmAccountDeletion}
             style={({ pressed }) => [
               styles.inlineButtonDanger,
+              inlineDangerButtonThemeStyle,
               pressed ? styles.rowPressed : null,
               busyAction === 'request-account-deletion' ? styles.disabledButton : null,
             ]}
           >
-            <AppText style={styles.inlineButtonDangerText}>
+            <AppText style={[styles.inlineButtonDangerText, inlineDangerButtonTextThemeStyle]}>
               {busyAction === 'request-account-deletion' ? 'Eliminando...' : 'Eliminar cuenta'}
             </AppText>
           </Pressable>
@@ -1257,7 +1318,7 @@ export function ProfileScreen() {
         onClose={() => setAvatarViewerVisible(false)}
         visible={avatarViewerVisible}
       />
-      <LoadingOverlay {...actionFeedback.overlayProps} />
+      <AccountActionFeedbackOverlay {...actionFeedback.overlayProps} />
     </ScreenShell>
   );
 }
@@ -1274,6 +1335,8 @@ const styles = StyleSheet.create({
   headerSignOutButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.dangerSoft,
+    borderColor: theme.colors.dangerSoft,
+    borderWidth: 1,
     borderRadius: theme.radius.pill,
     height: 40,
     justifyContent: 'center',

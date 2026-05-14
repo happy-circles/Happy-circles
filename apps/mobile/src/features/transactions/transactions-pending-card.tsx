@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
@@ -16,6 +17,7 @@ import {
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
+import { transactionCircleHref } from '@/lib/transaction-people';
 import { useAppTheme } from '@/providers/theme-provider';
 
 function initialsBackgroundColor(
@@ -68,6 +70,11 @@ function transactionDetailHref(
   item: ActivityItemDto,
   panel: 'pending' | 'history',
 ): Href {
+  const circleHref = transactionCircleHref(item);
+  if (circleHref) {
+    return circleHref;
+  }
+
   if (item.kind === 'settlement_proposal') {
     return `/settlements/${item.id}` as Href;
   }
@@ -91,10 +98,12 @@ function shouldSurfacePendingStatus(item: ActivityItemDto): boolean {
 export function PendingTransactionCard({
   item,
   people,
+  style,
   unread,
 }: {
   readonly item: ActivityItemDto;
   readonly people: readonly PersonCardDto[];
+  readonly style?: StyleProp<ViewStyle>;
   readonly unread: boolean;
 }) {
   const activeTheme = useAppTheme();
@@ -128,6 +137,7 @@ export function PendingTransactionCard({
       href={transactionDetailHref(people, item, 'pending')}
       meta={transactionMetaLabel(item)}
       pending
+      style={style}
       statusLabel={shouldSurfacePendingStatus(item) ? transactionStatusLabel(item) : null}
       statusTone={transactionStatusTone(item)}
       unread={unread}

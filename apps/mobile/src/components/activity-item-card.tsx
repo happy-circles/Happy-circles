@@ -9,8 +9,10 @@ type ActivityItemCardVariant = 'default' | 'muted' | 'accent' | 'elevated';
 export interface ActivityItemCardProps extends PropsWithChildren {
   readonly accentColor?: string;
   readonly attentionDot?: boolean;
+  readonly attentionDotColor?: string;
   readonly compact?: boolean;
   readonly contextNode?: ReactNode;
+  readonly highlightSurface?: boolean;
   readonly leadingAccessibilityLabel?: string;
   readonly leadingAccessibilityRole?: AccessibilityRole;
   readonly leadingDisabled?: boolean;
@@ -31,9 +33,11 @@ export interface ActivityItemCardProps extends PropsWithChildren {
 export function ActivityItemCard({
   accentColor,
   attentionDot = false,
+  attentionDotColor,
   children,
   compact = false,
   contextNode,
+  highlightSurface = false,
   leadingAccessibilityLabel,
   leadingAccessibilityRole,
   leadingDisabled,
@@ -54,8 +58,10 @@ export function ActivityItemCard({
     <AppCardShell
       accentColor={accentColor}
       attentionDot={attentionDot}
+      attentionDotColor={attentionDotColor}
       compact={compact}
       contextNode={contextNode}
+      highlightSurface={highlightSurface}
       leadingAccessibilityLabel={leadingAccessibilityLabel}
       leadingAccessibilityRole={leadingAccessibilityRole}
       leadingDisabled={leadingDisabled}

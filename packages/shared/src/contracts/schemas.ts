@@ -280,8 +280,6 @@ export const accountInviteTokenSchema = z.object({
 });
 
 export const accountInvitePreviewSchema = accountInviteTokenSchema.extend({
-  email: z.string().trim().email().optional(),
-  phoneE164: z.string().trim().min(8).max(24).optional(),
   recordAppOpen: z.boolean().optional(),
 });
 

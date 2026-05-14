@@ -5,7 +5,14 @@ import type {
   PersonTimelineItemDto,
 } from '@happy-circles/application';
 import type { Database, TransactionCategory } from '@happy-circles/shared';
-import type { SettlementVersionTimelineItemDto } from './settlement-version-types';
+
+export type {
+  SettlementDetailDecision,
+  SettlementDetailDto,
+  SettlementDetailMovementDto,
+  SettlementDetailParticipantDto,
+  SettlementMovement,
+} from './settlement-detail-types';
 
 export type RelationshipRow = Database['public']['Tables']['relationships']['Row'];
 export type NonNullFields<T, K extends keyof T> = Omit<T, K> & {
@@ -86,29 +93,6 @@ export interface AuditListItem {
   readonly subtitle: string;
 }
 
-export interface SettlementMovement {
-  readonly debtor_user_id: string;
-  readonly creditor_user_id: string;
-  readonly amount_minor: number;
-}
-
-export type SettlementDetailDecision = 'approved' | 'pending' | 'rejected';
-
-export interface SettlementDetailParticipantDto {
-  readonly userId: string;
-  readonly label: string;
-  readonly decision: SettlementDetailDecision;
-}
-
-export interface SettlementDetailMovementDto {
-  readonly id: string;
-  readonly debtorUserId: string;
-  readonly debtorLabel: string;
-  readonly creditorUserId: string;
-  readonly creditorLabel: string;
-  readonly amountMinor: number;
-}
-
 export interface TimelineEventDraft {
   readonly id: string;
   readonly title: string;
@@ -130,35 +114,6 @@ export interface TimelineEventDraft {
   readonly detail?: string;
   readonly happenedAt: string;
   readonly sortWeight: number;
-}
-
-export interface SettlementDetailDto {
-  readonly id: string;
-  readonly happyCircleCaseId: string | null;
-  readonly versionNumber: number | null;
-  readonly isCurrentVersion: boolean;
-  readonly replacesProposalId: string | null;
-  readonly replacedByProposalId: string | null;
-  readonly staleReason: string | null;
-  readonly status: string;
-  readonly snapshotHash: string;
-  readonly participants: readonly string[];
-  readonly participantDecisions: readonly SettlementDetailParticipantDto[];
-  readonly participantStatuses: readonly string[];
-  readonly totalAmountMinor: number;
-  readonly personalAmountMinor: number;
-  readonly movementCount: number;
-  readonly personalMovementCount: number;
-  readonly originalMovementCount: number;
-  readonly personalOriginalMovementCount: number;
-  readonly savedMovementsCount: number;
-  readonly personalSavedMovementsCount: number;
-  readonly movementDetails: readonly SettlementDetailMovementDto[];
-  readonly originalMovementDetails: readonly SettlementDetailMovementDto[];
-  readonly movements: readonly string[];
-  readonly impactLines: readonly string[];
-  readonly explainers: readonly string[];
-  readonly timeline: readonly SettlementVersionTimelineItemDto[];
 }
 
 export interface AccountDeletionRequestResult {
@@ -467,6 +422,7 @@ export interface ActionableItem {
   readonly tone?: ActivityItemDto['tone'];
   readonly participantUserIds?: readonly string[];
   readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
+  readonly createdByCurrentUser?: boolean;
   readonly createdAt: string;
 }
 

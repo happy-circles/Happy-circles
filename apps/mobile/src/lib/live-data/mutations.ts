@@ -19,7 +19,16 @@ export {
   useRespondInternalFriendshipInviteMutation,
   useReviewExternalFriendshipInviteMutation,
 } from './mutations/friendship-invites';
-export { markNotificationItemsViewed } from './mutations/notifications';
+export {
+  markNotificationItemsViewed,
+  markNotificationViewsViewed,
+} from './mutations/notifications';
+export {
+  clearNotificationViewCache,
+  notificationViewedKeysWithLocalCache,
+  rememberNotificationItemsViewed,
+  rememberNotificationViewKeys,
+} from './notification-view-cache';
 export {
   useCreatePeopleOutreachMutation,
   useResolvePeopleTargetsMutation,

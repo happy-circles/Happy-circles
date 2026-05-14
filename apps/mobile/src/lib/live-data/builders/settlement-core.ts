@@ -7,6 +7,28 @@ export interface SettlementParticipantMovementSummary {
   readonly receivedMinor: number;
 }
 
+export interface SettlementCounterpartyImpact {
+  readonly amountMinor: number;
+  readonly direction: 'incoming' | 'outgoing' | 'neutral';
+}
+
+type SettlementProposalPrivacyFields = SettlementProposalRow & {
+  readonly privacy_approved_count?: unknown;
+  readonly privacy_approvals_pending?: unknown;
+  readonly privacy_participant_count?: unknown;
+};
+
+function readNonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function readSettlementPrivacyCount(
+  proposal: SettlementProposalRow,
+  field: keyof SettlementProposalPrivacyFields,
+): number | null {
+  return readNonNegativeInteger((proposal as SettlementProposalPrivacyFields)[field]);
+}
+
 export function parseSettlementMovements(
   value: Database['public']['Tables']['settlement_proposals']['Row']['movements_json'],
 ) {
@@ -45,6 +67,33 @@ export function settlementProposalTotalAmount(proposal: SettlementProposalRow): 
   return parseSettlementMovements(proposal.movements_json).reduce(
     (total, movement) => total + movement.amount_minor,
     0,
+  );
+}
+
+export function settlementProposalParticipantCount(
+  proposal: SettlementProposalRow,
+  participants: readonly { readonly participant_user_id: string }[],
+): number {
+  return readSettlementPrivacyCount(proposal, 'privacy_participant_count') ?? participants.length;
+}
+
+export function settlementProposalApprovedCount(
+  proposal: SettlementProposalRow,
+  participants: readonly { readonly decision: string | null }[],
+): number {
+  return (
+    readSettlementPrivacyCount(proposal, 'privacy_approved_count') ??
+    participants.filter((participant) => participant.decision === 'approved').length
+  );
+}
+
+export function settlementProposalApprovalsPending(
+  proposal: SettlementProposalRow,
+  participants: readonly { readonly decision: string | null }[],
+): number {
+  return (
+    readSettlementPrivacyCount(proposal, 'privacy_approvals_pending') ??
+    participants.filter((participant) => participant.decision === 'pending').length
   );
 }
 
@@ -104,6 +153,15 @@ export function settlementProposalCounterpartyImpactAmount(
   currentUserId: string,
   counterpartyUserId: string,
 ): number {
+  return settlementProposalCounterpartyImpact(proposal, currentUserId, counterpartyUserId)
+    .amountMinor;
+}
+
+export function settlementProposalCounterpartyImpact(
+  proposal: SettlementProposalRow,
+  currentUserId: string,
+  counterpartyUserId: string,
+): SettlementCounterpartyImpact {
   const movements = parseSettlementMovements(proposal.movements_json);
   const summary = movements.reduce(
     (totals, movement) => ({
@@ -123,7 +181,15 @@ export function settlementProposalCounterpartyImpactAmount(
     { paidMinor: 0, receivedMinor: 0 },
   );
 
-  return Math.max(summary.paidMinor, summary.receivedMinor);
+  return {
+    amountMinor: Math.max(summary.paidMinor, summary.receivedMinor),
+    direction:
+      summary.receivedMinor > summary.paidMinor
+        ? 'incoming'
+        : summary.paidMinor > summary.receivedMinor
+          ? 'outgoing'
+          : 'neutral',
+  };
 }
 
 export function settlementSavedMovementsCount(

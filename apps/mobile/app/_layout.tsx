@@ -36,6 +36,7 @@ import {
   HappyCirclesGlyph,
   resolveHappyCirclesPalette,
 } from '@/components/happy-circles-glyph';
+import { HappyCircleDiscoveryBridge } from '@/components/happy-circle-discovery-bridge';
 import {
   IDENTITY_FLOW_COMPACT_FACE_SIZE,
   IDENTITY_FLOW_LARGE_FACE_VIEW_BOX,
@@ -2072,6 +2073,9 @@ function RootNavigator() {
         <Stack.Screen name="settlements/[id]" dangerouslySingular />
         <Stack.Screen name="transactions" dangerouslySingular />
       </Stack>
+      <HappyCircleDiscoveryBridge
+        disabled={launchIntroVisible || homeEntryHandoffVisible || setupEntryHandoffVisible}
+      />
       <MandatoryUpdateGate />
       <ProductAnalyticsBridge />
       <LaunchIntroOverlay onVisibleChange={setLaunchIntroVisible} />

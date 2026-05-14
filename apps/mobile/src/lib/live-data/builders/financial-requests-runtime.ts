@@ -394,6 +394,7 @@ export function buildPendingFinancialRequestItems(input: {
         amountMinor: request.amount_minor,
         category: normalizeTransactionCategory(request.category),
         counterpartyLabel: counterparty?.displayName,
+        createdByCurrentUser: request.creator_user_id === input.currentUserId,
         tone:
           requestDirectionForUser(request, input.currentUserId) === 'owes_me'
             ? 'positive'

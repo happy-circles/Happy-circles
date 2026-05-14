@@ -14,7 +14,6 @@ import { initialsBackgroundColor } from '@/features/home/dashboard-preview-cards
 import { triggerAppActionHaptic, triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { cardStateIntentFromStatus } from '@/lib/card-language';
-import { theme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
   INVITE_REQUEST_TABS,

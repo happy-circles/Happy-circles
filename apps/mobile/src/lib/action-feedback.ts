@@ -19,6 +19,7 @@ export interface SnackbarState {
 export type ActionFeedbackVariant = 'loading' | 'success' | 'danger';
 
 export type BlockingActionKey =
+  | 'amendMovement'
   | 'createMovement'
   | 'acceptFinancialRequest'
   | 'approveSettlement'
@@ -55,20 +56,24 @@ export interface ActionFeedbackOverlayOptions {
 // Blocking overlays are reserved for financial/account actions where leaving mid-flight is risky.
 export const BLOCKING_ACTION_FEEDBACK: Record<BlockingActionKey, BlockingActionFeedbackCopy> = {
   acceptFinancialRequest: {
-    message: 'Propuesta',
-    title: 'Aceptando',
+    message: 'Confirmando balance',
+    title: 'Activando',
+  },
+  amendMovement: {
+    message: 'Rearmando el caso',
+    title: 'Enviando correccion',
   },
   approveSettlement: {
-    message: 'Happy Circle',
-    title: 'Aprobando',
+    message: 'Preparando recompensa',
+    title: 'Aprobando Circle',
   },
   createMovement: {
-    message: 'Movimiento',
-    title: 'Guardando',
+    message: 'Conectando saldo',
+    title: 'Creando movimiento',
   },
   executeSettlement: {
-    message: 'Happy Circle',
-    title: 'Completando',
+    message: 'Abriendo tesoro',
+    title: 'Completando Circle',
   },
   requestAccountDeletion: {
     message: 'Cuenta',
@@ -225,19 +230,22 @@ export function useActionFeedbackOverlay({
 
       return new Promise<void>((resolve) => {
         resultResolveRef.current = resolve;
-        resultOverlayTimeoutRef.current = setTimeout(() => {
-          setResultOverlay(null);
-          resultOverlayTimeoutRef.current = null;
-          resultResolveRef.current = null;
-          resolve();
-        }, nextResult.durationMs ?? (nextVariant === 'danger' ? 2200 : resultDurationMs));
+        resultOverlayTimeoutRef.current = setTimeout(
+          () => {
+            setResultOverlay(null);
+            resultOverlayTimeoutRef.current = null;
+            resultResolveRef.current = null;
+            resolve();
+          },
+          nextResult.durationMs ?? (nextVariant === 'danger' ? 2200 : resultDurationMs),
+        );
       });
     },
     [clearResultTimeout, resultDurationMs],
   );
 
   const runBlockingAction = useCallback(
-    async <Result,>(
+    async <Result>(
       actionKey: BlockingActionKey,
       action: () => Promise<Result>,
     ): Promise<Result> => {

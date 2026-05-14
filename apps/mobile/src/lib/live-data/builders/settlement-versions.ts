@@ -3,42 +3,24 @@ import type {
   SettlementProposalRow,
   SettlementVersionTimelineItemDto,
 } from '../types';
-import { settlementProposalParticipantAmount } from './settlement-core';
+import {
+  settlementProposalApprovalsPending,
+  settlementProposalParticipantAmount,
+} from './settlement-core';
 
-function settlementVersionStatusTitle(status: string, versionNumber: number | null): string {
-  const versionLabel = versionNumber ? `Version ${versionNumber}` : 'Version';
-
-  if (status === 'pending_approvals') {
-    return `${versionLabel} pendiente`;
-  }
-  if (status === 'approved') {
-    return `${versionLabel} aprobada`;
-  }
-  if (status === 'executed') {
-    return `${versionLabel} ejecutada`;
-  }
-  if (status === 'rejected') {
-    return `${versionLabel} rechazada`;
-  }
-  if (status === 'stale') {
-    return `${versionLabel} reemplazada`;
-  }
-  if (status === 'expired') {
-    return `${versionLabel} expirada`;
-  }
-
-  return `${versionLabel} ${status}`;
+function settlementVersionTitle(versionNumber: number | null): string {
+  return versionNumber ? `Version ${versionNumber}` : 'Version';
 }
 
 export function staleReasonDetail(reason: string | null): string {
   if (reason === 'participant_set_changed') {
-    return 'Se cerro porque el nuevo calculo cambio los participantes.';
+    return 'Cambio de participantes.';
   }
   if (reason === 'related_execution_changed_balance') {
-    return 'Fue reemplazada porque otra ejecucion cambio los saldos.';
+    return 'Otra ejecucion cambio saldos.';
   }
 
-  return 'Fue reemplazada porque los saldos cambiaron.';
+  return 'Saldos nuevos.';
 }
 
 export function isCurrentSettlementVersion(proposal: SettlementProposalRow): boolean {
@@ -48,31 +30,28 @@ export function isCurrentSettlementVersion(proposal: SettlementProposalRow): boo
 function settlementVersionDetail(input: {
   readonly proposal: SettlementProposalRow;
   readonly approvalsPending: number;
-  readonly isCurrent: boolean;
 }): string {
-  const versionSuffix = input.isCurrent ? ' Es la version actual.' : '';
-
   if (input.proposal.status === 'pending_approvals') {
-    return `Faltan ${input.approvalsPending} aprobacion${input.approvalsPending === 1 ? '' : 'es'}.${versionSuffix}`;
+    return `Faltan ${input.approvalsPending} aprobacion${input.approvalsPending === 1 ? '' : 'es'}.`;
   }
   if (input.proposal.status === 'approved') {
-    return `Todos aprobaron esta version.${versionSuffix}`;
+    return 'Aprobada.';
   }
   if (input.proposal.status === 'executed') {
-    return `Esta version se ejecuto y actualizo los saldos.${versionSuffix}`;
+    return 'Movimientos registrados.';
   }
   if (input.proposal.status === 'rejected') {
-    return 'Esta version no fue aprobada.';
+    return 'No se aplico.';
   }
   if (input.proposal.status === 'stale') {
     return staleReasonDetail(input.proposal.stale_reason);
   }
   if (input.proposal.status === 'expired') {
-    return 'Esta version expiro antes de completarse.';
+    return 'Expiro sin cambios.';
   }
 
   const status: string = input.proposal.status;
-  return `Estado: ${status}.${versionSuffix}`;
+  return `Estado: ${status}.`;
 }
 
 function sortSettlementProposalsByVersion(
@@ -148,9 +127,7 @@ export function buildSettlementVersionTimeline(input: {
   return buildVisibleSettlementVersionGroups(Array.from(uniqueById.values())).map(
     ({ displayVersionNumber, proposal }) => {
       const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-      const approvalsPending = participants.filter(
-        (participant) => participant.decision === 'pending',
-      ).length;
+      const approvalsPending = settlementProposalApprovalsPending(proposal, participants);
       const isCurrent = isCurrentSettlementVersion(proposal);
 
       return {
@@ -158,8 +135,8 @@ export function buildSettlementVersionTimeline(input: {
         versionNumber: proposal.version_number,
         displayVersionNumber,
         status: proposal.status,
-        title: settlementVersionStatusTitle(proposal.status, displayVersionNumber),
-        detail: settlementVersionDetail({ proposal, approvalsPending, isCurrent }),
+        title: settlementVersionTitle(displayVersionNumber),
+        detail: settlementVersionDetail({ proposal, approvalsPending }),
         amountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
         createdAt: proposal.created_at,
         updatedAt: proposal.updated_at,

@@ -23,9 +23,23 @@ export type {
   SettlementVersionTimelineItemDto,
 } from './types';
 export { useAppSnapshot } from './fetch-snapshot';
-export { notificationViewKeyForItem } from './builders/notifications';
+export {
+  circleDiscoveryViewKeyForProposalId,
+  type NotificationViewDescriptor,
+  notificationItemCanAlert,
+  notificationItemStartsViewed,
+  notificationViewDescriptorForItem,
+  notificationViewKeyForItem,
+} from './builders/notifications';
+export {
+  clearNotificationViewCache,
+  notificationViewedKeysWithLocalCache,
+  rememberNotificationItemsViewed,
+  rememberNotificationViewKeys,
+} from './notification-view-cache';
 export {
   markNotificationItemsViewed,
+  markNotificationViewsViewed,
   useAcceptFinancialRequestMutation,
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,

@@ -37,7 +37,7 @@ export type LoopingInsightSwitcherStyles = {
 };
 
 const SCROLL_SETTLE_EPSILON = 0.5;
-const PROGRAMMATIC_SCROLL_COMMIT_MS = 260;
+const PROGRAMMATIC_SCROLL_FALLBACK_MS = 700;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -98,6 +98,7 @@ export function LoopingInsightSwitcher<T extends string>({
   const measuredWindowWidth = windowWidth > 0 ? windowWidth : fallbackWidth;
   const resolvedPodiumWidth = podiumWidth > 0 ? podiumWidth : measuredWindowWidth;
   const resolvedFilterWidth = filterWidth > 0 ? filterWidth : measuredWindowWidth;
+  const lastPodiumOffsetXRef = useRef(initialIndex * resolvedPodiumWidth);
   const syncedPodiumWidthRef = useRef(resolvedPodiumWidth);
   const resolvedPodiumWidthRef = useRef(resolvedPodiumWidth);
   const itemStep = itemWidth + itemGap;
@@ -182,6 +183,7 @@ export function LoopingInsightSwitcher<T extends string>({
     });
 
     if (!animated) {
+      lastPodiumOffsetXRef.current = index * pageWidth;
       positionProgress.setValue(index);
     }
   }
@@ -212,8 +214,19 @@ export function LoopingInsightSwitcher<T extends string>({
     clearProgrammaticCommitTimer();
     programmaticCommitTimerRef.current = setTimeout(() => {
       programmaticCommitTimerRef.current = null;
+      const pageWidth = resolvedPodiumWidthRef.current;
+      const targetIndex = clamp(Math.round(index), 0, maxIndex);
+      const targetOffset = targetIndex * pageWidth;
+
+      if (
+        pageWidth > 0 &&
+        Math.abs(lastPodiumOffsetXRef.current - targetOffset) > SCROLL_SETTLE_EPSILON
+      ) {
+        scrollToIndex(targetIndex, false);
+      }
+
       commitIndex(index);
-    }, PROGRAMMATIC_SCROLL_COMMIT_MS);
+    }, PROGRAMMATIC_SCROLL_FALLBACK_MS);
   }
 
   useEffect(
@@ -279,7 +292,10 @@ export function LoopingInsightSwitcher<T extends string>({
       return;
     }
 
-    positionProgress.setValue(clamp(event.nativeEvent.contentOffset.x / pageWidth, 0, maxIndex));
+    const offsetX = event.nativeEvent.contentOffset.x;
+
+    lastPodiumOffsetXRef.current = offsetX;
+    positionProgress.setValue(clamp(offsetX / pageWidth, 0, maxIndex));
   }
 
   function settlePodiumOffset(offsetX: number) {
@@ -403,7 +419,6 @@ export function LoopingInsightSwitcher<T extends string>({
                       updateRenderWindowCenter(optionIndex);
 
                       if (optionIndex === activeIndexRef.current) {
-                        scrollToIndex(optionIndex, true);
                         return;
                       }
 

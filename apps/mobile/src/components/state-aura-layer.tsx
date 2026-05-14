@@ -26,60 +26,20 @@ export type StateAuraTone =
 
 type AuraConfig = {
   readonly fillOpacity: number;
-  readonly highlightHeight: number;
-  readonly highlightOpacity: number;
-  readonly massHeight: number;
-  readonly massOpacity: number;
-  readonly massWidth: number;
-  readonly secondaryHeight: number;
-  readonly secondaryOpacity: number;
-  readonly secondaryWidth: number;
 };
 
 const AURA_SIZE_CONFIGS: Record<StateAuraSize, AuraConfig> = {
   compact: {
-    fillOpacity: 0.034,
-    highlightHeight: 74,
-    highlightOpacity: 0.09,
-    massHeight: 152,
-    massOpacity: 0.13,
-    massWidth: 286,
-    secondaryHeight: 96,
-    secondaryOpacity: 0.08,
-    secondaryWidth: 170,
+    fillOpacity: 0.3,
   },
   hero: {
-    fillOpacity: 0.12,
-    highlightHeight: 132,
-    highlightOpacity: 0.24,
-    massHeight: 250,
-    massOpacity: 0.34,
-    massWidth: 470,
-    secondaryHeight: 176,
-    secondaryOpacity: 0.2,
-    secondaryWidth: 286,
+    fillOpacity: 0.15,
   },
   large: {
-    fillOpacity: 0.084,
-    highlightHeight: 108,
-    highlightOpacity: 0.18,
-    massHeight: 218,
-    massOpacity: 0.26,
-    massWidth: 386,
-    secondaryHeight: 148,
-    secondaryOpacity: 0.16,
-    secondaryWidth: 238,
+    fillOpacity: 0.15,
   },
   regular: {
-    fillOpacity: 0.054,
-    highlightHeight: 86,
-    highlightOpacity: 0.12,
-    massHeight: 178,
-    massOpacity: 0.18,
-    massWidth: 320,
-    secondaryHeight: 118,
-    secondaryOpacity: 0.11,
-    secondaryWidth: 196,
+    fillOpacity: 0.3,
   },
 };
 
@@ -228,42 +188,6 @@ export function StateAuraLayer({
           { backgroundColor: auraColor, opacity: config.fillOpacity * opacityMultiplier },
         ]}
       />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.baseAura,
-          {
-            backgroundColor: auraColor,
-            height: config.massHeight,
-            marginLeft: -config.massWidth / 2,
-            opacity: config.massOpacity * opacityMultiplier,
-            width: config.massWidth,
-          },
-        ]}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.sideAura,
-          {
-            backgroundColor: auraColor,
-            height: config.secondaryHeight,
-            opacity: config.secondaryOpacity * opacityMultiplier,
-            width: config.secondaryWidth,
-          },
-        ]}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.highlightAura,
-          {
-            backgroundColor: auraColor,
-            height: config.highlightHeight,
-            opacity: config.highlightOpacity * opacityMultiplier,
-          },
-        ]}
-      />
     </View>
   );
 }
@@ -275,42 +199,6 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   softFill: {
-    borderRadius: theme.radius.large - 6,
-    bottom: 8,
-    left: 9,
-    position: 'absolute',
-    right: 9,
-    top: 8,
-  },
-  baseAura: {
-    borderBottomLeftRadius: 160,
-    borderBottomRightRadius: 116,
-    borderTopLeftRadius: 210,
-    borderTopRightRadius: 150,
-    left: '52%',
-    position: 'absolute',
-    top: '26%',
-    transform: [{ rotate: '-8deg' }, { scaleX: 1.08 }, { scaleY: 0.96 }],
-  },
-  sideAura: {
-    borderBottomLeftRadius: 92,
-    borderBottomRightRadius: 160,
-    borderTopLeftRadius: 128,
-    borderTopRightRadius: 82,
-    left: '6%',
-    position: 'absolute',
-    top: '12%',
-    transform: [{ rotate: '17deg' }, { scaleX: 1.14 }],
-  },
-  highlightAura: {
-    borderBottomLeftRadius: 140,
-    borderBottomRightRadius: 80,
-    borderTopLeftRadius: 120,
-    borderTopRightRadius: 180,
-    left: '18%',
-    position: 'absolute',
-    right: '14%',
-    top: 0,
-    transform: [{ rotate: '-13deg' }],
+    ...StyleSheet.absoluteFillObject,
   },
 });

@@ -130,10 +130,19 @@ function amountVisual(amountMinor: number): {
   return { color: theme.colors.primary, soft: theme.colors.primarySoft };
 }
 
-function FocusCardTitle({ children }: { readonly children: string }) {
+function FocusCardTitle({
+  align = 'center',
+  children,
+}: {
+  readonly align?: 'center' | 'start';
+  readonly children: string;
+}) {
   return (
-    <View style={styles.focusCardHeader}>
-      <AppText numberOfLines={1} style={styles.focusCardTitle}>
+    <View style={[styles.focusCardHeader, align === 'start' ? styles.focusCardHeaderStart : null]}>
+      <AppText
+        numberOfLines={1}
+        style={[styles.focusCardTitle, align === 'start' ? styles.focusCardTitleStart : null]}
+      >
         {children}
       </AppText>
     </View>
@@ -223,7 +232,7 @@ function BalanceCarouselMetricItem({
   readonly tone: 'positive' | 'negative';
 }) {
   const activeTheme = useAppTheme();
-  const visual = toneVisual(tone);
+  const visual = toneVisual(tone, activeTheme);
 
   if (!visual) {
     return null;
@@ -234,18 +243,20 @@ function BalanceCarouselMetricItem({
       style={[
         styles.balanceMetricItem,
         {
-          backgroundColor:
-            activeTheme.scheme === 'dark'
-              ? activeTheme.colors.surfaceSoft
-              : activeTheme.glass.background,
-          borderColor: activeTheme.colors.hairline,
+          backgroundColor: visual.softBackgroundColor,
+          borderColor: visual.borderColor,
         },
       ]}
     >
-      <Ionicons color={visual.accentColor} name={visual.icon} size={18} />
-      <AppText numberOfLines={1} style={[styles.balanceMetricLabel, { color: visual.accentColor }]}>
-        {visual.label}
-      </AppText>
+      <View style={styles.balanceMetricLabelRow}>
+        <Ionicons color={visual.accentColor} name={visual.icon} size={17} />
+        <AppText
+          numberOfLines={1}
+          style={[styles.balanceMetricLabel, { color: visual.accentColor }]}
+        >
+          {visual.label}
+        </AppText>
+      </View>
       <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.82}
@@ -517,14 +528,14 @@ function resolveParticleCollisions(particles: ParticleState[], bounds: ParticleB
 }
 
 function categoryFixedObstacles(bounds: ParticleBounds): readonly ParticleObstacle[] {
-  const titleHalfWidth = Math.min(56, Math.max(44, bounds.width * 0.17));
-  const titleCenterY = 14;
+  const titleSafeWidth = Math.min(132, Math.max(100, bounds.width * 0.42));
+  const titleCenterY = 12;
 
   return [
     {
-      radius: 20,
-      x1: bounds.width / 2 - titleHalfWidth,
-      x2: bounds.width / 2 + titleHalfWidth,
+      radius: 22,
+      x1: 0,
+      x2: titleSafeWidth,
       y1: titleCenterY,
       y2: titleCenterY,
     },
@@ -821,7 +832,7 @@ export function BalanceFocusCard({
     <SurfaceCard padding="lg" style={[styles.focusCard, styles.balanceFocusCard]}>
       <View style={styles.balanceFocusHeaderRow}>
         <View style={styles.balanceFocusTitleWrap}>
-          <FocusCardTitle>Balance actual</FocusCardTitle>
+          <FocusCardTitle align="start">Balance</FocusCardTitle>
         </View>
         {shouldShowHappyFaces ? (
           <HappyFacesCounter
@@ -835,18 +846,20 @@ export function BalanceFocusCard({
         ) : null}
       </View>
       <View style={styles.balanceHomeBody}>
-        <AppText
-          adjustsFontSizeToFit
-          minimumFontScale={0.78}
-          numberOfLines={1}
-          style={[
-            styles.homeBalanceAmount,
-            balanceVisual ? { color: balanceVisual.accentColor } : null,
-          ]}
-        >
-          {formatHomeBalanceCop(netBalanceMinor)}
-        </AppText>
-        <TrendChip amountMinor={periodChangeMinor} centered />
+        <View style={styles.homeBalanceHero}>
+          <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+            numberOfLines={1}
+            style={[
+              styles.homeBalanceAmount,
+              balanceVisual ? { color: balanceVisual.accentColor } : null,
+            ]}
+          >
+            {formatHomeBalanceCop(netBalanceMinor)}
+          </AppText>
+          <TrendChip amountMinor={periodChangeMinor} centered />
+        </View>
         <View style={styles.homeBalanceMetricsRow}>
           <BalanceCarouselMetricItem amountMinor={totalIOweMinor} tone="negative" />
           <BalanceCarouselMetricItem amountMinor={totalOwedToMeMinor} tone="positive" />
@@ -979,7 +992,7 @@ export function CategoriesFocusCard({
     >
       <View style={styles.categoryUniverse}>
         <View pointerEvents="none" style={styles.categoryFixedHeader}>
-          <FocusCardTitle>Categorias</FocusCardTitle>
+          <FocusCardTitle align="start">Categorias</FocusCardTitle>
         </View>
         {visibleCategories.length === 0 ? (
           <View style={styles.categoryUniverseEmptyState}>
@@ -1252,6 +1265,9 @@ export function SettlementsFocusCard({
       underlay={hasNewCircles ? <StateAuraLayer size="hero" variant="newCircle" /> : undefined}
     >
       <View style={styles.circleStageScene}>
+        <View pointerEvents="none" style={styles.circleStageTitleDock}>
+          <FocusCardTitle align="start">Circles</FocusCardTitle>
+        </View>
         {heroItem ? (
           <CircleStageActiveGraph
             activeCount={activeCount}

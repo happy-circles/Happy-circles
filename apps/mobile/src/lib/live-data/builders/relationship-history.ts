@@ -7,10 +7,6 @@ export function historyToneForRow(
   row: RelationshipHistoryRow,
   currentUserId: string,
 ): PersonTimelineItemDto['tone'] {
-  if (row.item_kind === 'ledger_transaction' && row.subtype === 'cycle_settlement') {
-    return 'neutral';
-  }
-
   if (row.status === 'rejected' || row.status === 'amended') {
     return 'neutral';
   }

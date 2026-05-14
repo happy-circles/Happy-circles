@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { PersonDetailDto } from '@happy-circles/application';
+
 vi.mock('react-native', () => ({
   Platform: {
     OS: 'web',
@@ -8,6 +10,7 @@ vi.mock('react-native', () => ({
 }));
 
 import {
+  buildActivityHistoryItems,
   buildHistoryCases,
   buildLatestHistoryCaseItems,
   toHistoryFeedItem,
@@ -233,5 +236,36 @@ describe('history case grouping', () => {
       replacedByProposalId: 'settlement-v2',
       staleReason: 'balance_changed',
     });
+  });
+
+  it('routes activity history Circle rows to the settlement detail', () => {
+    const [activityItem] = buildActivityHistoryItems({
+      'user-a': {
+        displayName: 'Sofia',
+        timeline: [
+          {
+            amountMinor: 50_000,
+            category: 'cycle',
+            detail: 'Circle cerrado',
+            flowLabel: 'Happy Circle',
+            happenedAt: '2026-05-05T12:00:00.000Z',
+            happenedAtLabel: 'hoy',
+            id: 'ledger-1',
+            kind: 'settlement',
+            originRequestId: null,
+            originSettlementProposalId: 'settlement-1',
+            sourceType: 'system',
+            status: 'posted',
+            subtitle: 'Happy Circle | hoy',
+            title: 'Circle cerrado',
+            tone: 'negative',
+          },
+        ],
+        userId: 'user-a',
+      } as unknown as PersonDetailDto,
+    });
+
+    expect(activityItem?.href).toBe('/settlements/settlement-1');
+    expect(activityItem?.counterpartyLabel).toBe('Sofia');
   });
 });

@@ -81,6 +81,18 @@ describe('activity helpers', () => {
     expect(
       pendingDetailHref(
         item({
+          category: 'cycle',
+          href: '/person/user-ana',
+          kind: 'settlement',
+          originSettlementProposalId: 'settlement-closed-1',
+          status: 'posted',
+        }),
+        [person({ displayName: 'Ana', userId: 'user-ana' })],
+      ),
+    ).toEqual({ href: '/settlements/settlement-closed-1' });
+    expect(
+      pendingDetailHref(
+        item({
           actorRole: 'sender',
           kind: 'friendship_invite',
           status: 'waiting_sender_review',

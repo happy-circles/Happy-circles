@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   activityRecencyScore,
+  buildCorrectionDraft,
+  buildCorrectionPendingContent,
   buildDraftPreview,
   formatAmountInput,
   personRelevanceScore,
@@ -19,9 +21,11 @@ describe('register flow helpers', () => {
 
   it('derives route defaults from params', () => {
     expect(resolveRegisterRouteParams({})).toEqual({
+      correctionRequestId: '',
       contextualDirection: null,
       contextualPersonId: '',
       initialDirection: 'i_owe',
+      mode: 'create',
     });
     expect(
       resolveRegisterRouteParams({
@@ -29,19 +33,107 @@ describe('register flow helpers', () => {
         personId: 'user-1',
       }),
     ).toEqual({
+      correctionRequestId: '',
       contextualDirection: 'owes_me',
       contextualPersonId: 'user-1',
       initialDirection: 'owes_me',
+      mode: 'create',
     });
     expect(
       resolveRegisterRouteParams({
         direction: 'unknown',
+        mode: 'correction',
         personId: ['ignored'],
+        requestId: 'request-1',
       }),
     ).toEqual({
+      correctionRequestId: 'request-1',
       contextualDirection: null,
       contextualPersonId: '',
       initialDirection: 'i_owe',
+      mode: 'correction',
+    });
+  });
+
+  it('builds correction drafts from the current pending instance', () => {
+    expect(
+      buildCorrectionDraft({
+        amountMinor: 30_000,
+        category: 'food_drinks',
+        id: 'request-1',
+        kind: 'financial_request',
+        pendingHistorySteps: [
+          {
+            amountMinor: 20_000,
+            category: 'transport',
+            createdAtLabel: 'ayer',
+            createdByLabel: 'Ana',
+            description: 'Taxi',
+            id: 'first',
+            isCurrent: false,
+            status: 'amended',
+            title: 'Propuesta inicial',
+          },
+          {
+            amountMinor: 45_000,
+            category: 'services',
+            createdAtLabel: 'hoy',
+            createdByLabel: 'Tu',
+            description: 'Soporte',
+            id: 'current',
+            isCurrent: true,
+            status: 'pending',
+            title: 'Monto actual',
+          },
+        ],
+        status: 'requires_you',
+        subtitle: 'Ana | Taxi | hoy',
+        title: 'Entrada propuesta',
+        tone: 'positive',
+      }),
+    ).toEqual({
+      amount: '450',
+      category: 'services',
+      description: 'Soporte',
+      direction: 'owes_me',
+    });
+  });
+
+  it('reuses pending movement content for correction context', () => {
+    expect(
+      buildCorrectionPendingContent({
+        amountMinor: 30_000,
+        category: 'food_drinks',
+        id: 'request-1',
+        kind: 'financial_request',
+        pendingHistorySteps: [],
+        status: 'requires_you',
+        subtitle: 'Ana | Pizza | hace 2 dias',
+        title: 'Entrada propuesta',
+        tone: 'positive',
+      }),
+    ).toEqual({
+      createdAtLabel: 'hace 2 dias',
+      createdByLabel: 'Ana',
+      detail: 'Pizza',
+    });
+
+    expect(
+      buildCorrectionPendingContent({
+        amountMinor: 30_000,
+        category: 'food_drinks',
+        id: 'request-1',
+        kind: 'financial_request',
+        pendingHistorySteps: [],
+        status: 'requires_you',
+        subtitle: '',
+        title: 'Entrada propuesta',
+        tone: 'positive',
+      }),
+    ).toEqual({
+      createdAtLabel: '',
+      createdByLabel: 'Persona',
+      detail: '',
     });
   });
 

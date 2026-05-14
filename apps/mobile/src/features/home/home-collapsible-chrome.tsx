@@ -6,6 +6,7 @@ import type { NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } fr
 import {
   AccessibilityInfo,
   Animated,
+  Easing,
   Platform,
   Pressable,
   StyleSheet,
@@ -69,23 +70,6 @@ function resolveHomeLiquidGlassPlatformStyle(activeTheme: AppTheme) {
     },
     default: {
       elevation: 9,
-    },
-  }) as object | undefined;
-}
-
-function resolveHomeFabOuterGlowPlatformStyle(activeTheme: AppTheme) {
-  return Platform.select({
-    web: {
-      boxShadow: `0 0 26px ${activeTheme.glass.homeFabOuterGlow}, 0 0 20px ${activeTheme.glass.homeFabWarmGlow}`,
-    },
-    ios: {
-      shadowColor: activeTheme.glass.homeFabWarmGlow,
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 1,
-      shadowRadius: 22,
-    },
-    default: {
-      elevation: 5,
     },
   }) as object | undefined;
 }
@@ -284,6 +268,42 @@ function HomeCompactAvatarFrame({ progress }: { readonly progress: HomeChromePro
 function HomeActivityButton({ count }: { readonly count: number }) {
   const activeTheme = useAppTheme();
   const hasAttention = count > 0;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const badgeScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.14],
+  });
+
+  useEffect(() => {
+    pulse.stopAnimation();
+    pulse.setValue(0);
+
+    if (!hasAttention) {
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          duration: 720,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 1,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(pulse, {
+          duration: 720,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 0,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]),
+    );
+
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [hasAttention, pulse]);
 
   return (
     <Link href="/activity" asChild>
@@ -312,19 +332,20 @@ function HomeActivityButton({ count }: { readonly count: number }) {
           size={24}
         />
         {hasAttention ? (
-          <View
+          <Animated.View
             style={[
               styles.activityBadge,
               {
                 backgroundColor: activeTheme.colors.danger,
                 borderColor: activeTheme.colors.surface,
+                transform: [{ scale: badgeScale }],
               },
             ]}
           >
             <AppText style={[styles.activityBadgeText, { color: activeTheme.colors.white }]}>
               {compactCountLabel(count)}
             </AppText>
-          </View>
+          </Animated.View>
         ) : null}
       </Pressable>
     </Link>
@@ -543,7 +564,6 @@ export function HomeRegisterFab({
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const liquidGlassPlatformStyle = resolveHomeLiquidGlassPlatformStyle(activeTheme);
-  const fabOuterGlowPlatformStyle = resolveHomeFabOuterGlowPlatformStyle(activeTheme);
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, windowWidth - theme.spacing.lg * 2),
@@ -579,16 +599,6 @@ export function HomeRegisterFab({
         },
       ]}
     >
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fabOuterGlow,
-          fabOuterGlowPlatformStyle,
-          {
-            borderColor: activeTheme.glass.homeFabOuterGlow,
-          },
-        ]}
-      />
       <Pressable
         accessibilityLabel="Registrar movimiento"
         accessibilityRole="button"
@@ -608,18 +618,45 @@ export function HomeRegisterFab({
         <View
           pointerEvents="none"
           style={[
-            styles.fabEdgeGlow,
+            styles.fabInnerGlow,
             {
-              borderColor: activeTheme.glass.homeFabEdgeGlow,
+              backgroundColor: activeTheme.glass.homeFabInnerGlow,
             },
           ]}
         />
         <View
           pointerEvents="none"
           style={[
-            styles.fabEdgeRing,
+            styles.fabInnerWarmGlow,
             {
-              borderColor: activeTheme.glass.homeFabEdgeRing,
+              backgroundColor: activeTheme.glass.homeFabInnerWarmGlow,
+            },
+          ]}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabInnerTopGlow,
+            {
+              backgroundColor: activeTheme.glass.homeFabInnerTopGlow,
+            },
+          ]}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabTopSpecular,
+            {
+              backgroundColor: activeTheme.glass.homeFabSpecular,
+            },
+          ]}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fabWarmSpecular,
+            {
+              backgroundColor: activeTheme.glass.homeFabWarmSpecular,
             },
           ]}
         />
@@ -810,44 +847,57 @@ const styles = StyleSheet.create({
     width: '100%',
     zIndex: 1,
   },
-  fabOuterGlow: {
+  fabInnerGlow: {
     borderRadius: HOME_CHROME_FAB_RADIUS,
-    borderWidth: 1,
     bottom: 2,
-    left: 2,
+    left: 3,
     position: 'absolute',
-    right: 2,
+    right: 3,
     top: 2,
   },
-  fabEdgeGlow: {
+  fabInnerWarmGlow: {
     borderRadius: HOME_CHROME_FAB_RADIUS,
-    borderWidth: 8,
-    bottom: 4,
-    left: 5,
+    bottom: 8,
+    height: 24,
     position: 'absolute',
-    right: 5,
-    top: 4,
+    right: 10,
+    width: 56,
   },
-  fabEdgeRing: {
+  fabInnerTopGlow: {
     borderRadius: HOME_CHROME_FAB_RADIUS,
-    borderWidth: 2.25,
-    bottom: 5,
-    left: 6,
+    height: 18,
+    left: 10,
     position: 'absolute',
-    right: 6,
+    right: 10,
     top: 5,
   },
-  fabHighlightEdge: {
-    borderBottomWidth: 2,
-    borderLeftWidth: 2,
-    borderRadius: HOME_CHROME_FAB_RADIUS,
-    borderRightWidth: 2,
-    borderTopWidth: 3,
-    bottom: 7,
-    left: 8,
+  fabTopSpecular: {
+    borderRadius: theme.radius.pill,
+    height: 6,
+    left: 18,
     position: 'absolute',
-    right: 8,
-    top: 7,
+    top: 9,
+    width: 42,
+  },
+  fabWarmSpecular: {
+    borderRadius: theme.radius.pill,
+    bottom: 10,
+    height: 5,
+    position: 'absolute',
+    right: 17,
+    width: 28,
+  },
+  fabHighlightEdge: {
+    borderBottomWidth: 1,
+    borderLeftWidth: 1.5,
+    borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderRightWidth: 1,
+    borderTopWidth: 2,
+    bottom: 10,
+    left: 11,
+    position: 'absolute',
+    right: 11,
+    top: 10,
   },
   fabLabelWrap: {
     overflow: 'hidden',

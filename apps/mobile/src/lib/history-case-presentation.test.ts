@@ -17,6 +17,7 @@ import {
   historyImpactLabel,
   historyImpactTone,
   historyStepAmountLabel,
+  historyTimelineStepAmountLabel,
   historyTimelineStepMetaLabel,
   type HistoryCaseItem,
 } from './history-cases';
@@ -77,6 +78,51 @@ describe('history case presentation', () => {
     expect(historyAmountIsVoided(executedProposal)).toBe(false);
     expect(historyCaseAmountLabel(executedProposal)).toBe(formatCop(50_000));
     expect(historyStepAmountLabel(executedProposal)).toBeNull();
+  });
+
+  it('uses the personal Circle direction for closed Circle amount tone', () => {
+    const outgoingCircle = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'executed',
+      tone: 'negative',
+    });
+
+    expect(historyImpactTone(outgoingCircle)).toBe('negative');
+  });
+
+  it('uses signed Circle amounts in the expanded history story', () => {
+    const executedProposal = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      id: 'settlement-1:executed',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'executed',
+      tone: 'negative',
+    });
+    const postedMovement = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      id: 'ledger-1',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'posted',
+      tone: 'negative',
+    });
+
+    expect(
+      historyTimelineStepAmountLabel(
+        {
+          latest: executedProposal,
+          steps: [executedProposal, postedMovement],
+        },
+        postedMovement,
+        1,
+      ),
+    ).toBe(`- ${formatCop(50_000)}`);
   });
 
   it('does not render Circle copy as a right-side timeline amount', () => {

@@ -24,6 +24,7 @@ import {
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
+import { transactionCircleHref } from '@/lib/transaction-people';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 import type { TransactionTargetPanel } from './dashboard-helpers';
 import { AppText } from '@/components/app-text';
@@ -144,6 +145,11 @@ export function transactionPersonHref(
   item: ActivityItemDto,
   panel: TransactionTargetPanel,
 ): Href {
+  const circleHref = transactionCircleHref(item);
+  if (circleHref) {
+    return circleHref;
+  }
+
   if (!person) {
     return (item.href ?? '/transactions') as Href;
   }
@@ -284,9 +290,7 @@ export function TransactionPreviewCard({
       accentColor={previewAccentColor}
       actorAvatarUrl={isSystemTransaction ? null : (person?.avatarUrl ?? null)}
       actorAvatarVariant={isSystemTransaction ? 'system' : 'person'}
-      actorFallbackColor={
-        isSystemTransaction ? toneColor : initialsBackgroundColor(fallbackPerson)
-      }
+      actorFallbackColor={isSystemTransaction ? toneColor : initialsBackgroundColor(fallbackPerson)}
       actorLabel={name}
       amountColor={toneColor}
       amountLabel={amountLabel}
@@ -300,7 +304,6 @@ export function TransactionPreviewCard({
       meta={meta}
       onPress={onPress}
       pending={highlightPending}
-      pendingHighlightColor={toneColor}
       statusLabel={showStatus ? transactionStatusLabel(item) : null}
       statusTone={transactionStatusTone(item)}
       unread={unread}

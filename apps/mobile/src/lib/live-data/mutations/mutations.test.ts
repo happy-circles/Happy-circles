@@ -61,7 +61,7 @@ import {
 import { resolveAvatarUploadMetadata, uploadAvatar } from './avatar-upload';
 import { withIdempotencyKey } from './edge-action';
 import { useCreateRequestMutation } from './financial-requests';
-import { markNotificationItemsViewed } from './notifications';
+import { markNotificationItemsViewed, markNotificationViewsViewed } from './notifications';
 import { useApproveSettlementMutation } from './settlements';
 import {
   guardSensitiveMutationAction,
@@ -311,6 +311,40 @@ describe('live-data mutation hooks', () => {
       [
         expect.objectContaining({
           notification_key: 'financial_request:item-1:requires_you',
+          user_id: 'user-1',
+        }),
+      ],
+      { onConflict: 'user_id,notification_key' },
+    );
+    expect(mocks.invalidateAppSnapshot).toHaveBeenCalled();
+  });
+
+  it('can upsert custom notification view keys for discovery moments', async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn(() => ({ upsert }));
+    mocks.assertSupabaseClient.mockReturnValue({ from });
+
+    await markNotificationViewsViewed('user-1', [
+      {
+        notificationKey: 'circle_discovery:settlement-1',
+        notificationKind: 'circle_discovery',
+        notificationStatus: 'discovered',
+        sourceItemId: 'settlement-1',
+      },
+      {
+        notificationKey: 'circle_discovery:settlement-1',
+        notificationKind: 'circle_discovery',
+        notificationStatus: 'discovered',
+        sourceItemId: 'settlement-1',
+      },
+    ]);
+
+    expect(from).toHaveBeenCalledWith('notification_views');
+    expect(upsert).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          notification_key: 'circle_discovery:settlement-1',
+          notification_kind: 'circle_discovery',
           user_id: 'user-1',
         }),
       ],

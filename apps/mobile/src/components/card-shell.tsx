@@ -71,8 +71,10 @@ export function CardPressable({
 export interface AppCardShellProps extends PropsWithChildren {
   readonly accentColor?: string;
   readonly attentionDot?: boolean;
+  readonly attentionDotColor?: string;
   readonly compact?: boolean;
   readonly contextNode?: ReactNode;
+  readonly highlightSurface?: boolean;
   readonly leadingAccessibilityLabel?: string;
   readonly leadingAccessibilityRole?: AccessibilityRole;
   readonly leadingDisabled?: boolean;
@@ -96,9 +98,11 @@ export interface AppCardShellProps extends PropsWithChildren {
 export function AppCardShell({
   accentColor,
   attentionDot = false,
+  attentionDotColor,
   children,
   compact = false,
   contextNode,
+  highlightSurface = false,
   leadingAccessibilityLabel,
   leadingAccessibilityRole,
   leadingDisabled,
@@ -161,7 +165,7 @@ export function AppCardShell({
       underlay={underlay}
       variant={variant}
     >
-      {unread ? (
+      {unread || highlightSurface ? (
         <View
           pointerEvents="none"
           style={[
@@ -195,7 +199,12 @@ export function AppCardShell({
       {attentionDot ? (
         <View
           pointerEvents="none"
-          style={[styles.pendingCornerDot, { backgroundColor: activeTheme.colors.cycle }]}
+          style={[
+            styles.pendingCornerDot,
+            {
+              backgroundColor: attentionDotColor ?? accentColor ?? activeTheme.colors.cycle,
+            },
+          ]}
         />
       ) : null}
       {children ? <View style={styles.footer}>{children}</View> : null}
@@ -226,6 +235,7 @@ function withAlpha(color: string, alpha: number): string {
 
 export interface CardTimelineStep {
   readonly amountLabel?: string | null;
+  readonly amountStruckThrough?: boolean;
   readonly detail?: string | null;
   readonly id: string;
   readonly leadingNode?: ReactNode;
@@ -267,6 +277,7 @@ export function CardTimeline({ steps }: { readonly steps: readonly CardTimelineS
                   style={[
                     styles.timelineAmount,
                     { color: timelineTextToneColor(activeTheme, step.tone ?? 'neutral') },
+                    step.amountStruckThrough ? styles.timelineAmountStruckThrough : null,
                   ]}
                 >
                   {step.amountLabel}
@@ -499,6 +510,10 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.footnote,
     fontWeight: '800',
     lineHeight: 17,
+  },
+  timelineAmountStruckThrough: {
+    opacity: 0.72,
+    textDecorationLine: 'line-through',
   },
   timelineDetail: {
     color: theme.colors.text,

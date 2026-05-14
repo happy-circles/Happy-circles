@@ -87,7 +87,6 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
   ) {
     const refreshEnabled = Boolean(refresh);
 
-    const progressViewOffset = refresh?.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
     const iosNativeIndicatorTopInset =
       Platform.OS === 'ios' ? (refresh?.nativeIndicatorTopInset ?? 0) : 0;
     const resolvedContentInset = useMemo(

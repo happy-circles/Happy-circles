@@ -972,8 +972,6 @@ export function useSessionController(): SessionContextValue {
         {
           body: {
             deliveryToken: pendingIntent.token,
-            email: normalizedEmail,
-            phoneE164,
             recordAppOpen: false,
           },
           headers: {
@@ -991,21 +989,6 @@ export function useSessionController(): SessionContextValue {
             supportId,
           ),
         );
-      }
-
-      if (
-        registrationPreview.data?.emailAlreadyRegistered &&
-        registrationPreview.data.phoneAlreadyRegistered
-      ) {
-        return 'Ese correo y celular ya existen.';
-      }
-
-      if (registrationPreview.data?.emailAlreadyRegistered) {
-        return 'Ese correo ya existe.';
-      }
-
-      if (registrationPreview.data?.phoneAlreadyRegistered) {
-        return 'Ese celular ya esta vinculado.';
       }
 
       if (

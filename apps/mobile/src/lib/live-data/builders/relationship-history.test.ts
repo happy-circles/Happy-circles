@@ -5,6 +5,7 @@ import {
   buildCycleSettlementImpactLabel,
   buildHistorySubtitle,
   buildTimelineStepTitle,
+  historyToneForRow,
 } from './relationship-history';
 
 const CURRENT_USER_ID = 'user-current';
@@ -36,21 +37,20 @@ const names = new Map([
 
 describe('relationship history cycle settlement copy', () => {
   it('renders personal ledger rows as directional movements', () => {
-    expect(
-      buildTimelineStepTitle(row({}), CURRENT_USER_ID, 'Sofia', names),
-    ).toBe('Pagaste a Sofia');
+    expect(buildTimelineStepTitle(row({}), CURRENT_USER_ID, 'Sofia', names)).toBe(
+      'Pagaste a Sofia',
+    );
+    expect(historyToneForRow(row({}), CURRENT_USER_ID)).toBe('negative');
 
-    expect(
-      buildTimelineStepTitle(
-        row({
-          creditor_user_id: CURRENT_USER_ID,
-          debtor_user_id: SOFIA_ID,
-        }),
-        CURRENT_USER_ID,
-        'Sofia',
-        names,
-      ),
-    ).toBe('Sofia te pagó');
+    const incomingRow = row({
+      creditor_user_id: CURRENT_USER_ID,
+      debtor_user_id: SOFIA_ID,
+    });
+
+    expect(buildTimelineStepTitle(incomingRow, CURRENT_USER_ID, 'Sofia', names)).toBe(
+      'Sofia te pag\u00f3',
+    );
+    expect(historyToneForRow(incomingRow, CURRENT_USER_ID)).toBe('positive');
   });
 
   it('does not append generic completion copy to cycle settlement subtitles', () => {

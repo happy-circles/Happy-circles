@@ -120,7 +120,7 @@ Estado actual:
 - `https://app.happy-circles.com/privacy`, `/terms` y `/support` responden 200.
 - `assetlinks.json` ya incluye fingerprint Android del certificado de upload EAS.
 - SHA256 Android actual: `CE:9F:B0:28:2F:5C:7D:0A:DC:A9:37:34:92:86:1F:59:4B:2B:82:84:EB:5A:5C:DA:0E:40:03:54:B5:94:05:EB`.
-- `apple-app-site-association` sigue con `details: []` hasta configurar `APPLE_TEAM_ID` o `APPLE_APP_ID`.
+- `apple-app-site-association` ya incluye `AA75LHJ4LC.com.happycircles.app`.
 
 Pendiente externo:
 

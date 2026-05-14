@@ -2,8 +2,9 @@ import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 import type { SettlementParticipantRow, SettlementProposalRow } from '../types';
 import {
   parseSettlementMovements,
+  settlementProposalApprovalsPending,
+  settlementProposalParticipantCount,
   settlementProposalParticipantAmount,
-  settlementProposalTotalAmount,
   settlementSavedMovementsCount,
 } from './settlement-core';
 import {
@@ -49,30 +50,54 @@ export function buildActiveSettlementPreviews(input: {
 
   return Array.from(activeProposalsByCase.values()).map((proposal) => {
     const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-    const participantUserIds = participants.map((participant) => participant.participant_user_id);
+    const movements = parseSettlementMovements(proposal.movements_json);
+    const personalMovements = movements.filter(
+      (movement) =>
+        movement.debtor_user_id === input.currentUserId ||
+        movement.creditor_user_id === input.currentUserId,
+    );
+    const directCounterpartyUserIds = new Set(
+      personalMovements.flatMap((movement) => [movement.debtor_user_id, movement.creditor_user_id]),
+    );
+    directCounterpartyUserIds.delete(input.currentUserId);
+    const visibleParticipants = participants.filter(
+      (participant) =>
+        participant.participant_user_id === input.currentUserId ||
+        directCounterpartyUserIds.has(participant.participant_user_id),
+    );
+    const participantUserIds = visibleParticipants.map(
+      (participant) => participant.participant_user_id,
+    );
     const participantLabel = (participantUserId: string) =>
-      settlementParticipantLabel({
-        participantUserId,
-        currentUserId: input.currentUserId,
-        visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
-        names: input.names,
-      }) ?? 'Happy';
+      participantUserId === input.currentUserId || directCounterpartyUserIds.has(participantUserId)
+        ? (settlementParticipantLabel({
+            participantUserId,
+            currentUserId: input.currentUserId,
+            visibleCounterpartyUserIds: new Set([
+              ...input.visibleCounterpartyUserIds,
+              participantUserId,
+            ]),
+            names: input.names,
+          }) ?? 'Persona')
+        : 'Happy';
     const participantLabels = buildSettlementParticipantLabels({
       participantUserIds,
       currentUserId: input.currentUserId,
-      visibleCounterpartyUserIds: input.visibleCounterpartyUserIds,
+      visibleCounterpartyUserIds: new Set([
+        ...input.visibleCounterpartyUserIds,
+        ...participantUserIds,
+      ]),
       names: input.names,
     });
-    const approvalsPending = participants.filter(
-      (participant) => participant.decision === 'pending',
-    ).length;
-    const movements = parseSettlementMovements(proposal.movements_json);
-    const movementCount = movements.length;
+    const approvalsPending = settlementProposalApprovalsPending(proposal, participants);
+    const participantCount = settlementProposalParticipantCount(proposal, participants);
+    const movementCount = personalMovements.length;
     const incomingMovement =
-      movements.find((movement) => movement.creditor_user_id === input.currentUserId) ?? null;
+      personalMovements.find((movement) => movement.creditor_user_id === input.currentUserId) ??
+      null;
     const outgoingMovement =
-      movements.find((movement) => movement.debtor_user_id === input.currentUserId) ?? null;
-    const participantDecisions = participants.map((participant, index) => ({
+      personalMovements.find((movement) => movement.debtor_user_id === input.currentUserId) ?? null;
+    const participantDecisions = visibleParticipants.map((participant, index) => ({
       userId: participant.participant_user_id,
       label: participantLabels[index] ?? 'Persona',
       decision: normalizeSettlementDetailDecision(participant.decision),
@@ -92,12 +117,12 @@ export function buildActiveSettlementPreviews(input: {
         proposal.status === 'approved'
           ? `Con ${summarizeSettlementParticipants(participantLabels)} se completara automaticamente.`
           : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`,
-      totalAmountMinor: settlementProposalTotalAmount(proposal),
+      totalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
       personalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
       approvalsPending,
       movementCount,
-      savedMovementsCount: settlementSavedMovementsCount(participants.length, movementCount),
-      participantCount: participants.length,
+      savedMovementsCount: settlementSavedMovementsCount(participantCount, movementCount),
+      participantCount,
       participantUserIds,
       participantLabels,
       participantDecisions,

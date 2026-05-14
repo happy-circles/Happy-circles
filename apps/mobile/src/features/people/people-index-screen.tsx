@@ -19,7 +19,12 @@ import { TransactionEventCard } from '@/components/transaction-event-card';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { prefetchAvatarPaths } from '@/lib/avatar-prefetch';
-import { useAppSnapshot } from '@/lib/live-data';
+import {
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
+  useAppSnapshot,
+} from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme, type AppTheme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -35,7 +40,9 @@ import {
   transactionToneColor,
   transactionVisualCategory,
 } from '@/lib/transaction-presentation';
+import { transactionCircleHref } from '@/lib/transaction-people';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { useSession } from '@/providers/session-provider';
 import {
   firstName,
   formatCompactCop,
@@ -388,6 +395,11 @@ function transactionDetailHref(
   item: ActivityItemDto,
   panel: 'pending' | 'history',
 ): Href {
+  const circleHref = transactionCircleHref(item);
+  if (circleHref) {
+    return circleHref;
+  }
+
   if (item.kind === 'settlement_proposal') {
     return `/settlements/${item.id}` as Href;
   }
@@ -826,6 +838,7 @@ function HistoryTransactionCard({
 export function PeopleIndexScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const session = useSession();
   const activeTheme = useAppTheme();
   const topInset = Math.max(0, insets.top);
   const params = useLocalSearchParams<{
@@ -860,6 +873,14 @@ export function PeopleIndexScreen() {
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
+  const notificationViewedKeys = useMemo(
+    () =>
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    [session.userId, snapshotQuery.data?.notificationViewedKeys],
+  );
   const insightSections = useMemo(
     () =>
       buildPeopleInsightActivitySections({
@@ -1050,7 +1071,14 @@ export function PeopleIndexScreen() {
     if (item.type === 'pending') {
       return (
         <View style={styles.containedListItem}>
-          <PendingTransactionCard item={item.item} people={people} unread={false} />
+          <PendingTransactionCard
+            item={item.item}
+            people={people}
+            unread={
+              notificationItemCanAlert(item.item) &&
+              !notificationViewedKeys.has(notificationViewKeyForItem(item.item))
+            }
+          />
         </View>
       );
     }
@@ -1258,7 +1286,6 @@ export function PeopleIndexScreen() {
                       }
                     />
                   ) : null}
-
                 </>
               ) : visiblePersonRows.length === 0 ? (
                 <EmptyState

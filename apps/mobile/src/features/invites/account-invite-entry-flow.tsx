@@ -49,10 +49,15 @@ import { buildSetupAccountHref } from '@/lib/setup-account';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
+  emailAccordionCloseLayoutAnimation,
+  emailAccordionOpenLayoutAnimation,
+} from './account-invite-entry-animations';
+import {
   MIN_ACCOUNT_INVITE_TOKEN_LENGTH,
   accountInviteStatusMessage,
   extractAccountInviteToken,
 } from './account-invite-utils';
+import { AccountInviteEntryTokenForm } from './account-invite-entry-token-form';
 import { AuthEntryIdentity } from './account-invite-entry-identity';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
@@ -90,28 +95,6 @@ const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-const emailAccordionOpenLayoutAnimation = {
-  create: {
-    property: LayoutAnimation.Properties.opacity,
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-  duration: 260,
-  update: {
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-};
-
-const emailAccordionCloseLayoutAnimation = {
-  delete: {
-    property: LayoutAnimation.Properties.opacity,
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-  duration: 210,
-  update: {
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-};
 
 export function AccountSignInEntry({
   autoUseRememberedAccount = false,
@@ -1229,36 +1212,19 @@ export function AccountSignInEntry({
       />
     );
   const tokenContent = (
-    <View style={styles.rememberedMain}>
-      <IdentityFlowForm>
-        <IdentityFlowField
-          error={tokenFieldError}
-          icon="key"
-          label="Codigo de invitacion"
-          status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
-        >
-          <IdentityFlowTextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onBlur={() => setTokenTouched(true)}
-            onChangeText={(value) => {
-              setTokenMessage(null);
-              setTokenInput(value);
-            }}
-            placeholder="Se llena al abrir tu link"
-            placeholderTextColor={activeTheme.colors.muted}
-            value={tokenInput}
-          />
-        </IdentityFlowField>
-
-        <IdentityFlowPrimaryAction
-          disabled={authBusy || !shouldPreview || Boolean(blockingMessage)}
-          label={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
-          loading={previewQuery.isFetching}
-          onPress={previewQuery.isFetching ? undefined : () => void handleTokenContinue()}
-        />
-      </IdentityFlowForm>
-    </View>
+    <AccountInviteEntryTokenForm
+      disabled={authBusy || !shouldPreview || Boolean(blockingMessage)}
+      loading={previewQuery.isFetching}
+      onBlurToken={() => setTokenTouched(true)}
+      onChangeToken={(value) => {
+        setTokenMessage(null);
+        setTokenInput(value);
+      }}
+      onContinue={() => void handleTokenContinue()}
+      status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
+      tokenFieldError={tokenFieldError}
+      tokenInput={tokenInput}
+    />
   );
   const isTokenSurface = entrySurface === 'token';
   const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;

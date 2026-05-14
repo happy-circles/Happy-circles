@@ -8,6 +8,7 @@ import type { AnalyticsRange } from '../utils/dates';
 import { computeChangeRatio, dateMs, isWithinRange } from '../utils/dates';
 import {
   parseSettlementMovements,
+  settlementProposalParticipantCount,
   settlementProposalParticipantAmount,
   settlementSavedMovementsCount,
 } from './settlement-core';
@@ -73,7 +74,13 @@ export function buildSettlementMetrics(input: {
   );
   const savedMovementsCount = currentExecuted.reduce((total, proposal) => {
     const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-    return total + settlementSavedMovementsCount(participants.length, sumMovementCount(proposal));
+    return (
+      total +
+      settlementSavedMovementsCount(
+        settlementProposalParticipantCount(proposal, participants),
+        sumMovementCount(proposal),
+      )
+    );
   }, 0);
 
   return {

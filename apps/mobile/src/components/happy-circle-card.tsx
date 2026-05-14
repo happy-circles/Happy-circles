@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import type { ActiveSettlementPreviewDto } from '@happy-circles/application';
 
 import { CardPressable } from '@/components/card-shell';
+import { CircleActionFeedbackOverlay } from '@/components/circle-action-feedback-overlay';
 import {
   HappyCircleRing,
   type HappyCircleDecision,
@@ -15,7 +16,6 @@ import {
   happyCircleDecisionColor,
 } from '@/components/happy-circle-ring';
 import { LiquidGlassDisc } from '@/components/liquid-glass-disc';
-import { LoadingOverlay } from '@/components/loading-overlay';
 import { PrimaryAction } from '@/components/primary-action';
 import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
 import { SurfaceCard } from '@/components/surface-card';
@@ -37,12 +37,12 @@ import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
 
-const SHOWCASE_CARD_HEIGHT = 584;
-const SHOWCASE_BODY_HEIGHT = 468;
+const SHOWCASE_CARD_HEIGHT = 528;
+const SHOWCASE_BODY_HEIGHT = 424;
 const SHOWCASE_FOOTER_HEIGHT = SHOWCASE_CARD_HEIGHT - SHOWCASE_BODY_HEIGHT;
-const SHOWCASE_HEADER_TOP = 48;
-const SHOWCASE_RING_TOP = 110;
-const SHOWCASE_PILLS_TOP = 432;
+const SHOWCASE_HEADER_TOP = 28;
+const SHOWCASE_RING_TOP = 84;
+const SHOWCASE_PILLS_TOP = 404;
 const SHOWCASE_PILLS_WIDTH = 260;
 
 function ApprovalDots({
@@ -152,6 +152,23 @@ function directCircleCardParticipants(
   ];
 }
 
+function readResultStatus(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const status = (value as Record<string, unknown>)['status'];
+  return typeof status === 'string' ? status : null;
+}
+
+function readNestedStatus(value: unknown, key: string): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return readResultStatus((value as Record<string, unknown>)[key]);
+}
+
 export interface HappyCircleCardProps {
   readonly proposal: ActiveSettlementPreviewDto;
   readonly showcaseRingSize?: number;
@@ -211,14 +228,29 @@ export function HappyCircleCard({
 
     try {
       if (action === 'approve') {
-        await actionFeedback.runBlockingAction('approveSettlement', () =>
+        const response = await actionFeedback.runBlockingAction('approveSettlement', () =>
           approveSettlement.mutateAsync(proposal.proposalId),
         );
-        await actionFeedback.showResult({
-          message: 'Decisión guardada',
-          title: 'Listo',
-          variant: 'success',
-        });
+        const nextStatus = readResultStatus(response);
+
+        if (nextStatus === 'executed') {
+          const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
+
+          await actionFeedback.showResult({
+            message:
+              nextAutoCycleStatus === 'queued'
+                ? 'Tesoro listo y otro Circle en camino'
+                : 'Tesoro listo en el detalle',
+            title: 'Circle completado',
+            variant: 'success',
+          });
+        } else {
+          await actionFeedback.showResult({
+            message: 'Decisión guardada',
+            title: 'Listo',
+            variant: 'success',
+          });
+        }
       } else {
         await rejectSettlement.mutateAsync(proposal.proposalId);
         triggerAppWarningHaptic();
@@ -576,7 +608,15 @@ export function HappyCircleCard({
           )}
         </View>
       ) : null}
-      <LoadingOverlay {...actionFeedback.overlayProps} />
+      <CircleActionFeedbackOverlay
+        action="approve"
+        amountLabel={amountLabel}
+        message={actionFeedback.overlayProps.message}
+        participants={orderedDecisions}
+        title={actionFeedback.overlayProps.title}
+        variant={actionFeedback.overlayProps.variant}
+        visible={actionFeedback.overlayProps.visible && busyAction === 'approve'}
+      />
     </SurfaceCard>
   );
 }

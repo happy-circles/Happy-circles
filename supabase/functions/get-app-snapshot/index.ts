@@ -261,6 +261,12 @@ type SignedAvatarBatchRow = {
   readonly signedURL?: string | null;
 };
 
+type SettlementMovementRecord = {
+  readonly amount_minor: number;
+  readonly creditor_user_id: string;
+  readonly debtor_user_id: string;
+};
+
 async function expectRows<T>(query: PromiseLike<QueryResult<T>>, label: string): Promise<T[]> {
   const { data, error } = await query;
   if (error) {
@@ -290,18 +296,131 @@ function addIds(target: Set<string>, ...values: readonly unknown[]) {
 }
 
 function addMovementUserIds(target: Set<string>, movementsJson: unknown) {
-  if (!Array.isArray(movementsJson)) {
-    return;
+  for (const record of parseSettlementMovementRecords(movementsJson)) {
+    addIds(target, record.debtor_user_id, record.creditor_user_id);
+  }
+}
+
+function parseSettlementMovementRecords(value: unknown): SettlementMovementRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
   }
 
-  for (const movement of movementsJson) {
+  return value.flatMap((movement) => {
     if (!movement || typeof movement !== 'object') {
-      continue;
+      return [];
     }
 
     const record = movement as Record<string, unknown>;
-    addIds(target, record.debtor_user_id, record.creditor_user_id);
+    if (
+      typeof record.debtor_user_id === 'string' &&
+      typeof record.creditor_user_id === 'string' &&
+      typeof record.amount_minor === 'number'
+    ) {
+      return [
+        {
+          amount_minor: record.amount_minor,
+          creditor_user_id: record.creditor_user_id,
+          debtor_user_id: record.debtor_user_id,
+        },
+      ];
+    }
+
+    return [];
+  });
+}
+
+function actorSettlementMovements(value: unknown, actorUserId: string): SettlementMovementRecord[] {
+  return parseSettlementMovementRecords(value).filter(
+    (movement) =>
+      movement.debtor_user_id === actorUserId || movement.creditor_user_id === actorUserId,
+  );
+}
+
+function groupSettlementParticipantsByProposalId(
+  participants: readonly Record<string, unknown>[],
+): Map<string, Record<string, unknown>[]> {
+  const grouped = new Map<string, Record<string, unknown>[]>();
+
+  for (const participant of participants) {
+    const proposalId = participant.settlement_proposal_id;
+    if (typeof proposalId !== 'string') {
+      continue;
+    }
+
+    const bucket = grouped.get(proposalId);
+    if (bucket) {
+      bucket.push(participant);
+    } else {
+      grouped.set(proposalId, [participant]);
+    }
   }
+
+  return grouped;
+}
+
+function sanitizeSettlementRowsForActor(input: {
+  readonly actorUserId: string;
+  readonly settlementParticipants: readonly Record<string, unknown>[];
+  readonly settlementProposals: readonly Record<string, unknown>[];
+}): {
+  readonly settlementParticipants: readonly Record<string, unknown>[];
+  readonly settlementProposals: readonly Record<string, unknown>[];
+} {
+  const participantsByProposalId = groupSettlementParticipantsByProposalId(
+    input.settlementParticipants,
+  );
+  const visibleParticipants: Record<string, unknown>[] = [];
+
+  const settlementProposals = input.settlementProposals.map((proposal) => {
+    const proposalId = proposal.id;
+    const participants =
+      typeof proposalId === 'string' ? (participantsByProposalId.get(proposalId) ?? []) : [];
+    const actorMovements = actorSettlementMovements(proposal.movements_json, input.actorUserId);
+    const actorGraphSnapshot = actorSettlementMovements(proposal.graph_snapshot, input.actorUserId);
+    const directUserIds = new Set<string>([input.actorUserId]);
+
+    addMovementUserIds(directUserIds, actorMovements);
+
+    for (const participant of participants) {
+      const participantUserId = participant.participant_user_id;
+      if (typeof participantUserId === 'string' && directUserIds.has(participantUserId)) {
+        visibleParticipants.push(participant);
+      }
+    }
+
+    const approvedCount = participants.filter(
+      (participant) => participant.decision === 'approved',
+    ).length;
+    const approvalsPending = participants.filter(
+      (participant) => participant.decision === 'pending',
+    ).length;
+
+    return {
+      ...proposal,
+      anchor_user_high_id:
+        typeof proposal.anchor_user_high_id === 'string' &&
+        directUserIds.has(proposal.anchor_user_high_id)
+          ? proposal.anchor_user_high_id
+          : null,
+      anchor_user_low_id:
+        typeof proposal.anchor_user_low_id === 'string' &&
+        directUserIds.has(proposal.anchor_user_low_id)
+          ? proposal.anchor_user_low_id
+          : null,
+      created_by_user_id: input.actorUserId,
+      graph_snapshot: actorGraphSnapshot,
+      movements_json: actorMovements,
+      privacy_approved_count: approvedCount,
+      privacy_approvals_pending: approvalsPending,
+      privacy_participant_count: participants.length,
+    };
+  });
+
+  return {
+    settlementParticipants: visibleParticipants,
+    settlementProposals,
+  };
 }
 
 function normalizeAvatarPath(path: unknown): string | null {
@@ -632,7 +751,7 @@ Deno.serve((request) =>
       caseSettlementProposals as (Record<string, unknown> & { readonly id: string })[],
     );
     const settlementProposalIds = settlementProposals.map((proposal) => proposal.id);
-    const settlementParticipants =
+    let settlementParticipants =
       settlementProposalIds.length === 0
         ? []
         : await expectRows<Record<string, unknown>>(
@@ -643,6 +762,16 @@ Deno.serve((request) =>
               .order('created_at', { ascending: true }),
             'settlement_participants',
           );
+    const actorScopedSettlements = sanitizeSettlementRowsForActor({
+      actorUserId,
+      settlementParticipants,
+      settlementProposals,
+    });
+
+    settlementProposals = actorScopedSettlements.settlementProposals as (Record<string, unknown> & {
+      readonly id: string;
+    })[];
+    settlementParticipants = [...actorScopedSettlements.settlementParticipants];
 
     for (const request of financialRequests) {
       addIds(

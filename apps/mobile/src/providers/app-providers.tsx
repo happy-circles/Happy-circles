@@ -6,6 +6,7 @@ import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-c
 
 import { queryClient } from '@/lib/query-client';
 import { installGlobalErrorReporting } from '@/lib/support-errors';
+import { HappyRewardProvider } from './happy-reward-provider';
 import { ThemeProvider, useAppTheme } from './theme-provider';
 
 import { SessionProvider } from './session-provider';
@@ -57,7 +58,9 @@ function AppProvidersContent({ children }: PropsWithChildren) {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <QueryClientProvider client={queryClient}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <HappyRewardProvider>{children}</HappyRewardProvider>
+        </SessionProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -40,6 +40,11 @@ function assertContains(relativePath, pattern, message) {
   assert(pattern.test(content), `${relativePath}: ${message}`);
 }
 
+function assertNotContains(relativePath, pattern, message) {
+  const content = readFile(relativePath);
+  assert(!pattern.test(content), `${relativePath}: ${message}`);
+}
+
 const migrationFiles = walk('supabase/migrations').filter((file) => file.endsWith('.sql'));
 const forbiddenMigrationPatterns = [
   { pattern: /\bseed_demo_data\b/i, label: 'seed_demo_data helper' },
@@ -66,10 +71,25 @@ const publicFunctionAllowlist = new Set([
   'process-graph-cycle-jobs',
 ]);
 const functionBlocks = [...config.matchAll(/^\[functions\.([^\]]+)\]\s*([\s\S]*?)(?=^\[|\s*$)/gm)];
+const declaredFunctionNames = new Set(functionBlocks.map(([, functionName]) => functionName));
 for (const [, functionName, block] of functionBlocks) {
   const verifyJwt = block.match(/^\s*verify_jwt\s*=\s*(true|false)\s*$/m)?.[1];
   if (verifyJwt === 'false' && !publicFunctionAllowlist.has(functionName)) {
     failures.push(`supabase/config.toml: unexpected public function ${functionName}`);
+  }
+}
+
+const functionDirectories = fs
+  .readdirSync(path.join(rootDir, 'supabase/functions'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== '_shared')
+  .map((entry) => entry.name)
+  .filter((functionName) => exists(path.join('supabase/functions', functionName, 'index.ts')));
+
+for (const functionName of functionDirectories) {
+  if (!declaredFunctionNames.has(functionName)) {
+    failures.push(
+      `supabase/config.toml: missing [functions.${functionName}] declaration for Edge Function`,
+    );
   }
 }
 
@@ -97,6 +117,36 @@ assertContains(
   'supabase/functions/_shared/http.ts',
   /'cache-control':\s*'no-store'[\s\S]*'x-content-type-options':\s*'nosniff'/,
   'Edge JSON responses must include no-store and nosniff',
+);
+assertContains(
+  'supabase/functions/_shared/http.ts',
+  /DEFAULT_JSON_BODY_BYTES\s*=\s*64\s*\*\s*1024/,
+  'Edge JSON helper must keep the default 64KB payload limit',
+);
+assertContains(
+  'supabase/functions/_shared/http.ts',
+  /check_edge_rate_limit/,
+  'Edge HTTP helper must enforce the check_edge_rate_limit RPC',
+);
+assertContains(
+  'supabase/functions/_shared/http.ts',
+  /maxBodyBytes[\s\S]*payload_too_large/,
+  'Edge HTTP helper must reject oversized JSON payloads',
+);
+assertContains(
+  'supabase/migrations/0055_edge_rate_limits.sql',
+  /create\s+or\s+replace\s+function\s+public\.check_edge_rate_limit/i,
+  'edge rate-limit migration must define check_edge_rate_limit',
+);
+assertContains(
+  'supabase/migrations/0055_edge_rate_limits.sql',
+  /grant\s+execute\s+on\s+function\s+public\.check_edge_rate_limit[\s\S]*to\s+service_role/i,
+  'check_edge_rate_limit must only be callable through service_role',
+);
+assertNotContains(
+  'supabase/functions/get-account-invite-preview-public/index.ts',
+  /emailAlreadyRegistered|phoneAlreadyRegistered|auth_email_exists|user_profiles/,
+  'public account invite preview must not expose or compute email/phone existence',
 );
 
 assert(
@@ -158,8 +208,18 @@ for (const mobileFile of walk('apps/mobile/src').filter((file) => /\.(ts|tsx)$/.
 
 assertContains(
   'apps/landing/next.config.mjs',
-  /Strict-Transport-Security[\s\S]*Content-Security-Policy[\s\S]*X-Content-Type-Options[\s\S]*Referrer-Policy[\s\S]*Permissions-Policy[\s\S]*X-Frame-Options/,
-  'landing app must define the required security headers',
+  /Strict-Transport-Security[\s\S]*X-Content-Type-Options[\s\S]*Referrer-Policy[\s\S]*Permissions-Policy[\s\S]*X-Frame-Options/,
+  'landing app must define the required non-CSP security headers',
+);
+assertContains(
+  'apps/landing/proxy.ts',
+  /Content-Security-Policy[\s\S]*script-src 'self' 'nonce-\$\{nonce\}'/,
+  'landing CSP must use a per-request script nonce',
+);
+assertNotContains(
+  'apps/landing/next.config.mjs',
+  /script-src[^"']*'unsafe-inline'|'unsafe-inline'[^"']*script-src/,
+  'landing static headers must not allow unsafe-inline scripts',
 );
 
 if (failures.length > 0) {

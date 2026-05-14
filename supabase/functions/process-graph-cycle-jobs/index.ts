@@ -79,159 +79,171 @@ Deno.serve((request) => {
     return accessResponse;
   }
 
-  return handlePublicRpc(request, async (body) => {
-    const client = createServiceRoleClient();
-    const limit = Number(body.limit ?? 10);
-    if (!Number.isInteger(limit) || limit <= 0 || limit > 50) {
-      throw new Error('Invalid limit');
-    }
-
-    const workerId =
-      typeof body.workerId === 'string' && body.workerId.trim().length > 0
-        ? body.workerId.trim()
-        : `edge-worker-${crypto.randomUUID()}`;
-    const results: unknown[] = [];
-
-    for (let index = 0; index < limit; index += 1) {
-      const { data: claimedData, error: claimError } = await client.rpc('claim_graph_cycle_job', {
-        p_worker_id: workerId,
-      });
-
-      if (claimError) {
-        throw claimError;
+  return handlePublicRpc(
+    request,
+    async (body) => {
+      const client = createServiceRoleClient();
+      const limit = Number(body.limit ?? 10);
+      if (!Number.isInteger(limit) || limit <= 0 || limit > 50) {
+        throw new Error('Invalid limit');
       }
 
-      const job = parseClaimedJob(claimedData);
-      if (!job) {
-        break;
-      }
+      const workerId =
+        typeof body.workerId === 'string' && body.workerId.trim().length > 0
+          ? body.workerId.trim()
+          : `edge-worker-${crypto.randomUUID()}`;
+      const results: unknown[] = [];
 
-      try {
-        const { data: contextData, error: contextError } = await client.rpc(
-          'get_graph_cycle_job_context',
-          { p_job_id: job.id },
-        );
-
-        if (contextError) {
-          throw contextError;
-        }
-
-        const payload = asRecord(contextData, 'job context');
-        const context = asRecord(payload.context, 'job context payload');
-        const status = requireString(context.status, 'context.status');
-
-        if (status !== 'ok') {
-          const result = { status: 'no_cycles', reason: status };
-          const { data: completed, error: completeError } = await client.rpc(
-            'complete_graph_cycle_job',
-            {
-              p_job_id: job.id,
-              p_worker_id: workerId,
-              p_result_json: result,
-            },
-          );
-
-          if (completeError) {
-            throw completeError;
-          }
-
-          results.push(completed);
-          continue;
-        }
-
-        const anchorEdge = parseEdge(context.anchorEdge, 'context.anchorEdge');
-        if (!Array.isArray(context.graphSnapshot)) {
-          throw new Error('Invalid context.graphSnapshot');
-        }
-
-        const graphSnapshot = context.graphSnapshot;
-        const edges = graphSnapshot.map((edge, edgeIndex) =>
-          parseEdge(edge, `context.graphSnapshot[${edgeIndex}]`),
-        );
-        const draft = detectBestAnchoredCycleSettlement(edges, anchorEdge);
-
-        if (!draft) {
-          const result = { status: 'no_cycles' };
-          const { data: completed, error: completeError } = await client.rpc(
-            'complete_graph_cycle_job',
-            {
-              p_job_id: job.id,
-              p_worker_id: workerId,
-              p_result_json: result,
-            },
-          );
-
-          if (completeError) {
-            throw completeError;
-          }
-
-          results.push(completed);
-          continue;
-        }
-
-        const { data: proposal, error: proposalError } = await client.rpc(
-          'propose_cycle_settlement',
-          {
-            p_actor_user_id: job.actorUserId,
-            p_idempotency_key: `graph_cycle_job_${job.id}`,
-            p_graph_snapshot_hash: requireString(
-              context.graphSnapshotHash,
-              'context.graphSnapshotHash',
-            ),
-            p_graph_snapshot: graphSnapshot,
-            p_movements_json: draft.movements,
-            p_participant_user_ids: draft.participantUserIds,
-            p_anchor_user_low_id: job.userLowId,
-            p_anchor_user_high_id: job.userHighId,
-            p_currency_code: job.currencyCode,
-            p_source_graph_cycle_job_id: job.id,
-          },
-        );
-
-        if (proposalError) {
-          throw proposalError;
-        }
-
-        const result = {
-          status: 'proposal_created',
-          proposal,
-          amountMinor: draft.amountMinor,
-          participantUserIds: draft.participantUserIds,
-        };
-        const { data: completed, error: completeError } = await client.rpc(
-          'complete_graph_cycle_job',
-          {
-            p_job_id: job.id,
-            p_worker_id: workerId,
-            p_result_json: result,
-          },
-        );
-
-        if (completeError) {
-          throw completeError;
-        }
-
-        results.push(completed);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const { data: failed, error: failError } = await client.rpc('fail_graph_cycle_job', {
-          p_job_id: job.id,
+      for (let index = 0; index < limit; index += 1) {
+        const { data: claimedData, error: claimError } = await client.rpc('claim_graph_cycle_job', {
           p_worker_id: workerId,
-          p_error: message,
         });
 
-        if (failError) {
-          throw failError;
+        if (claimError) {
+          throw claimError;
         }
 
-        results.push(failed);
-      }
-    }
+        const job = parseClaimedJob(claimedData);
+        if (!job) {
+          break;
+        }
 
-    return {
-      status: 'processed',
-      processedCount: results.length,
-      results,
-    };
-  });
+        try {
+          const { data: contextData, error: contextError } = await client.rpc(
+            'get_graph_cycle_job_context',
+            { p_job_id: job.id },
+          );
+
+          if (contextError) {
+            throw contextError;
+          }
+
+          const payload = asRecord(contextData, 'job context');
+          const context = asRecord(payload.context, 'job context payload');
+          const status = requireString(context.status, 'context.status');
+
+          if (status !== 'ok') {
+            const result = { status: 'no_cycles', reason: status };
+            const { data: completed, error: completeError } = await client.rpc(
+              'complete_graph_cycle_job',
+              {
+                p_job_id: job.id,
+                p_worker_id: workerId,
+                p_result_json: result,
+              },
+            );
+
+            if (completeError) {
+              throw completeError;
+            }
+
+            results.push(completed);
+            continue;
+          }
+
+          const anchorEdge = parseEdge(context.anchorEdge, 'context.anchorEdge');
+          if (!Array.isArray(context.graphSnapshot)) {
+            throw new Error('Invalid context.graphSnapshot');
+          }
+
+          const graphSnapshot = context.graphSnapshot;
+          const edges = graphSnapshot.map((edge, edgeIndex) =>
+            parseEdge(edge, `context.graphSnapshot[${edgeIndex}]`),
+          );
+          const draft = detectBestAnchoredCycleSettlement(edges, anchorEdge);
+
+          if (!draft) {
+            const result = { status: 'no_cycles' };
+            const { data: completed, error: completeError } = await client.rpc(
+              'complete_graph_cycle_job',
+              {
+                p_job_id: job.id,
+                p_worker_id: workerId,
+                p_result_json: result,
+              },
+            );
+
+            if (completeError) {
+              throw completeError;
+            }
+
+            results.push(completed);
+            continue;
+          }
+
+          const { data: proposal, error: proposalError } = await client.rpc(
+            'propose_cycle_settlement',
+            {
+              p_actor_user_id: job.actorUserId,
+              p_idempotency_key: `graph_cycle_job_${job.id}`,
+              p_graph_snapshot_hash: requireString(
+                context.graphSnapshotHash,
+                'context.graphSnapshotHash',
+              ),
+              p_graph_snapshot: graphSnapshot,
+              p_movements_json: draft.movements,
+              p_participant_user_ids: draft.participantUserIds,
+              p_anchor_user_low_id: job.userLowId,
+              p_anchor_user_high_id: job.userHighId,
+              p_currency_code: job.currencyCode,
+              p_source_graph_cycle_job_id: job.id,
+            },
+          );
+
+          if (proposalError) {
+            throw proposalError;
+          }
+
+          const result = {
+            status: 'proposal_created',
+            proposal,
+            amountMinor: draft.amountMinor,
+            participantUserIds: draft.participantUserIds,
+          };
+          const { data: completed, error: completeError } = await client.rpc(
+            'complete_graph_cycle_job',
+            {
+              p_job_id: job.id,
+              p_worker_id: workerId,
+              p_result_json: result,
+            },
+          );
+
+          if (completeError) {
+            throw completeError;
+          }
+
+          results.push(completed);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const { data: failed, error: failError } = await client.rpc('fail_graph_cycle_job', {
+            p_job_id: job.id,
+            p_worker_id: workerId,
+            p_error: message,
+          });
+
+          if (failError) {
+            throw failError;
+          }
+
+          results.push(failed);
+        }
+      }
+
+      return {
+        status: 'processed',
+        processedCount: results.length,
+        results,
+      };
+    },
+    {
+      maxBodyBytes: 16 * 1024,
+      rateLimit: {
+        actorRequired: false,
+        limit: 30,
+        scope: 'process-graph-cycle-jobs',
+        windowSeconds: 60,
+      },
+    },
+  );
 });

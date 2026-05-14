@@ -4,22 +4,16 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  CardTimeline,
-  type CardTimelineStep,
-  type CardTone,
-} from '@/components/card-shell';
+import { CardTimeline } from '@/components/card-shell';
+import { CircleActionFeedbackOverlay } from '@/components/circle-action-feedback-overlay';
 import { EmptyState } from '@/components/empty-state';
-import { HappyCircleFaceIcon, happyCircleDecisionColor } from '@/components/happy-circle-ring';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
-import { LoadingOverlay } from '@/components/loading-overlay';
+import { standardHappyCircleParticipants } from '@/components/happy-circle-ring';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { Snackbar } from '@/components/snackbar';
 import { StatusChip } from '@/components/status-chip';
-import { StateAuraLayer, stateAuraVariantFromTone } from '@/components/state-aura-layer';
-import { SurfaceCard } from '@/components/surface-card';
 import {
   showBlockedActionAlert,
   useActionFeedbackOverlay,
@@ -35,17 +29,27 @@ import {
 import { formatCop } from '@/lib/data';
 import { resolveHappyCirclePresentation } from '@/lib/happy-circle-presentation';
 import {
+  markNotificationItemsViewed,
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
   useAppSnapshot,
   useApproveSettlementMutation,
   useRejectSettlementMutation,
-  type SettlementDetailMovementDto,
-  type SettlementDetailParticipantDto,
-  type SettlementVersionTimelineItemDto,
 } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { settlementDetailScreenStyles as styles } from './settlement-detail-screen-styles';
+import {
+  ApprovalDecisionList,
+  ApprovalPills,
+  CircleMovementDetails,
+  approvalProgressText,
+  settlementStoryHeadline,
+  settlementStoryText,
+} from './settlement-detail-story';
+import { versionStorySteps } from './settlement-version-story';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { useHappyReward } from '@/providers/happy-reward-provider';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -76,393 +80,6 @@ function readNestedStatus(value: unknown, key: string): string | null {
   return readResultStatus((value as Record<string, unknown>)[key]);
 }
 
-function versionTimelineTone(status: string): CardTone {
-  if (status === 'executed') {
-    return 'success';
-  }
-
-  if (status === 'approved') {
-    return 'cycle';
-  }
-
-  if (status === 'pending_approvals') {
-    return 'warning';
-  }
-
-  if (status === 'rejected') {
-    return 'danger';
-  }
-
-  return 'neutral';
-}
-
-function versionStatusLabel(status: string): string {
-  if (status === 'pending_approvals') {
-    return 'En aprobacion';
-  }
-
-  if (status === 'approved') {
-    return 'Lista';
-  }
-
-  if (status === 'executed') {
-    return 'Cerrada';
-  }
-
-  if (status === 'rejected') {
-    return 'No aprobada';
-  }
-
-  if (status === 'stale') {
-    return 'Reemplazada';
-  }
-
-  if (status === 'expired') {
-    return 'Expirada';
-  }
-
-  return status;
-}
-
-function versionNumberLabel(item: SettlementVersionTimelineItemDto, index: number): string {
-  const versionNumber = item.displayVersionNumber ?? item.versionNumber ?? index + 1;
-
-  return `Version ${versionNumber}`;
-}
-
-function versionDateLabel(timestamp: string): string | null {
-  const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat('es-CO', {
-    day: 'numeric',
-    month: 'short',
-  }).format(date);
-}
-
-function versionStoryTitle(item: SettlementVersionTimelineItemDto, index: number): string {
-  if (item.isCurrent) {
-    return index === 0 ? 'Calculo actual' : 'Nuevo calculo actual';
-  }
-
-  if (item.status === 'executed') {
-    return 'Circle cerrado';
-  }
-
-  if (item.status === 'rejected') {
-    return 'No se aprobo';
-  }
-
-  if (item.status === 'stale' || item.replacedByProposalId) {
-    return index === 0 ? 'Primer calculo' : 'Calculo anterior';
-  }
-
-  return index === 0 ? 'Primer calculo' : 'Nuevo calculo';
-}
-
-function versionStoryDetail(item: SettlementVersionTimelineItemDto): string | null {
-  if (item.status === 'pending_approvals') {
-    return 'Esperando aprobaciones';
-  }
-
-  if (item.status === 'approved') {
-    return 'Listo para cerrar';
-  }
-
-  if (item.status === 'executed') {
-    return 'Actualizo el saldo';
-  }
-
-  if (item.status === 'rejected') {
-    return 'No cambio el saldo';
-  }
-
-  if (item.status === 'stale') {
-    return 'Los saldos cambiaron';
-  }
-
-  if (item.status === 'expired') {
-    return 'Expiro antes de cerrarse';
-  }
-
-  return null;
-}
-
-function versionStoryMeta(item: SettlementVersionTimelineItemDto, index: number): string {
-  const parts = [
-    versionNumberLabel(item, index),
-    versionDateLabel(item.createdAt),
-    item.isCurrent ? 'Actual' : versionStatusLabel(item.status),
-  ].filter(Boolean);
-
-  return parts.join(' / ');
-}
-
-function versionStorySteps(
-  timeline: readonly SettlementVersionTimelineItemDto[],
-): readonly CardTimelineStep[] {
-  return timeline.map((item, index) => ({
-    amountLabel: formatCop(item.amountMinor),
-    detail: versionStoryDetail(item),
-    id: item.proposalId,
-    meta: versionStoryMeta(item, index),
-    tone: versionTimelineTone(item.status),
-    title: versionStoryTitle(item, index),
-  }));
-}
-
-function personalMovementsForUser(
-  movements: readonly SettlementDetailMovementDto[],
-  currentUserId: string | null,
-): readonly SettlementDetailMovementDto[] {
-  if (!currentUserId) {
-    return [];
-  }
-
-  const incoming = movements.filter((movement) => movement.creditorUserId === currentUserId);
-  const outgoing = movements.filter((movement) => movement.debtorUserId === currentUserId);
-  return [...incoming, ...outgoing];
-}
-
-function participantById(
-  participants: readonly SettlementDetailParticipantDto[],
-  userId: string | null,
-  fallbackLabel: string,
-): SettlementDetailParticipantDto | null {
-  if (!userId) {
-    return null;
-  }
-
-  return (
-    participants.find((participant) => participant.userId === userId) ?? {
-      userId,
-      label: fallbackLabel,
-      decision: 'pending',
-    }
-  );
-}
-
-function approvalDecisionLabel(decision: SettlementDetailParticipantDto['decision']): string {
-  if (decision === 'approved') {
-    return 'aprobado';
-  }
-
-  if (decision === 'rejected') {
-    return 'no aprobado';
-  }
-
-  return 'pendiente';
-}
-
-function ApprovalPills({
-  participants,
-}: {
-  readonly participants: readonly SettlementDetailParticipantDto[];
-}) {
-  if (participants.length === 0) {
-    return null;
-  }
-
-  return (
-    <View style={styles.approvalPillsRow}>
-      {participants.map((participant) => {
-        const color = happyCircleDecisionColor(participant.decision);
-
-        return (
-          <View
-            accessible
-            accessibilityLabel={`${participant.label}: ${approvalDecisionLabel(participant.decision)}`}
-            key={participant.userId}
-            style={[
-              styles.approvalPill,
-              { backgroundColor: color, shadowColor: color },
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
-function MovementEndpoint({
-  active,
-  label,
-  participant,
-  tone,
-}: {
-  readonly active: boolean;
-  readonly label: string;
-  readonly participant: SettlementDetailParticipantDto | null;
-  readonly tone: 'success' | 'warning';
-}) {
-  const toneColor = tone === 'success' ? theme.colors.success : theme.colors.warning;
-
-  return (
-    <View style={styles.movementEndpoint}>
-      <View
-        style={[
-          styles.movementEndpointIcon,
-          { backgroundColor: active ? `${toneColor}12` : theme.colors.surfaceSoft },
-        ]}
-      >
-        {participant ? (
-          <HappyCircleFaceIcon decision={participant.decision} size={30} />
-        ) : (
-          <Ionicons color={theme.colors.textMuted} name="remove-circle-outline" size={22} />
-        )}
-      </View>
-      <AppText numberOfLines={1} style={styles.movementEndpointLabel}>
-        {label}
-      </AppText>
-    </View>
-  );
-}
-
-function MovementFlowBadge({
-  active,
-  amountLabel,
-  direction,
-  label,
-  tone,
-}: {
-  readonly active: boolean;
-  readonly amountLabel: string;
-  readonly direction: 'incoming' | 'outgoing';
-  readonly label: string;
-  readonly tone: 'success' | 'warning';
-}) {
-  const toneColor = tone === 'success' ? theme.colors.success : theme.colors.warning;
-  const color = active ? toneColor : theme.colors.textMuted;
-  const lineColor = active ? `${toneColor}B8` : theme.colors.hairline;
-
-  return (
-    <View style={styles.movementFlowBadge}>
-      <View style={styles.movementConnectorTop}>
-        <AppText numberOfLines={1} style={[styles.movementDetailLabel, { color }]}>
-          {label}
-        </AppText>
-        <AppText
-          adjustsFontSizeToFit
-          minimumFontScale={0.76}
-          numberOfLines={1}
-          style={[styles.movementDetailAmount, { color }]}
-        >
-          {amountLabel}
-        </AppText>
-      </View>
-      <View
-        style={[
-          styles.movementLineRow,
-          direction === 'incoming'
-            ? styles.movementLineRowIncoming
-            : styles.movementLineRowOutgoing,
-        ]}
-      >
-        <View style={[styles.movementLine, { backgroundColor: lineColor }]} />
-        <Ionicons color={lineColor} name="arrow-forward" size={15} />
-        <View style={[styles.movementLine, { backgroundColor: lineColor }]} />
-      </View>
-    </View>
-  );
-}
-
-function MovementSelfNode({
-  participant,
-}: {
-  readonly participant: SettlementDetailParticipantDto | null;
-}) {
-  return (
-    <View style={styles.movementSelfNode}>
-      <View style={[styles.movementSelfIcon, { backgroundColor: `${theme.colors.cycle}12` }]}>
-        {participant ? (
-          <HappyCircleFaceIcon decision={participant.decision} size={34} />
-        ) : (
-          <Ionicons color={theme.colors.cycle} name="person-circle-outline" size={26} />
-        )}
-      </View>
-      <AppText numberOfLines={1} style={styles.movementSelfLabel}>
-        Tu
-      </AppText>
-    </View>
-  );
-}
-
-function participantShortLabel(participant: SettlementDetailParticipantDto | null, fallback: string) {
-  if (!participant) {
-    return fallback;
-  }
-
-  return participant.label.split(/\s+/)[0] ?? participant.label;
-}
-
-function CircleMovementDetails({
-  currentUserId,
-  movements,
-  participants,
-}: {
-  readonly currentUserId: string | null;
-  readonly movements: readonly SettlementDetailMovementDto[];
-  readonly participants: readonly SettlementDetailParticipantDto[];
-}) {
-  const personalMovements = personalMovementsForUser(movements, currentUserId);
-  const incomingMovement =
-    personalMovements.find((movement) => movement.creditorUserId === currentUserId) ?? null;
-  const outgoingMovement =
-    personalMovements.find((movement) => movement.debtorUserId === currentUserId) ?? null;
-  const currentParticipant = participantById(participants, currentUserId, 'Tu');
-  const incomingParticipant = incomingMovement
-    ? participantById(participants, incomingMovement.debtorUserId, incomingMovement.debtorLabel)
-    : null;
-  const outgoingParticipant = outgoingMovement
-    ? participantById(participants, outgoingMovement.creditorUserId, outgoingMovement.creditorLabel)
-    : null;
-
-  return (
-    <View style={styles.movementDetails}>
-      <View style={styles.movementMapRow}>
-        <MovementEndpoint
-          active={incomingMovement !== null}
-          label={participantShortLabel(incomingParticipant, 'Nadie')}
-          participant={incomingParticipant}
-          tone="success"
-        />
-        <MovementFlowBadge
-          active={incomingMovement !== null}
-          amountLabel={incomingMovement ? formatCop(incomingMovement.amountMinor) : 'Sin pago'}
-          direction="incoming"
-          label="Recibes"
-          tone="success"
-        />
-        <View style={styles.movementSelfSpacer} />
-      </View>
-
-      <View style={styles.movementCenterRow}>
-        <MovementSelfNode participant={currentParticipant} />
-      </View>
-
-      <View style={styles.movementMapRow}>
-        <View style={styles.movementSelfSpacer} />
-        <MovementFlowBadge
-          active={outgoingMovement !== null}
-          amountLabel={outgoingMovement ? formatCop(outgoingMovement.amountMinor) : 'Sin pago'}
-          direction="outgoing"
-          label="Pagas"
-          tone="warning"
-        />
-        <MovementEndpoint
-          active={outgoingMovement !== null}
-          label={participantShortLabel(outgoingParticipant, 'Nadie')}
-          participant={outgoingParticipant}
-          tone="warning"
-        />
-      </View>
-    </View>
-  );
-}
-
 export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenProps) {
   const router = useRouter();
   const { top: topInset } = useSafeAreaInsets();
@@ -477,9 +94,19 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
+  const { claimReward, getRewardForSettlement } = useHappyReward();
   const viewedProposalIdRef = useRef<string | null>(null);
+  const viewedNotificationKeyRef = useRef<string | null>(null);
 
   const settlement = snapshotQuery.data?.settlementsById[proposalId] ?? null;
+  const pendingSettlementNotificationItem =
+    snapshotQuery.data?.activitySections
+      .find((section) => section.key === 'pending')
+      ?.items.find(
+        (item) =>
+          item.kind === 'settlement_proposal' &&
+          (item.id === proposalId || item.originSettlementProposalId === proposalId),
+      ) ?? null;
 
   useEffect(() => {
     if (!settlement || viewedProposalIdRef.current === proposalId) {
@@ -493,6 +120,24 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       metadata: { status: settlement?.status ?? 'loading' },
     });
   }, [proposalId, settlement?.status]);
+
+  useEffect(() => {
+    if (
+      !session.userId ||
+      !pendingSettlementNotificationItem ||
+      !notificationItemCanAlert(pendingSettlementNotificationItem)
+    ) {
+      return;
+    }
+
+    const notificationKey = notificationViewKeyForItem(pendingSettlementNotificationItem);
+    if (viewedNotificationKeyRef.current === notificationKey) {
+      return;
+    }
+
+    viewedNotificationKeyRef.current = notificationKey;
+    void markNotificationItemsViewed(session.userId, [pendingSettlementNotificationItem]);
+  }, [pendingSettlementNotificationItem, session.userId]);
 
   async function handleAction(action: 'approve' | 'reject') {
     setBusyAction(action);
@@ -508,8 +153,18 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         if (nextStatus === 'stale') {
           triggerAppWarningHaptic();
           setBanner({
-            message: 'Esta versión fue reemplazada porque los saldos cambiaron.',
+            message: 'Hay un calculo nuevo.',
             tone: 'warning',
+          });
+        } else if (nextStatus === 'executed') {
+          const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
+          await actionFeedback.showResult({
+            message:
+              nextAutoCycleStatus === 'queued'
+                ? 'Tesoro listo y otro Circle en camino'
+                : 'Tesoro listo para reclamar',
+            title: 'Circle completado',
+            variant: 'success',
           });
         } else {
           const nextAutoCycleStatus = readNestedStatus(response, 'nextAutoCycleJob');
@@ -616,23 +271,39 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const myDecision =
     settlement.participantDecisions.find((participant) => participant.userId === session.userId)
       ?.decision ?? null;
+  const circleFeedbackParticipants = standardHappyCircleParticipants(
+    settlement.participantDecisions,
+    session.userId,
+    myDecision ?? 'pending',
+  );
+  const circleFeedbackAmountLabel = formatCop(settlement.personalAmountMinor);
   const canDecide = settlement.status === 'pending_approvals' && myDecision === 'pending';
-  const approvalsPending = settlement.participantDecisions.filter(
-    (participant) => participant.decision === 'pending',
-  ).length;
+  const approvalsPending = settlement.approvalsPending;
   const presentation = resolveHappyCirclePresentation({
     approvalsPending,
     myDecision,
     status: settlement.status,
   });
-  const participantCount = settlement.participantDecisions.length;
-  const approvedCount = settlement.participantDecisions.filter(
-    (participant) => participant.decision === 'approved',
-  ).length;
-  const approvalSummary = `${approvedCount}/${participantCount} aprobadas`;
+  const participantCount = settlement.participantCount;
+  const approvedCount = settlement.approvedCount;
+  const approvalSummary =
+    participantCount > 0 ? `${approvedCount}/${participantCount} aprobaron` : 'Sin aprobaciones';
   const replacementProposalId = settlement.replacedByProposalId;
   const versionSteps = versionStorySteps(settlement.timeline);
   const cycleColor = activeTheme.colors.cycle;
+  const cycleForegroundColor = activeTheme.colors.onPrimary;
+  const storyText = settlementStoryText(settlement.status, approvalsPending);
+  const storyHeadline = settlementStoryHeadline({
+    approvalsPending,
+    canDecide,
+    status: settlement.status,
+  });
+  const approvalText = approvalProgressText({
+    approvalsPending,
+    participantCount,
+    status: settlement.status,
+  });
+  const claimableReward = getRewardForSettlement(proposalId);
 
   return (
     <ScreenShell
@@ -648,120 +319,200 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
-      <SurfaceCard
-        padding="none"
-        style={styles.detailCard}
-        underlay={
-          <StateAuraLayer size="hero" variant={stateAuraVariantFromTone(presentation.tone)} />
-        }
-        variant="elevated"
-      >
-        <View style={styles.detailCardBody}>
-          <View style={styles.detailCardHeader}>
-            <View style={styles.detailCardTitleBlock}>
-              <AppText style={styles.detailCardTitle}>Happy Circle</AppText>
-              <AppText style={styles.detailCardMeta}>{approvalSummary}</AppText>
-            </View>
-            <View style={styles.detailCardHeaderActions}>
-              <StatusChip compact label={presentation.label} tone={presentation.tone} />
-            </View>
+      <View style={styles.detailStory}>
+        <View style={styles.statusStory}>
+          <View style={styles.statusStoryTop}>
+            <AppText style={[styles.statusEyebrow, { color: cycleColor }]}>Happy Circle</AppText>
+            <StatusChip compact label={presentation.label} tone={presentation.tone} />
           </View>
+          <AppText style={[styles.statusHeadline, { color: activeTheme.colors.text }]}>
+            {storyHeadline}
+          </AppText>
+          <AppText style={[styles.statusBody, { color: activeTheme.colors.textMuted }]}>
+            {storyText}
+          </AppText>
+        </View>
 
+        {claimableReward ? (
+          <View
+            style={[
+              styles.rewardClaimPanel,
+              {
+                backgroundColor: activeTheme.colors.treasureSoft,
+                borderColor: activeTheme.colors.treasure,
+              },
+            ]}
+          >
+            <View style={styles.rewardClaimCopy}>
+              <View style={styles.rewardClaimHeader}>
+                <Ionicons color={activeTheme.colors.treasure} name="gift-outline" size={18} />
+                <AppText
+                  style={[styles.rewardClaimEyebrow, { color: activeTheme.colors.treasure }]}
+                >
+                  Tesoro listo
+                </AppText>
+              </View>
+              <AppText style={[styles.rewardClaimTitle, { color: activeTheme.colors.text }]}>
+                Reclama los Happy puntos de este Circle
+              </AppText>
+              <AppText style={[styles.rewardClaimBody, { color: activeTheme.colors.textMuted }]}>
+                La animacion queda ligada a este detalle, para que sepas exactamente de donde viene.
+              </AppText>
+            </View>
+            <PrimaryAction
+              color={activeTheme.colors.treasure}
+              icon="happy"
+              label={`Reclamar +${claimableReward.scoreDelta}`}
+              onPress={() => {
+                triggerAppActionHaptic();
+                void claimReward(claimableReward);
+              }}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.storySection}>
+          <View style={styles.storySectionHeader}>
+            <AppText style={[styles.storyEyebrow, { color: cycleColor }]}>Tu impacto</AppText>
+            <AppText style={[styles.storySectionTitle, { color: activeTheme.colors.text }]}>
+              Lo que cambia para ti
+            </AppText>
+          </View>
           <CircleMovementDetails
             currentUserId={session.userId}
             movements={settlement.movementDetails}
+            onOpenMovement={(counterpartyUserId) => {
+              triggerAppSelectionHaptic();
+              pushRoute(
+                router,
+                `/person/${encodeURIComponent(counterpartyUserId)}?panel=history&focus=${encodeURIComponent(
+                  settlement.id,
+                )}`,
+              );
+            }}
             participants={settlement.participantDecisions}
+            status={settlement.status}
           />
+        </View>
 
+        <View style={styles.storySection}>
+          <View style={styles.storySectionHeader}>
+            <AppText style={[styles.storyEyebrow, { color: cycleColor }]}>Aprobaciones</AppText>
+            <AppText style={[styles.storySectionTitle, { color: activeTheme.colors.text }]}>
+              {approvalSummary}
+            </AppText>
+            {approvalText ? (
+              <AppText style={[styles.storySectionBody, { color: activeTheme.colors.textMuted }]}>
+                {approvalText}
+              </AppText>
+            ) : null}
+          </View>
           <View style={styles.approvalPillsBlock}>
             <ApprovalPills participants={settlement.participantDecisions} />
-            <AppText numberOfLines={1} style={styles.detailCardState}>
-              {presentation.summary}
-            </AppText>
+            <ApprovalDecisionList
+              currentUserId={session.userId}
+              participants={settlement.participantDecisions}
+            />
           </View>
         </View>
 
         {canDecide ? (
-          <View style={styles.cardActions}>
-            <Pressable
-              accessibilityLabel="Rechazar Happy Circle"
-              accessibilityRole="button"
-              disabled={busyAction !== null}
-              onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
-              onPress={() => {
-                Alert.alert(
-                  'Seguro quieres rechazar este Happy Circle?',
-                  'Si rechazas, este Circle se cerrara para todos. No se aplicara ningun movimiento.',
-                  [
+          <View style={styles.actionStory}>
+            <AppText style={[styles.actionHint, { color: activeTheme.colors.textMuted }]}>
+              Tu decision define si este calculo se aplica o queda cancelado para todos.
+            </AppText>
+            <View style={styles.cardActions}>
+              <Pressable
+                accessibilityLabel="Rechazar Happy Circle"
+                accessibilityRole="button"
+                disabled={busyAction !== null}
+                onPressIn={busyAction === null ? triggerAppWarningHaptic : undefined}
+                onPress={() => {
+                  Alert.alert('Rechazar Circle?', 'No se aplicaran estos movimientos.', [
                     {
                       text: 'Volver',
                       style: 'cancel',
                     },
                     {
-                      text: 'Rechazar Circle',
+                      text: 'Rechazar',
                       style: 'destructive',
                       onPress: () => void handleAction('reject'),
                     },
-                  ],
-                );
-              }}
-              style={({ pressed }) => [
-                styles.circleActionButton,
-                {
-                  backgroundColor: `${activeTheme.colors.danger}12`,
-                  borderColor: `${activeTheme.colors.danger}2E`,
-                  borderWidth: 1,
-                },
-                pressed ? styles.circleActionButtonPressed : null,
-                busyAction !== null ? styles.circleActionButtonDisabled : null,
-              ]}
-            >
-              <Ionicons
-                color={activeTheme.colors.danger}
-                name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
-                size={20}
-              />
-              <AppText style={[styles.circleActionLabel, { color: activeTheme.colors.danger }]}>
-                {busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
-              </AppText>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Aprobar Happy Circle"
-              accessibilityRole="button"
-              disabled={busyAction !== null}
-              onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
-              onPress={() => void handleAction('approve')}
-              style={({ pressed }) => [
-                styles.circleActionButton,
-                {
-                  backgroundColor: cycleColor,
-                  borderColor: cycleColor,
-                  ...activeTheme.shadow.card,
-                },
-                pressed ? styles.circleActionButtonPressed : null,
-                busyAction !== null ? styles.circleActionButtonDisabled : null,
-              ]}
-            >
-              <Ionicons
-                color={activeTheme.colors.white}
-                name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
-                size={20}
-              />
-              <AppText style={[styles.circleActionLabel, { color: activeTheme.colors.white }]}>
-                {busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
-              </AppText>
-            </Pressable>
+                  ]);
+                }}
+                style={({ pressed }) => [
+                  styles.circleActionButton,
+                  {
+                    backgroundColor: `${activeTheme.colors.danger}12`,
+                    borderColor: `${activeTheme.colors.danger}2E`,
+                    borderWidth: 1,
+                  },
+                  pressed ? styles.circleActionButtonPressed : null,
+                  busyAction !== null ? styles.circleActionButtonDisabled : null,
+                ]}
+              >
+                <Ionicons
+                  color={activeTheme.colors.danger}
+                  name={busyAction === 'reject' ? 'hourglass-outline' : 'close'}
+                  size={20}
+                />
+                <AppText style={[styles.circleActionLabel, { color: activeTheme.colors.danger }]}>
+                  {busyAction === 'reject' ? 'Rechazando...' : 'Rechazar'}
+                </AppText>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Aprobar Happy Circle"
+                accessibilityRole="button"
+                disabled={busyAction !== null}
+                onPressIn={busyAction === null ? triggerAppActionHaptic : undefined}
+                onPress={() => void handleAction('approve')}
+                style={({ pressed }) => [
+                  styles.circleActionButton,
+                  {
+                    backgroundColor: cycleColor,
+                    borderColor: cycleColor,
+                    ...activeTheme.shadow.card,
+                  },
+                  pressed ? styles.circleActionButtonPressed : null,
+                  busyAction !== null ? styles.circleActionButtonDisabled : null,
+                ]}
+              >
+                <Ionicons
+                  color={cycleForegroundColor}
+                  name={busyAction === 'approve' ? 'hourglass-outline' : 'checkmark'}
+                  size={20}
+                />
+                <AppText style={[styles.circleActionLabel, { color: cycleForegroundColor }]}>
+                  {busyAction === 'approve' ? 'Aprobando...' : 'Aprobar'}
+                </AppText>
+              </Pressable>
+            </View>
           </View>
         ) : null}
-      </SurfaceCard>
+      </View>
 
       <View style={styles.versionsSection}>
         <View style={styles.versionsHeader}>
           <View style={styles.versionsTitleBlock}>
-            <AppText style={styles.versionsTitle}>Historia del Circle</AppText>
+            <AppText style={[styles.versionsTitle, { color: activeTheme.colors.text }]}>
+              Como llego aqui
+            </AppText>
+            <AppText style={[styles.versionsSubtitle, { color: activeTheme.colors.textMuted }]}>
+              Versiones y resultado de cada calculo.
+            </AppText>
           </View>
-          <View style={styles.versionsCountBadge}>
-            <AppText style={styles.versionsCountText}>{settlement.timeline.length}</AppText>
+          <View
+            style={[
+              styles.versionsCountBadge,
+              {
+                backgroundColor: activeTheme.colors.surfaceSoft,
+                borderColor: activeTheme.colors.hairline,
+              },
+            ]}
+          >
+            <AppText style={[styles.versionsCountText, { color: activeTheme.colors.text }]}>
+              {settlement.timeline.length}
+            </AppText>
           </View>
         </View>
         <View style={styles.versionStoryPanel}>
@@ -782,7 +533,15 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         ) : null}
       </View>
 
-      <LoadingOverlay {...actionFeedback.overlayProps} />
+      <CircleActionFeedbackOverlay
+        action="approve"
+        amountLabel={circleFeedbackAmountLabel}
+        message={actionFeedback.overlayProps.message}
+        participants={circleFeedbackParticipants}
+        title={actionFeedback.overlayProps.title}
+        variant={actionFeedback.overlayProps.variant}
+        visible={actionFeedback.overlayProps.visible && busyAction === 'approve'}
+      />
     </ScreenShell>
   );
 }

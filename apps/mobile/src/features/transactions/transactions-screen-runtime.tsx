@@ -1,11 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
-import type { TransactionCategory } from '@happy-circles/shared';
 
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
@@ -17,8 +14,6 @@ import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
   buildHistoryCases,
   friendlyHistoryStepLabel,
-  type HistoryCase,
-  type HistoryCaseItem,
   historyAmountIsVoided,
   historyCardTitle,
   historyCaseAmountLabel,
@@ -35,11 +30,12 @@ import {
   historyTimelineStepMetaLabel,
 } from '@/lib/history-cases';
 import {
-  markNotificationItemsViewed,
+  notificationItemCanAlert,
   notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
   useAppSnapshot,
 } from '@/lib/live-data';
-import { theme, type AppTheme } from '@/lib/theme';
+import { theme } from '@/lib/theme';
 import { transactionsScreenStyles as styles } from './transactions-screen-styles';
 import {
   normalizeTransactionCategory,
@@ -55,247 +51,24 @@ import {
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   isConsolidatedTransactionItem,
-  isNoBalanceTransactionStatus,
   isPendingTransactionItem,
-  transactionVisualCategory,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { PendingTransactionCard } from './transactions-pending-card';
 import { useAppTheme } from '@/providers/theme-provider';
-
-const PRIMARY_FILTER_OPTIONS: readonly {
-  readonly label: string;
-  readonly value: Extract<
-    TransactionRootFilter,
-    'all' | 'owed_to_me' | 'i_owe' | 'pending' | 'rejected'
-  >;
-}[] = [
-  { label: 'Todo', value: 'all' },
-  { label: 'Pendientes', value: 'pending' },
-  { label: 'Rechazadas', value: 'rejected' },
-  { label: 'Te deben', value: 'owed_to_me' },
-  { label: 'Debes', value: 'i_owe' },
-];
-
-function isBalanceRootItem(item: ActivityItemDto): boolean {
-  return (
-    !isNoBalanceTransactionStatus(item.status) &&
-    (item.tone === 'positive' || item.tone === 'negative')
-  );
-}
-
-function matchesPendingFilter(item: ActivityItemDto, filter: TransactionRootFilter): boolean {
-  if (filter === 'all' || filter === 'pending' || filter === 'projection') {
-    return true;
-  }
-
-  if (filter === 'pending_incoming') {
-    return item.tone === 'positive';
-  }
-
-  if (filter === 'pending_outgoing') {
-    return item.tone === 'negative';
-  }
-
-  return false;
-}
-
-function matchesHistoryFilter(item: ActivityItemDto, filter: TransactionRootFilter): boolean {
-  if (filter === 'all') {
-    return true;
-  }
-
-  if (filter === 'rejected') {
-    return item.status === 'rejected';
-  }
-
-  if (filter === 'current_balance') {
-    return isBalanceRootItem(item);
-  }
-
-  if (filter === 'owed_to_me') {
-    return isBalanceRootItem(item) && item.tone === 'positive';
-  }
-
-  if (filter === 'i_owe') {
-    return isBalanceRootItem(item) && item.tone === 'negative';
-  }
-
-  return false;
-}
-
-function matchesCategoryFilter(
-  item: ActivityItemDto,
-  category: TransactionCategory | null,
-): boolean {
-  return !category || transactionVisualCategory(item) === category;
-}
-
-function emptyFilterTitle(filter: TransactionRootFilter): string {
-  if (filter === 'all') {
-    return 'Sin transacciones';
-  }
-
-  if (filter === 'pending' || filter === 'pending_incoming' || filter === 'pending_outgoing') {
-    return 'Sin pendientes';
-  }
-
-  if (filter === 'rejected') {
-    return 'Sin rechazadas';
-  }
-
-  if (filter === 'projection') {
-    return 'Sin raíz de proyección';
-  }
-
-  return 'Sin movimientos';
-}
-
-function emptyFilterDescription(filter: TransactionRootFilter): string {
-  if (filter === 'all') {
-    return 'Cuando registres movimientos o se creen propuestas, aparecerán aquí.';
-  }
-
-  if (filter === 'pending_incoming') {
-    return 'No hay pendientes que aumenten tu balance proyectado.';
-  }
-
-  if (filter === 'pending_outgoing') {
-    return 'No hay pendientes que reduzcan tu balance proyectado.';
-  }
-
-  if (filter === 'pending' || filter === 'projection') {
-    return 'No hay movimientos pendientes para esta raiz.';
-  }
-
-  if (filter === 'rejected') {
-    return 'No hay movimientos rechazados en esta vista.';
-  }
-
-  if (filter === 'owed_to_me') {
-    return 'No hay movimientos donde te deban en esta vista.';
-  }
-
-  if (filter === 'i_owe') {
-    return 'No hay movimientos donde debas en esta vista.';
-  }
-
-  return 'No hay movimientos que expliquen esta raiz del balance.';
-}
-
-function initialsBackgroundColor(
-  person: Pick<PersonCardDto, 'userId' | 'displayName'>,
-  activeTheme: AppTheme = theme,
-): string {
-  const source = `${person.userId}:${person.displayName}`;
-  let hash = 0;
-
-  for (let index = 0; index < source.length; index += 1) {
-    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
-  }
-
-  return (
-    activeTheme.palette.avatar[hash % activeTheme.palette.avatar.length] ??
-    activeTheme.colors.primary
-  );
-}
-
-function personIdFromHref(href: string | undefined): string | null {
-  const match = href?.match(/^\/person\/([^/?#]+)/);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
-function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
-  const normalizedKind: HistoryCaseItem['kind'] =
-    item.kind === 'settlement'
-      ? 'settlement'
-      : item.kind === 'payment' || item.kind === 'manual_payment'
-        ? 'payment'
-        : item.kind === 'system'
-          ? 'system'
-          : 'request';
-
-  return {
-    amountMinor: item.amountMinor,
-    category: item.category,
-    counterpartyLabel: item.counterpartyLabel,
-    detail: item.detail,
-    flowLabel: item.flowLabel,
-    happenedAt: item.happenedAt,
-    happenedAtLabel: item.happenedAtLabel,
-    happyCircleCaseId: item.happyCircleCaseId,
-    href: item.href,
-    id: item.id,
-    kind: normalizedKind,
-    originRequestId: item.originRequestId,
-    originSettlementProposalId: item.originSettlementProposalId,
-    replacedByProposalId: item.replacedByProposalId,
-    replacesProposalId: item.replacesProposalId,
-    staleReason: item.staleReason,
-    status: item.status,
-    subtitle: item.subtitle,
-    title: item.title,
-    tone: item.tone,
-  };
-}
-
-function transactionPersonForHistoryCase(
-  people: readonly PersonCardDto[],
-  itemCase: Pick<HistoryCase<HistoryCaseItem>, 'latest'>,
-): PersonCardDto | undefined {
-  const hrefPersonId = personIdFromHref(itemCase.latest.href);
-  if (hrefPersonId) {
-    const matchedPerson = people.find((person) => person.userId === hrefPersonId);
-    if (matchedPerson) {
-      return matchedPerson;
-    }
-  }
-
-  return people.find((person) => person.displayName === itemCase.latest.counterpartyLabel);
-}
-
-function transactionHistoryCaseHref(
-  people: readonly PersonCardDto[],
-  itemCase: HistoryCase<HistoryCaseItem>,
-): Href {
-  if (itemCase.isCycleSnippet) {
-    const proposalId =
-      itemCase.latest.originSettlementProposalId ??
-      itemCase.steps.find((step) => step.originSettlementProposalId)?.originSettlementProposalId;
-
-    if (proposalId) {
-      return `/settlements/${proposalId}` as Href;
-    }
-
-    return itemCase.latest.href?.startsWith('/settlements/')
-      ? (itemCase.latest.href as Href)
-      : ('/circles' as Href);
-  }
-
-  const matchedPerson = transactionPersonForHistoryCase(people, itemCase);
-  const personId = matchedPerson?.userId ?? personIdFromHref(itemCase.latest.href);
-  if (!personId) {
-    return itemCase.latest.href?.startsWith('/person/')
-      ? (itemCase.latest.href as Href)
-      : ('/transactions' as Href);
-  }
-
-  const focusId =
-    itemCase.latest.originSettlementProposalId ??
-    itemCase.latest.originRequestId ??
-    itemCase.latest.id;
-
-  return `/person/${personId}?panel=history&focus=${encodeURIComponent(focusId)}` as Href;
-}
+import {
+  PRIMARY_FILTER_OPTIONS,
+  activityHistoryCaseItem,
+  emptyFilterDescription,
+  emptyFilterTitle,
+  initialsBackgroundColor,
+  matchesCategoryFilter,
+  matchesHistoryFilter,
+  matchesPendingFilter,
+  transactionHistoryCaseHref,
+  transactionPersonForHistoryCase,
+} from './transactions-screen-model';
 
 function FilterPill({
   icon,
@@ -318,9 +91,7 @@ function FilterPill({
       style={({ pressed }) => [
         styles.filterPill,
         {
-          backgroundColor: selected
-            ? activeTheme.colors.primaryGhost
-            : activeTheme.colors.surface,
+          backgroundColor: selected ? activeTheme.colors.primaryGhost : activeTheme.colors.surface,
           borderColor: selected ? activeTheme.colors.primaryGhost : activeTheme.colors.border,
         },
         pressed ? styles.filterPillPressed : null,
@@ -328,7 +99,9 @@ function FilterPill({
     >
       {icon ? (
         <Ionicons
-          color={selected ? (iconColor ?? activeTheme.colors.primary) : activeTheme.colors.textMuted}
+          color={
+            selected ? (iconColor ?? activeTheme.colors.primary) : activeTheme.colors.textMuted
+          }
           name={icon}
           size={14}
         />
@@ -363,29 +136,18 @@ export function TransactionsScreen() {
   const categoryFilter = rawCategory ? normalizeTransactionCategory(rawCategory) : null;
   const circleFilterSelected = categoryFilter === 'cycle';
   const [activeFilter, setActiveFilter] = useState<TransactionRootFilter>(initialFilter);
-  const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
   const activePrimaryFilter = primaryTransactionFilter(activeFilter);
   const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
-  const notificationViewedKeys = useMemo(() => {
-    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
-    for (const key of optimisticNotificationViewedKeys) {
-      keys.add(key);
-    }
-
-    return keys;
-  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
-  const unviewedPendingTransactionItems = useMemo(
+  const notificationViewedKeys = useMemo(
     () =>
-      pendingTransactionItems.filter(
-        (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
       ),
-    [notificationViewedKeys, pendingTransactionItems],
+    [session.userId, snapshotQuery.data?.notificationViewedKeys],
   );
   const visiblePendingTransactionItems = useMemo(
     () =>
@@ -433,42 +195,8 @@ export function TransactionsScreen() {
     visiblePendingTransactionItems.length > 0 || historyCases.length > 0;
 
   useEffect(() => {
-    setOptimisticNotificationViewedKeys(new Set());
-  }, [session.userId]);
-
-  useEffect(() => {
     setActiveFilter(initialFilter);
   }, [initialFilter]);
-
-  useEffect(() => {
-    if (!session.userId || unviewedPendingTransactionItems.length === 0) {
-      return;
-    }
-
-    const nextKeys = unviewedPendingTransactionItems.map((item) =>
-      notificationViewKeyForItem(item),
-    );
-    const nextKeySet = new Set(nextKeys);
-    setOptimisticNotificationViewedKeys((current) => {
-      const merged = new Set(current);
-      for (const key of nextKeys) {
-        merged.add(key);
-      }
-
-      return merged;
-    });
-
-    void markNotificationItemsViewed(session.userId, unviewedPendingTransactionItems).catch(() => {
-      setOptimisticNotificationViewedKeys((current) => {
-        const next = new Set(current);
-        for (const key of nextKeySet) {
-          next.delete(key);
-        }
-
-        return next;
-      });
-    });
-  }, [session.userId, unviewedPendingTransactionItems]);
 
   function selectPrimaryFilter(filter: (typeof PRIMARY_FILTER_OPTIONS)[number]['value']) {
     triggerAppSelectionHaptic();
@@ -598,7 +326,10 @@ export function TransactionsScreen() {
                 item={item}
                 key={item.id}
                 people={people}
-                unread={!notificationViewedKeys.has(notificationViewKeyForItem(item))}
+                unread={
+                  notificationItemCanAlert(item) &&
+                  !notificationViewedKeys.has(notificationViewKeyForItem(item))
+                }
               />
             ))}
           </View>
@@ -611,7 +342,9 @@ export function TransactionsScreen() {
             {historyCases.map((itemCase) => {
               const latest = itemCase.latest;
               const caseAmountLabel = historyCaseAmountLabel(latest);
-              const caseTone = historyImpactTone(latest) as HistoryCaseTone;
+              const caseTone = (
+                itemCase.isCycleSnippet ? 'cycle' : historyImpactTone(latest)
+              ) as HistoryCaseTone;
               const caseTitle = friendlyHistoryStepLabel(latest);
               const caseDescription = historyCardTitle(itemCase);
               const caseEyebrow = historyCaseEyebrow(itemCase);

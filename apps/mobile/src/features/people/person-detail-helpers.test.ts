@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
 import {
   buildFinancialRequestPendingContent,
   buildFocusCandidates,
+  buildPersonCorrectionHref,
   buildPersonRegisterHref,
   matchesFocusedTransaction,
   pendingSnippetTone,
@@ -88,6 +89,14 @@ describe('person detail helpers', () => {
       params: {
         direction: 'owes_me',
         personId: 'user-1',
+      },
+    });
+    expect(buildPersonCorrectionHref('user-1', 'request-1')).toEqual({
+      pathname: '/register',
+      params: {
+        mode: 'correction',
+        personId: 'user-1',
+        requestId: 'request-1',
       },
     });
   });

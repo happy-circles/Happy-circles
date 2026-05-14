@@ -1,7 +1,10 @@
 import type { ActivityItemDto } from '@happy-circles/application';
 
 import { buildHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
-import { notificationViewKeyForItem } from '@/lib/live-data/builders/notifications';
+import {
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
+} from '@/lib/live-data/builders/notifications';
 import {
   isConsolidatedTransactionItem,
   isPendingTransactionItem,
@@ -50,7 +53,9 @@ export function buildDashboardTransactionPreview({
       highlightPending: true,
       isPending: true,
       item,
-      unread: !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      unread:
+        notificationItemCanAlert(item) &&
+        !notificationViewedKeys.has(notificationViewKeyForItem(item)),
     })),
     ...recentHistoryItems.map((item) => ({
       highlightPending: false,

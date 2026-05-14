@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
+import type { TransactionTargetPanel } from './dashboard-helpers';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
 import { AppText } from '@/components/app-text';
 
@@ -58,7 +59,7 @@ export function DashboardTransactionsSection({
     readonly item: ActivityItemDto;
     readonly unread: boolean;
   }[];
-  readonly onOpenItem: (item: ActivityItemDto) => void;
+  readonly onOpenItem: (item: ActivityItemDto, panel: TransactionTargetPanel) => void;
   readonly people: readonly PersonCardDto[];
 }) {
   if (items.length === 0) {
@@ -104,7 +105,7 @@ export function DashboardTransactionsSection({
                   isPending={isPending}
                   item={item}
                   key={item.id}
-                  onPress={() => onOpenItem(item)}
+                  onPress={() => onOpenItem(item, isPending ? 'pending' : 'history')}
                   people={people}
                   unread={unread}
                 />
@@ -124,7 +125,7 @@ export function DashboardTransactionsSection({
                   isPending={isPending}
                   item={item}
                   key={item.id}
-                  onPress={() => onOpenItem(item)}
+                  onPress={() => onOpenItem(item, isPending ? 'pending' : 'history')}
                   people={people}
                   unread={unread}
                 />

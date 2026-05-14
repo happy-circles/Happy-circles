@@ -22,7 +22,7 @@ import {
   transactionPersonForItem,
   transactionPersonHref,
 } from '@/features/home/dashboard-preview-cards';
-import { balanceFocusHref } from '@/features/home/dashboard-helpers';
+import { balanceFocusHref, type TransactionTargetPanel } from '@/features/home/dashboard-helpers';
 import {
   HOME_CHROME_EXPANDED_HEIGHT,
   HomeCollapsibleChrome,
@@ -32,7 +32,12 @@ import {
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { pushRoute } from '@/lib/navigation';
-import { notificationViewKeyForItem, useAppSnapshot } from '@/lib/live-data';
+import {
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
+  useAppSnapshot,
+} from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
@@ -78,13 +83,22 @@ export function DashboardScreen() {
     (section) => section.key === 'history',
   );
   const notificationViewedKeys = useMemo(() => {
-    const keys = new Set(snapshotQuery.data?.notificationViewedKeys ?? []);
+    const keys = new Set(
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    );
     for (const key of optimisticNotificationViewedKeys) {
       keys.add(key);
     }
 
     return keys;
-  }, [optimisticNotificationViewedKeys, snapshotQuery.data?.notificationViewedKeys]);
+  }, [
+    optimisticNotificationViewedKeys,
+    session.userId,
+    snapshotQuery.data?.notificationViewedKeys,
+  ]);
   const newCircleProposalIds = useMemo(() => {
     const ids = new Set<string>();
 
@@ -92,6 +106,7 @@ export function DashboardScreen() {
       if (
         item.kind === 'settlement_proposal' &&
         item.category === 'cycle' &&
+        notificationItemCanAlert(item) &&
         !notificationViewedKeys.has(notificationViewKeyForItem(item))
       ) {
         ids.add(item.originSettlementProposalId ?? item.id);
@@ -133,7 +148,9 @@ export function DashboardScreen() {
   ).length;
   const pendingNotificationCount =
     pendingSection?.items.filter(
-      (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+      (item) =>
+        notificationItemCanAlert(item) &&
+        !notificationViewedKeys.has(notificationViewKeyForItem(item)),
     ).length ??
     snapshotQuery.data?.notificationUnreadCount ??
     0;
@@ -175,9 +192,9 @@ export function DashboardScreen() {
     setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
 
-  function openTransactionPreviewItem(item: ActivityItemDto) {
+  function openTransactionPreviewItem(item: ActivityItemDto, panel: TransactionTargetPanel) {
     const person = transactionPersonForItem(dashboard?.activePeople ?? [], item);
-    pushRoute(router, transactionPersonHref(person, item, 'history'));
+    pushRoute(router, transactionPersonHref(person, item, panel));
   }
 
   function openHappyFaces() {

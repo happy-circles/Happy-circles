@@ -61,8 +61,6 @@ export interface RegistrationInput extends EmailPasswordCredentials {
 
 export interface AccountRegistrationPreviewResult {
   readonly deliveryStatus?: string | null;
-  readonly emailAlreadyRegistered?: boolean;
-  readonly phoneAlreadyRegistered?: boolean;
   readonly reason?: string | null;
   readonly status?: string | null;
 }

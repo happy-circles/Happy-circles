@@ -70,16 +70,16 @@ function participantDisplayLabel(
   participant: ActiveSettlementPreviewDto['participantDecisions'][number],
   currentUserId: string | null | undefined,
 ): string {
-  return currentUserId && participant.userId === currentUserId ? 'Tú' : firstName(participant.label);
+  return currentUserId && participant.userId === currentUserId
+    ? 'Tú'
+    : firstName(participant.label);
 }
 
-export function buildCirclePersonalMetrics(
-  input: {
-    readonly currentUserId: string | null | undefined;
-    readonly historyItems: readonly CircleLedgerItem[];
-    readonly settlementsById: Readonly<Record<string, CircleMetricSettlement>>;
-  },
-): CirclePersonalMetrics {
+export function buildCirclePersonalMetrics(input: {
+  readonly currentUserId: string | null | undefined;
+  readonly historyItems: readonly CircleLedgerItem[];
+  readonly settlementsById: Readonly<Record<string, CircleMetricSettlement>>;
+}): CirclePersonalMetrics {
   if (!input.currentUserId) {
     return {
       closedCircleCount: 0,
@@ -150,15 +150,11 @@ function settlementForLedgerItems(
 }
 
 function personalLedgerAmountMinor(ledgerItems: readonly CircleLedgerItem[]): number {
-  return ledgerItems.reduce(
-    (maxAmount, item) => Math.max(maxAmount, item.amountMinor ?? 0),
-    0,
-  );
+  return ledgerItems.reduce((maxAmount, item) => Math.max(maxAmount, item.amountMinor ?? 0), 0);
 }
 
 export function circleApprovedCount(proposal: ActiveSettlementPreviewDto): number {
-  return proposal.participantDecisions.filter((participant) => participant.decision === 'approved')
-    .length;
+  return Math.max(0, proposal.participantCount - proposal.approvalsPending);
 }
 
 export function circleMovementReductionLabel(proposal: ActiveSettlementPreviewDto): string {
@@ -220,16 +216,18 @@ export function circleParticipantSummary(
   const labels = proposal.participantDecisions.map((participant) =>
     participantDisplayLabel(participant, currentUserId),
   );
-
-  if (labels.length === 0) {
+  const hiddenCount = Math.max(0, proposal.participantCount - labels.length);
+  const displayLabels =
+    hiddenCount > 0 ? [...labels, `${hiddenCount} privado${hiddenCount === 1 ? '' : 's'}`] : labels;
+  if (displayLabels.length === 0) {
     return proposal.title || 'Happy Circle';
   }
 
-  if (labels.length <= 3) {
-    return labels.join(' · ');
+  if (displayLabels.length <= 3) {
+    return displayLabels.join(' · ');
   }
 
-  return `${labels.slice(0, 3).join(' · ')} · +${labels.length - 3}`;
+  return `${displayLabels.slice(0, 3).join(' · ')} · +${displayLabels.length - 3}`;
 }
 
 export function buildCircleProposalViewModels({

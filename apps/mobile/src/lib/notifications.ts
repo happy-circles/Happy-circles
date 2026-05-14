@@ -7,6 +7,9 @@ let configured = false;
 
 type NotificationsModule = typeof ExpoNotifications;
 
+const PENDING_NOTIFICATION_CHANNEL_ID = 'happy-pending';
+const PENDING_NOTIFICATION_VIBRATION_PATTERN = [0, 250, 160, 250];
+
 interface NotificationSupport {
   readonly supported: boolean;
   readonly reason?: string;
@@ -85,10 +88,25 @@ export async function configureNotifications(): Promise<void> {
     return;
   }
 
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(PENDING_NOTIFICATION_CHANNEL_ID, {
+      enableLights: true,
+      enableVibrate: true,
+      importance: Notifications.AndroidImportance.MAX,
+      lightColor: '#f5a400',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      name: 'Happy Circles pendientes',
+      showBadge: true,
+      sound: 'default',
+      vibrationPattern: PENDING_NOTIFICATION_VIBRATION_PATTERN,
+    });
+  }
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldPlaySound: false,
-      shouldSetBadge: false,
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,
     }),
@@ -143,11 +161,18 @@ export async function scheduleDailyPendingReminder(): Promise<void> {
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Tienes pendientes en Happy Circles',
+      badge: 1,
       body: 'Revisa solicitudes y saldos que esperan tu accion.',
+      color: '#f5a400',
       data: { href: '/activity' },
+      interruptionLevel: 'active',
+      priority: 'max',
+      sound: 'default',
+      title: 'Tienes pendientes en Happy Circles',
+      vibrate: PENDING_NOTIFICATION_VIBRATION_PATTERN,
     },
     trigger: {
+      channelId: PENDING_NOTIFICATION_CHANNEL_ID,
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 60 * 60 * 24,
       repeats: true,
@@ -168,11 +193,18 @@ export async function scheduleDeferredReminder(
 
   await Notifications.scheduleNotificationAsync({
     content: {
+      badge: 1,
       title,
       body,
+      color: '#f5a400',
       data: { href },
+      interruptionLevel: 'active',
+      priority: 'max',
+      sound: 'default',
+      vibrate: PENDING_NOTIFICATION_VIBRATION_PATTERN,
     },
     trigger: {
+      channelId: PENDING_NOTIFICATION_CHANNEL_ID,
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: Math.max(minutes * 60, 60),
     },

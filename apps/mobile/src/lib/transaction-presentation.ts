@@ -123,7 +123,9 @@ export function transactionAmountIsVoided(
   return isNoBalanceTransactionStatus(item.status);
 }
 
-export function transactionFocusId(item: ActivityItemDto): string {
+export function transactionFocusId(
+  item: Pick<ActivityItemDto, 'id' | 'originRequestId' | 'originSettlementProposalId'>,
+): string {
   return item.originSettlementProposalId ?? item.originRequestId ?? item.id;
 }
 

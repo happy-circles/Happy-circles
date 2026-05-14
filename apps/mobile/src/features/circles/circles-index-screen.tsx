@@ -58,7 +58,12 @@ import {
   type HistoryCase,
   type HistoryCaseItem,
 } from '@/lib/history-cases';
-import { notificationViewKeyForItem, useAppSnapshot } from '@/lib/live-data';
+import {
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
+  useAppSnapshot,
+} from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
@@ -68,12 +73,12 @@ import { useAppTheme } from '@/providers/theme-provider';
 
 const CIRCLE_COLOR = transactionCategoryColor('cycle');
 const CYCLE_TRANSACTIONS_HREF = '/transactions?category=cycle' as Href;
-const ARCHIVE_CARD_HEIGHT = 584;
-const ARCHIVE_BODY_HEIGHT = 468;
+const ARCHIVE_CARD_HEIGHT = 528;
+const ARCHIVE_BODY_HEIGHT = 424;
 const ARCHIVE_FOOTER_HEIGHT = ARCHIVE_CARD_HEIGHT - ARCHIVE_BODY_HEIGHT;
-const ARCHIVE_HEADER_TOP = 48;
-const ARCHIVE_RING_TOP = 110;
-const ARCHIVE_PILLS_TOP = 432;
+const ARCHIVE_HEADER_TOP = 28;
+const ARCHIVE_RING_TOP = 84;
+const ARCHIVE_PILLS_TOP = 404;
 const ARCHIVE_PILLS_WIDTH = 260;
 
 const EMPTY_HAPPY_CIRCLE_SCORE: HappyCircleScoreDto = {
@@ -699,6 +704,7 @@ function LatestCircleTransactionCard({
       })}
       title={caseDescription || caseTitle}
       tone={caseTone}
+      cardStyle={styles.latestTransactionCard}
     />
   );
 }
@@ -725,18 +731,22 @@ export function CirclesIndexScreen() {
     [historySection?.items, session.userId, snapshot?.settlementsById],
   );
   const newCircleProposalIds = useMemo(() => {
-    const notificationViewedKeys = new Set(snapshot?.notificationViewedKeys ?? []);
+    const notificationViewedKeys = notificationViewedKeysWithLocalCache(
+      session.userId,
+      snapshot?.notificationViewedKeys ?? [],
+    );
 
     return new Set(
       (pendingSection?.items ?? []).flatMap((item) =>
         item.kind === 'settlement_proposal' &&
         isCircleActivityItem(item) &&
+        notificationItemCanAlert(item) &&
         !notificationViewedKeys.has(notificationViewKeyForItem(item))
           ? [item.originSettlementProposalId ?? item.id]
           : [],
       ),
     );
-  }, [pendingSection?.items, snapshot?.notificationViewedKeys]);
+  }, [pendingSection?.items, session.userId, snapshot?.notificationViewedKeys]);
   const activeProposals: readonly ActiveSettlementPreviewDto[] =
     snapshot?.balanceOverview.resolution.activeProposals ?? [];
   const circleItems = useMemo(
@@ -790,8 +800,9 @@ export function CirclesIndexScreen() {
     [pendingSection?.items],
   );
   const notificationViewedKeys = useMemo(
-    () => new Set(snapshot?.notificationViewedKeys ?? []),
-    [snapshot?.notificationViewedKeys],
+    () =>
+      notificationViewedKeysWithLocalCache(session.userId, snapshot?.notificationViewedKeys ?? []),
+    [session.userId, snapshot?.notificationViewedKeys],
   );
   const hasCircleTransactions =
     pendingCircleTransactions.length > 0 || latestCircleTransactionCases.length > 0;
@@ -881,7 +892,11 @@ export function CirclesIndexScreen() {
                       item={item}
                       key={item.id}
                       people={people}
-                      unread={!notificationViewedKeys.has(notificationViewKeyForItem(item))}
+                      style={styles.latestTransactionCard}
+                      unread={
+                        notificationItemCanAlert(item) &&
+                        !notificationViewedKeys.has(notificationViewKeyForItem(item))
+                      }
                     />
                   ))}
                 </View>
@@ -1206,13 +1221,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   latestTransactionsList: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  latestTransactionCard: {
+    minHeight: 56,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
   },
   transactionGroups: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   transactionGroup: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   transactionGroupHeader: {
     alignItems: 'center',

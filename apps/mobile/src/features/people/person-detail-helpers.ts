@@ -127,3 +127,14 @@ export function buildPersonRegisterHref(personId: string, direction: 'i_owe' | '
     },
   } as Href;
 }
+
+export function buildPersonCorrectionHref(personId: string, requestId: string): Href {
+  return {
+    pathname: '/register',
+    params: {
+      mode: 'correction',
+      personId,
+      requestId,
+    },
+  } as Href;
+}

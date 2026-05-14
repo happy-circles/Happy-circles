@@ -1,12 +1,12 @@
 import type { ActivityItemDto, PersonDetailDto } from '@happy-circles/application';
 import { buildActivityHistoryItems } from '../../history-cases';
-import { notificationViewKeyForItem } from './notifications';
-import type { AccountInviteListItem, ActionableItem, FriendshipInviteListItem } from '../types';
 import {
-  sortActionableItems,
-  sortHistoryItems,
-  uniqueActivityItemsById,
-} from '../utils/sorting';
+  notificationItemCanAlert,
+  notificationItemStartsViewed,
+  notificationViewKeyForItem,
+} from './notifications';
+import type { AccountInviteListItem, ActionableItem, FriendshipInviteListItem } from '../types';
+import { sortActionableItems, sortHistoryItems, uniqueActivityItemsById } from '../utils/sorting';
 
 export function buildActivityState(input: {
   readonly pendingRequests: readonly ActionableItem[];
@@ -28,6 +28,7 @@ export function buildActivityState(input: {
     | FriendshipInviteListItem
     | AccountInviteListItem
   )[];
+  readonly notificationViewedKeys: ReadonlySet<string>;
   readonly historyItems: readonly ActivityItemDto[];
 } {
   const pendingItems = sortActionableItems([
@@ -36,8 +37,16 @@ export function buildActivityState(input: {
     ...input.friendshipPendingItems,
     ...input.accountInvitePendingItems,
   ]);
+  const notificationViewedKeys = new Set(input.notificationViewedKeys);
+  for (const item of pendingItems) {
+    if (notificationItemStartsViewed(item)) {
+      notificationViewedKeys.add(notificationViewKeyForItem(item));
+    }
+  }
   const unviewedPendingItems = pendingItems.filter(
-    (item) => !input.notificationViewedKeys.has(notificationViewKeyForItem(item)),
+    (item) =>
+      notificationItemCanAlert(item) &&
+      !notificationViewedKeys.has(notificationViewKeyForItem(item)),
   );
   const historyItems = uniqueActivityItemsById(
     sortHistoryItems([
@@ -50,6 +59,7 @@ export function buildActivityState(input: {
   return {
     pendingItems,
     unviewedPendingItems,
+    notificationViewedKeys,
     historyItems,
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
@@ -11,13 +11,21 @@ import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
+import {
+  CircleActionFeedbackOverlay,
+  type CircleActionFeedbackAction,
+} from '@/components/circle-action-feedback-overlay';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
-import { LoadingOverlay } from '@/components/loading-overlay';
+import {
+  standardHappyCircleParticipants,
+  type HappyCircleRingParticipant,
+} from '@/components/happy-circle-ring';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
 import { PrimaryAction } from '@/components/primary-action';
 import { Snackbar } from '@/components/snackbar';
 import { SwipePager } from '@/components/swipe-pager';
+import { TransactionActionFeedbackOverlay } from '@/components/transaction-action-feedback-overlay';
 import {
   showBlockedActionAlert,
   useActionFeedbackOverlay,
@@ -44,24 +52,27 @@ import {
   toHistoryFeedItem,
 } from '@/lib/history-cases';
 import {
+  markNotificationItemsViewed,
+  notificationItemCanAlert,
+  notificationViewKeyForItem,
+  notificationViewedKeysWithLocalCache,
   useAcceptFinancialRequestMutation,
-  useAmendFinancialRequestMutation,
   useAppSnapshot,
   useApproveSettlementMutation,
   useExecuteSettlementMutation,
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
-import { toneVisual } from '@/lib/direction-ui';
+import { toneVisual, type LedgerDirection } from '@/lib/direction-ui';
 import { pushRoute } from '@/lib/navigation';
+import {
+  pendingNotificationDotColor,
+  pendingNotificationSurfaceColor,
+} from '@/lib/pending-notification-visuals';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useAppTheme } from '@/providers/theme-provider';
-import {
-  DEFAULT_TRANSACTION_CATEGORY,
-  type UserTransactionCategory,
-  isUserTransactionCategory,
-} from '@/lib/transaction-categories';
+import { DEFAULT_TRANSACTION_CATEGORY } from '@/lib/transaction-categories';
 import {
   transactionContextLabel,
   transactionMetaLabel,
@@ -73,6 +84,7 @@ import {
   PERSON_SEGMENT_KEYS,
   buildFinancialRequestPendingContent,
   buildFocusCandidates,
+  buildPersonCorrectionHref,
   buildPersonRegisterHref,
   matchesFocusedTransaction,
   pendingStatusLabel,
@@ -101,12 +113,41 @@ interface BannerState {
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 }
 
-interface AmendmentErrors {
-  readonly amount?: string;
-  readonly description?: string;
-}
-
 const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
+
+function fallbackCircleFeedbackParticipants(input: {
+  readonly action: CircleActionFeedbackAction;
+  readonly counterpartyLabel?: string | null;
+  readonly currentUserId: string | null | undefined;
+  readonly participantUserIds?: readonly string[] | null;
+}): readonly HappyCircleRingParticipant[] {
+  const decision: HappyCircleRingParticipant['decision'] =
+    input.action === 'execute' ? 'approved' : 'pending';
+  const participants =
+    input.participantUserIds?.map((participantUserId, index) => ({
+      decision,
+      label:
+        participantUserId === input.currentUserId
+          ? 'Tu'
+          : index === 0 && input.counterpartyLabel
+            ? input.counterpartyLabel
+            : 'Happy',
+      userId: participantUserId,
+    })) ?? [];
+
+  if (
+    input.currentUserId &&
+    !participants.some((participant) => participant.userId === input.currentUserId)
+  ) {
+    return [{ decision, label: 'Tu', userId: input.currentUserId }, ...participants];
+  }
+
+  if (participants.length > 0) {
+    return participants;
+  }
+
+  return [{ decision, label: 'Tu', userId: 'circle-feedback:self' }];
+}
 
 function CircleDetailLink({ color, href }: { readonly color: string; readonly href: Href }) {
   return (
@@ -125,6 +166,16 @@ function CircleDetailLink({ color, href }: { readonly color: string; readonly hr
       </Pressable>
     </Link>
   );
+}
+
+function buildPersonPanelHref(input: {
+  readonly focusId?: string | null;
+  readonly panel: PersonSegmentKey;
+  readonly userId: string;
+}): Href {
+  const focusParam = input.focusId ? `&focus=${encodeURIComponent(input.focusId)}` : '';
+
+  return `/person/${encodeURIComponent(input.userId)}?panel=${input.panel}${focusParam}` as Href;
 }
 
 function pendingCaseTone(item: ActivityItemDto): HistoryCaseTone {
@@ -206,22 +257,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const refresh = useSnapshotRefresh(snapshotQuery);
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
-  const amendRequest = useAmendFinancialRequestMutation();
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [activeAmendmentItemId, setActiveAmendmentItemId] = useState<string | null>(null);
-  const [amendmentAmount, setAmendmentAmount] = useState('');
-  const [amendmentDescription, setAmendmentDescription] = useState('');
-  const [amendmentCategory, setAmendmentCategory] = useState<UserTransactionCategory>(
-    DEFAULT_TRANSACTION_CATEGORY,
-  );
-  const [amendmentErrors, setAmendmentErrors] = useState<AmendmentErrors>({});
   const [expandedPendingItemIds, setExpandedPendingItemIds] = useState<string[]>([]);
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
+  const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
   const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
@@ -244,6 +290,23 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     [screenBackgroundStyle, topInset],
   );
   const pendingItems = person?.pendingItems ?? [];
+  const notificationViewedKeys = useMemo(() => {
+    const keys = new Set(
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    );
+    for (const key of optimisticNotificationViewedKeys) {
+      keys.add(key);
+    }
+
+    return keys;
+  }, [
+    optimisticNotificationViewedKeys,
+    session.userId,
+    snapshotQuery.data?.notificationViewedKeys,
+  ]);
   const focusCandidates = useMemo(() => buildFocusCandidates(focusItemId), [focusItemId]);
   const focusedPendingItemId = useMemo(() => {
     if (focusCandidates.size === 0) {
@@ -269,36 +332,149 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     const focusedIds = new Set(focusedItems.map((item) => item.id));
     return [...focusedItems, ...pendingItems.filter((item) => !focusedIds.has(item.id))];
   }, [focusCandidates, pendingItems]);
+  const pendingItemsToMarkViewed = useMemo(() => {
+    const candidates =
+      focusCandidates.size > 0
+        ? orderedPendingItems.filter((item) => matchesFocusedTransaction(item, focusCandidates))
+        : panelSegment === 'pending'
+          ? orderedPendingItems
+          : [];
 
-  useEffect(() => {
+    return candidates.filter(
+      (item) =>
+        notificationItemCanAlert(item) &&
+        !notificationViewedKeys.has(notificationViewKeyForItem(item)),
+    );
+  }, [focusCandidates, notificationViewedKeys, orderedPendingItems, panelSegment]);
+  const activeCircleFeedback = useMemo(() => {
+    if (!busyKey) {
+      return null;
+    }
+
+    const separatorIndex = busyKey.lastIndexOf(':');
+    if (separatorIndex <= 0) {
+      return null;
+    }
+
+    const itemId = busyKey.slice(0, separatorIndex);
+    const actionValue = busyKey.slice(separatorIndex + 1);
+    if (actionValue !== 'approve' && actionValue !== 'execute') {
+      return null;
+    }
+
+    const action: CircleActionFeedbackAction = actionValue;
+    const pendingItem = pendingItems.find((item) => item.id === itemId);
+    if (!pendingItem || pendingItem.kind !== 'settlement_proposal') {
+      return null;
+    }
+
+    const settlement = snapshotQuery.data?.settlementsById[itemId] ?? null;
+    const amountMinor =
+      typeof pendingItem.amountMinor === 'number' && pendingItem.amountMinor > 0
+        ? pendingItem.amountMinor
+        : settlement?.personalAmountMinor;
+    const participants =
+      settlement && settlement.participantDecisions.length > 0
+        ? standardHappyCircleParticipants(
+            settlement.participantDecisions,
+            session.userId,
+            action === 'execute' ? 'approved' : 'pending',
+          )
+        : fallbackCircleFeedbackParticipants({
+            action,
+            counterpartyLabel: person?.displayName,
+            currentUserId: session.userId,
+            participantUserIds: pendingItem.participantUserIds,
+          });
+
+    return {
+      action,
+      amountLabel:
+        typeof amountMinor === 'number' && amountMinor > 0 ? formatCop(amountMinor) : null,
+      participants,
+    };
+  }, [
+    busyKey,
+    pendingItems,
+    person?.displayName,
+    session.userId,
+    snapshotQuery.data?.settlementsById,
+  ]);
+  const activeFinancialFeedback = useMemo(() => {
+    if (!busyKey) {
+      return null;
+    }
+
+    const separatorIndex = busyKey.lastIndexOf(':');
+    if (separatorIndex <= 0) {
+      return null;
+    }
+
+    const itemId = busyKey.slice(0, separatorIndex);
+    const actionValue = busyKey.slice(separatorIndex + 1);
+    if (actionValue !== 'accept') {
+      return null;
+    }
+
+    const pendingItem = pendingItems.find((item) => item.id === itemId);
+    if (!pendingItem || pendingItem.kind !== 'financial_request') {
+      return null;
+    }
+
+    return {
+      amountLabel:
+        typeof pendingItem.amountMinor === 'number' && pendingItem.amountMinor > 0
+          ? formatCop(pendingItem.amountMinor)
+          : formatCop(0),
+      category: pendingItem.category ?? DEFAULT_TRANSACTION_CATEGORY,
+      direction: (pendingItem.tone === 'positive' ? 'owes_me' : 'i_owe') as LedgerDirection,
+      personLabel: person?.displayName ?? pendingItem.counterpartyLabel ?? null,
+    };
+  }, [busyKey, pendingItems, person?.displayName]);
+
+  useLayoutEffect(() => {
     setVisualPanelSegment(panelSegment);
   }, [panelSegment]);
 
-  useEffect(() => {
-    if (!activeAmendmentItemId || !pendingItems.some((item) => item.id === activeAmendmentItemId)) {
-      setActiveAmendmentItemId(null);
-      setAmendmentAmount('');
-      setAmendmentDescription('');
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-      setAmendmentErrors({});
-    }
-  }, [activeAmendmentItemId, pendingItems]);
+  useLayoutEffect(() => {
+    const nextPanel = initialPanel ?? 'history';
+
+    setVisualPanelSegment((current) => (current === nextPanel ? current : nextPanel));
+    setPanelSegment((current) => (current === nextPanel ? current : nextPanel));
+  }, [initialPanel]);
 
   useEffect(() => {
-    if (initialPanel) {
-      setPanelSegment(initialPanel);
+    setOptimisticNotificationViewedKeys(new Set());
+  }, [session.userId]);
+
+  useEffect(() => {
+    if (!session.userId || pendingItemsToMarkViewed.length === 0) {
       return;
     }
 
-    if (pendingItems.length > 0) {
-      setPanelSegment('pending');
-      return;
-    }
+    const nextKeys = pendingItemsToMarkViewed.map((item) => notificationViewKeyForItem(item));
+    const nextKeySet = new Set(nextKeys);
+    setOptimisticNotificationViewedKeys((current) => {
+      const merged = new Set(current);
+      for (const key of nextKeys) {
+        merged.add(key);
+      }
 
-    setPanelSegment('history');
-  }, [initialPanel, pendingItems.length]);
+      return merged;
+    });
 
-  const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
+    void markNotificationItemsViewed(session.userId, pendingItemsToMarkViewed).catch(() => {
+      setOptimisticNotificationViewedKeys((current) => {
+        const next = new Set(current);
+        for (const key of nextKeySet) {
+          next.delete(key);
+        }
+
+        return next;
+      });
+    });
+  }, [pendingItemsToMarkViewed, session.userId]);
+
   const historyItems = useMemo(
     () =>
       person ? person.timeline.map((item) => toHistoryFeedItem(item, person.displayName)) : [],
@@ -330,13 +506,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       ? `history:${focusedHistoryCaseId}`
       : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focusedPendingItemId) {
+      setVisualPanelSegment('pending');
       setPanelSegment('pending');
       return;
     }
 
     if (focusedHistoryCaseId) {
+      setVisualPanelSegment('history');
       setPanelSegment('history');
     }
   }, [focusedHistoryCaseId, focusedPendingItemId]);
@@ -392,90 +570,6 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     };
   }, [focusItemId, focusedLandingKey]);
 
-  function toggleAmendment(item: ActivityItemDto) {
-    appHaptics.triggerAppSelectionHaptic();
-    if (activeAmendmentItemId === item.id) {
-      setActiveAmendmentItemId(null);
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-      setAmendmentErrors({});
-      return;
-    }
-
-    const financialRequestContent = buildFinancialRequestPendingContent(item);
-    const category = isUserTransactionCategory(item.category)
-      ? item.category
-      : DEFAULT_TRANSACTION_CATEGORY;
-    setActiveAmendmentItemId(item.id);
-    setExpandedPendingItemIds([item.id]);
-    setAmendmentAmount(String(Math.max(1, Math.round((item.amountMinor ?? 0) / 100))));
-    setAmendmentDescription(financialRequestContent.detail);
-    setAmendmentCategory(category);
-    setAmendmentErrors({});
-  }
-
-  async function handleAmendment(requestId: string) {
-    const nextErrors: AmendmentErrors = {
-      amount: amendmentAmountMinor > 0 ? undefined : 'Ingresa un monto mayor a 0.',
-      description:
-        amendmentDescription.trim().length > 0 ? undefined : 'Explica el concepto del nuevo monto.',
-    };
-    const errorCount = Object.values(nextErrors).filter(Boolean).length;
-    if (errorCount > 0) {
-      appHaptics.triggerAppWarningHaptic();
-      setAmendmentErrors(nextErrors);
-      setBanner({
-        message:
-          errorCount === 1
-            ? 'Te falta 1 dato para enviar el nuevo monto.'
-            : `Te faltan ${errorCount} datos para enviar el nuevo monto.`,
-        tone: 'danger',
-      });
-      return;
-    }
-
-    setBusyKey(`${requestId}:amendment`);
-    setBanner(null);
-
-    try {
-      await amendRequest.mutateAsync({
-        requestId,
-        amountMinor: amendmentAmountMinor,
-        description: amendmentDescription.trim(),
-        category: amendmentCategory,
-      });
-      setActiveAmendmentItemId(null);
-      setAmendmentAmount('');
-      setAmendmentDescription('');
-      setAmendmentCategory(DEFAULT_TRANSACTION_CATEGORY);
-      setAmendmentErrors({});
-      appHaptics.triggerAppSuccessHaptic();
-      showSnackbar('Nuevo monto enviado.', 'success');
-    } catch (error) {
-      appHaptics.triggerAppErrorHaptic();
-      const nextMessage =
-        error instanceof Error ? error.message : 'No se pudo enviar el nuevo monto.';
-      if (
-        showBlockedActionAlert(nextMessage, router, {
-          hasEmailPassword: session.linkedMethods.hasEmailPassword,
-          profile: {
-            displayName: session.profile?.display_name ?? null,
-            avatarPath: session.profile?.avatar_path ?? null,
-            phoneE164: session.profile?.phone_e164 ?? null,
-          },
-        })
-      ) {
-        return;
-      }
-
-      setBanner({
-        message: nextMessage,
-        tone: 'danger',
-      });
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
   async function handlePendingItemAction(
     itemId: string,
     kind: string,
@@ -507,10 +601,26 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             title: 'Listo',
             variant: 'success',
           });
+          pushRoute(
+            router,
+            buildPersonPanelHref({
+              focusId: itemId,
+              panel: 'history',
+              userId,
+            }),
+          );
         } else {
           await rejectRequest.mutateAsync(itemId);
           appHaptics.triggerAppWarningHaptic();
           showSnackbar('Propuesta no aceptada.', 'neutral');
+          pushRoute(
+            router,
+            buildPersonPanelHref({
+              focusId: itemId,
+              panel: 'history',
+              userId,
+            }),
+          );
         }
         return;
       }
@@ -526,6 +636,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             setBanner({
               message: 'Esta versión fue reemplazada porque los saldos cambiaron.',
               tone: 'warning',
+            });
+          } else if (nextStatus === 'executed') {
+            await actionFeedback.showResult({
+              message: 'Tesoro listo en el detalle',
+              title: 'Circle completado',
+              variant: 'success',
             });
           } else {
             await actionFeedback.showResult({
@@ -548,8 +664,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         );
         const nextStatus = readNestedStatus(response, 'nextAutoCycleJob');
         await actionFeedback.showResult({
-          message: nextStatus === 'queued' ? 'Siguiente Circle' : 'Happy Circle completado',
-          title: 'Listo',
+          message:
+            nextStatus === 'queued'
+              ? 'Tesoro listo y otro Circle en camino'
+              : 'Tesoro listo en el detalle',
+          title: 'Circle completado',
           variant: 'success',
         });
       }
@@ -606,19 +725,18 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   function renderPendingItem(item: ActivityItemDto) {
     const isFocused = focusedLandingActive && matchesFocusedTransaction(item, focusCandidates);
+    const unread =
+      notificationItemCanAlert(item) &&
+      !notificationViewedKeys.has(notificationViewKeyForItem(item));
 
     if (item.kind === 'financial_request') {
       const financialRequestContent = buildFinancialRequestPendingContent(item);
       return (
         <PendingFinancialRequestCard
           actorAvatarUrl={person?.avatarUrl ?? null}
-          amendmentAmount={amendmentAmount}
-          amendmentCategory={amendmentCategory}
-          amendmentDescription={amendmentDescription}
           amountMinor={item.amountMinor ?? 0}
           amountTone={item.tone === 'positive' || item.tone === 'negative' ? item.tone : 'neutral'}
           busyAccept={busyKey === `${item.id}:accept`}
-          busyAmendment={busyKey === `${item.id}:amendment`}
           busyReject={busyKey === `${item.id}:reject`}
           counterpartyName={person?.displayName ?? 'Persona'}
           category={item.category}
@@ -629,32 +747,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           historySteps={item.pendingHistorySteps}
           isExpanded={expandedPendingItemIds[0] === item.id}
           key={item.id}
-          amendmentAmountError={
-            activeAmendmentItemId === item.id ? (amendmentErrors.amount ?? null) : null
-          }
-          amendmentDescriptionError={
-            activeAmendmentItemId === item.id ? (amendmentErrors.description ?? null) : null
-          }
           onAccept={
             busyKey
               ? undefined
               : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')
           }
-          onChangeAmendmentAmount={(value) => {
-            setAmendmentAmount(value);
-            setAmendmentErrors((current) => ({
-              ...current,
-              amount: undefined,
-            }));
-          }}
-          onChangeAmendmentDescription={(value) => {
-            setAmendmentDescription(value);
-            setAmendmentErrors((current) => ({
-              ...current,
-              description: undefined,
-            }));
-          }}
-          onChangeAmendmentCategory={setAmendmentCategory}
           onReject={
             busyKey
               ? undefined
@@ -667,12 +764,15 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                       void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
                   })
           }
-          onSubmitAmendment={busyKey ? undefined : () => void handleAmendment(item.id)}
-          onToggleAmendment={busyKey ? undefined : () => toggleAmendment(item)}
+          onToggleAmendment={
+            busyKey
+              ? undefined
+              : () => pushRoute(router, buildPersonCorrectionHref(userId, item.id))
+          }
           onToggle={() => togglePendingItem(item.id)}
           responseState={item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'}
-          showAmendment={activeAmendmentItemId === item.id}
           title={item.title}
+          unread={unread}
         />
       );
     }
@@ -696,11 +796,17 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
     return (
       <HistoryCaseCard
+        attentionDot
+        attentionDotColor={pendingNotificationDotColor(activeTheme)}
         actorAvatarUrl={item.kind === 'settlement_proposal' ? null : (person?.avatarUrl ?? null)}
         amountLabel={amountLabel}
         description={null}
-        eyebrow={item.kind === 'settlement_proposal' ? 'Happy Circle' : (person?.displayName ?? null)}
+        eyebrow={
+          item.kind === 'settlement_proposal' ? 'Happy Circle' : (person?.displayName ?? null)
+        }
         focused={isFocused}
+        highlightSurface={unread}
+        highlightSurfaceColor={pendingNotificationSurfaceColor(activeTheme)}
         isCycleSnippet={item.kind === 'settlement_proposal'}
         isExpanded={isExpanded}
         key={item.id}
@@ -801,28 +907,24 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
                     ? undefined
                     : () => {
                         appHaptics.triggerAppSelectionHaptic();
-                        Alert.alert(
-                          'Completar Circle',
-                          'Se movera al historial.',
-                          [
-                            { text: 'Cancelar', style: 'cancel' },
-                            {
-                              text: 'Completar',
-                              style: 'destructive',
-                              onPress: () => {
-                                appHaptics.triggerAppActionHaptic();
-                                void handlePendingItemAction(
-                                  item.id,
-                                  item.kind,
-                                  item.status,
-                                  'execute',
-                                );
-                              },
+                        Alert.alert('Completar Circle', 'Se movera al historial.', [
+                          { text: 'Cancelar', style: 'cancel' },
+                          {
+                            text: 'Completar',
+                            style: 'destructive',
+                            onPress: () => {
+                              appHaptics.triggerAppActionHaptic();
+                              void handlePendingItemAction(
+                                item.id,
+                                item.kind,
+                                item.status,
+                                'execute',
+                              );
                             },
-                          ],
-                        );
+                          },
+                        ]);
                       }
-                  }
+                }
                 style={styles.circlePanelAction}
               />
             </View>
@@ -1079,7 +1181,29 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         </View>
       </View>
       <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
-      <LoadingOverlay {...actionFeedback.overlayProps} />
+      {activeFinancialFeedback ? (
+        <TransactionActionFeedbackOverlay
+          amountLabel={activeFinancialFeedback.amountLabel}
+          category={activeFinancialFeedback.category}
+          direction={activeFinancialFeedback.direction}
+          message={actionFeedback.overlayProps.message}
+          personLabel={activeFinancialFeedback.personLabel}
+          title={actionFeedback.overlayProps.title}
+          variant={actionFeedback.overlayProps.variant}
+          visible={actionFeedback.overlayProps.visible}
+        />
+      ) : null}
+      {activeCircleFeedback ? (
+        <CircleActionFeedbackOverlay
+          action={activeCircleFeedback.action}
+          amountLabel={activeCircleFeedback.amountLabel}
+          message={actionFeedback.overlayProps.message}
+          participants={activeCircleFeedback.participants}
+          title={actionFeedback.overlayProps.title}
+          variant={actionFeedback.overlayProps.variant}
+          visible={actionFeedback.overlayProps.visible}
+        />
+      ) : null}
       <AvatarViewerModal
         imageUrl={person.avatarUrl ?? null}
         label={person.displayName}

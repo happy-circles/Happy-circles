@@ -33,7 +33,7 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-url-polyfill/auto', () => ({}));
 
 import { buildLiveSnapshot } from './build-snapshot';
-import { notificationViewKeyForItem } from './builders/notifications';
+import { notificationItemCanAlert, notificationViewKeyForItem } from './builders/notifications';
 import type {
   AccountInviteDeliveryRow,
   AccountInviteRow,
@@ -42,6 +42,7 @@ import type {
   FriendshipInviteDeliveryRow,
   FriendshipInviteRow,
   HappyCircleScoreEventRow,
+  InboxItemRow,
   NotificationViewRow,
   OpenDebtRow,
   RelationshipRow,
@@ -53,6 +54,7 @@ import type {
 const ACTOR_ID = 'user-actor';
 const FRIEND_ID = 'user-friend';
 const OTHER_ID = 'user-other';
+const HIDDEN_ID = 'user-hidden';
 const NOW = '2026-05-05T12:00:00.000Z';
 
 type SnapshotInput = Parameters<typeof buildLiveSnapshot>[0];
@@ -247,11 +249,7 @@ function settlementProposal(value: Partial<SettlementProposalRow>): SettlementPr
   });
 }
 
-function cycleMovements(
-  amountMinor: number,
-  firstUserId = ACTOR_ID,
-  secondUserId = FRIEND_ID,
-) {
+function cycleMovements(amountMinor: number, firstUserId = ACTOR_ID, secondUserId = FRIEND_ID) {
   return [
     {
       debtor_user_id: secondUserId,
@@ -274,6 +272,17 @@ function settlementParticipant(value: Partial<SettlementParticipantRow>): Settle
     decision: 'approved',
     decided_at: NOW,
     created_at: NOW,
+    ...value,
+  });
+}
+
+function inboxItem(value: Partial<InboxItemRow>): InboxItemRow {
+  return row<InboxItemRow>({
+    created_at: NOW,
+    item_id: 'settlement-1',
+    item_kind: 'settlement_proposal',
+    owner_user_id: ACTOR_ID,
+    status: 'pending_approvals',
     ...value,
   });
 }
@@ -328,6 +337,39 @@ function baseInput(overrides: Partial<SnapshotInput> = {}): SnapshotInput {
 }
 
 describe('buildLiveSnapshot', () => {
+  it('keeps notification alerts scoped to incoming attention items', () => {
+    expect(
+      notificationItemCanAlert({
+        id: 'request-incoming',
+        kind: 'financial_request',
+        status: 'requires_you',
+      }),
+    ).toBe(true);
+    expect(
+      notificationItemCanAlert({
+        createdByCurrentUser: true,
+        id: 'request-own',
+        kind: 'financial_request',
+        status: 'requires_you',
+      }),
+    ).toBe(false);
+    expect(
+      notificationItemCanAlert({
+        id: 'request-waiting',
+        kind: 'financial_request',
+        status: 'waiting_other_side',
+      }),
+    ).toBe(false);
+    expect(
+      notificationItemCanAlert({
+        id: 'local-notifications-reminder',
+        kind: 'system_note',
+        sourceType: 'system',
+        status: 'pending',
+      }),
+    ).toBe(true);
+  });
+
   it('builds a stable empty snapshot for a user without relationships', () => {
     const snapshot = buildLiveSnapshot(baseInput());
 
@@ -442,6 +484,70 @@ describe('buildLiveSnapshot', () => {
     expect(viewedSnapshot.notificationViewedKeys.has(notificationViewKeyForItem(pendingItem))).toBe(
       true,
     );
+  });
+
+  it('treats user-created pending financial requests as viewed notifications', () => {
+    const pending = financialRequest({
+      creator_user_id: ACTOR_ID,
+      responder_user_id: FRIEND_ID,
+      debtor_user_id: FRIEND_ID,
+      creditor_user_id: ACTOR_ID,
+    });
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
+        relationships: [relationship()],
+        financialRequests: [pending],
+      }),
+    );
+
+    const pendingItem = snapshot.activitySections[0]?.items[0];
+    expect(pendingItem).toMatchObject({
+      createdByCurrentUser: true,
+      id: 'request-1',
+      kind: 'financial_request',
+      status: 'waiting_other_side',
+    });
+    expect(snapshot.pendingCount).toBe(1);
+    expect(snapshot.notificationUnreadCount).toBe(0);
+    expect(snapshot.notificationViewedKeys.has(notificationViewKeyForItem(pendingItem))).toBe(true);
+  });
+
+  it('treats user-created pending settlement proposals as viewed notifications', () => {
+    const pending = settlementProposal({
+      created_by_user_id: ACTOR_ID,
+      graph_snapshot: cycleMovements(1200),
+      movements_json: cycleMovements(1200),
+      status: 'pending_approvals',
+    });
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
+        relationships: [relationship()],
+        inboxItems: [inboxItem({ item_id: pending.id })],
+        settlementProposals: [pending],
+        settlementParticipants: [
+          settlementParticipant({
+            participant_user_id: ACTOR_ID,
+            decision: 'pending',
+            decided_at: null,
+          }),
+          settlementParticipant({ participant_user_id: FRIEND_ID }),
+        ],
+      }),
+    );
+
+    const pendingItem = snapshot.activitySections[0]?.items[0];
+    expect(pendingItem).toMatchObject({
+      category: 'cycle',
+      createdByCurrentUser: true,
+      id: 'settlement-1',
+      kind: 'settlement_proposal',
+      status: 'pending_approvals',
+    });
+    expect(snapshot.pendingCount).toBe(1);
+    expect(snapshot.notificationUnreadCount).toBe(0);
+    expect(snapshot.notificationViewedKeys.has(notificationViewKeyForItem(pendingItem))).toBe(true);
   });
 
   it('separates friendship invites into pending and history states', () => {
@@ -608,6 +714,11 @@ describe('buildLiveSnapshot', () => {
       },
       {
         debtor_user_id: OTHER_ID,
+        creditor_user_id: HIDDEN_ID,
+        amount_minor: 700,
+      },
+      {
+        debtor_user_id: HIDDEN_ID,
         creditor_user_id: FRIEND_ID,
         amount_minor: 700,
       },
@@ -618,6 +729,7 @@ describe('buildLiveSnapshot', () => {
           profile(ACTOR_ID, 'Ana'),
           profile(FRIEND_ID, 'Ben'),
           profile(OTHER_ID, 'Carla'),
+          profile(HIDDEN_ID, 'Sofia'),
         ],
         relationships: [relationship()],
         settlementProposals: [
@@ -652,6 +764,11 @@ describe('buildLiveSnapshot', () => {
             participant_user_id: OTHER_ID,
           }),
           settlementParticipant({
+            id: 'participant-active-hidden',
+            settlement_proposal_id: 'settlement-active',
+            participant_user_id: HIDDEN_ID,
+          }),
+          settlementParticipant({
             id: 'participant-executed-actor',
             settlement_proposal_id: 'settlement-executed',
             participant_user_id: ACTOR_ID,
@@ -666,6 +783,11 @@ describe('buildLiveSnapshot', () => {
             settlement_proposal_id: 'settlement-executed',
             participant_user_id: OTHER_ID,
           }),
+          settlementParticipant({
+            id: 'participant-executed-hidden',
+            settlement_proposal_id: 'settlement-executed',
+            participant_user_id: HIDDEN_ID,
+          }),
         ],
       }),
     );
@@ -673,8 +795,28 @@ describe('buildLiveSnapshot', () => {
     expect(snapshot.balanceOverview.resolution.activeProposal).toMatchObject({
       proposalId: 'settlement-active',
       personalAmountMinor: 700,
-      totalAmountMinor: 2100,
+      totalAmountMinor: 700,
+      participantCount: 4,
     });
+    expect(
+      snapshot.balanceOverview.resolution.activeProposal?.participantDecisions.map(
+        (participant) => participant.label,
+      ),
+    ).toEqual(['Tu', 'Ben', 'Carla']);
+    expect(
+      snapshot.settlementsById['settlement-active']?.participantDecisions.map(
+        (participant) => participant.label,
+      ),
+    ).toEqual(['Tu', 'Ben', 'Carla']);
+    expect(
+      snapshot.settlementsById['settlement-active']?.movementDetails.map((movement) => [
+        movement.debtorUserId,
+        movement.creditorUserId,
+      ]),
+    ).toEqual([
+      [FRIEND_ID, ACTOR_ID],
+      [ACTOR_ID, OTHER_ID],
+    ]);
     expect(snapshot.balanceOverview.resolution.resolvedMinor).toBe(700);
     expect(snapshot.activitySections[0]?.items[0]).toMatchObject({
       id: 'settlement-active',
@@ -811,7 +953,7 @@ describe('buildLiveSnapshot', () => {
         amountMinor: 2500,
         status: 'stale',
         replacedByProposalId: 'settlement-v2',
-        detail: 'Fue reemplazada porque los saldos cambiaron.',
+        detail: 'Saldos nuevos.',
       },
       {
         proposalId: 'settlement-v2',

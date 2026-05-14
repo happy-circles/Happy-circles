@@ -239,7 +239,7 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
       historyItems: activityState.historyItems,
     }),
     notificationUnreadCount: activityState.unviewedPendingItems.length,
-    notificationViewedKeys,
+    notificationViewedKeys: activityState.notificationViewedKeys,
     pendingCount: activityState.pendingItems.length,
     auditEvents: buildAuditItems(input.auditEvents, snapshotNowMs),
     settlementsById,

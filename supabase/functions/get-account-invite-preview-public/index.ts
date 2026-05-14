@@ -1,79 +1,76 @@
 import {
   createClientFingerprintHash,
+  createSha256Hex,
   createServiceRoleClient,
   getOptionalActorUserId,
   handlePublicRpc,
   requireString,
 } from '../_shared/http.ts';
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid invite preview');
+  }
+
+  return value as Record<string, unknown>;
+}
+
 Deno.serve((request) =>
-  handlePublicRpc(request, async (body) => {
-    const client = createServiceRoleClient();
-    const actorUserId = await getOptionalActorUserId(request);
-    const clientFingerprintHash = await createClientFingerprintHash(request);
-    const email =
-      typeof body.email === 'string' && body.email.trim().length > 0
-        ? body.email.trim().toLocaleLowerCase('en-US')
-        : null;
-    const phoneE164 =
-      typeof body.phoneE164 === 'string' && body.phoneE164.trim().length > 0
-        ? body.phoneE164.trim()
-        : null;
-    const { data, error } = await client.rpc('get_account_invite_preview_public', {
-      p_actor_user_id: actorUserId,
-      p_delivery_token: requireString(body.deliveryToken, 'deliveryToken'),
-      p_record_app_open: body.recordAppOpen !== false,
-      p_client_fingerprint_hash: clientFingerprintHash,
-    });
+  handlePublicRpc(
+    request,
+    async (body) => {
+      const client = createServiceRoleClient();
+      const actorUserId = await getOptionalActorUserId(request);
+      const clientFingerprintHash = await createClientFingerprintHash(request);
+      const { data, error } = await client.rpc('get_account_invite_preview_public', {
+        p_actor_user_id: actorUserId,
+        p_delivery_token: requireString(body.deliveryToken, 'deliveryToken'),
+        p_record_app_open: body.recordAppOpen !== false,
+        p_client_fingerprint_hash: clientFingerprintHash,
+      });
 
-    if (error) {
-      throw error;
-    }
+      if (error) {
+        throw error;
+      }
 
-    if (
-      (!email && !phoneE164) ||
-      typeof data !== 'object' ||
-      data === null ||
-      Array.isArray(data)
-    ) {
-      return data;
-    }
-
-    const [existingEmailProfileResult, existingAuthEmailResult, existingPhoneProfileResult] =
-      await Promise.all([
-        email
-          ? client.from('user_profiles').select('id').eq('email', email).limit(1).maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-        email
-          ? client.rpc('auth_email_exists', { p_email: email })
-          : Promise.resolve({ data: false, error: null }),
-        phoneE164
-          ? client
-              .from('user_profiles')
-              .select('id')
-              .eq('phone_e164', phoneE164)
-              .limit(1)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
-
-    if (existingEmailProfileResult.error) {
-      throw existingEmailProfileResult.error;
-    }
-
-    if (existingAuthEmailResult.error) {
-      throw existingAuthEmailResult.error;
-    }
-
-    if (existingPhoneProfileResult.error) {
-      throw existingPhoneProfileResult.error;
-    }
-
-    return {
-      ...data,
-      emailAlreadyRegistered:
-        Boolean(existingEmailProfileResult.data) || Boolean(existingAuthEmailResult.data),
-      phoneAlreadyRegistered: Boolean(existingPhoneProfileResult.data),
-    };
-  }),
+      const preview = asRecord(data);
+      return {
+        channel: preview.channel ?? null,
+        deliveryId: preview.deliveryId ?? null,
+        deliveryStatus: preview.deliveryStatus ?? 'unavailable',
+        expiresAt: preview.expiresAt ?? null,
+        intendedRecipientPhoneMasked: preview.intendedRecipientPhoneMasked ?? null,
+        inviteExpiresAt: preview.inviteExpiresAt ?? null,
+        inviteId: preview.inviteId ?? null,
+        inviterAvatarPath: preview.inviterAvatarPath ?? null,
+        inviterDisplayName: preview.inviterDisplayName ?? null,
+        reason: preview.reason ?? 'invite_unavailable',
+        resolvedAt: preview.resolvedAt ?? null,
+        status: preview.status ?? 'unavailable',
+      };
+    },
+    {
+      rateLimit: [
+        {
+          actorRequired: false,
+          limit: 20,
+          scope: async ({ body }) => {
+            const deliveryToken =
+              typeof body.deliveryToken === 'string' && body.deliveryToken.trim().length > 0
+                ? body.deliveryToken.trim()
+                : 'invalid-token';
+            const deliveryTokenHash = await createSha256Hex(deliveryToken);
+            return `get-account-invite-preview-public:${deliveryTokenHash}`;
+          },
+          windowSeconds: 60 * 60,
+        },
+        {
+          actorRequired: false,
+          limit: 120,
+          scope: 'get-account-invite-preview-public:global',
+          windowSeconds: 60 * 60,
+        },
+      ],
+    },
+  ),
 );

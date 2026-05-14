@@ -1,0 +1,140 @@
+import { StyleSheet } from 'react-native';
+
+import { theme } from '@/lib/theme';
+
+export const settlementDetailStoryStyles = StyleSheet.create({
+  transactionChanges: {
+    gap: theme.spacing.md,
+  },
+  transactionChangeRow: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: theme.radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    minHeight: 78,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  transactionChangeRowAction: {
+    marginHorizontal: 0,
+  },
+  transactionChangeRowPressed: {
+    opacity: 0.9,
+  },
+  transactionChangeIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  transactionChangeCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  transactionChangeTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 19,
+  },
+  transactionChangeDetail: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  transactionChangeAmountSlot: {
+    alignItems: 'flex-end',
+    flexShrink: 1,
+    maxWidth: 132,
+    minWidth: 84,
+  },
+  transactionChangeAmount: {
+    fontSize: theme.typography.callout,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 19,
+    textAlign: 'right',
+  },
+  transactionChangeAmountVoided: {
+    opacity: 0.72,
+    textDecorationLine: 'line-through',
+  },
+  approvalPillsRow: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    maxWidth: 260,
+    width: '100%',
+  },
+  approvalPill: {
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    height: 8,
+    minWidth: 0,
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+  },
+  approvalDecisionList: {
+    gap: theme.spacing.xs,
+    width: '100%',
+  },
+  approvalDecisionRow: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  approvalDecisionIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  approvalDecisionCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  approvalDecisionName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.footnote,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 17,
+  },
+  approvalDecisionStatus: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
+  approvalSelfBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 26,
+    minWidth: 36,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  approvalSelfBadgeText: {
+    color: theme.colors.cycle,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 14,
+  },
+});
