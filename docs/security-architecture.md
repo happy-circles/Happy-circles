@@ -8,7 +8,7 @@ Happy Circles treats Supabase as the enforcement layer, not only as storage. Cli
 - User-facing public views must use `security_invoker=true` so the caller's RLS policies apply.
 - Private profile data belongs in own-profile endpoints or views. Cross-user profile surfaces should expose only `id`, `display_name`, `avatar_path`, minimal account state, and timestamps.
 - `app_settings` is public only for allowlisted runtime keys: `currency`, `app_web_origin`, and `mobile_min_supported_version`.
-- Production migrations must not create demo users, demo passwords, or demo seed/reset helpers. Demo data lives in `supabase/seed.sql`, `supabase/dev`, or explicit development scripts only.
+- Production migrations must not create demo users, demo passwords, or demo seed/reset helpers. Demo data lives in `[db.seed]` files under `supabase/dev` or explicit development scripts only.
 - Avatars are private storage objects. Clients never write the `avatars` bucket directly and never update `user_profiles.avatar_path` directly; uploads must go through the authenticated `upload-avatar` Edge Function, and reads must use short-lived signed URLs.
 
 ## Edge Functions and RPC

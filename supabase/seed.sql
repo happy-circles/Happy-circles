@@ -1,3 +1,1 @@
-\ir ./dev/seed_demo_helpers.sql
-
-select public.seed_demo_data();
+-- Seed files are declared in config.toml under [db.seed].

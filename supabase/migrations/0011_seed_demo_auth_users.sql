@@ -1,2 +1,2 @@
 -- Production migration intentionally left blank.
--- Local development sample accounts are loaded from supabase/seed.sql.
+-- Local development sample accounts are loaded from the [db.seed] files.

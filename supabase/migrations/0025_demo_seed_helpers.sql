@@ -1,2 +1,2 @@
 -- Production migration intentionally left blank.
--- Local development seed helpers are loaded from supabase/seed.sql.
+-- Local development seed helpers are loaded from the [db.seed] files.

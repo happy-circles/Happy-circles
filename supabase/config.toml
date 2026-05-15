@@ -10,6 +10,10 @@ port = 54322
 shadow_port = 54320
 major_version = 17
 
+[db.seed]
+enabled = true
+sql_paths = ["./dev/seed_demo_helpers.sql", "./dev/seed_demo_data.sql"]
+
 [studio]
 enabled = true
 port = 54323

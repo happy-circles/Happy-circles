@@ -179,7 +179,7 @@ Never commit real `.env` files.
 ## Supabase Workflow
 
 - Apply migrations in order from `supabase/migrations`.
-- Use `supabase/seed.sql`, `supabase/dev`, and `supabase/scripts` for demo and remote development data workflows. Demo users and demo reset helpers must not live in production migrations.
+- Use the `[db.seed]` files in `supabase/dev` and the scripts in `supabase/scripts` for demo and remote development data workflows. Demo users and demo reset helpers must not live in production migrations.
 - Deploy Edge Functions from `supabase/functions`.
 - Keep `supabase/config.toml` aligned with function auth requirements.
 - Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, storage, security, or graph-cycle behavior.
