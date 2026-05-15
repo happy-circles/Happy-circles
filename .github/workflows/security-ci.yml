@@ -30,5 +30,23 @@ jobs:
         with:
           version: latest
 
-      - name: Run security gate
-        run: pnpm run ci
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level moderate
+
+      - name: Build landing
+        run: pnpm build:landing
+
+      - name: Run security checks
+        run: pnpm security:check
+
+      - name: Test Supabase
+        run: pnpm test:supabase

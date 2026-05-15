@@ -45,6 +45,32 @@ function capture(command, args) {
   return result.stdout;
 }
 
+function commandExists(command) {
+  const result = spawnSync(command, ['--version'], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_OPTIONS: nodeOptions,
+    },
+    shell: isWindows,
+    stdio: 'ignore',
+  });
+
+  return result.status === 0;
+}
+
+const useInstalledSupabaseCli = commandExists('supabase');
+
+function runSupabase(args) {
+  if (useInstalledSupabaseCli) {
+    run('supabase', args);
+    return;
+  }
+
+  run(pnpmCommand, ['dlx', 'supabase@latest', ...args]);
+}
+
 function resolveSupabaseDbContainer() {
   const names = capture('docker', ['ps', '--format', '{{.Names}}'])
     .split(/\r?\n/)
@@ -91,7 +117,7 @@ function seedLocalDemoData() {
   }
 }
 
-run(pnpmCommand, ['dlx', 'supabase@latest', 'db', 'start']);
-run(pnpmCommand, ['dlx', 'supabase@latest', 'db', 'reset', '--no-seed']);
+runSupabase(['db', 'start']);
+runSupabase(['db', 'reset', '--no-seed']);
 seedLocalDemoData();
-run(pnpmCommand, ['dlx', 'supabase@latest', 'test', 'db']);
+runSupabase(['test', 'db']);
