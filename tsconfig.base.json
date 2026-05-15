@@ -3,9 +3,7 @@
     "baseUrl": ".",
     "paths": {
       "@happy-circles/shared": ["packages/shared/src/index.ts"],
-      "@happy-circles/domain": ["packages/domain/src/index.ts"],
-      "@happy-circles/application": ["packages/application/src/index.ts"],
-      "@happy-circles/infrastructure": ["packages/infrastructure/src/index.ts"]
+      "@happy-circles/application": ["packages/application/src/index.ts"]
     },
     "target": "ES2022",
     "module": "ESNext",

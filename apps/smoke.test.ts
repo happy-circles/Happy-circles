@@ -104,13 +104,6 @@ describe('app smoke checks', () => {
 
   it('keeps setup reminders concise and routed to the exact setup surface', () => {
     const setupReminder = readRepoFile('apps', 'mobile', 'src', 'lib', 'setup-reminder.ts');
-    const setupPromptCard = readRepoFile(
-      'apps',
-      'mobile',
-      'src',
-      'components',
-      'setup-prompt-card.tsx',
-    );
     const profileScreen = readRepoFile(
       'apps',
       'mobile',
@@ -127,6 +120,14 @@ describe('app smoke checks', () => {
       'profile',
       'profile-helpers.ts',
     );
+    const profileFocusController = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'profile',
+      'profile-focus-controller.ts',
+    );
     const notifications = readRepoFile('apps', 'mobile', 'src', 'lib', 'notifications.ts');
     const appLayout = readRepoFile('apps', 'mobile', 'app', '_layout.tsx');
 
@@ -136,11 +137,9 @@ describe('app smoke checks', () => {
     expect(setupReminder).toContain("'/people?addPerson=1'");
     expect(setupReminder).toContain("'/profile?focus=notifications'");
     expect(setupReminder).not.toContain('cuando quieras terminar la configuracion');
-    expect(setupPromptCard).toContain(
-      'Hay ${actionCount} ajustes pendientes para completar seguridad, acceso y avisos.',
-    );
     expect(profileHelpers).toContain("resolvedFocusTarget === 'notifications'");
-    expect(profileScreen).toContain('resolveProfileFocusRequest');
+    expect(profileScreen).toContain('useProfileFocusController');
+    expect(profileFocusController).toContain('resolveProfileFocusRequest');
     expect(profileScreen).toContain("highlightTarget === 'account'");
     expect(notifications).toContain('getLastNotificationResponseAsync');
     expect(appLayout).toContain('getLastNotificationRoute');
@@ -157,7 +156,7 @@ describe('app smoke checks', () => {
       'activity-screen-runtime.tsx',
     );
 
-    expect(activityScreen).toContain('openNotificationTarget(detailHref)');
+    expect(activityScreen).toContain('openNotificationTarget(detailHref, item)');
     expect(activityScreen).toContain('pendingDetailHref(item, people)');
     expect(activityScreen).not.toContain('Ver Happy Circle');
     expect(activityScreen).not.toContain('useAcceptFinancialRequestMutation');

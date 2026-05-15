@@ -1633,6 +1633,7 @@ export type Database = {
           participant_count: number
           score_delta: number
           settlement_proposal_id: string
+          treasure_claimed_at: string | null
           user_id: string
         }
         Insert: {
@@ -1642,6 +1643,7 @@ export type Database = {
           participant_count: number
           score_delta: number
           settlement_proposal_id: string
+          treasure_claimed_at?: string | null
           user_id: string
         }
         Update: {
@@ -1651,6 +1653,7 @@ export type Database = {
           participant_count?: number
           score_delta?: number
           settlement_proposal_id?: string
+          treasure_claimed_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -4031,6 +4034,10 @@ export type Database = {
         Returns: Json
       }
       claim_graph_cycle_job: { Args: { p_worker_id?: string }; Returns: Json }
+      claim_happy_circle_treasure: {
+        Args: { p_score_event_id: string }
+        Returns: Json
+      }
       claim_welcome_email_delivery: {
         Args: { p_actor_user_id: string }
         Returns: {

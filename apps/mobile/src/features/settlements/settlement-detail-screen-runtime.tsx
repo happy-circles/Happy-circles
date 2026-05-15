@@ -92,6 +92,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
+  const [rewardClaiming, setRewardClaiming] = useState(false);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
   const { claimReward, getRewardForSettlement } = useHappyReward();
@@ -362,10 +363,22 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <PrimaryAction
               color={activeTheme.colors.treasure}
               icon="happy"
-              label={`Reclamar +${claimableReward.scoreDelta}`}
+              label={rewardClaiming ? 'Reclamando...' : `Reclamar +${claimableReward.scoreDelta}`}
+              loading={rewardClaiming}
               onPress={() => {
                 triggerAppActionHaptic();
-                void claimReward(claimableReward);
+                setRewardClaiming(true);
+                void claimReward(claimableReward)
+                  .catch((error) => {
+                    triggerAppErrorHaptic();
+                    showSnackbar(
+                      error instanceof Error ? error.message : 'No se pudo reclamar el tesoro.',
+                      'danger',
+                    );
+                  })
+                  .finally(() => {
+                    setRewardClaiming(false);
+                  });
               }}
             />
           </View>

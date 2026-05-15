@@ -224,6 +224,7 @@ const HAPPY_CIRCLE_SCORE_EVENT_SELECT = [
   'score_delta',
   'participant_count',
   'awarded_at',
+  'treasure_claimed_at',
   'created_at',
 ].join(', ');
 

@@ -51,6 +51,7 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     happyCircleScore: {
       totalFaces: 0,
       closedCircleCount: 0,
+      claimableAwards: [],
       recentAwards: [],
       latestAward: null,
     },
@@ -131,6 +132,10 @@ describe('snapshot cache payloads', () => {
     await expect(readCachedAppSnapshot('user-a')).resolves.toMatchObject({
       updatedAt: '2026-05-06T00:00:00.000Z',
     });
-    expect(sqliteMocks.database.getFirstAsync).toHaveBeenCalledWith(expect.any(String), 'user-a', 2);
+    expect(sqliteMocks.database.getFirstAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      'user-a',
+      2,
+    );
   });
 });

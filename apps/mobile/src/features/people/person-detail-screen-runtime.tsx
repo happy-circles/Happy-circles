@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, useRouter, type Href } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,10 +16,7 @@ import {
   type CircleActionFeedbackAction,
 } from '@/components/circle-action-feedback-overlay';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
-import {
-  standardHappyCircleParticipants,
-  type HappyCircleRingParticipant,
-} from '@/components/happy-circle-ring';
+import { standardHappyCircleParticipants } from '@/components/happy-circle-ring';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
 import { PrimaryAction } from '@/components/primary-action';
@@ -100,6 +97,14 @@ import {
   PersonDetailLoadingState,
   PersonDetailMissingState,
 } from './person-detail-states';
+import { CircleDetailLink } from './person-detail-circle-link';
+import {
+  buildPersonPanelHref,
+  fallbackCircleFeedbackParticipants,
+  pendingCaseTone,
+  pendingCurrentStatusDetail,
+  pendingCurrentStatusTone,
+} from './person-detail-runtime-utils';
 import { personDetailScreenStyles as styles } from './person-detail-screen.styles';
 import { AppText } from '@/components/app-text';
 
@@ -114,139 +119,6 @@ interface BannerState {
 }
 
 const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
-
-function fallbackCircleFeedbackParticipants(input: {
-  readonly action: CircleActionFeedbackAction;
-  readonly counterpartyLabel?: string | null;
-  readonly currentUserId: string | null | undefined;
-  readonly participantUserIds?: readonly string[] | null;
-}): readonly HappyCircleRingParticipant[] {
-  const decision: HappyCircleRingParticipant['decision'] =
-    input.action === 'execute' ? 'approved' : 'pending';
-  const participants =
-    input.participantUserIds?.map((participantUserId, index) => ({
-      decision,
-      label:
-        participantUserId === input.currentUserId
-          ? 'Tu'
-          : index === 0 && input.counterpartyLabel
-            ? input.counterpartyLabel
-            : 'Happy',
-      userId: participantUserId,
-    })) ?? [];
-
-  if (
-    input.currentUserId &&
-    !participants.some((participant) => participant.userId === input.currentUserId)
-  ) {
-    return [{ decision, label: 'Tu', userId: input.currentUserId }, ...participants];
-  }
-
-  if (participants.length > 0) {
-    return participants;
-  }
-
-  return [{ decision, label: 'Tu', userId: 'circle-feedback:self' }];
-}
-
-function CircleDetailLink({ color, href }: { readonly color: string; readonly href: Href }) {
-  return (
-    <Link href={href} asChild>
-      <Pressable
-        accessibilityRole="link"
-        onPressIn={appHaptics.triggerAppSelectionHaptic}
-        style={({ pressed }) => [
-          styles.circleDetailLink,
-          pressed ? styles.circleDetailLinkPressed : null,
-        ]}
-      >
-        <AppText numberOfLines={1} style={[styles.circleDetailLinkText, { color }]}>
-          Ver detalle del Circle &gt;
-        </AppText>
-      </Pressable>
-    </Link>
-  );
-}
-
-function buildPersonPanelHref(input: {
-  readonly focusId?: string | null;
-  readonly panel: PersonSegmentKey;
-  readonly userId: string;
-}): Href {
-  const focusParam = input.focusId ? `&focus=${encodeURIComponent(input.focusId)}` : '';
-
-  return `/person/${encodeURIComponent(input.userId)}?panel=${input.panel}${focusParam}` as Href;
-}
-
-function pendingCaseTone(item: ActivityItemDto): HistoryCaseTone {
-  if (item.kind === 'settlement_proposal') {
-    return 'cycle';
-  }
-
-  if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return 'danger';
-  }
-
-  if (item.tone === 'positive') {
-    return 'positive';
-  }
-
-  if (item.tone === 'negative') {
-    return 'negative';
-  }
-
-  return 'neutral';
-}
-
-function pendingCurrentStatusTone(item: ActivityItemDto): HistoryCaseTone {
-  if (item.status === 'rejected' || item.status === 'canceled' || item.status === 'expired') {
-    return 'danger';
-  }
-
-  if (item.status === 'approved') {
-    return 'positive';
-  }
-
-  if (item.status === 'pending_approvals' || item.status === 'requires_you') {
-    return 'negative';
-  }
-
-  if (item.kind === 'settlement_proposal') {
-    return 'cycle';
-  }
-
-  return pendingCaseTone(item);
-}
-
-function pendingCurrentStatusDetail(item: ActivityItemDto): string {
-  if (item.kind === 'settlement_proposal') {
-    if (item.status === 'pending_approvals') {
-      return 'Falta tu aprobacion.';
-    }
-
-    if (item.status === 'approved') {
-      return 'Aprobado. Puedes completarlo.';
-    }
-
-    if (item.status === 'waiting_other_side') {
-      return 'Faltan aprobaciones.';
-    }
-
-    if (item.status === 'rejected') {
-      return 'No fue aprobado.';
-    }
-
-    if (item.status === 'expired') {
-      return 'Expirado.';
-    }
-
-    if (item.status === 'stale') {
-      return item.staleReason ?? 'Reemplazado por cambios en el balance.';
-    }
-  }
-
-  return transactionStatusLabel(item) ?? pendingStatusLabel(item.status);
-}
 
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
   const router = useRouter();

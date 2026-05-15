@@ -10,6 +10,16 @@ begin
 
   if not exists (
     select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'happy_circle_score_events'
+      and column_name = 'treasure_claimed_at'
+  ) then
+    raise exception 'expected treasure claim timestamp column';
+  end if;
+
+  if not exists (
+    select 1
     from pg_indexes
     where schemaname = 'public'
       and tablename = 'happy_circle_score_events'
@@ -26,6 +36,16 @@ begin
       and indexname = 'happy_circle_score_events_user_awarded_at_idx'
   ) then
     raise exception 'expected user awarded_at index';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'happy_circle_score_events'
+      and indexname = 'happy_circle_score_events_user_unclaimed_idx'
+  ) then
+    raise exception 'expected user unclaimed award index';
   end if;
 
   if not exists (
@@ -51,6 +71,14 @@ begin
   if has_function_privilege('authenticated', 'public.award_happy_circle_score(uuid)'::regprocedure, 'EXECUTE') then
     raise exception 'award_happy_circle_score must only be internal';
   end if;
+
+  if not has_function_privilege('authenticated', 'public.claim_happy_circle_treasure(uuid)'::regprocedure, 'EXECUTE') then
+    raise exception 'expected authenticated users to claim own treasure';
+  end if;
+
+  if has_function_privilege('anon', 'public.claim_happy_circle_treasure(uuid)'::regprocedure, 'EXECUTE') then
+    raise exception 'anonymous users must not claim treasure';
+  end if;
 end
 $$;
 
@@ -70,6 +98,9 @@ declare
   v_response jsonb;
   v_event_count integer;
   v_score_sum integer;
+  v_score_event_id uuid;
+  v_claimed_at timestamptz;
+  v_other_user_blocked boolean := false;
 begin
   v_request := public.create_balance_request(
     v_a,
@@ -162,6 +193,54 @@ begin
   if v_event_count <> 4 or v_score_sum <> 16 then
     raise exception 'expected score events to remain idempotent, got count %, sum %', v_event_count, v_score_sum;
   end if;
+
+  select id
+    into v_score_event_id
+  from public.happy_circle_score_events
+  where settlement_proposal_id = v_proposal_id
+    and user_id = v_a;
+
+  perform set_config('request.jwt.claim.sub', v_a::text, true);
+  v_response := public.claim_happy_circle_treasure(v_score_event_id);
+
+  if v_response ->> 'status' <> 'claimed'
+    or v_response ->> 'scoreEventId' <> v_score_event_id::text
+    or (v_response ->> 'scoreDelta')::integer <> 4 then
+    raise exception 'expected first claim to mark treasure claimed, got %', v_response;
+  end if;
+
+  select treasure_claimed_at
+    into v_claimed_at
+  from public.happy_circle_score_events
+  where id = v_score_event_id;
+
+  if v_claimed_at is null then
+    raise exception 'expected claim timestamp to persist';
+  end if;
+
+  v_response := public.claim_happy_circle_treasure(v_score_event_id);
+
+  if v_response ->> 'status' <> 'already_claimed'
+    or (v_response ->> 'treasureClaimedAt')::timestamptz <> v_claimed_at then
+    raise exception 'expected second claim to be idempotent, got %', v_response;
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_b::text, true);
+
+  begin
+    perform public.claim_happy_circle_treasure(v_score_event_id);
+  exception
+    when others then
+      if sqlerrm like '%happy_circle_score_event_not_found%' then
+        v_other_user_blocked := true;
+      else
+        raise;
+      end if;
+  end;
+
+  if not v_other_user_blocked then
+    raise exception 'expected users to be blocked from claiming other users treasure';
+  end if;
 end
 $$;
 
@@ -222,6 +301,6 @@ $$;
 
 \unset QUIET
 select '1..3';
-select 'ok 1 - happy circle score events are private and internal';
-select 'ok 2 - executed circles award participant-count score events idempotently';
+select 'ok 1 - happy circle score events are private with claimable treasure rpc';
+select 'ok 2 - executed circles award score and claim treasure idempotently';
 select 'ok 3 - existing executed circles can be awarded without duplicate events';

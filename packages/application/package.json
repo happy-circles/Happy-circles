@@ -16,7 +16,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@happy-circles/domain": "workspace:*",
     "@happy-circles/shared": "workspace:*"
   }
 }

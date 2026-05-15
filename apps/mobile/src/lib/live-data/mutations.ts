@@ -39,6 +39,7 @@ export {
 } from './mutations/profile';
 export {
   useApproveSettlementMutation,
+  useClaimHappyCircleTreasureMutation,
   useExecuteSettlementMutation,
   useRejectSettlementMutation,
 } from './mutations/settlements';

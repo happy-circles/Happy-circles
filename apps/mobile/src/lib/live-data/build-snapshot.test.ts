@@ -295,6 +295,7 @@ function happyCircleScoreEvent(value: Partial<HappyCircleScoreEventRow>): HappyC
     score_delta: 4,
     participant_count: 4,
     awarded_at: NOW,
+    treasure_claimed_at: null,
     created_at: NOW,
     ...value,
   });
@@ -388,6 +389,7 @@ describe('buildLiveSnapshot', () => {
     expect(snapshot.happyCircleScore).toEqual({
       totalFaces: 0,
       closedCircleCount: 0,
+      claimableAwards: [],
       recentAwards: [],
       latestAward: null,
     });
@@ -401,6 +403,7 @@ describe('buildLiveSnapshot', () => {
     expect(snapshot.happyCircleScore).toEqual({
       totalFaces: 0,
       closedCircleCount: 0,
+      claimableAwards: [],
       recentAwards: [],
       latestAward: null,
     });
@@ -984,6 +987,7 @@ describe('buildLiveSnapshot', () => {
             score_delta: 4,
             participant_count: 4,
             awarded_at: '2026-05-05T12:00:00.000Z',
+            treasure_claimed_at: '2026-05-05T12:01:00.000Z',
           }),
           happyCircleScoreEvent({
             id: 'score-event-other',
@@ -996,14 +1000,18 @@ describe('buildLiveSnapshot', () => {
       }),
     );
 
-    expect(snapshot.happyCircleScore.totalFaces).toBe(7);
+    expect(snapshot.happyCircleScore.totalFaces).toBe(4);
     expect(snapshot.happyCircleScore.closedCircleCount).toBe(2);
     expect(snapshot.happyCircleScore.latestAward).toMatchObject({
       id: 'score-event-new',
       settlementProposalId: 'settlement-new',
       scoreDelta: 4,
       participantCount: 4,
+      claimedAt: '2026-05-05T12:01:00.000Z',
     });
+    expect(snapshot.happyCircleScore.claimableAwards.map((award) => award.id)).toEqual([
+      'score-event-old',
+    ]);
     expect(snapshot.happyCircleScore.recentAwards.map((award) => award.id)).toEqual([
       'score-event-new',
       'score-event-old',

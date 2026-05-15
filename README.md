@@ -66,9 +66,7 @@ The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage
 
 - `apps/mobile`: Expo Router mobile app and React Native UI.
 - `apps/landing`: Next.js landing and app-link gateway.
-- `packages/domain`: pure domain rules, value objects, ledger invariants, requests, relationships, settlements, and graph algorithms.
-- `packages/application`: use-case contracts, command orchestration, query DTOs, and ports.
-- `packages/infrastructure`: Supabase client adapters, structured logging, and application error mapping.
+- `packages/application`: internal query DTO types shared by app surfaces.
 - `packages/shared`: DTO contracts, Zod schemas, enums, identifiers, and generated database types.
 - `supabase/migrations`: ordered Postgres schema, RLS, views, RPCs, analytics, security, invites, and graph worker migrations.
 - `supabase/functions`: Supabase Edge Functions for authenticated commands, public previews, analytics writes, and graph-cycle processing.

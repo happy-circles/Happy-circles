@@ -9,6 +9,8 @@ Fecha: 2026-05-14
 - Flooding de endpoints: `_shared/http.ts` aplica rate limits centralizados antes de ejecutar handlers.
 - Payload abuse: `_shared/http.ts` valida `Content-Type`, `Content-Length` y bytes reales antes de parsear JSON.
 - Enumeracion de invitaciones: `get-account-invite-preview-public` ya no acepta ni devuelve existencia de email o telefono, y el endpoint aplica un allowlist explicito de campos publicos.
+- Support error leakage: mobile y Postgres redactan bearer tokens, JWTs, query tokens, secretos y tokens de rutas de invitacion antes de persistir reportes de soporte.
+- Retencion de rate limits: el cleanup nocturno elimina ventanas viejas de `edge_rate_limits` y del rate limit legacy de previews publicos.
 - Landing CSP: el landing usa CSP con nonce por request para scripts y conserva headers de aislamiento y privacidad.
 
 ## Limites aplicados
@@ -31,9 +33,12 @@ Fecha: 2026-05-14
 
 - `pnpm security:check` valida funciones publicas permitidas, funciones declaradas en config, headers de seguridad, helper de payloads, RPC de rate limit y ausencia de flags publicos de invitacion.
 - `supabase/tests/18_edge_rate_limits.sql` cubre el RPC `check_edge_rate_limit`, separacion por scope/actor/fingerprint y privacidad del preview publico.
+- `supabase/tests/13_support_error_reports.sql` cubre sanitizacion de metadata, error messages y rutas antes de persistir support errors.
+- `apps/mobile/src/lib/support-errors.test.ts` cubre redaccion client-side de tokens antes de reportar errores.
 
 ## Riesgos residuales
 
 - `style-src 'unsafe-inline'` se conserva temporalmente en el CSP del landing por compatibilidad con el build actual de Next/CSS. Riesgo bajo comparado con `script-src`; debe revisarse cuando se confirme que el build no necesita estilos inline.
 - El rate limiting usa Postgres y fingerprints derivados de IP/User-Agent. Es suficiente para esta fase, pero no sustituye un WAF o proteccion perimetral si el trafico malicioso escala.
 - Los limites son defaults iniciales. Si produccion muestra falsos positivos, se deben ajustar por migracion o configuracion posterior.
+- La redaccion de support errors cubre patrones comunes de secretos. No debe usarse como permiso para enviar payloads libres, request bodies completos o PII deliberada.

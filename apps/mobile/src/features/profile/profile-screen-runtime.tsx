@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,14 +12,12 @@ import {
   Switch,
   View,
 } from 'react-native';
-import type { ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
 import { AppText } from '@/components/app-text';
-import type { AppTextInputRef } from '@/components/app-text-input';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
@@ -60,8 +58,8 @@ import {
   formatStepUpFailure,
   resolveContactsPermissionActionLabel,
   resolveContactsPermissionTone,
-  resolveProfileFocusRequest,
 } from './profile-helpers';
+import { useProfileFocusController } from './profile-focus-controller';
 import { ProfileStatusRow } from './profile-status-row';
 import { ThemePreferenceSection } from './theme-preference-section';
 
@@ -138,25 +136,9 @@ export function ProfileScreen() {
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
-  const [trustPasswordFallbackOpen, setTrustPasswordFallbackOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
-  const scrollViewRef = useRef<ScrollView | null>(null);
-  const accountOffsetRef = useRef(0);
-  const methodsOffsetRef = useRef(0);
-  const deviceOffsetRef = useRef(0);
-  const accountMeasuredRef = useRef(false);
-  const methodsMeasuredRef = useRef(false);
-  const deviceMeasuredRef = useRef(false);
-  const trustPasswordInputRef = useRef<AppTextInputRef | null>(null);
-  const attachPasswordInputRef = useRef<AppTextInputRef | null>(null);
-  const pendingScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const delayedFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [highlightTarget, setHighlightTarget] = useState<'account' | 'methods' | 'device' | null>(
-    null,
-  );
 
   const accountLabel =
     currentUserProfile?.displayName ??
@@ -187,184 +169,32 @@ export function ProfileScreen() {
   });
   const socialTrustMethods = trustMethods.filter((method) => method !== 'password');
   const hasPasswordTrustMethod = trustMethods.includes('password');
+  const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'security';
+  const completeProfileHref = buildSetupAccountHref(setupEntryStep);
+  const {
+    accountMeasuredRef,
+    accountOffsetRef,
+    attachPasswordInputRef,
+    deviceMeasuredRef,
+    deviceOffsetRef,
+    highlightTarget,
+    methodsMeasuredRef,
+    methodsOffsetRef,
+    scrollViewRef,
+    setTrustPasswordFallbackOpen,
+    trustPasswordFallbackOpen,
+    trustPasswordInputRef,
+  } = useProfileFocusController({
+    canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
+    focusTarget: typeof params.focus === 'string' ? params.focus : null,
+    hasEmailPassword: session.linkedMethods.hasEmailPassword,
+    isTrustedDevice: session.isTrustedDevice,
+    sectionTarget: typeof params.section === 'string' ? params.section : null,
+  });
   const showTrustPasswordFallback =
     hasPasswordTrustMethod &&
     !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
-  const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'security';
-  const completeProfileHref = buildSetupAccountHref(setupEntryStep);
-
-  const clearFocusTimers = useCallback(() => {
-    if (pendingScrollTimeoutRef.current) {
-      clearTimeout(pendingScrollTimeoutRef.current);
-      pendingScrollTimeoutRef.current = null;
-    }
-
-    if (delayedFocusTimeoutRef.current) {
-      clearTimeout(delayedFocusTimeoutRef.current);
-      delayedFocusTimeoutRef.current = null;
-    }
-
-    if (highlightTimeoutRef.current) {
-      clearTimeout(highlightTimeoutRef.current);
-      highlightTimeoutRef.current = null;
-    }
-  }, []);
-
-  const queueHighlightReset = useCallback(() => {
-    if (highlightTimeoutRef.current) {
-      clearTimeout(highlightTimeoutRef.current);
-    }
-
-    highlightTimeoutRef.current = setTimeout(() => {
-      setHighlightTarget(null);
-      highlightTimeoutRef.current = null;
-    }, 2600);
-  }, []);
-
-  const focusProfileSection = useCallback(
-    (focusTarget: string | null, sectionTarget: string | null) => {
-      const focusRequest = resolveProfileFocusRequest({
-        canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
-        focusTarget,
-        hasEmailPassword: session.linkedMethods.hasEmailPassword,
-        isTrustedDevice: session.isTrustedDevice,
-        sectionTarget,
-      });
-      if (!focusRequest) {
-        return false;
-      }
-
-      const scrollToAccount = () => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, accountOffsetRef.current - 24),
-          animated: true,
-        });
-        setHighlightTarget('account');
-        queueHighlightReset();
-      };
-
-      const scrollToMethods = () => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, methodsOffsetRef.current - 24),
-          animated: true,
-        });
-        setHighlightTarget('methods');
-        queueHighlightReset();
-      };
-
-      const scrollToDevice = () => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, deviceOffsetRef.current - 24),
-          animated: true,
-        });
-        setHighlightTarget('device');
-        queueHighlightReset();
-      };
-
-      if (focusRequest.inputTarget === 'attach-password') {
-        if (!methodsMeasuredRef.current || !attachPasswordInputRef.current) {
-          return false;
-        }
-
-        scrollToMethods();
-        delayedFocusTimeoutRef.current = setTimeout(() => {
-          attachPasswordInputRef.current?.focus();
-          delayedFocusTimeoutRef.current = null;
-        }, 220);
-        return true;
-      }
-
-      if (focusRequest.inputTarget === 'trust-password') {
-        if (!deviceMeasuredRef.current || !trustPasswordInputRef.current) {
-          setTrustPasswordFallbackOpen(true);
-          return false;
-        }
-
-        setTrustPasswordFallbackOpen(true);
-        scrollToDevice();
-        delayedFocusTimeoutRef.current = setTimeout(() => {
-          trustPasswordInputRef.current?.focus();
-          delayedFocusTimeoutRef.current = null;
-        }, 220);
-        return true;
-      }
-
-      if (focusRequest.highlightTarget === 'device') {
-        if (!deviceMeasuredRef.current) {
-          return false;
-        }
-
-        scrollToDevice();
-        return true;
-      }
-
-      if (focusRequest.highlightTarget === 'account') {
-        if (!accountMeasuredRef.current) {
-          return false;
-        }
-
-        scrollToAccount();
-        return true;
-      }
-
-      if (focusRequest.highlightTarget === 'methods') {
-        if (!methodsMeasuredRef.current) {
-          return false;
-        }
-
-        scrollToMethods();
-        return true;
-      }
-
-      return false;
-    },
-    [
-      queueHighlightReset,
-      session.canTrustCurrentDeviceWithoutPassword,
-      session.isTrustedDevice,
-      session.linkedMethods.hasEmailPassword,
-    ],
-  );
-
-  useEffect(() => {
-    const focusTarget = typeof params.focus === 'string' ? params.focus : null;
-    const sectionTarget = typeof params.section === 'string' ? params.section : null;
-    if (!focusTarget && !sectionTarget) {
-      return;
-    }
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const attemptFocus = () => {
-      if (cancelled) {
-        return;
-      }
-
-      if (focusProfileSection(focusTarget, sectionTarget)) {
-        pendingScrollTimeoutRef.current = null;
-        return;
-      }
-
-      attempts += 1;
-      if (attempts >= 10) {
-        pendingScrollTimeoutRef.current = null;
-        return;
-      }
-
-      pendingScrollTimeoutRef.current = setTimeout(attemptFocus, 120);
-    };
-
-    pendingScrollTimeoutRef.current = setTimeout(attemptFocus, 60);
-
-    return () => {
-      cancelled = true;
-      clearFocusTimers();
-    };
-  }, [clearFocusTimers, focusProfileSection, params.focus, params.section]);
-
-  useEffect(() => () => clearFocusTimers(), [clearFocusTimers]);
 
   async function runAction(actionKey: string, action: () => Promise<string>) {
     triggerImpactHaptic();

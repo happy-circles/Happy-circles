@@ -84,6 +84,7 @@ const ARCHIVE_PILLS_WIDTH = 260;
 const EMPTY_HAPPY_CIRCLE_SCORE: HappyCircleScoreDto = {
   totalFaces: 0,
   closedCircleCount: 0,
+  claimableAwards: [],
   recentAwards: [],
   latestAward: null,
 };

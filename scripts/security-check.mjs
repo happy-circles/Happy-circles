@@ -143,6 +143,21 @@ assertContains(
   /grant\s+execute\s+on\s+function\s+public\.check_edge_rate_limit[\s\S]*to\s+service_role/i,
   'check_edge_rate_limit must only be callable through service_role',
 );
+assertContains(
+  'supabase/migrations/0056_support_error_redaction_and_rate_limit_retention.sql',
+  /create\s+or\s+replace\s+function\s+public\.sanitize_support_error_text/i,
+  'support error reports must redact token material before persistence',
+);
+assertContains(
+  'supabase/migrations/0056_support_error_redaction_and_rate_limit_retention.sql',
+  /delete\s+from\s+public\.edge_rate_limits[\s\S]*interval\s+'2 days'/i,
+  'edge rate limits must have bounded retention',
+);
+assertContains(
+  'apps/mobile/src/lib/support-errors.ts',
+  /SECRET_TEXT_PATTERNS[\s\S]*Bearer \[redacted\][\s\S]*redacted_jwt[\s\S]*access_token[\s\S]*redactSupportErrorText/,
+  'mobile support error reporting must redact bearer tokens, JWTs, and URL tokens',
+);
 assertNotContains(
   'supabase/functions/get-account-invite-preview-public/index.ts',
   /emailAlreadyRegistered|phoneAlreadyRegistered|auth_email_exists|user_profiles/,

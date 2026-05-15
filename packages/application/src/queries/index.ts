@@ -21,11 +21,13 @@ export interface HappyCircleScoreAwardDto {
   readonly scoreDelta: number;
   readonly participantCount: number;
   readonly awardedAt: string;
+  readonly claimedAt: string | null;
 }
 
 export interface HappyCircleScoreDto {
   readonly totalFaces: number;
   readonly closedCircleCount: number;
+  readonly claimableAwards: readonly HappyCircleScoreAwardDto[];
   readonly recentAwards: readonly HappyCircleScoreAwardDto[];
   readonly latestAward: HappyCircleScoreAwardDto | null;
 }

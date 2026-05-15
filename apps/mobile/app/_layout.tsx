@@ -8,6 +8,7 @@ import {
   useRouter,
   useSegments,
 } from 'expo-router';
+import Constants from 'expo-constants';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -80,7 +81,12 @@ import { useSession } from '@/providers/session-provider';
 import { useAppTheme, useThemeScheme } from '@/providers/theme-provider';
 import { AppText } from '@/components/app-text';
 
-SplashScreen.setOptions({ duration: 140, fade: true });
+const IS_EXPO_GO = String(Constants.appOwnership) === 'expo';
+
+if (!IS_EXPO_GO) {
+  SplashScreen.setOptions({ duration: 140, fade: true });
+}
+
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';

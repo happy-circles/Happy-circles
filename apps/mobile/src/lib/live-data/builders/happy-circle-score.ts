@@ -20,17 +20,22 @@ export function buildHappyCircleScore(input: {
 
       return right.id.localeCompare(left.id);
     });
-  const recentAwards = userEvents.slice(0, RECENT_AWARD_LIMIT).map((event) => ({
+  const awards = userEvents.map((event) => ({
     id: event.id,
     settlementProposalId: event.settlement_proposal_id,
     scoreDelta: event.score_delta,
     participantCount: event.participant_count,
     awardedAt: event.awarded_at,
+    claimedAt: event.treasure_claimed_at,
   }));
+  const recentAwards = awards.slice(0, RECENT_AWARD_LIMIT);
+  const claimableAwards = awards.filter((award) => !award.claimedAt);
+  const claimedEvents = userEvents.filter((event) => event.treasure_claimed_at);
 
   return {
-    totalFaces: userEvents.reduce((total, event) => total + event.score_delta, 0),
+    totalFaces: claimedEvents.reduce((total, event) => total + event.score_delta, 0),
     closedCircleCount: new Set(userEvents.map((event) => event.settlement_proposal_id)).size,
+    claimableAwards,
     recentAwards,
     latestAward: recentAwards[0] ?? null,
   };

@@ -404,6 +404,27 @@ export const themes = {
 
 export type AppTheme = (typeof themes)[ThemeScheme];
 
+export function colorWithAlpha(color: string, alpha: number): string {
+  const normalized = color.trim();
+  const compactHexMatch = normalized.match(/^#([\da-f]{3})$/i);
+  if (compactHexMatch) {
+    const [red, green, blue] = compactHexMatch[1].split('').map((entry) => entry + entry);
+    return colorWithAlpha(`#${red}${green}${blue}`, alpha);
+  }
+
+  const hexMatch = normalized.match(/^#([\da-f]{6})$/i);
+  if (!hexMatch) {
+    return color;
+  }
+
+  const rawHex = hexMatch[1];
+  const red = Number.parseInt(rawHex.slice(0, 2), 16);
+  const green = Number.parseInt(rawHex.slice(2, 4), 16);
+  const blue = Number.parseInt(rawHex.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 let runtimeTheme: AppTheme = lightTheme;
 
 export function setRuntimeThemeScheme(scheme: ThemeScheme): void {

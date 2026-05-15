@@ -25,12 +25,6 @@ importers:
       '@types/react':
         specifier: ~19.1.10
         version: 19.1.17
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^8.22.0
-        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3)
-      '@typescript-eslint/parser':
-        specifier: ^8.22.0
-        version: 8.58.0(eslint@9.39.4)(typescript@5.9.3)
       eslint:
         specifier: ^9.19.0
         version: 9.39.4
@@ -40,9 +34,6 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.8.1
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -210,33 +201,9 @@ importers:
 
   packages/application:
     dependencies:
-      '@happy-circles/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@happy-circles/shared':
         specifier: workspace:*
         version: link:../shared
-
-  packages/domain:
-    dependencies:
-      '@happy-circles/shared':
-        specifier: workspace:*
-        version: link:../shared
-
-  packages/infrastructure:
-    dependencies:
-      '@happy-circles/application':
-        specifier: workspace:*
-        version: link:../application
-      '@happy-circles/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@happy-circles/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@supabase/supabase-js':
-        specifier: ^2.49.1
-        version: 2.102.1
 
   packages/shared:
     dependencies:
@@ -8158,6 +8125,7 @@ snapshots:
   get-tsconfig@4.13.7:
     dependencies:
       resolve-pkg-maps: 1.0.0
+    optional: true
 
   getenv@2.0.0: {}
 
@@ -9308,7 +9276,8 @@ snapshots:
 
   resolve-from@5.0.0: {}
 
-  resolve-pkg-maps@1.0.0: {}
+  resolve-pkg-maps@1.0.0:
+    optional: true
 
   resolve-workspace-root@2.0.1: {}
 
@@ -9672,6 +9641,7 @@ snapshots:
       get-tsconfig: 4.13.7
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   type-check@0.4.0:
     dependencies:

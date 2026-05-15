@@ -57,6 +57,8 @@ declare
   v_report_id uuid;
   v_user_id uuid := '00000000-0000-0000-0000-000000001201';
   v_metadata jsonb;
+  v_error_message text;
+  v_route text;
 begin
   delete from public.support_error_reports
   where support_id = 'HC-AB12-CD34-EF56';
@@ -71,10 +73,10 @@ begin
     'edge_function',
     'HC-AB12-CD34-EF56',
     'request_failed',
-    'No se pudo completar la accion.',
+    'No se pudo completar la accion. Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnopqrstuvwxyz https://app.test/join/invite_token_123456789?access_token=secret-token',
     'create-balance-request',
     'register',
-    'register',
+    '/join/invite_token_123456789?code=otp-code',
     'ios',
     '0.1.0',
     false,
@@ -82,6 +84,7 @@ begin
     jsonb_build_object(
       'action', 'create_request',
       'status', 400,
+      'reason', 'secret=super-secret',
       'phone', '+570000000000',
       'description', 'free-form text must be dropped'
     )
@@ -91,8 +94,8 @@ begin
     raise exception 'expected support report id';
   end if;
 
-  select metadata_json
-    into v_metadata
+  select metadata_json, error_message, route
+    into v_metadata, v_error_message, v_route
   from public.support_error_reports
   where id = v_report_id;
 
@@ -102,6 +105,20 @@ begin
 
   if v_metadata ->> 'action' <> 'create_request' then
     raise exception 'support report metadata did not keep allowlisted action';
+  end if;
+
+  if v_error_message like '%eyJ%'
+    or v_error_message like '%secret-token%'
+    or v_error_message like '%invite_token_123456789%' then
+    raise exception 'support report error_message leaked token material';
+  end if;
+
+  if v_route like '%otp-code%' or v_route like '%invite_token_123456789%' then
+    raise exception 'support report route leaked token material';
+  end if;
+
+  if v_metadata ->> 'reason' <> 'secret=[redacted]' then
+    raise exception 'support report metadata did not redact allowlisted string secrets';
   end if;
 end $$;
 

@@ -4,6 +4,7 @@ declare
   v_actor_b uuid := '00000000-0000-0000-0000-000000001802';
   v_limited boolean := false;
   v_preview jsonb;
+  v_cleanup jsonb;
 begin
   delete from public.edge_rate_limits
   where scope like 'test:%';
@@ -81,6 +82,50 @@ begin
 
   if v_preview ? 'emailAlreadyRegistered' or v_preview ? 'phoneAlreadyRegistered' then
     raise exception 'public account invite preview must not expose registration existence flags';
+  end if;
+
+  insert into public.edge_rate_limits (
+    scope,
+    subject_key,
+    window_started_at,
+    window_seconds,
+    request_count,
+    updated_at
+  )
+  values (
+    'test:stale-cleanup',
+    'fingerprint:test',
+    timezone('utc', now()) - interval '3 days',
+    60,
+    1,
+    timezone('utc', now()) - interval '3 days'
+  )
+  on conflict (scope, subject_key, window_started_at) do nothing;
+
+  insert into public.public_invite_preview_rate_limits (
+    token_hash,
+    client_fingerprint_hash,
+    window_started_at,
+    request_count,
+    updated_at
+  )
+  values (
+    repeat('a', 64),
+    'test-cleanup-fingerprint',
+    timezone('utc', now()) - interval '3 days',
+    1,
+    timezone('utc', now()) - interval '3 days'
+  )
+  on conflict (token_hash, client_fingerprint_hash, window_started_at) do nothing;
+
+  v_cleanup := public.cleanup_supabase_usage_retention();
+
+  if coalesce((v_cleanup ->> 'edgeRateLimitsDeleted')::integer, 0) < 1 then
+    raise exception 'expected cleanup to delete stale edge_rate_limits rows';
+  end if;
+
+  if coalesce((v_cleanup ->> 'publicInvitePreviewRateLimitsDeleted')::integer, 0) < 1 then
+    raise exception 'expected cleanup to delete stale public invite preview rate-limit rows';
   end if;
 end
 $$;

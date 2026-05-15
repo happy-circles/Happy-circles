@@ -63,6 +63,39 @@ interface WebEventTargetLike {
 
 const UNKNOWN_SCREEN: AnalyticsScreenName = 'unknown';
 const SUPPORT_ID_REGEX = /^HC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+const SUPPORT_ERROR_TEXT_LIMIT = 240;
+const SUPPORT_ERROR_ROUTE_LIMIT = 120;
+const SECRET_TEXT_PATTERNS: ReadonlyArray<{
+  readonly pattern: RegExp;
+  readonly replacement: string;
+}> = [
+  {
+    pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
+    replacement: 'Bearer [redacted]',
+  },
+  {
+    pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+    replacement: '[redacted_jwt]',
+  },
+  {
+    pattern:
+      /([?&#](?:access_token|refresh_token|id_token|token|code|password|apikey|api_key|secret)=)[^&#\s]+/gi,
+    replacement: '$1[redacted]',
+  },
+  {
+    pattern:
+      /\b((?:access|refresh|id)[_-]?token|api[_-]?key|apikey|authorization|password|secret)\s*[:=]\s*[^\s,;&#]+/gi,
+    replacement: '$1=[redacted]',
+  },
+  {
+    pattern: /\bsb_secret_[A-Za-z0-9_-]{16,}\b/g,
+    replacement: '[redacted_supabase_secret]',
+  },
+  {
+    pattern: /((?:\/|%2F)(?:join|invite)(?:\/|%2F))[A-Za-z0-9_-]{12,128}/gi,
+    replacement: '$1[redacted]',
+  },
+];
 
 let supportContext: {
   readonly route: string | null;
@@ -111,7 +144,10 @@ export function setSupportErrorContext(context: {
   readonly screenName?: AnalyticsScreenName | null;
 }): void {
   supportContext = {
-    route: context.route?.slice(0, 120) ?? supportContext.route,
+    route:
+      context.route === undefined
+        ? supportContext.route
+        : redactSupportErrorText(context.route ?? '', SUPPORT_ERROR_ROUTE_LIMIT) || null,
     screenName: context.screenName ?? supportContext.screenName,
   };
 }
@@ -136,6 +172,33 @@ export function messageFromUnknownError(error: unknown, fallback = 'Unexpected e
   }
 
   return fallback;
+}
+
+export function redactSupportErrorText(
+  value: string,
+  maxLength = SUPPORT_ERROR_TEXT_LIMIT,
+): string {
+  const cappedLength = Math.max(1, Math.min(maxLength, 1000));
+  let redacted = value.trim();
+
+  for (const { pattern, replacement } of SECRET_TEXT_PATTERNS) {
+    redacted = redacted.replace(pattern, replacement);
+  }
+
+  return redacted.trim().slice(0, cappedLength);
+}
+
+function redactSupportMetadata(metadata?: SupportMetadata): SupportMetadata {
+  if (!metadata) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(metadata).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? redactSupportErrorText(value, 120) : value,
+    ]),
+  ) as SupportMetadata;
 }
 
 export async function readFunctionErrorDetails(error: unknown): Promise<FunctionErrorDetails> {
@@ -235,7 +298,9 @@ export function reportAndCreateSupportError(input: {
   }
 
   const supportId = input.supportId ?? createSupportId();
-  const message = messageFromUnknownError(input.error, input.fallbackMessage);
+  const message = redactSupportErrorText(
+    messageFromUnknownError(input.error, input.fallbackMessage),
+  );
 
   reportClientErrorSafe({
     error: input.error,
@@ -244,7 +309,7 @@ export function reportAndCreateSupportError(input: {
     fatal: false,
     functionName: input.functionName,
     kind: input.kind,
-    metadata: input.metadata,
+    metadata: redactSupportMetadata(input.metadata),
     requestId: input.requestId,
     supportId,
   });
@@ -280,13 +345,16 @@ async function reportClientError(input: ReportClientErrorInput): Promise<void> {
   }
 
   const metadata: SupportMetadata = {
-    ...input.metadata,
+    ...redactSupportMetadata(input.metadata),
     ...(input.functionName ? { functionName: input.functionName } : {}),
   };
+  const errorMessage = redactSupportErrorText(
+    input.errorMessage ?? messageFromUnknownError(input.error),
+  );
   const payload = reportSupportErrorSchema.parse({
     appVersion: getCurrentAppVersion(),
     errorCode: input.errorCode ?? null,
-    errorMessage: (input.errorMessage ?? messageFromUnknownError(input.error)).slice(0, 240),
+    errorMessage: errorMessage || 'Unexpected error',
     fatal: input.fatal ?? false,
     functionName: input.functionName ?? null,
     kind: input.kind,
@@ -294,7 +362,10 @@ async function reportClientError(input: ReportClientErrorInput): Promise<void> {
     occurredAt: new Date().toISOString(),
     platform: Platform.OS,
     requestId: input.requestId ?? null,
-    route: input.route ?? supportContext.route,
+    route:
+      input.route === undefined
+        ? supportContext.route
+        : redactSupportErrorText(input.route ?? '', SUPPORT_ERROR_ROUTE_LIMIT) || null,
     screenName: input.screenName ?? supportContext.screenName,
     supportId,
   });

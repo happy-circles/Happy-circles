@@ -30,6 +30,7 @@ describe('get-app-snapshot contract', () => {
     );
     expect(functionSource).toContain(".from('happy_circle_score_events')");
     expect(functionSource).toContain(".eq('user_id', actorUserId)");
+    expect(functionSource).toContain('treasure_claimed_at');
     expect(functionSource).toContain(".eq('actor_user_id', actorUserId)");
     expect(functionSource).toContain('participantScope(actorUserId)');
     expect(functionSource).toContain('friendshipScope(actorUserId)');

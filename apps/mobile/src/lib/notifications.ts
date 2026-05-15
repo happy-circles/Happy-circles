@@ -3,6 +3,8 @@ import type * as ExpoNotifications from 'expo-notifications';
 import type { EventSubscription, NotificationResponse } from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { theme } from '@/lib/theme';
+
 let configured = false;
 
 type NotificationsModule = typeof ExpoNotifications;
@@ -93,7 +95,7 @@ export async function configureNotifications(): Promise<void> {
       enableLights: true,
       enableVibrate: true,
       importance: Notifications.AndroidImportance.MAX,
-      lightColor: '#f5a400',
+      lightColor: theme.colors.treasure,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       name: 'Happy Circles pendientes',
       showBadge: true,
@@ -163,7 +165,7 @@ export async function scheduleDailyPendingReminder(): Promise<void> {
     content: {
       badge: 1,
       body: 'Revisa solicitudes y saldos que esperan tu accion.',
-      color: '#f5a400',
+      color: theme.colors.treasure,
       data: { href: '/activity' },
       interruptionLevel: 'active',
       priority: 'max',
@@ -196,7 +198,7 @@ export async function scheduleDeferredReminder(
       badge: 1,
       title,
       body,
-      color: '#f5a400',
+      color: theme.colors.treasure,
       data: { href },
       interruptionLevel: 'active',
       priority: 'max',

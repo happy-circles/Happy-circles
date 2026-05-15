@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app lib",
-    "prepare:avatars": "python scripts/prepare-avatars.py",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

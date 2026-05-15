@@ -47,6 +47,7 @@ export {
   useApproveSettlementMutation,
   useCancelAccountInviteMutation,
   useCancelFriendshipInviteMutation,
+  useClaimHappyCircleTreasureMutation,
   useClaimExternalFriendshipInviteMutation,
   useCreateExternalFriendshipInviteMutation,
   useCreateInternalFriendshipInviteMutation,

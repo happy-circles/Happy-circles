@@ -1,6 +1,6 @@
 # UX and Copy Standards
 
-Happy Circles no longer uses Figma as a product source of truth. Product polish should come from the running app, operational docs, and the shared mobile theme.
+Product polish should come from the running app, operational docs, and the shared mobile theme.
 
 ## Sources of Truth
 
