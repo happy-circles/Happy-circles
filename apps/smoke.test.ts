@@ -77,7 +77,7 @@ describe('app smoke checks', () => {
     expect(inviteSurface).not.toContain('Receiver');
     expect(inviteSurface).toContain('Invitación a Happy Circles');
     expect(inviteSurface).toContain('Puede recibir invitación');
-    expect(inviteSurface).toContain('Pega un link completo o un código válido de invitación.');
+    expect(inviteSurface).toContain('Pega un enlace completo o un código válido de invitación.');
   });
 
   it('keeps reset-password recovery and invalid-link states separated', () => {
