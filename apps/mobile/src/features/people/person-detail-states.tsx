@@ -49,7 +49,7 @@ export function PersonDetailMissingState({ refresh }: { readonly refresh: Brande
       title="Persona"
     >
       <EmptyState
-        description="Prueba desde la lista principal de personas o confirma que la relación exista en Supabase."
+        description="Prueba desde la lista principal de personas o confirma que la relación siga activa."
         title="Sin relación activa"
       />
     </ScreenShell>

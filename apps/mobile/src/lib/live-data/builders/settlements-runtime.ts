@@ -174,7 +174,7 @@ export function buildPendingSettlementItems(
         id: proposal.id,
         kind: 'settlement_proposal',
         title: 'Happy Circle esperando aprobaciones',
-        subtitle: `${titleBase} | faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}`,
+        subtitle: `${titleBase} | faltan ${approvalsPending} ${approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}`,
         status: 'waiting_other_side',
         ctaLabel: LIVE_DATA_CTA.review,
         href: LIVE_DATA_ROUTES.settlement(proposal.id),
@@ -331,7 +331,7 @@ export function buildSettlementDetail(
     proposal.status === 'pending_approvals'
       ? [
           approvalsPending > 0
-            ? `Faltan ${approvalsPending} aprobacion${approvalsPending > 1 ? 'es' : ''}.`
+            ? `Faltan ${approvalsPending} ${approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}.`
             : 'Sin pendientes.',
         ]
       : proposal.status === 'approved'
@@ -341,7 +341,7 @@ export function buildSettlementDetail(
           : proposal.status === 'stale'
             ? [
                 staleReasonDetail(proposal.stale_reason),
-                proposal.replaced_by_proposal_id ? 'Hay un calculo nuevo.' : 'No se puede aprobar.',
+                proposal.replaced_by_proposal_id ? 'Hay un cálculo nuevo.' : 'No se puede aprobar.',
               ]
             : ['No se aplicaron movimientos.'];
 

@@ -369,7 +369,7 @@ export function AccountCreateAccountScreen() {
       }
     } catch (error) {
       triggerIdentityErrorHaptic();
-      setMessage(error instanceof Error ? error.message : 'No se pudo validar la confirmacion.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo validar la confirmación.');
     } finally {
       setVerificationBusy(false);
     }
@@ -383,7 +383,11 @@ export function AccountCreateAccountScreen() {
     <IdentityFlowScreen
       contentTransitionKey={contentTransitionKey}
       identity={<IdentityFlowIdentity centerFaceSize="small" state={tokenState} variant="status" />}
-      identityPosition={canCreateAccount && !pendingVerificationEmail && !showEmailPasswordFallback && !message ? 'center' : 'top'}
+      identityPosition={
+        canCreateAccount && !pendingVerificationEmail && !showEmailPasswordFallback && !message
+          ? 'center'
+          : 'top'
+      }
       message={
         message ? (
           <MessageBanner message={message} tone={resolveCreateAccountMessageTone(message)} />
@@ -402,7 +406,7 @@ export function AccountCreateAccountScreen() {
       {!shouldPreview ? (
         <View style={styles.messageBlock}>
           <MessageBanner
-            message="Abre tu link de invitación o pega el código completo desde la entrada."
+            message="Abre tu enlace de invitación o pega el código completo desde la entrada."
             tone="neutral"
           />
           <PrimaryAction href="/join" label="Volver a invitación" variant="secondary" />

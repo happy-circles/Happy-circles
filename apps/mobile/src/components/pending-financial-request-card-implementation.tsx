@@ -156,7 +156,7 @@ function ResponseActionButton({
 }
 
 function historyActorLabel(label: string): string {
-  return label === 'Tu' ? 'Por ti' : `Por ${label}`;
+  return label === 'Tú' || label === 'Tu' ? 'Por ti' : `Por ${label}`;
 }
 
 function hasPendingHistoryAmountChanges(

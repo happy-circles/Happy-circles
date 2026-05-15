@@ -36,7 +36,7 @@ export function AccountInviteEntryTokenForm({
         <IdentityFlowField
           error={tokenFieldError}
           icon="key"
-          label="Codigo de invitacion"
+          label="Código de invitación"
           status={status}
         >
           <IdentityFlowTextInput
@@ -44,7 +44,7 @@ export function AccountInviteEntryTokenForm({
             autoCorrect={false}
             onBlur={onBlurToken}
             onChangeText={onChangeToken}
-            placeholder="Se llena al abrir tu link"
+            placeholder="Se llena al abrir tu enlace"
             placeholderTextColor={activeTheme.colors.muted}
             value={tokenInput}
           />

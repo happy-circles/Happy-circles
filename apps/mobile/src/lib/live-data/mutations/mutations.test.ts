@@ -213,7 +213,7 @@ describe('live-data mutation hooks', () => {
         currentDeviceId: 'device-1',
         deliveryToken: 'delivery-token-123',
       }),
-    ).rejects.toThrow('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
+    ).rejects.toThrow('Este dispositivo aún no es confiable. Valídalo primero desde seguridad.');
     expect(mocks.invokeSupabaseFunction).not.toHaveBeenCalled();
   });
 

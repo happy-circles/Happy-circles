@@ -212,11 +212,11 @@ export function transactionDirectionLabel(item: ActivityItemDto): string {
   }
 
   if (item.tone === 'positive') {
-    return 'Te deben';
+    return 'Por cobrar';
   }
 
   if (item.tone === 'negative') {
-    return 'Debes';
+    return 'Por pagar';
   }
 
   return 'Sin saldo';
@@ -426,7 +426,7 @@ export function transactionCreatorLabel(item: ActivityItemDto, actorLabel: strin
   }
 
   const titleCreator = item.title.match(
-    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
+    /^(.+?)\s+(propuso|acept[oó]|registr[oó]|aplic[oó]|no acept[oó])\b/i,
   )?.[1];
   if (titleCreator?.trim()) {
     return titleCreator.trim();
@@ -461,7 +461,8 @@ export function transactionTimeLabel(item: ActivityItemDto): string {
 
 export function transactionCreatedByMetaLabel(item: ActivityItemDto, actorLabel: string): string {
   const creatorLabel = transactionCreatorLabel(item, actorLabel);
-  const createdByText = creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
+  const createdByText =
+    creatorLabel === 'Tú' || creatorLabel === 'Tu' ? 'Creado por ti' : `Creado por ${creatorLabel}`;
 
   return `${createdByText} - ${transactionTimeLabel(item)}`;
 }
@@ -541,11 +542,11 @@ export function transactionContextLabel(item: ActivityItemDto, actorLabel: strin
 function cycleLedgerContextLabel(item: Pick<ActivityItemDto, 'flowLabel'>): string {
   const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
 
-  if (from === 'Tu' && to) {
+  if ((from === 'Tú' || from === 'Tu') && to) {
     return `Pagaste a ${to}`;
   }
 
-  if (to === 'Tu' && from) {
+  if ((to === 'Tú' || to === 'Tu') && from) {
     return `${from} te pagó`;
   }
 

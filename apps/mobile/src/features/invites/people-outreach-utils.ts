@@ -79,17 +79,17 @@ export function buildAccountInviteShareMessage(input: {
   if (input.amountMinor && input.amountMinor > 0 && input.direction) {
     const movementText =
       input.direction === 'i_owe'
-        ? `una salida de ${formatCop(input.amountMinor)}`
-        : `una entrada de ${formatCop(input.amountMinor)}`;
+        ? `que yo te debo ${formatCop(input.amountMinor)}`
+        : `que tú me debes ${formatCop(input.amountMinor)}`;
     const descriptionText =
       input.description && input.description.trim().length > 0
         ? ` por ${input.description.trim()}`
         : '';
 
-    return `${prefix} te comparti un acceso privado a Happy Circles para registrar ${movementText}${descriptionText}. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+    return `${prefix} te compartí un acceso privado a Happy Circles para registrar ${movementText}${descriptionText}. Abre este enlace para entrar o crear tu cuenta: ${input.inviteLink}`;
   }
 
-  return `${prefix} te comparti un acceso privado a Happy Circles para que entres y te conectes conmigo. Abre este link para entrar o crear tu cuenta: ${input.inviteLink}`;
+  return `${prefix} te compartí un acceso privado a Happy Circles para que entres y te conectes conmigo. Abre este enlace para entrar o crear tu cuenta: ${input.inviteLink}`;
 }
 
 function maskPhoneValue(value: string): string {
@@ -348,7 +348,7 @@ export function badgeForResolution(resolution: PeopleTargetResolution | null): {
 
   if (resolution.status === 'active_user') {
     return {
-      label: 'Ya esta en Happy Circles',
+      label: 'Ya está en Happy Circles',
       tone: 'success',
     };
   }
@@ -365,11 +365,11 @@ export function actionLabelForResolution(resolution: PeopleTargetResolution | nu
   }
 
   if (resolution.status === 'already_related') {
-    return 'Ya estan conectados';
+    return 'Ya están conectados';
   }
 
   if (resolution.status === 'pending_friendship' || resolution.status === 'pending_activation') {
-    return 'Ya tiene una invitacion pendiente';
+    return 'Ya tiene una invitación pendiente';
   }
 
   if (resolution.status === 'active_user') {
@@ -399,5 +399,5 @@ export function buildContactMeta(contact: ContactCandidate): string {
     return primaryLine;
   }
 
-  return `${primaryLine} | ${contact.phoneOptions.length} numeros`;
+  return `${primaryLine} | ${contact.phoneOptions.length} números`;
 }

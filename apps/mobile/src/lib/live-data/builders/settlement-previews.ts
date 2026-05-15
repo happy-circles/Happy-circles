@@ -116,7 +116,7 @@ export function buildActiveSettlementPreviews(input: {
       subtitle:
         proposal.status === 'approved'
           ? `Con ${summarizeSettlementParticipants(participantLabels)} se completara automaticamente.`
-          : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`,
+          : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} ${approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}.`,
       totalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
       personalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
       approvalsPending,

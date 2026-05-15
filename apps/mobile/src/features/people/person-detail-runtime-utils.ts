@@ -21,7 +21,7 @@ export function fallbackCircleFeedbackParticipants(input: {
       decision,
       label:
         participantUserId === input.currentUserId
-          ? 'Tu'
+          ? 'Tú'
           : index === 0 && input.counterpartyLabel
             ? input.counterpartyLabel
             : 'Happy',
@@ -32,14 +32,14 @@ export function fallbackCircleFeedbackParticipants(input: {
     input.currentUserId &&
     !participants.some((participant) => participant.userId === input.currentUserId)
   ) {
-    return [{ decision, label: 'Tu', userId: input.currentUserId }, ...participants];
+    return [{ decision, label: 'Tú', userId: input.currentUserId }, ...participants];
   }
 
   if (participants.length > 0) {
     return participants;
   }
 
-  return [{ decision, label: 'Tu', userId: 'circle-feedback:self' }];
+  return [{ decision, label: 'Tú', userId: 'circle-feedback:self' }];
 }
 
 export function buildPersonPanelHref(input: {
@@ -95,7 +95,7 @@ export function pendingCurrentStatusTone(item: ActivityItemDto): HistoryCaseTone
 export function pendingCurrentStatusDetail(item: ActivityItemDto): string {
   if (item.kind === 'settlement_proposal') {
     if (item.status === 'pending_approvals') {
-      return 'Falta tu aprobacion.';
+      return 'Falta tu aprobación.';
     }
 
     if (item.status === 'approved') {

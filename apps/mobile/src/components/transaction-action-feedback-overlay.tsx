@@ -72,8 +72,8 @@ const CORRECTION_PHASES: readonly TransactionFeedbackPhase[] = [
   },
   {
     icon: 'layers-outline',
-    label: 'version',
-    message: 'La nueva version queda conectada al movimiento original.',
+    label: 'versión',
+    message: 'La nueva versión queda conectada al movimiento original.',
     title: 'Reordenando el caso',
   },
   {
@@ -108,7 +108,7 @@ function resultCopy(input: {
     label: input.isCorrection ? 'corregido' : 'creado',
     message:
       input.message ??
-      (input.isCorrection ? 'La correccion quedo enviada.' : 'La propuesta quedo enviada.'),
+      (input.isCorrection ? 'La corrección quedó enviada.' : 'La propuesta quedó enviada.'),
     title: input.title ?? (input.isCorrection ? 'Correccion enviada' : 'Movimiento creado'),
   };
 }
@@ -252,9 +252,7 @@ export function TransactionActionFeedbackOverlay({
 
   return (
     <Modal animationType="none" statusBarTranslucent transparent visible={mounted}>
-      <Animated.View
-        style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}
-      >
+      <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
           style={[
             styles.card,

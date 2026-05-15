@@ -29,23 +29,23 @@ import { AppText } from '@/components/app-text';
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'identity_incomplete') {
-    return 'Completa tu perfil para poder reclamar esta invitacion.';
+    return 'Completa tu perfil para poder reclamar esta invitación.';
   }
 
   if (reason === 'already_connected') {
-    return 'Ya tienes una relacion activa con esta persona.';
+    return 'Ya tienes una relación activa con esta persona.';
   }
 
   if (reason === 'sender_view') {
-    return 'Esta invitacion sigue esperando a que alguien la reclame.';
+    return 'Esta invitación sigue esperando a que alguien la reclame.';
   }
 
   if (reason === 'sender_review') {
-    return 'Ya hay una cuenta esperando tu validacion.';
+    return 'Ya hay una cuenta esperando tu validación.';
   }
 
   if (reason === 'claimed_by_other') {
-    return 'Esta invitacion ya fue reclamada por otra cuenta.';
+    return 'Esta invitación ya fue reclamada por otra cuenta.';
   }
 
   if (reason === 'delivery_revoked') {
@@ -53,26 +53,26 @@ function inviteReasonLabel(reason: string): string {
   }
 
   if (reason === 'accepted') {
-    return 'La amistad ya quedo creada.';
+    return 'La amistad ya quedó creada.';
   }
 
   if (reason === 'rejected') {
-    return 'Esta invitacion ya fue cerrada.';
+    return 'Esta invitación ya fue cerrada.';
   }
 
   if (reason === 'expired') {
-    return 'Este acceso ya vencio.';
+    return 'Este acceso ya venció.';
   }
 
   if (reason === 'canceled') {
-    return 'La invitacion ya fue cancelada.';
+    return 'La invitación ya fue cancelada.';
   }
 
-  return 'No puedes continuar con esta invitacion.';
+  return 'No puedes continuar con esta invitación.';
 }
 
 function channelLabel(channel: 'remote' | 'qr') {
-  return channel === 'qr' ? 'QR temporal' : 'Invitacion remota';
+  return channel === 'qr' ? 'QR temporal' : 'Invitación remota';
 }
 
 function isUnavailableFriendshipInvite(reason: string) {
@@ -161,35 +161,35 @@ export function InviteLinkScreen() {
             : 'success'
           : 'idle';
   const tokenTitle = !deliveryToken
-    ? 'Link invalido'
+    ? 'Enlace no válido'
     : !readyForPreview
       ? 'Preparando acceso'
       : previewQuery.error
-        ? 'No pudimos abrir esta invitacion'
+        ? 'No pudimos abrir esta invitación'
         : previewQuery.isLoading
-          ? 'Leyendo invitacion'
+          ? 'Leyendo invitación'
           : preview
             ? tokenUnavailable
-              ? 'Invitacion no disponible'
+              ? 'Invitación no disponible'
               : preview.canApprove
-                ? 'Revisar conexion'
+                ? 'Revisar conexión'
                 : preview.canClaim
-                  ? 'Invitacion de amistad'
-                  : 'Invitacion revisada'
-            : 'Invitacion de amistad';
+                  ? 'Invitación de amistad'
+                  : 'Invitación revisada'
+            : 'Invitación de amistad';
   const tokenSubtitle = !deliveryToken
-    ? 'No encontramos el token de esta invitacion.'
+    ? 'No encontramos el código de esta invitación.'
     : !readyForPreview
-      ? 'Te llevamos por login o setup antes de mostrar la confirmacion real.'
+      ? 'Te llevamos a iniciar sesión o completar tu configuración antes de mostrar la confirmación.'
       : previewQuery.error
         ? previewQuery.error.message
         : previewQuery.isLoading
-          ? 'Consultando el estado actual del token.'
+          ? 'Consultando el estado de la invitación.'
           : preview
             ? tokenUnavailable || (!preview.canClaim && !preview.canApprove)
               ? inviteReasonLabel(preview.reason)
-              : 'Responde cuando reconozcas esta invitacion.'
-            : 'El token abre una invitacion privada.';
+              : 'Responde cuando reconozcas esta invitación.'
+            : 'El código abre una invitación privada.';
   const previewPersonName =
     preview?.canApprove && preview.claimantSnapshot
       ? preview.claimantSnapshot.displayName
@@ -264,12 +264,12 @@ export function InviteLinkScreen() {
       await clearPendingInviteIntent();
       setMessage(
         response.status === 'accepted'
-          ? 'Conexion confirmada. La amistad ya quedo creada.'
-          : 'Reclamaste esta invitacion. Ahora falta la validacion final del otro lado.',
+          ? 'Conexión confirmada. La amistad ya quedó creada.'
+          : 'Reclamaste esta invitación. Ahora falta la validación final del otro lado.',
       );
       await previewQuery.refetch();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo reclamar la invitacion.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo reclamar la invitación.');
     } finally {
       setBusyAction(null);
     }
@@ -291,12 +291,12 @@ export function InviteLinkScreen() {
       await clearPendingInviteIntent();
       setMessage(
         decision === 'approve'
-          ? 'Conexion confirmada. La amistad ya quedo creada.'
-          : 'Invitacion cerrada. Puedes generar otra si lo necesitas.',
+          ? 'Conexión confirmada. La amistad ya quedó creada.'
+          : 'Invitación cerrada. Puedes generar otra si lo necesitas.',
       );
       await previewQuery.refetch();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo completar la validacion.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo completar la validación.');
     } finally {
       setBusyAction(null);
     }

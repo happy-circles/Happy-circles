@@ -709,7 +709,7 @@ export function useSessionController(): SessionContextValue {
         return {
           message:
             mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
-              ? 'Vinculacion con Google cancelada.'
+              ? 'Vinculación con Google cancelada.'
               : credentialResult.message,
           userId: null,
         };
@@ -826,7 +826,7 @@ export function useSessionController(): SessionContextValue {
 
         if (!credential.identityToken) {
           return {
-            message: 'Apple no devolvio un token valido.',
+            message: 'Apple no devolvió la credencial necesaria.',
             userId: null,
           };
         }
@@ -907,7 +907,7 @@ export function useSessionController(): SessionContextValue {
         ) {
           return {
             message:
-              mode === 'link' ? 'Vinculacion con Apple cancelada.' : 'Inicio con Apple cancelado.',
+              mode === 'link' ? 'Vinculación con Apple cancelada.' : 'Inicio con Apple cancelado.',
             userId: null,
           };
         }
@@ -1077,7 +1077,7 @@ export function useSessionController(): SessionContextValue {
         ?.trim()
         .toLocaleLowerCase('en-US');
       if (!email) {
-        return 'Escribe el correo para reenviar la confirmacion.';
+        return 'Escribe el correo para reenviar la confirmación.';
       }
 
       if (sessionRef.current && isSessionEmailConfirmed(sessionRef.current)) {
@@ -1182,7 +1182,7 @@ export function useSessionController(): SessionContextValue {
           !sessionRef.current ||
           passwordRecoverySessionUserIdRef.current !== sessionRef.current.user.id
         ) {
-          return 'El enlace de recuperacion ya no es valido. Pide uno nuevo.';
+          return 'El enlace de recuperación ya no es válido. Pide uno nuevo.';
         }
 
         const { error } = await supabase.auth.updateUser({

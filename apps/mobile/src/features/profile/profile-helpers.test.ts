@@ -27,7 +27,7 @@ describe('profile helpers', () => {
       'Valida este dispositivo antes de eliminar tu cuenta.',
     );
     expect(formatStepUpFailure('lockout', 'Face ID')).toBe(
-      'Face ID esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.',
+      'Face ID está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.',
     );
     expect(formatStepUpFailure(null, 'Face ID')).toBe(
       'No se pudo validar tu identidad para eliminar la cuenta.',

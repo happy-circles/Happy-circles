@@ -30,12 +30,12 @@ function versionTimelineTone(status: string): CardTone {
 function versionNumberLabel(item: SettlementVersionTimelineItemDto, index: number): string {
   const versionNumber = item.displayVersionNumber ?? item.versionNumber ?? index + 1;
 
-  return `Version ${versionNumber}`;
+  return `Versión ${versionNumber}`;
 }
 
 function versionStatusLabel(status: string): string {
   if (status === 'pending_approvals') {
-    return 'En aprobacion';
+    return 'En aprobación';
   }
 
   if (status === 'approved') {
@@ -80,14 +80,14 @@ function versionStoryTitle(item: SettlementVersionTimelineItemDto, index: number
   }
 
   if (item.isCurrent) {
-    return index === 0 ? 'Calculo actual' : 'Nuevo calculo actual';
+    return index === 0 ? 'Cálculo actual' : 'Nuevo cálculo actual';
   }
 
   if (item.status === 'executed') {
     return 'Circle cerrado';
   }
 
-  return index === 0 ? 'Primer calculo' : 'Nuevo calculo';
+  return index === 0 ? 'Primer cálculo' : 'Nuevo cálculo';
 }
 
 function versionStoryDetail(item: SettlementVersionTimelineItemDto): string | null {

@@ -58,8 +58,8 @@ export type PeopleInsightPerson = {
 
 export const PEOPLE_INSIGHT_OPTIONS: readonly PeopleInsightOption[] = [
   { label: 'Balance', value: 'balance' },
-  { label: 'Te deben', value: 'owed_to_me' },
-  { label: 'Debes', value: 'i_owe' },
+  { label: 'Por cobrar', value: 'owed_to_me' },
+  { label: 'Por pagar', value: 'i_owe' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
   { label: 'Circles', value: 'circles' },
@@ -108,7 +108,7 @@ export function peopleInsightEmptyDescription(filter: PeopleInsightFilter): stri
   }
 
   if (filter === 'i_owe') {
-    return 'Cuando debas en una relación, esos movimientos aparecerán aquí.';
+    return 'Cuando tengas saldo por pagar en una relación, esos movimientos aparecerán aquí.';
   }
 
   if (filter === 'pending') {

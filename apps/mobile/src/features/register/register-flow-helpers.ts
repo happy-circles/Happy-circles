@@ -28,7 +28,11 @@ export interface RegisterPerson {
 export function activityRecencyScore(value: string): number {
   const normalized = value.trim().toLocaleLowerCase('es-CO');
 
-  if (normalized.length === 0 || normalized === 'sin movimientos todavia') {
+  if (
+    normalized.length === 0 ||
+    normalized === 'sin movimientos todavía' ||
+    normalized === 'sin movimientos todavia'
+  ) {
     return 0;
   }
 

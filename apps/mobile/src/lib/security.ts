@@ -21,7 +21,7 @@ function resolveBiometricLabel(types: readonly LocalAuthentication.Authenticatio
     return Platform.OS === 'ios' ? 'Touch ID' : 'huella';
   }
 
-  return 'biometria';
+  return 'biometría';
 }
 
 function shouldAllowDeviceFallback(): boolean {
@@ -34,7 +34,7 @@ function shouldAllowDeviceFallback(): boolean {
 
 export async function getBiometricSupport(): Promise<BiometricSupport> {
   if (Platform.OS === 'web') {
-    return { available: false, label: 'biometria' };
+    return { available: false, label: 'biometría' };
   }
 
   const [hasHardware, isEnrolled, types] = await Promise.all([
@@ -66,7 +66,7 @@ export async function authenticateWithBiometricsResult(): Promise<BiometricAuthR
     promptMessage: 'Desbloquea Happy Circles',
     cancelLabel: 'Cancelar',
     disableDeviceFallback: !allowDeviceFallback,
-    fallbackLabel: allowDeviceFallback ? 'Usar codigo' : '',
+    fallbackLabel: allowDeviceFallback ? 'Usar código' : '',
   });
 
   if (result.success) {

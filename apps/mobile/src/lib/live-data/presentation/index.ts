@@ -34,8 +34,8 @@ export function buildActivitySections(input: {
     {
       key: 'history',
       title: 'Historial',
-      description: 'Lo ultimo que ya quedo registrado en el ledger o resuelto.',
-      emptyMessage: 'Aun no hay historial.',
+      description: 'Lo último que ya quedó registrado en el historial o resuelto.',
+      emptyMessage: 'Aún no hay historial.',
       items: input.historyItems,
     },
   ];

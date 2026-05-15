@@ -82,7 +82,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 401,
       code: 'auth_required',
-      message: 'Autenticacion requerida.',
+      message: 'Autenticación requerida.',
     };
   }
 
@@ -98,7 +98,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 429,
       code: 'rate_limited',
-      message: 'Intenta de nuevo mas tarde.',
+      message: 'Intenta de nuevo más tarde.',
     };
   }
 
@@ -106,7 +106,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 403,
       code: 'forbidden',
-      message: 'No tienes permisos para realizar esta accion.',
+      message: 'No tienes permisos para realizar esta acción.',
     };
   }
 
@@ -114,7 +114,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 403,
       code: 'forbidden',
-      message: 'No tienes permisos para realizar esta accion.',
+      message: 'No tienes permisos para realizar esta acción.',
     };
   }
 
@@ -122,7 +122,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'validation_failed',
-      message: 'Solicitud invalida.',
+      message: 'Solicitud inválida.',
     };
   }
 
@@ -138,7 +138,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 403,
       code: 'account_not_active',
-      message: 'Tu cuenta aun no esta activa para enviar invitaciones.',
+      message: 'Tu cuenta aún no está activa para enviar invitaciones.',
     };
   }
 
@@ -146,7 +146,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 403,
       code: 'device_not_trusted',
-      message: 'Este dispositivo aun no es confiable. Validalo primero desde seguridad.',
+      message: 'Este dispositivo aún no es confiable. Valídalo primero desde seguridad.',
     };
   }
 
@@ -154,7 +154,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'cannot_invite_self',
-      message: 'No puedes enviarte una invitacion a ti mismo.',
+      message: 'No puedes enviarte una invitación a ti mismo.',
     };
   }
 
@@ -173,7 +173,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'contact_phone_required',
-      message: 'El contacto necesita un numero valido para enviar la invitacion.',
+      message: 'El contacto necesita un número válido para enviar la invitación.',
     };
   }
 
@@ -184,7 +184,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'validation_failed',
-      message: 'El tipo de invitacion no es valido.',
+      message: 'El tipo de invitación no es válido.',
     };
   }
 
@@ -192,7 +192,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'profile_not_found',
-      message: 'No encontramos tu perfil. Cierra sesion y vuelve a entrar.',
+      message: 'No encontramos tu perfil. Cierra sesión y vuelve a entrar.',
     };
   }
 
@@ -204,7 +204,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'activation_profile_incomplete',
-      message: 'Completa tu perfil antes de activar esta invitacion.',
+      message: 'Completa tu perfil antes de activar esta invitación.',
     };
   }
 
@@ -216,7 +216,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 409,
       code: 'invite_already_used',
-      message: 'Esta invitacion ya fue usada o ya no esta disponible.',
+      message: 'Esta invitación ya fue usada o ya no está disponible.',
     };
   }
 
@@ -224,7 +224,7 @@ function normalizeError(error: unknown): SafeError {
     return {
       status: 410,
       code: 'invite_expired',
-      message: 'Esta invitacion ya vencio.',
+      message: 'Esta invitación ya venció.',
     };
   }
 
@@ -251,7 +251,7 @@ function normalizePublicError(error: unknown): SafeError {
     return {
       status: 429,
       code: 'rate_limited',
-      message: 'Intenta de nuevo mas tarde.',
+      message: 'Intenta de nuevo más tarde.',
     };
   }
 
@@ -263,7 +263,7 @@ function normalizePublicError(error: unknown): SafeError {
     return {
       status: 409,
       code: 'invite_already_used',
-      message: 'Esta invitacion ya fue usada o ya no esta disponible.',
+      message: 'Esta invitación ya fue usada o ya no está disponible.',
     };
   }
 
@@ -271,7 +271,7 @@ function normalizePublicError(error: unknown): SafeError {
     return {
       status: 410,
       code: 'invite_expired',
-      message: 'Esta invitacion ya vencio.',
+      message: 'Esta invitación ya venció.',
     };
   }
 
@@ -279,14 +279,14 @@ function normalizePublicError(error: unknown): SafeError {
     return {
       status: 400,
       code: 'validation_failed',
-      message: 'Solicitud invalida.',
+      message: 'Solicitud inválida.',
     };
   }
 
   return {
     status: 400,
     code: 'invite_preview_unavailable',
-    message: 'No pudimos abrir esta invitacion.',
+    message: 'No pudimos abrir esta invitación.',
   };
 }
 

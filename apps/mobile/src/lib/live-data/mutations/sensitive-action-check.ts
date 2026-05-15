@@ -24,7 +24,7 @@ export async function guardSensitiveMutationAction(
   }
 
   if (session.deviceTrustState !== 'trusted') {
-    throw new Error('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
+    throw new Error('Este dispositivo aún no es confiable. Valídalo primero desde seguridad.');
   }
 
   const result = await session.stepUpAuth();
@@ -41,7 +41,7 @@ export async function guardSensitiveMutationAction(
 
     if (result.error === 'lockout') {
       throw new Error(
-        `${session.biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`,
+        `${session.biometricLabel} está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`,
       );
     }
 

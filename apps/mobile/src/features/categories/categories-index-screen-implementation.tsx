@@ -46,8 +46,8 @@ import {
 
 const CATEGORY_INSIGHT_OPTIONS = [
   { label: 'Balance', value: 'balance' },
-  { label: 'Te deben', value: 'owed_to_me' },
-  { label: 'Debes', value: 'i_owe' },
+  { label: 'Por cobrar', value: 'owed_to_me' },
+  { label: 'Por pagar', value: 'i_owe' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
   { label: 'Circles', value: 'circles' },
@@ -234,11 +234,11 @@ function categoryInsightEmptyDescription(filter: CategoryInsightFilter): string 
   }
 
   if (filter === 'owed_to_me') {
-    return 'Cuando una categoría acumule dinero que te deben, aparecerá aquí.';
+    return 'Cuando una categoría acumule saldo a tu favor, aparecerá aquí.';
   }
 
   if (filter === 'i_owe') {
-    return 'Cuando debas dentro de una categoría, aparecerá aquí.';
+    return 'Cuando una categoría acumule saldo por pagar, aparecerá aquí.';
   }
 
   if (filter === 'pending') {
@@ -638,7 +638,7 @@ function selectedCategoryEmptyDescription(
   hasQuery: boolean,
 ): string {
   if (!hasQuery && filter === 'rejected') {
-    return 'No hay movimientos rechazados para esta categoria.';
+    return 'No hay movimientos rechazados para esta categoría.';
   }
 
   if (hasQuery) {
@@ -653,7 +653,7 @@ function selectedCategoryEmptyDescription(
     return 'No hay Happy Circles para esta categoría.';
   }
 
-  return 'No hay transacciones cerradas para esta categoría.';
+  return 'No hay movimientos cerrados para esta categoría.';
 }
 
 function selectedCategoryEmptyTitle(filter: CategoryInsightFilter, hasQuery: boolean): string {
@@ -882,7 +882,7 @@ export function CategoriesIndexScreen({
       <ScreenShell headerVariant="plain" largeTitle={false} title="Categorías">
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <AppText style={styles.supportText}>Estamos organizando tus categorias.</AppText>
+          <AppText style={styles.supportText}>Estamos organizando tus categorías.</AppText>
         </View>
       </ScreenShell>
     );
@@ -917,11 +917,7 @@ export function CategoriesIndexScreen({
     );
   }
 
-  function renderCategorySectionHeader({
-    section,
-  }: {
-    readonly section: CategoryListSection;
-  }) {
+  function renderCategorySectionHeader({ section }: { readonly section: CategoryListSection }) {
     if (!section.title) {
       return null;
     }

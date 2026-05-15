@@ -62,7 +62,7 @@ function buildWelcomeHtml(input: {
     <title>Bienvenido a Happy Circles</title>
   </head>
   <body style="margin:0;background:#eef1f6;color:#0f1728;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Tu cuenta ya esta lista para usar Happy Circles.</div>
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Tu cuenta ya está lista para usar Happy Circles.</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">
       <tr>
         <td align="center" style="padding:28px 14px;">
@@ -73,7 +73,7 @@ function buildWelcomeHtml(input: {
                   <tr>
                     <td style="vertical-align:middle;">
                       <div style="font-size:12px;line-height:1.4;color:#dfe5ef;">Happy Circles</div>
-                      <h1 style="margin:10px 0 0;color:#ffffff;font-size:30px;line-height:1.12;font-weight:700;">Tu cuenta ya esta lista</h1>
+                      <h1 style="margin:10px 0 0;color:#ffffff;font-size:30px;line-height:1.12;font-weight:700;">Tu cuenta ya está lista</h1>
                     </td>
                     <td align="right" style="width:92px;vertical-align:middle;">
                       <svg width="78" height="78" viewBox="120 120 440 440" role="img" aria-label="Happy Circles">
@@ -97,7 +97,7 @@ function buildWelcomeHtml(input: {
             <tr>
               <td style="padding:34px;">
                 <p style="margin:0;font-size:17px;line-height:1.58;color:#344054;">
-                  Hola ${escapedFirstName}, terminaste la configuracion principal de tu cuenta. Ya puedes conectar tus circulos, registrar movimientos y mantener los saldos claros con ${escapedDisplayName} como tu perfil.
+                  Hola ${escapedFirstName}, terminaste la configuración principal de tu cuenta. Ya puedes conectar tus círculos, registrar movimientos y mantener los saldos claros con ${escapedDisplayName} como tu perfil.
                 </p>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;border-collapse:separate;">
                   <tr>
@@ -127,7 +127,7 @@ function buildWelcomeHtml(input: {
                           <td style="width:10px;border-radius:999px;background:#3dba6e;"></td>
                           <td style="padding-left:14px;">
                             <div style="font-size:14px;line-height:1.45;color:#1a2744;font-weight:700;">Conecta tus personas</div>
-                            <div style="margin-top:4px;font-size:14px;line-height:1.55;color:#667085;">Agrega contactos de confianza y arma los circulos donde quieres llevar cuentas compartidas.</div>
+                            <div style="margin-top:4px;font-size:14px;line-height:1.55;color:#667085;">Agrega contactos de confianza y arma los círculos donde quieres llevar cuentas compartidas.</div>
                           </td>
                         </tr>
                       </table>
@@ -173,12 +173,12 @@ function buildWelcomeText(input: {
   return [
     `Hola ${input.firstName},`,
     '',
-    'Tu cuenta de Happy Circles ya esta lista.',
+    'Tu cuenta de Happy Circles ya está lista.',
     '',
     `Perfil: ${input.displayName}`,
     'Correo confirmado, perfil completo y dispositivo validado.',
     '',
-    'Ya puedes conectar tus circulos, registrar movimientos y mantener los saldos claros.',
+    'Ya puedes conectar tus círculos, registrar movimientos y mantener los saldos claros.',
     '',
     `Abrir Happy Circles: ${appUrl}`,
   ].join('\n');

@@ -1007,7 +1007,7 @@ export function AccountSignInEntry({
     if (token.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH) {
       setTokenTouched(true);
       triggerIdentityWarningHaptic();
-      setTokenMessage('Abre tu link de invitación o pega el código completo para continuar.');
+      setTokenMessage('Abre tu enlace de invitación o pega el código completo para continuar.');
       return;
     }
 

@@ -363,7 +363,7 @@ export function buildAnalyticsInsight(input: {
         ? `${input.topCategory.label} explica la mayor parte del cambio.`
         : input.topPerson
           ? `${input.topPerson.label} concentra el mayor impacto del periodo.`
-          : 'Todavia no hay suficiente actividad para explicar cambios.';
+          : 'Todavía no hay suficiente actividad para explicar cambios.';
 
   return `${detail} ${comparison}`;
 }

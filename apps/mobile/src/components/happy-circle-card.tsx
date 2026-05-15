@@ -132,7 +132,7 @@ function directCircleCardParticipants(
   const incoming = proposal.incomingConnection;
 
   return [
-    { ...currentParticipant, label: 'Tu' },
+    { ...currentParticipant, label: 'Tú' },
     outgoing
       ? {
           decision: circleCardDecision(proposal, outgoing.userId, fallbackDecision),

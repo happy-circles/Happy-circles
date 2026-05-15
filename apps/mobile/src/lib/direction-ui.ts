@@ -14,7 +14,7 @@ export interface DirectionVisual {
 
 function negativeDirectionVisual(activeTheme: AppTheme = theme): DirectionVisual {
   return {
-    label: 'Debes',
+    label: 'Por pagar',
     icon: 'arrow-up-circle-outline',
     accentColor: activeTheme.colors.brandCoral,
     softBackgroundColor: activeTheme.colors.dangerSoft,
@@ -24,7 +24,7 @@ function negativeDirectionVisual(activeTheme: AppTheme = theme): DirectionVisual
 
 function positiveDirectionVisual(activeTheme: AppTheme = theme): DirectionVisual {
   return {
-    label: 'Te deben',
+    label: 'Por cobrar',
     icon: 'arrow-down-circle-outline',
     accentColor: activeTheme.colors.brandGreen,
     softBackgroundColor: activeTheme.colors.successSoft,
@@ -41,7 +41,10 @@ export function directionVisual(
     : negativeDirectionVisual(activeTheme);
 }
 
-export function toneVisual(tone: LedgerTone, activeTheme: AppTheme = theme): DirectionVisual | null {
+export function toneVisual(
+  tone: LedgerTone,
+  activeTheme: AppTheme = theme,
+): DirectionVisual | null {
   if (tone === 'positive') {
     return positiveDirectionVisual(activeTheme);
   }

@@ -20,8 +20,8 @@ export const PRIMARY_FILTER_OPTIONS: readonly {
   { label: 'Todo', value: 'all' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
-  { label: 'Te deben', value: 'owed_to_me' },
-  { label: 'Debes', value: 'i_owe' },
+  { label: 'Por cobrar', value: 'owed_to_me' },
+  { label: 'Por pagar', value: 'i_owe' },
 ];
 
 function isBalanceRootItem(item: ActivityItemDto): boolean {
@@ -86,7 +86,7 @@ export function matchesCategoryFilter(
 
 export function emptyFilterTitle(filter: TransactionRootFilter): string {
   if (filter === 'all') {
-    return 'Sin transacciones';
+    return 'Sin movimientos';
   }
 
   if (filter === 'pending' || filter === 'pending_incoming' || filter === 'pending_outgoing') {
@@ -98,7 +98,7 @@ export function emptyFilterTitle(filter: TransactionRootFilter): string {
   }
 
   if (filter === 'projection') {
-    return 'Sin raiz de proyeccion';
+    return 'Sin raíz de proyección';
   }
 
   return 'Sin movimientos';
@@ -106,7 +106,7 @@ export function emptyFilterTitle(filter: TransactionRootFilter): string {
 
 export function emptyFilterDescription(filter: TransactionRootFilter): string {
   if (filter === 'all') {
-    return 'Cuando registres movimientos o se creen propuestas, apareceran aqui.';
+    return 'Cuando registres movimientos o se creen propuestas, aparecerán aquí.';
   }
 
   if (filter === 'pending_incoming') {
@@ -118,7 +118,7 @@ export function emptyFilterDescription(filter: TransactionRootFilter): string {
   }
 
   if (filter === 'pending' || filter === 'projection') {
-    return 'No hay movimientos pendientes para esta raiz.';
+    return 'No hay movimientos pendientes para esta raíz.';
   }
 
   if (filter === 'rejected') {
@@ -126,14 +126,14 @@ export function emptyFilterDescription(filter: TransactionRootFilter): string {
   }
 
   if (filter === 'owed_to_me') {
-    return 'No hay movimientos donde te deban en esta vista.';
+    return 'No hay movimientos por cobrar en esta vista.';
   }
 
   if (filter === 'i_owe') {
-    return 'No hay movimientos donde debas en esta vista.';
+    return 'No hay movimientos por pagar en esta vista.';
   }
 
-  return 'No hay movimientos que expliquen esta raiz del balance.';
+  return 'No hay movimientos que expliquen esta raíz del balance.';
 }
 
 export function initialsBackgroundColor(

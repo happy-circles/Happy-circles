@@ -89,7 +89,7 @@ export function buildFriendshipInviteTimeline(input: {
   readonly intendedRecipientReference: string | null;
   readonly nowMs: number;
 }): readonly PersonTimelineItemDto[] {
-  const sourceLabel = input.actorRole === 'sender' ? 'Tu' : input.inviterName;
+  const sourceLabel = input.actorRole === 'sender' ? 'Tú' : input.inviterName;
   const deliveryRows = [...input.deliveries].sort((left, right) =>
     left.created_at.localeCompare(right.created_at),
   );
@@ -108,18 +108,18 @@ export function buildFriendshipInviteTimeline(input: {
           id: `${input.invite.id}:claimed`,
           title:
             claimedByDifferentPerson && input.actorRole !== 'claimant'
-              ? `${input.claimantName} reclamo la invitacion enviada a ${targetReference}`
+              ? `${input.claimantName} reclamó la invitación enviada a ${targetReference}`
               : input.actorRole === 'claimant'
-                ? 'Reclamaste la invitacion'
-                : `${input.claimantName} reclamo la invitacion`,
-          subtitle: claimedByDifferentPerson ? 'Requiere verificacion' : 'Solicitud reclamada',
+                ? 'Reclamaste la invitación'
+                : `${input.claimantName} reclamó la invitación`,
+          subtitle: claimedByDifferentPerson ? 'Requiere verificación' : 'Solicitud reclamada',
           status:
             input.actionState === 'requires_you_review' ||
             input.actionState === 'waiting_sender_review'
               ? input.actionState
               : 'posted',
           sourceLabel: input.claimantName,
-          detail: 'Invitacion de amistad',
+          detail: 'Invitación de amistad',
           happenedAt: claimedDelivery?.claimed_at ?? input.invite.updated_at,
           originInviteId: input.invite.id,
           nowMs: input.nowMs,
@@ -137,7 +137,7 @@ export function buildFriendshipInviteTimeline(input: {
               : 'Solicitud de amistad',
           status: input.actionState,
           sourceLabel,
-          detail: 'Invitacion de amistad',
+          detail: 'Invitación de amistad',
           happenedAt: input.invite.updated_at ?? input.invite.created_at,
           originInviteId: input.invite.id,
           nowMs: input.nowMs,
@@ -153,16 +153,16 @@ export function buildFriendshipInviteTimeline(input: {
                 ? `Amistad conectada con ${input.claimantName !== 'Persona' ? input.claimantName : input.targetName}`
                 : `Amistad conectada con ${input.inviterName}`
               : input.invite.status === 'rejected'
-                ? 'La invitacion fue rechazada'
+                ? 'La invitación fue rechazada'
                 : input.invite.status === 'expired'
-                  ? 'La invitacion expiro'
-                  : 'La invitacion fue cancelada',
+                  ? 'La invitación expiró'
+                  : 'La invitación fue cancelada',
           subtitle: claimedByDifferentPerson
-            ? `${input.claimantName} reclamo la invitacion enviada a ${targetReference}`
+            ? `${input.claimantName} reclamó la invitación enviada a ${targetReference}`
             : 'Solicitud de amistad',
           status: input.invite.status,
           sourceLabel,
-          detail: 'Invitacion de amistad',
+          detail: 'Invitación de amistad',
           happenedAt: input.invite.resolved_at ?? input.invite.updated_at,
           originInviteId: input.invite.id,
           nowMs: input.nowMs,
@@ -175,12 +175,12 @@ export function buildFriendshipInviteTimeline(input: {
       id: `${input.invite.id}:created`,
       title:
         input.actorRole === 'sender'
-          ? `Invitacion enviada a ${targetReference}`
-          : `${input.inviterName} envio la invitacion`,
+          ? `Invitación enviada a ${targetReference}`
+          : `${input.inviterName} envió la invitación`,
       subtitle: 'Solicitud de amistad',
       status: 'posted',
       sourceLabel,
-      detail: 'Invitacion de amistad',
+      detail: 'Invitación de amistad',
       happenedAt: input.invite.created_at,
       originInviteId: input.invite.id,
       nowMs: input.nowMs,
@@ -230,7 +230,7 @@ export function buildFriendshipInviteItems(input: {
     const inviterProfile = inviteProfileFromUser({
       names: input.names,
       profiles: input.profiles,
-      roleLabel: actorRole === 'recipient' ? 'Te envio una solicitud' : 'Contacto de confianza',
+      roleLabel: actorRole === 'recipient' ? 'Te envió una solicitud' : 'Contacto de confianza',
       userId: invite.inviter_user_id,
     });
     const targetProfile = invite.target_user_id
@@ -266,7 +266,7 @@ export function buildFriendshipInviteItems(input: {
     const respondingProfile =
       invite.flow === 'external' && (claimantUserId || claimantSnapshot) ? claimantProfile : null;
     const inviterName =
-      invite.inviter_user_id === input.currentUserId ? 'Tu' : inviterProfile.displayName;
+      invite.inviter_user_id === input.currentUserId ? 'Tú' : inviterProfile.displayName;
     const targetName = invite.target_user_id
       ? targetProfile.displayName
       : (invite.intended_recipient_alias ?? intendedRecipientProfile.displayName);
@@ -277,7 +277,7 @@ export function buildFriendshipInviteItems(input: {
       pieces.push(`vence ${formatRelativeLabel(invite.expires_at, input.nowMs)}`);
     }
 
-    let title = 'Invitacion';
+    let title = 'Invitación';
     let subtitle = pieces.join(' | ');
     let actionState: FriendshipInviteListItem['actionState'] = 'history';
     let status = invite.status;
@@ -300,7 +300,7 @@ export function buildFriendshipInviteItems(input: {
           ? invite.intended_recipient_alias
             ? `QR temporal para ${invite.intended_recipient_alias}`
             : 'QR temporal activo'
-          : `Invitacion lista para ${invite.intended_recipient_alias ?? 'tu contacto'}`;
+          : `Invitación lista para ${invite.intended_recipient_alias ?? 'tu contacto'}`;
       subtitle = [
         intendedRecipientReference,
         latestDelivery?.expires_at
@@ -313,7 +313,7 @@ export function buildFriendshipInviteItems(input: {
       status = 'pending_claim';
     } else if (invite.status === 'pending_sender_review') {
       if (actorRole === 'sender') {
-        title = `${claimantName} reclamo la invitacion para ${targetName}`;
+        title = `${claimantName} reclamó la invitación para ${targetName}`;
         subtitle = [
           intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
           'Por verificar',
@@ -323,8 +323,8 @@ export function buildFriendshipInviteItems(input: {
         actionState = 'requires_you_review';
         status = 'requires_you_review';
       } else {
-        title = `Esperando validacion de ${inviterName}`;
-        subtitle = 'Ya reclamaste esta invitacion';
+        title = `Esperando validación de ${inviterName}`;
+        subtitle = 'Ya reclamaste esta invitación';
         actionState = 'waiting_sender_review';
         status = 'waiting_sender_review';
       }
@@ -338,27 +338,27 @@ export function buildFriendshipInviteItems(input: {
           ? actorRole === 'sender'
             ? invite.flow === 'external'
               ? autoAcceptedByPhoneMatch
-                ? `${claimantName} acepto tu invitacion`
+                ? `${claimantName} aceptó tu invitación`
                 : `Confirmaste a ${claimantName}`
-              : `${targetName} acepto tu invitacion`
+              : `${targetName} aceptó tu invitación`
             : actorRole === 'claimant'
               ? autoAcceptedByPhoneMatch
                 ? 'Conexion creada'
-                : `${inviterName} confirmo esta conexion`
-              : `Aceptaste la invitacion de ${inviterName}`
+                : `${inviterName} confirmó esta conexión`
+              : `Aceptaste la invitación de ${inviterName}`
           : invite.status === 'rejected'
             ? actorRole === 'sender'
               ? invite.flow === 'external'
                 ? `Rechazaste a ${claimantName}`
-                : `${targetName} rechazo tu invitacion`
+                : `${targetName} rechazó tu invitación`
               : actorRole === 'claimant'
-                ? `${inviterName} rechazo esta conexion`
-                : `Rechazaste la invitacion de ${inviterName}`
+                ? `${inviterName} rechazó esta conexión`
+                : `Rechazaste la invitación de ${inviterName}`
             : invite.status === 'expired'
               ? actorRole === 'sender'
-                ? 'La invitacion vencio'
-                : 'Esta invitacion vencio'
-              : 'Invitacion cancelada';
+                ? 'La invitación venció'
+                : 'Esta invitación venció'
+              : 'Invitación cancelada';
       subtitle = [
         actorRole === 'sender' ? intendedRecipientReference : null,
         formatRelativeLabel(happenedAt, input.nowMs),
@@ -389,7 +389,7 @@ export function buildFriendshipInviteItems(input: {
                 ? claimantProfile.displayName
                 : (invite.intended_recipient_alias ?? undefined)
               : targetName
-            : inviterName !== 'Tu'
+            : inviterName !== 'Tú' && inviterName !== 'Tu'
               ? inviterName
               : undefined,
         expiresAt: invite.expires_at,

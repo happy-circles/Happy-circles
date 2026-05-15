@@ -125,7 +125,7 @@ export function formatStepUpFailure(error: string | null, biometricLabel: string
   }
 
   if (error === 'lockout') {
-    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
+    return `${biometricLabel} está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
   }
 
   if (error === 'user_cancel') {

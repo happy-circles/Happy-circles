@@ -69,11 +69,11 @@ export function accountInviteCurrentStatusTitle(input: {
   readonly targetName: string;
 }): string {
   if (input.actionState === 'requires_you_review') {
-    return `${input.targetName} espera tu validacion`;
+    return `${input.targetName} espera tu validación`;
   }
 
   if (input.actionState === 'waiting_sender_review') {
-    return `Esperando validacion de ${input.inviterName}`;
+    return `Esperando validación de ${input.inviterName}`;
   }
 
   return `Esperando activacion de ${input.targetName}`;
@@ -89,7 +89,7 @@ export function buildAccountInviteTimeline(input: {
   readonly intendedRecipientReference: string | null;
   readonly nowMs: number;
 }): readonly PersonTimelineItemDto[] {
-  const sourceLabel = input.actorRole === 'inviter' ? 'Tu' : input.inviterName;
+  const sourceLabel = input.actorRole === 'inviter' ? 'Tú' : input.inviterName;
   const deliveryRows = [...input.deliveries].sort((left, right) =>
     left.created_at.localeCompare(right.created_at),
   );
@@ -110,11 +110,11 @@ export function buildAccountInviteTimeline(input: {
           id: `${input.invite.id}:activated`,
           title:
             activatedByDifferentPerson && input.actorRole !== 'activated'
-              ? `${input.targetName} activo el acceso enviado a ${targetReference}`
+              ? `${input.targetName} activó el acceso enviado a ${targetReference}`
               : input.actorRole === 'activated'
                 ? 'Activaste el acceso privado'
-                : `${input.targetName} activo el acceso privado`,
-          subtitle: activatedByDifferentPerson ? 'Requiere verificacion' : 'Acceso privado',
+                : `${input.targetName} activó el acceso privado`,
+          subtitle: activatedByDifferentPerson ? 'Requiere verificación' : 'Acceso privado',
           status:
             input.actionState === 'requires_you_review' ||
             input.actionState === 'waiting_sender_review'
@@ -160,10 +160,10 @@ export function buildAccountInviteTimeline(input: {
               : input.invite.status === 'rejected'
                 ? 'El acceso fue rechazado'
                 : input.invite.status === 'expired'
-                  ? 'El acceso expiro'
+                  ? 'El acceso expiró'
                   : 'El acceso fue cancelado',
           subtitle: activatedByDifferentPerson
-            ? `${input.targetName} activo el acceso enviado a ${targetReference}`
+            ? `${input.targetName} activó el acceso enviado a ${targetReference}`
             : 'Acceso privado',
           status: input.invite.status,
           sourceLabel,
@@ -181,7 +181,7 @@ export function buildAccountInviteTimeline(input: {
       title:
         input.actorRole === 'inviter'
           ? `Acceso privado enviado a ${targetReference}`
-          : `${input.inviterName} te envio un acceso privado`,
+          : `${input.inviterName} te envió un acceso privado`,
       subtitle: 'Acceso privado',
       status: 'posted',
       sourceLabel,
@@ -230,11 +230,11 @@ export function buildAccountInviteItems(input: {
     const inviterProfile = inviteProfileFromUser({
       names: input.names,
       profiles: input.profiles,
-      roleLabel: actorRole === 'activated' ? 'Te envio un acceso privado' : 'Contacto de confianza',
+      roleLabel: actorRole === 'activated' ? 'Te envió un acceso privado' : 'Contacto de confianza',
       userId: invite.inviter_user_id,
     });
     const inviterName =
-      invite.inviter_user_id === input.currentUserId ? 'Tu' : inviterProfile.displayName;
+      invite.inviter_user_id === input.currentUserId ? 'Tú' : inviterProfile.displayName;
     const activatedUserProfile = invite.activated_user_id
       ? input.profiles.get(invite.activated_user_id)
       : undefined;
@@ -267,7 +267,7 @@ export function buildAccountInviteItems(input: {
     const expiryLabel = invite.expires_at
       ? `vence ${formatRelativeLabel(invite.expires_at, input.nowMs)}`
       : null;
-    let title = 'Invitacion de acceso';
+    let title = 'Invitación de acceso';
     let subtitle = [intendedRecipientReference, expiryLabel].filter(Boolean).join(' | ');
     let actionState: AccountInviteListItem['actionState'] = 'history';
     let status = invite.status;
@@ -284,7 +284,7 @@ export function buildAccountInviteItems(input: {
       ctaLabel = originChannel === 'qr' ? LIVE_DATA_CTA.qrActive : LIVE_DATA_CTA.share;
     } else if (invite.status === 'pending_inviter_review') {
       if (actorRole === 'inviter') {
-        title = `${targetName} activo el acceso privado`;
+        title = `${targetName} activó el acceso privado`;
         subtitle = [
           intendedRecipientReference ? `Pensada para ${intendedRecipientReference}` : null,
           'Por verificar',
@@ -295,7 +295,7 @@ export function buildAccountInviteItems(input: {
         status = 'requires_you_review';
         ctaLabel = LIVE_DATA_CTA.verify;
       } else {
-        title = `Esperando validacion de ${inviterName}`;
+        title = `Esperando validación de ${inviterName}`;
         subtitle = 'Ya activaste este acceso';
         actionState = 'waiting_sender_review';
         status = 'waiting_sender_review';
@@ -308,18 +308,18 @@ export function buildAccountInviteItems(input: {
         invite.status === 'accepted'
           ? actorRole === 'inviter'
             ? autoAcceptedByPhoneMatch
-              ? `${targetName} activo el acceso privado`
+              ? `${targetName} activó el acceso privado`
               : `Confirmaste a ${targetName}`
-            : `${inviterName} confirmo tu acceso`
+            : `${inviterName} confirmó tu acceso`
           : invite.status === 'rejected'
             ? actorRole === 'inviter'
               ? `Rechazaste a ${targetName}`
-              : `${inviterName} rechazo este acceso`
+              : `${inviterName} rechazó este acceso`
             : invite.status === 'expired'
               ? actorRole === 'inviter'
-                ? `El acceso para ${targetName} vencio`
-                : 'Este acceso vencio'
-              : 'Invitacion de acceso cancelada';
+                ? `El acceso para ${targetName} venció`
+                : 'Este acceso venció'
+              : 'Invitación de acceso cancelada';
       subtitle = [
         actorRole === 'inviter' ? intendedRecipientReference : null,
         formatRelativeLabel(happenedAt, input.nowMs),

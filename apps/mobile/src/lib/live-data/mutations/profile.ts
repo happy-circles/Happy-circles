@@ -24,7 +24,7 @@ export function useUpdateProfileAvatarMutation() {
     mutationFn: async (input: { readonly uri: string; readonly contentType?: string | null }) => {
       const userId = session.userId;
       if (!userId) {
-        throw new Error('No hay una sesion activa.');
+        throw new Error('No hay una sesión activa.');
       }
 
       return uploadAvatar(assertSupabaseClient(), input);

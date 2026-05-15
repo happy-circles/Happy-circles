@@ -100,7 +100,7 @@ describe('people insights', () => {
     expect(normalizePeopleInsightFilter('rejected')).toBe('rejected');
     expect(normalizePeopleInsightFilter(['owed_to_me'])).toBe('owed_to_me');
     expect(normalizePeopleInsightFilter('unknown')).toBe('balance');
-    expect(peopleInsightLabel('i_owe')).toBe('Debes');
+    expect(peopleInsightLabel('i_owe')).toBe('Por pagar');
     expect(peopleInsightLabel('rejected')).toBe('Rechazadas');
     expect(peopleInsightLabel('movements')).toBe('Movimientos');
   });

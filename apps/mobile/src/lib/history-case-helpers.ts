@@ -59,7 +59,7 @@ export function historyCreatorLabel(item: HistoryCaseItem, fallbackLabel: string
 
   const subtitleParts = splitHistorySubtitle(item.subtitle);
   const titleCreator = item.title.match(
-    /^(.+?)\s+(propuso|acepto|registro|aplico|no acepto)\b/i,
+    /^(.+?)\s+(propuso|acept[oó]|registr[oó]|aplic[oó]|no acept[oó])\b/i,
   )?.[1];
 
   if (titleCreator?.trim()) {
@@ -80,12 +80,13 @@ export function historyCreatorLabel(item: HistoryCaseItem, fallbackLabel: string
 }
 
 export function createdByText(label: string): string {
-  return label === 'Tu' ? 'Creado por ti' : `Creado por ${label}`;
+  return label === 'Tú' || label === 'Tu' ? 'Creado por ti' : `Creado por ${label}`;
 }
 
 export function isInviteTrajectoryItem(item: Pick<HistoryCaseItem, 'kind' | 'detail'>): boolean {
   return (
     item.kind === 'friendship_invite' ||
+    item.detail === 'Invitación de amistad' ||
     item.detail === 'Invitacion de amistad' ||
     item.detail === 'Acceso privado'
   );
@@ -135,11 +136,13 @@ export function compactHistoryLabel(
   item: Pick<HistoryCaseItem, 'kind' | 'status' | 'detail'>,
 ): string {
   if (item.kind === 'friendship_invite') {
-    return 'Invitacion';
+    return 'Invitación';
   }
 
   if (isInviteTrajectoryItem(item)) {
-    return item.detail ?? 'Invitacion';
+    return item.detail === 'Invitacion de amistad'
+      ? 'Invitación de amistad'
+      : (item.detail ?? 'Invitación');
   }
 
   if (isCircleActivityItem(item)) {
@@ -210,7 +213,12 @@ export function historyDirectionFromItem(item: HistoryCaseItem): HistoryDirectio
 export function historyCaseKey(
   item: Pick<
     HistoryCaseItem,
-    'id' | 'kind' | 'category' | 'originRequestId' | 'originSettlementProposalId' | 'happyCircleCaseId'
+    | 'id'
+    | 'kind'
+    | 'category'
+    | 'originRequestId'
+    | 'originSettlementProposalId'
+    | 'happyCircleCaseId'
   >,
 ): string {
   if (isCircleActivityItem(item)) {

@@ -171,7 +171,7 @@ export function AddPersonContactsSheet({
                       compact
                       disabled={Boolean(busyKey)}
                       label={
-                        busyKey === 'expand-contacts' ? 'Abriendo agenda...' : 'Ver mas contactos'
+                        busyKey === 'expand-contacts' ? 'Abriendo agenda...' : 'Ver más contactos'
                       }
                       onPress={busyKey ? undefined : () => void handleExpandLimitedContactsAccess()}
                       variant="secondary"
@@ -213,7 +213,7 @@ export function AddPersonContactsSheet({
                 >
                   <AppText style={styles.emptyTitle}>Conecta tu agenda</AppText>
                   <AppText style={styles.emptyText}>
-                    Asi vemos quien ya esta en Happy Circles y quien necesita invitacion.
+                    Así vemos quién ya está en Happy Circles y quién necesita invitación.
                   </AppText>
                   {contactsPermissionStatus !== 'unavailable' ? (
                     <PrimaryAction
@@ -239,7 +239,7 @@ export function AddPersonContactsSheet({
                   <View style={styles.modalHeaderCopy}>
                     <AppText style={styles.optionTitle}>Escanear QR</AppText>
                     <AppText style={styles.emptyText}>
-                      Centra el QR de Happy Circles en la camara.
+                      Centra el QR de Happy Circles en la cámara.
                     </AppText>
                   </View>
                   <Pressable onPress={() => setScannerOpen(false)} style={styles.closeButton}>
@@ -322,7 +322,7 @@ export function AddPersonContactsSheet({
                   <PrimaryAction
                     compact
                     disabled={!myQrLink}
-                    label="Compartir link"
+                    label="Compartir enlace"
                     onPress={() => void handleShareMyQr()}
                     variant="secondary"
                   />
@@ -378,7 +378,7 @@ export function AddPersonContactsSheet({
                             ? 'Agregado'
                             : resolution?.status === 'pending_friendship'
                               ? 'Pendiente'
-                              : 'Puede recibir invitacion'}
+                              : 'Puede recibir invitación'}
                       </AppText>
                     </View>
                     <Pressable

@@ -65,8 +65,8 @@ export function useAddPersonContactPermissionActions({
 
       setMessage(
         nextStatus === 'limited'
-          ? 'Tu telefono compartio contactos limitados. Los estamos cargando.'
-          : 'Tu agenda se esta cargando.',
+          ? 'Tu teléfono compartió contactos limitados. Los estamos cargando.'
+          : 'Tu agenda se está cargando.',
       );
       void loadContacts();
     } catch (error) {

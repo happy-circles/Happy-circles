@@ -68,7 +68,7 @@ export function resolveTokenFieldError(input: {
     input.tokenMessage ??
     (input.normalizedToken.length > 0 &&
     input.normalizedToken.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH
-      ? 'Pega el token completo para continuar.'
+      ? 'Pega el código completo para continuar.'
       : null)
   );
 }

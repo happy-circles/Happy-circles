@@ -1276,7 +1276,7 @@ export function PeopleIndexScreen() {
                     <EmptyState
                       description={
                         query.trim().length > 0
-                          ? 'Prueba con otro texto o borra la busqueda para ver su historial.'
+                          ? 'Prueba con otro texto o borra la búsqueda para ver su historial.'
                           : peopleInsightEmptyDescription(activeFilter)
                       }
                       title={
@@ -1291,7 +1291,7 @@ export function PeopleIndexScreen() {
                 <EmptyState
                   description={
                     query.trim().length > 0
-                      ? 'Prueba con otro nombre o borra la busqueda para ver tus personas.'
+                      ? 'Prueba con otro nombre o borra la búsqueda para ver tus personas.'
                       : peopleInsightEmptyDescription(activeFilter)
                   }
                   title={
@@ -1329,7 +1329,7 @@ export function PeopleIndexScreen() {
 
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
-        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú'}
         onClose={() => setAddPersonSheetVisible(false)}
         transactionContext={transactionContext}
         visible={addPersonSheetVisible}

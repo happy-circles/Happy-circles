@@ -32,8 +32,8 @@ function item(value: Partial<ActivityItemDto>): ActivityItemDto {
     originRequestId: null,
     originSettlementProposalId: null,
     status: 'posted',
-    subtitle: 'Ana | Cafes | hoy',
-    title: 'Ana registro cafes',
+    subtitle: 'Ana | Cafés | hoy',
+    title: 'Ana registró cafés',
     tone: 'positive',
     ...value,
   } as ActivityItemDto;
@@ -126,7 +126,7 @@ describe('transaction presentation', () => {
       transactionContextLabel(
         item({
           category: 'cycle',
-          flowLabel: 'Tu -> Sofia',
+          flowLabel: 'Tú -> Sofia',
           kind: 'settlement',
           status: 'posted',
         }),
@@ -138,7 +138,7 @@ describe('transaction presentation', () => {
       transactionContextLabel(
         item({
           category: 'cycle',
-          flowLabel: 'Sofia -> Tu',
+          flowLabel: 'Sofia -> Tú',
           kind: 'settlement',
           status: 'posted',
         }),

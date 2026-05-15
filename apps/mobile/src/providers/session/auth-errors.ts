@@ -117,7 +117,7 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
   }
 
   if (normalized.includes('database error saving new user')) {
-    return 'No pudimos crear la cuenta con esta invitación. Revisa que el link siga disponible y que el celular no esté vinculado.';
+    return 'No pudimos crear la cuenta con esta invitación. Revisa que el enlace siga disponible y que el celular no esté vinculado.';
   }
 
   return message;

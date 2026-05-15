@@ -20,7 +20,7 @@ export function createSnapshotAbortSignal(parentSignal?: AbortSignal) {
     timedOut = true;
     controller.abort();
     rejectTimeout(
-      new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.'),
+      new Error('La sincronización tardó demasiado. Revisa tu conexión e intenta de nuevo.'),
     );
   }, LIVE_SNAPSHOT_TIMEOUT_MS);
 
@@ -47,7 +47,7 @@ export function createSnapshotAbortSignal(parentSignal?: AbortSignal) {
 
 export function assertSupabaseClient() {
   if (!supabase) {
-    throw new Error('Supabase no esta configurado en esta app.');
+    throw new Error('El servicio de datos no está disponible en este momento.');
   }
 
   return supabase;
@@ -75,7 +75,7 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
       if (refreshError || !refreshData.session) {
         await client.auth.signOut();
-        throw new Error('Tu sesion ya no es valida. Cierra sesion y vuelve a entrar.');
+        throw new Error('Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.');
       }
 
       result = await invoke();

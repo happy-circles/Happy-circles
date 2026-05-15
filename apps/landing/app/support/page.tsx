@@ -32,8 +32,8 @@ export default function SupportPage() {
         <section className="legalSection">
           <h2>Cuenta y privacidad</h2>
           <p>
-            Tambien puedes revisar la <Link href="/privacy">politica de privacidad</Link> y los{' '}
-            <Link href="/terms">terminos de servicio</Link>.
+            También puedes revisar la <Link href="/privacy">política de privacidad</Link> y los{' '}
+            <Link href="/terms">términos de servicio</Link>.
           </p>
         </section>
       </article>

@@ -3,7 +3,7 @@ export function formatPeriodComparison(
   previousLabel: string | null,
 ): string {
   if (changeRatio === null || !previousLabel) {
-    return 'No hay comparacion disponible todavia.';
+    return 'No hay comparación disponible todavía.';
   }
 
   if (changeRatio === 0) {

@@ -314,7 +314,7 @@ export function SetupAccountScreen() {
   function handleAvatarPermissionDenied(source: 'camera' | 'library', canAskAgain: boolean) {
     const isCamera = source === 'camera';
     const permissionMessage = isCamera
-      ? 'Necesitas permitir acceso a la camara para tomar tu foto.'
+      ? 'Necesitas permitir acceso a la cámara para tomar tu foto.'
       : 'Necesitas permitir acceso a tus fotos para elegir tu foto de perfil.';
 
     triggerWarningHaptic();
@@ -325,7 +325,7 @@ export function SetupAccountScreen() {
     }
 
     Alert.alert(
-      isCamera ? 'Permiso de camara bloqueado' : 'Permiso de fotos bloqueado',
+      isCamera ? 'Permiso de cámara bloqueado' : 'Permiso de fotos bloqueado',
       `${permissionMessage} Abre Ajustes y habilita el permiso para Happy Circles.`,
       [
         { style: 'cancel', text: 'Ahora no' },
@@ -363,7 +363,7 @@ export function SetupAccountScreen() {
 
       if (!session.isEmailConfirmed) {
         triggerWarningHaptic();
-        setMessage('Perfil guardado. Confirma tu correo o reenvia el enlace de confirmacion.');
+        setMessage('Perfil guardado. Confirma tu correo o reenvía el enlace de confirmación.');
         return;
       }
 
@@ -506,7 +506,7 @@ export function SetupAccountScreen() {
       session.resendEmailConfirmation(accountEmail),
     );
 
-    if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
+    if (result.includes('Enviamos') || result.includes('ya está confirmado')) {
       triggerSuccessHaptic();
     } else {
       triggerWarningHaptic();
@@ -526,7 +526,7 @@ export function SetupAccountScreen() {
 
     if (!emailConfirmationCodeValid) {
       triggerWarningHaptic();
-    setMessage('Ingresa el código de 8 dígitos del correo.');
+      setMessage('Ingresa el código de 8 dígitos del correo.');
       return;
     }
 
@@ -580,7 +580,7 @@ export function SetupAccountScreen() {
       ? 'Validando...'
       : session.isTrustedDevice
         ? 'Listo'
-        : 'Validacion pendiente'
+        : 'Validación pendiente'
     : isSaving
       ? 'Guardando...'
       : editPhoneMode
@@ -843,8 +843,8 @@ export function SetupAccountScreen() {
               <View style={styles.securityAction}>
                 {session.canTrustCurrentDeviceWithoutPassword ? (
                   <AppText style={styles.helperText}>
-                    Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla otra
-                    vez.
+                    Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla
+                    otra vez.
                   </AppText>
                 ) : null}
                 <View style={styles.inlineActionRow}>
@@ -956,7 +956,7 @@ export function SetupAccountScreen() {
                         ? 'Primero valida este dispositivo'
                         : 'No disponible'
                   }
-                  title="Biometria"
+                  title="Biometría"
                   tone={session.biometricsEnabled ? 'success' : 'muted'}
                   trailing={
                     <Switch

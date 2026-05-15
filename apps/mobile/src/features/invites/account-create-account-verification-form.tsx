@@ -46,10 +46,10 @@ export function AccountCreateAccountVerificationForm({
 
       <IdentityFlowField
         error={
-          verificationCode.length > 0 && !verificationCodeValid ? 'Debe tener 8 digitos.' : null
+          verificationCode.length > 0 && !verificationCodeValid ? 'Debe tener 8 dígitos.' : null
         }
         icon="keypad"
-        label="Codigo"
+        label="Código"
         status={
           verificationCode.length === 0 ? 'idle' : verificationCodeValid ? 'success' : 'danger'
         }

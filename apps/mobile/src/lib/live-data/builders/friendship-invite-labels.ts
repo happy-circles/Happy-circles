@@ -46,11 +46,11 @@ export function friendshipInviteCurrentStatusTitle(input: {
   }
 
   if (input.actionState === 'requires_you_review') {
-    return `${input.claimantName} espera tu validacion`;
+    return `${input.claimantName} espera tu validación`;
   }
 
   if (input.actionState === 'waiting_sender_review') {
-    return `Esperando validacion de ${input.inviterName}`;
+    return `Esperando validación de ${input.inviterName}`;
   }
 
   if (input.actionState === 'pending_claim') {

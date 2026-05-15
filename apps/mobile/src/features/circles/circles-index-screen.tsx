@@ -418,7 +418,7 @@ function archiveDecisionsForHistoryCase(
 ): PastCircleArchiveItem['decisions'] {
   const currentNode: HappyCircleRingParticipant = {
     decision,
-    label: 'Tu',
+    label: 'Tú',
     userId: currentUserId ?? `${itemCase.id}:self`,
   };
   let incomingNode: HappyCircleRingParticipant | null = null;
@@ -427,7 +427,7 @@ function archiveDecisionsForHistoryCase(
   for (const step of itemCase.steps) {
     const [from, to] = (step.flowLabel ?? '').split('->').map((part) => part.trim());
 
-    if (!outgoingNode && from === 'Tu' && to && to !== 'Happy Circle') {
+    if (!outgoingNode && (from === 'Tú' || from === 'Tu') && to && to !== 'Happy Circle') {
       outgoingNode = {
         decision,
         label: to,
@@ -435,7 +435,7 @@ function archiveDecisionsForHistoryCase(
       };
     }
 
-    if (!incomingNode && to === 'Tu' && from && from !== 'Happy Circle') {
+    if (!incomingNode && (to === 'Tú' || to === 'Tu') && from && from !== 'Happy Circle') {
       incomingNode = {
         decision,
         label: from,
@@ -622,7 +622,7 @@ function CircleArchiveRail({ items }: { readonly items: readonly CircleArchiveIt
 
   if (items.length === 0) {
     return (
-      <EmptyState description="No hay tarjetas en este filtro todavia." title="Sin Circles aqui" />
+      <EmptyState description="No hay tarjetas en este filtro todavía." title="Sin Circles aquí" />
     );
   }
 
@@ -874,7 +874,7 @@ export function CirclesIndexScreen() {
               </Pressable>
             </Link>
           }
-          title="Últimas transacciones"
+          title="Últimos movimientos"
         >
           <View style={styles.transactionGroups}>
             {pendingCircleTransactions.length > 0 ? (

@@ -57,7 +57,7 @@ export function buildNameByUserId(
   const names = new Map<string, string>();
 
   for (const profile of profiles) {
-    names.set(profile.id, profile.id === currentUserId ? 'Tu' : profile.display_name);
+    names.set(profile.id, profile.id === currentUserId ? 'Tú' : profile.display_name);
   }
 
   return names;

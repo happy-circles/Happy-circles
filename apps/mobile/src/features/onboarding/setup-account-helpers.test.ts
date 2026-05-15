@@ -130,7 +130,7 @@ describe('setup account helpers', () => {
     ).toEqual({
       errors: {
         fullName: 'Escribe tu nombre, no el correo.',
-        phoneNationalNumber: 'Ingresa un celular valido.',
+        phoneNationalNumber: 'Ingresa un celular válido.',
         photo: undefined,
       },
       firstInvalidField: 'fullName',

@@ -287,14 +287,14 @@ export function normalizedInviteName(value: string | null | undefined): string |
     normalized === 'contacto invitado' ||
     normalized === 'tu contacto' ||
     normalized === 'solicitud enviada' ||
-    normalized === 'invitacion' ||
-    normalized === 'invitacion cancelada' ||
-    normalized === 'invitacion de acceso' ||
+    normalized === 'invitación' ||
+    normalized === 'invitación cancelada' ||
+    normalized === 'invitación de acceso' ||
     normalized === 'qr temporal activo' ||
-    normalized === 'conexion creada' ||
-    normalized === 'esta invitacion vencio' ||
-    normalized === 'la invitacion vencio' ||
-    normalized === 'este acceso vencio'
+    normalized === 'conexión creada' ||
+    normalized === 'esta invitación venció' ||
+    normalized === 'la invitación venció' ||
+    normalized === 'este acceso venció'
   ) {
     return null;
   }
@@ -416,22 +416,22 @@ export function displayNameForInvite(item: InviteRequestItem): string {
     /^(.+) quiere conectar contigo$/i,
     /^Esperando a (.+)$/i,
     /^Verifica a (.+)$/i,
-    /^(.+) reclamo la invitacion para .+$/i,
-    /^Invitacion lista para (.+)$/i,
+    /^(.+) reclamó la invitación para .+$/i,
+    /^Invitación lista para (.+)$/i,
     /^QR temporal para (.+)$/i,
-    /^Esperando validacion de (.+)$/i,
-    /^(.+) acepto tu invitacion$/i,
+    /^Esperando validación de (.+)$/i,
+    /^(.+) aceptó tu invitación$/i,
     /^Confirmaste a (.+)$/i,
     /^Amistad conectada con (.+)$/i,
-    /^Aceptaste la invitacion de (.+)$/i,
-    /^(.+) rechazo tu invitacion$/i,
+    /^Aceptaste la invitación de (.+)$/i,
+    /^(.+) rechazó tu invitación$/i,
     /^Rechazaste a (.+)$/i,
-    /^Rechazaste la invitacion de (.+)$/i,
+    /^Rechazaste la invitación de (.+)$/i,
     /^Acceso privado para (.+)$/i,
-    /^(.+) activo el acceso privado$/i,
-    /^(.+) confirmo tu acceso$/i,
-    /^(.+) rechazo este acceso$/i,
-    /^El acceso para (.+) vencio$/i,
+    /^(.+) activ[oó] el acceso privado$/i,
+    /^(.+) confirm[oó] tu acceso$/i,
+    /^(.+) rechazó este acceso$/i,
+    /^El acceso para (.+) venció$/i,
   ];
 
   for (const pattern of patterns) {

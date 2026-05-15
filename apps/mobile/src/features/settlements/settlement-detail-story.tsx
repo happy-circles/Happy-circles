@@ -108,7 +108,7 @@ export function settlementStoryHeadline({
       return 'Listo para registrar';
     }
 
-    return approvalsPending === 1 ? 'Falta una aprobacion' : 'Faltan aprobaciones';
+    return approvalsPending === 1 ? 'Falta una aprobación' : 'Faltan aprobaciones';
   }
 
   if (status === 'approved') {
@@ -231,7 +231,7 @@ export function ApprovalDecisionList({
                 <AppText
                   style={[styles.approvalSelfBadgeText, { color: activeTheme.colors.cycle }]}
                 >
-                  Tu
+                  Tú
                 </AppText>
               </View>
             ) : null}
@@ -260,7 +260,9 @@ export function approvalProgressText({
       return 'Sin pendientes.';
     }
 
-    return `Falta ${approvalsPending} aprobacion${approvalsPending === 1 ? '' : 'es'}.`;
+    return `${approvalsPending === 1 ? 'Falta' : 'Faltan'} ${approvalsPending} ${
+      approvalsPending === 1 ? 'aprobación' : 'aprobaciones'
+    }.`;
   }
 
   if (status === 'approved') {
@@ -272,15 +274,15 @@ export function approvalProgressText({
   }
 
   if (status === 'rejected') {
-    return 'No aprobado. No aplico movimientos.';
+    return 'No aprobado. No aplicó movimientos.';
   }
 
   if (status === 'stale') {
-    return 'Reemplazado por un calculo nuevo.';
+    return 'Reemplazado por un cálculo nuevo.';
   }
 
   if (status === 'expired') {
-    return 'Expiro antes de completarse.';
+    return 'Expiró antes de completarse.';
   }
 
   return null;
@@ -289,30 +291,30 @@ export function approvalProgressText({
 export function settlementStoryText(status: string, approvalsPending: number): string {
   if (status === 'pending_approvals') {
     if (approvalsPending === 0) {
-      return 'Todos aprobaron este calculo. El siguiente paso es registrar los movimientos para cerrar saldos.';
+      return 'Todos aprobaron este cálculo. El siguiente paso es registrar los movimientos para cerrar saldos.';
     }
 
-    return 'Este calculo muestra quien paga y quien recibe. Solo se aplica cuando las aprobaciones necesarias estan completas.';
+    return 'Este cálculo muestra quién paga y quién recibe. Solo se aplica cuando las aprobaciones necesarias están completas.';
   }
 
   if (status === 'approved') {
-    return 'El acuerdo ya esta aprobado. Falta registrar el movimiento final para que el saldo quede cerrado.';
+    return 'El acuerdo ya está aprobado. Falta registrar el movimiento final para que el saldo quede cerrado.';
   }
 
   if (status === 'executed') {
-    return 'El Circle ya se cerro y los movimientos quedaron registrados en los perfiles.';
+    return 'El Circle ya se cerró y los movimientos quedaron registrados en los perfiles.';
   }
 
   if (status === 'rejected') {
-    return 'El Circle se cancelo. Los montos quedan en rojo y tachados porque no cambiaron ningun saldo.';
+    return 'El Circle se canceló. Los montos quedan en rojo y tachados porque no cambiaron ningún saldo.';
   }
 
   if (status === 'stale') {
-    return 'Los saldos cambiaron y este calculo dejo de ser el actual. Usa el nuevo calculo para decidir.';
+    return 'Los saldos cambiaron y este cálculo dejó de ser el actual. Usa el nuevo cálculo para decidir.';
   }
 
   if (status === 'expired') {
-    return 'El Circle expiro antes de cerrarse. No se aplico ningun movimiento.';
+    return 'El Circle expiró antes de cerrarse. No se aplicó ningún movimiento.';
   }
 
   return 'Movimientos para cuadrar saldos.';

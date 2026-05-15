@@ -129,7 +129,7 @@ function fallbackParticipantDecisions(
 
   return participantUserIds.map((userId, index) => ({
     decision: 'pending',
-    label: userId === currentUserId ? 'Tu' : index === 0 ? 'Persona' : `Persona ${index + 1}`,
+    label: userId === currentUserId ? 'Tú' : index === 0 ? 'Persona' : `Persona ${index + 1}`,
     userId,
   }));
 }

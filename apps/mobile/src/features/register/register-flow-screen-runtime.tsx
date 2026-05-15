@@ -330,8 +330,8 @@ export function RegisterFlowScreen() {
         amountMinor,
         category,
         createdAtLabel: 'Ahora',
-        createdByLabel: 'Tu',
-        description: description.trim().length > 0 ? description.trim() : 'Sin nota todavia',
+        createdByLabel: 'Tú',
+        description: description.trim().length > 0 ? description.trim() : 'Sin nota todavía',
         id: `${correctionItem.id}:draft`,
         isCurrent: false,
         status: 'draft',
@@ -588,7 +588,7 @@ export function RegisterFlowScreen() {
 
     if (!userId) {
       setBanner({
-        message: 'Tu sesion aun no esta lista. Intenta otra vez en unos segundos.',
+        message: 'Tu sesión aún no está lista. Intenta otra vez en unos segundos.',
         tone: 'danger',
       });
       return;
@@ -892,7 +892,7 @@ export function RegisterFlowScreen() {
                         />
                       </View>
                       {errors.amount ? (
-                        <AppText style={styles.inlineError}>Ingresa un monto valido</AppText>
+                        <AppText style={styles.inlineError}>Ingresa un monto válido</AppText>
                       ) : null}
                     </View>
 
@@ -1033,7 +1033,7 @@ export function RegisterFlowScreen() {
                                 )
                               ) : (
                                 <AppText style={styles.personSearchHint}>
-                                  Escribe un nombre y te mostraremos coincidencias aqui mismo.
+                                  Escribe un nombre y te mostraremos coincidencias aquí mismo.
                                 </AppText>
                               )}
                             </View>
@@ -1062,7 +1062,7 @@ export function RegisterFlowScreen() {
                     ) : null}
 
                     <View style={styles.fieldStack}>
-                      <AppText style={styles.sectionLabel}>Categoria</AppText>
+                      <AppText style={styles.sectionLabel}>Categoría</AppText>
                       <TransactionCategoryPicker
                         onChange={setCategory}
                         value={category}
@@ -1159,7 +1159,7 @@ export function RegisterFlowScreen() {
       />
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
-        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú'}
         initialSearchValue={addPersonInitialSearch}
         onClose={() => setAddPersonSheetVisible(false)}
         transactionContext={addPersonTransactionContext}

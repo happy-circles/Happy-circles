@@ -153,13 +153,13 @@ export function setSupportErrorContext(context: {
 }
 
 export function withSupportCode(message: string, supportId: string): string {
-  const trimmed = message.trim() || 'No se pudo completar la accion.';
+  const trimmed = message.trim() || 'No se pudo completar la acción.';
 
   if (!SUPPORT_ID_REGEX.test(supportId) || trimmed.includes(supportId)) {
     return trimmed;
   }
 
-  return `${trimmed} Codigo de soporte: ${supportId}.`;
+  return `${trimmed} Código de soporte: ${supportId}.`;
 }
 
 export function messageFromUnknownError(error: unknown, fallback = 'Unexpected error'): string {

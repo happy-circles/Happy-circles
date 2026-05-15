@@ -10,7 +10,7 @@ export function formatStepUpErrorMessage(
   error: string | null,
 ): string {
   if (error === 'device_untrusted') {
-    return 'Este dispositivo aun no es confiable. Validalo primero desde Perfil.';
+    return 'Este dispositivo aún no es confiable. Valídalo primero desde Perfil.';
   }
 
   if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
@@ -18,7 +18,7 @@ export function formatStepUpErrorMessage(
   }
 
   if (error === 'lockout') {
-    return `${biometricLabel} esta bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
+    return `${biometricLabel} está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`;
   }
 
   if (error === 'user_cancel') {

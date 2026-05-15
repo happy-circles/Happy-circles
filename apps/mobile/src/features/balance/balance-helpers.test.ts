@@ -118,7 +118,7 @@ describe('balance helpers', () => {
           personLabels: ['Ana Maria', 'Ana Lopez', 'Ben Soto', 'Carla Diaz'],
         }),
       ),
-    ).toBe('Ana, Ben y 1 mas');
+    ).toBe('Ana, Ben y 1 más');
     expect(categoryFocusMeta(category({ movementCount: 2 }))).toBe('2 movimientos');
   });
 });

@@ -34,23 +34,23 @@ export function extractAccountInviteToken(value: string | null | undefined): str
 
 export function accountInviteStatusMessage(status: string, deliveryStatus: string): string | null {
   if (deliveryStatus === 'revoked') {
-    return 'Este link fue reemplazado por una invitacion mas reciente.';
+    return 'Este enlace fue reemplazado por una invitación más reciente.';
   }
 
   if (deliveryStatus === 'expired' || status === 'expired') {
-    return 'Esta invitacion ya vencio. Pide una nueva para empezar.';
+    return 'Esta invitación ya venció. Pide una nueva para empezar.';
   }
 
   if (status === 'accepted') {
-    return 'Esta invitacion ya fue usada.';
+    return 'Esta invitación ya fue usada.';
   }
 
   if (status === 'rejected' || status === 'canceled') {
-    return 'Esta invitacion ya fue cerrada.';
+    return 'Esta invitación ya fue cerrada.';
   }
 
   if (status === 'pending_inviter_review') {
-    return 'Esta invitacion ya fue reclamada y esta esperando revision.';
+    return 'Esta invitación ya fue reclamada y está esperando revisión.';
   }
 
   return null;

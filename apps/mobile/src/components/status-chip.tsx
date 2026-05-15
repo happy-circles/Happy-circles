@@ -61,6 +61,7 @@ function statusIconName(label: string, tone: StatusChipTone): keyof typeof Ionic
   if (
     normalized.includes('conexion') ||
     normalized.includes('conexión') ||
+    normalized.includes('invitación') ||
     normalized.includes('invitacion') ||
     normalized.includes('invitación')
   ) {

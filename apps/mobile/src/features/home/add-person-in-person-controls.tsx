@@ -32,7 +32,7 @@ export function AddPersonInPersonQrBlock({
     >
       <View style={styles.inPersonCopy}>
         <AppText style={styles.inPersonTitle}>Conectar en persona</AppText>
-        <AppText style={styles.inPersonText}>Usa QR cuando ya estan juntos.</AppText>
+        <AppText style={styles.inPersonText}>Usa QR cuando ya están juntos.</AppText>
       </View>
       <View style={styles.inPersonActions}>
         <Pressable

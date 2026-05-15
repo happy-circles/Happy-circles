@@ -108,7 +108,7 @@ describe('buildPeopleState', () => {
       friendshipPendingItems: [],
       historyByRelationshipId: new Map(),
       names: new Map([
-        [CURRENT_USER_ID, 'Tu'],
+        [CURRENT_USER_ID, 'Tú'],
         ['user-ana', 'Ana'],
         ['user-carlos', 'Carlos'],
         ['user-sofia', 'Sofia'],

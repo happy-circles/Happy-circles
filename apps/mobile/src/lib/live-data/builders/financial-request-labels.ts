@@ -15,7 +15,7 @@ export function userLabelForRequest(
     return fallback;
   }
 
-  return userId === currentUserId ? 'Tu' : (names.get(userId) ?? counterpartyName);
+  return userId === currentUserId ? 'Tú' : (names.get(userId) ?? counterpartyName);
 }
 
 export function buildRequestFlowLabelFromRequest(
@@ -83,26 +83,26 @@ export function buildRequestResolutionTitle(
 
   if (request.status === 'accepted') {
     if (request.parent_request_id) {
-      return `${responder} acepto el nuevo monto`;
+      return `${responder} aceptó el nuevo monto`;
     }
 
     if (request.request_type === 'transaction_reversal') {
-      return `${responder} acepto el ajuste`;
+      return `${responder} aceptó el ajuste`;
     }
 
-    return `${responder} acepto la propuesta`;
+    return `${responder} aceptó la propuesta`;
   }
 
   if (request.status === 'rejected') {
     if (request.parent_request_id) {
-      return `${responder} no acepto el nuevo monto`;
+      return `${responder} no aceptó el nuevo monto`;
     }
 
     if (request.request_type === 'transaction_reversal') {
-      return `${responder} no acepto el ajuste`;
+      return `${responder} no aceptó el ajuste`;
     }
 
-    return `${responder} no acepto la propuesta`;
+    return `${responder} no aceptó la propuesta`;
   }
 
   if (request.status === 'canceled') {
@@ -110,7 +110,7 @@ export function buildRequestResolutionTitle(
   }
 
   if (request.status === 'expired') {
-    return 'La propuesta expiro';
+    return 'La propuesta expiró';
   }
 
   if (request.status === 'amended') {

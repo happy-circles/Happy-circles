@@ -94,7 +94,7 @@ const config: ExpoConfig = {
     [
       'expo-camera',
       {
-        cameraPermission: 'Happy Circles usa la camara para escanear codigos QR de invitacion.',
+        cameraPermission: 'Happy Circles usa la cámara para escanear códigos QR de invitación.',
       },
     ],
     [
@@ -116,7 +116,7 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
-        'Happy Circles usa la camara para escanear invitaciones QR y actualizar tu foto de perfil.',
+        'Happy Circles usa la cámara para escanear invitaciones QR y actualizar tu foto de perfil.',
       NSContactsUsageDescription:
         'Happy Circles usa tus contactos para encontrar personas que ya conoces.',
       NSFaceIDUsageDescription:

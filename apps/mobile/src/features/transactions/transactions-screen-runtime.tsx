@@ -221,11 +221,11 @@ export function TransactionsScreen() {
         largeTitle={false}
         safeAreaEdges={['left', 'right']}
         subtitle="Estamos organizando tus pendientes y el historial completo."
-        title="Transacciones"
+        title="Movimientos"
       >
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
-          <AppText style={styles.supportText}>Leyendo el ledger real desde Supabase.</AppText>
+          <AppText style={styles.supportText}>Estamos cargando tus movimientos.</AppText>
         </View>
       </ScreenShell>
     );
@@ -239,8 +239,8 @@ export function TransactionsScreen() {
         largeTitle={false}
         refresh={refresh}
         safeAreaEdges={['left', 'right']}
-        subtitle="No pudimos cargar tus transacciones."
-        title="Transacciones"
+        subtitle="No pudimos cargar tus movimientos."
+        title="Movimientos"
       >
         <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
@@ -264,7 +264,7 @@ export function TransactionsScreen() {
       largeTitle={false}
       refresh={refresh}
       safeAreaEdges={['left', 'right']}
-      title="Transacciones"
+      title="Movimientos"
       titleAlign="center"
     >
       <View style={styles.filterStack}>
@@ -305,7 +305,7 @@ export function TransactionsScreen() {
               size={13}
             />
             <AppText style={[styles.categoryFilterText, { color: activeTheme.colors.textMuted }]}>
-              Categoria: {transactionCategoryLabel(categoryFilter)}
+              Categoría: {transactionCategoryLabel(categoryFilter)}
             </AppText>
           </View>
         ) : null}

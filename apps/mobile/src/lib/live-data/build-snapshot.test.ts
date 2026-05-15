@@ -694,7 +694,7 @@ describe('buildLiveSnapshot', () => {
       savedMovementsCount: 1,
       status: 'approved',
       totalAmountMinor: 2500,
-      participants: ['Tu', 'Ben'],
+      participants: ['Tú', 'Ben'],
     });
     expect(snapshot.activitySections[0]?.items[0]).toMatchObject({
       kind: 'settlement_proposal',
@@ -805,12 +805,12 @@ describe('buildLiveSnapshot', () => {
       snapshot.balanceOverview.resolution.activeProposal?.participantDecisions.map(
         (participant) => participant.label,
       ),
-    ).toEqual(['Tu', 'Ben', 'Carla']);
+    ).toEqual(['Tú', 'Ben', 'Carla']);
     expect(
       snapshot.settlementsById['settlement-active']?.participantDecisions.map(
         (participant) => participant.label,
       ),
-    ).toEqual(['Tu', 'Ben', 'Carla']);
+    ).toEqual(['Tú', 'Ben', 'Carla']);
     expect(
       snapshot.settlementsById['settlement-active']?.movementDetails.map((movement) => [
         movement.debtorUserId,

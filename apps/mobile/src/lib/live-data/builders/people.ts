@@ -108,7 +108,7 @@ export function buildPeopleState(input: {
           ? `Propuesta pendiente ${formatRelativeLabel(latestRequest.created_at, input.nowMs)}`
           : latestHistory
             ? `Ultimo movimiento ${formatRelativeLabel(latestHistory.happened_at, input.nowMs)}`
-            : 'Sin movimientos todavia';
+            : 'Sin movimientos todavía';
 
       return {
         userId: counterpartyUserId,
@@ -213,7 +213,7 @@ export function buildPeopleState(input: {
         person.netAmountMinor === 0
           ? person.pendingCount > 0
             ? `${pendingLabel} por resolver con ${person.displayName}`
-            : `Con ${person.displayName} estan al dia`
+            : `Con ${person.displayName} están al día`
           : person.direction === 'owes_me'
             ? `${person.displayName} te debe`
             : `Le debes a ${person.displayName}`;

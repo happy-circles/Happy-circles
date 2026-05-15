@@ -78,7 +78,7 @@ describe('register flow helpers', () => {
             amountMinor: 45_000,
             category: 'services',
             createdAtLabel: 'hoy',
-            createdByLabel: 'Tu',
+            createdByLabel: 'Tú',
             description: 'Soporte',
             id: 'current',
             isCurrent: true,
@@ -161,7 +161,7 @@ describe('register flow helpers', () => {
   });
 
   it('ranks people by pending work, recency and balance weight', () => {
-    expect(activityRecencyScore('Sin movimientos todavia')).toBe(0);
+    expect(activityRecencyScore('Sin movimientos todavía')).toBe(0);
     expect(activityRecencyScore('hace 5 min')).toBe(140);
     expect(activityRecencyScore('Hoy')).toBe(120);
     expect(activityRecencyScore('Ayer')).toBe(90);
@@ -170,7 +170,7 @@ describe('register flow helpers', () => {
 
     const quietPerson = personRelevanceScore({
       displayName: 'Beto',
-      lastActivityLabel: 'Sin movimientos todavia',
+      lastActivityLabel: 'Sin movimientos todavía',
       netAmountMinor: 0,
       pendingCount: 0,
       userId: 'beto',

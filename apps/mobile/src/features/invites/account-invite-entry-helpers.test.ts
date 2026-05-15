@@ -68,10 +68,10 @@ describe('account invite entry helpers', () => {
     expect(isRecoveryCodeValid('12345678')).toBe(true);
     expect(isRecoveryCodeValid('1234')).toBe(false);
     expect(validateEmailForAuth('')).toBe('Escribe tu correo.');
-    expect(validateEmailForAuth('samuel')).toBe('Escribe un correo valido.');
+    expect(validateEmailForAuth('samuel')).toBe('Escribe un correo válido.');
     expect(validateEmailForAuth('samuel@example.com')).toBeUndefined();
     expect(validatePasswordForAuth({ isRecovery: false, password: '' })).toBe(
-      'Escribe tu contrasena.',
+      'Escribe tu contraseña.',
     );
     expect(validatePasswordForAuth({ isRecovery: true, password: '' })).toBeUndefined();
     expect(
@@ -89,10 +89,10 @@ describe('account invite entry helpers', () => {
 
   it('derives remembered reauth, token and secondary action messages', () => {
     expect(biometricMessage('user_cancel', 'Face ID')).toBe(
-      'Cancelaste Face ID. Puedes entrar con correo y contrasena.',
+      'Cancelaste Face ID. Puedes entrar con correo y contraseña.',
     );
     expect(biometricMessage('not_available', 'Face ID')).toBe(
-      'Este dispositivo no tiene biometria disponible. Entra con correo y contrasena.',
+      'Este dispositivo no tiene biometría disponible. Entra con correo y contraseña.',
     );
     expect(
       resolveTokenFieldError({
@@ -101,14 +101,14 @@ describe('account invite entry helpers', () => {
         tokenMessage: null,
         tokenTouched: true,
       }),
-    ).toBe('Pega el token completo para continuar.');
+    ).toBe('Pega el código completo para continuar.');
     expect(
       resolveTokenLogoSubtitle({
         blockingMessage: null,
         inviterDisplayName: 'Ana',
         isFetching: false,
       }),
-    ).toBe('Ana te invito.');
+    ).toBe('Ana te invitó.');
     expect(
       resolveSecondaryAuthAction({
         hasRememberedAccount: true,

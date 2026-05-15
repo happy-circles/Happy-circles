@@ -35,38 +35,38 @@ type IoniconName = ComponentProps<typeof IdentityFlowField>['icon'];
 
 function inviteReasonLabel(reason: string): string {
   if (reason === 'invite_unavailable') {
-    return 'Esta invitacion no esta disponible o ya no puede usarse.';
+    return 'Esta invitación no está disponible o ya no puede usarse.';
   }
 
   if (reason === 'delivery_revoked') {
-    return 'Este acceso fue reemplazado por un link mas reciente.';
+    return 'Este acceso fue reemplazado por un enlace más reciente.';
   }
 
   if (reason === 'delivery_expired' || reason === 'expired') {
-    return 'Esta invitacion ya vencio.';
+    return 'Esta invitación ya venció.';
   }
 
   if (reason === 'pending_inviter_review') {
-    return 'Tu cuenta ya quedo activa. Solo falta que la persona que te invito confirme el contacto.';
+    return 'Tu cuenta ya quedó activa. Solo falta que la persona que te invitó confirme el contacto.';
   }
 
   if (reason === 'accepted') {
-    return 'La cuenta ya quedo activa y la conexion fue creada.';
+    return 'La cuenta ya quedó activa y la conexión fue creada.';
   }
 
   if (reason === 'rejected') {
-    return 'La invitacion fue cerrada despues de revisar el contacto.';
+    return 'La invitación fue cerrada después de revisar el contacto.';
   }
 
   if (reason === 'canceled') {
-    return 'La invitacion fue cancelada.';
+    return 'La invitación fue cancelada.';
   }
 
   return 'Necesitas terminar la activacion para entrar a Happy Circles.';
 }
 
 function channelLabel(channel: 'remote' | 'qr') {
-  return channel === 'qr' ? 'QR temporal' : 'Invitacion privada';
+  return channel === 'qr' ? 'QR temporal' : 'Invitación privada';
 }
 
 function joinReadableList(items: readonly string[]) {
@@ -83,7 +83,7 @@ function setupRequirementLabel(step: SetupStep) {
   }
 
   if (step === 'security') {
-    return 'validar este telefono';
+    return 'validar este teléfono';
   }
 
   return 'completar nombre y celular';
@@ -114,7 +114,7 @@ function setupActionLabel(step: SetupStep) {
   }
 
   if (step === 'security') {
-    return 'Confiar este telefono';
+    return 'Confiar este teléfono';
   }
 
   return 'Completar perfil';
@@ -125,7 +125,7 @@ function setupActionSubtitle(
   profile: ReturnType<typeof useSession>['profile'],
 ) {
   if (steps.length === 0) {
-    return 'Termina el setup requerido antes de activar la cuenta.';
+    return 'Completa la configuración requerida antes de activar la cuenta.';
   }
 
   return `Falta ${joinReadableList(
@@ -225,20 +225,20 @@ export function AccountInviteScreen() {
             : 'success'
           : 'idle';
   const tokenTitle = !deliveryToken
-    ? 'Link invalido'
+    ? 'Enlace no válido'
     : previewQuery.error
       ? 'No pudimos abrir este acceso'
       : previewQuery.isLoading
-        ? 'Leyendo invitacion'
+        ? 'Leyendo invitación'
         : preview
           ? tokenUnavailable
-            ? 'Invitacion no disponible'
+            ? 'Invitación no disponible'
             : canActivate
               ? 'Activa tu cuenta'
-              : 'Invitacion confirmada'
-          : 'Entrar con invitacion';
+              : 'Invitación confirmada'
+          : 'Entrar con invitación';
   const tokenSubtitle = !deliveryToken
-    ? 'No encontramos el token de esta invitacion.'
+    ? 'No encontramos el código de esta invitación.'
     : previewQuery.error
       ? previewQuery.error.message
       : previewQuery.isLoading
@@ -246,8 +246,8 @@ export function AccountInviteScreen() {
         : preview
           ? tokenUnavailable
             ? 'No revelamos detalles de invitaciones no disponibles.'
-            : `${preview.inviterDisplayName ?? 'Alguien'} envio este acceso privado.`
-          : 'Una invitacion privada te da acceso a Happy Circles.';
+            : `${preview.inviterDisplayName ?? 'Alguien'} envió este acceso privado.`
+          : 'Una invitación privada te da acceso a Happy Circles.';
   const contentTransitionKey = previewQuery.isLoading
     ? 'account-invite:loading'
     : preview
@@ -302,13 +302,13 @@ export function AccountInviteScreen() {
       if (response.status === 'pending_inviter_review') {
         await clearPendingInviteIntent();
         setMessage(
-          'Tu cuenta ya quedo lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
+          'Tu cuenta ya quedó lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
         );
         await navigateHome();
         return;
       }
 
-      setMessage('Terminamos este paso, pero todavia no pudimos cerrar la invitacion.');
+      setMessage('Terminamos este paso, pero todavía no pudimos cerrar la invitación.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo activar esta cuenta.');
     } finally {
@@ -326,7 +326,7 @@ export function AccountInviteScreen() {
       actions={
         <IdentityFlowSecondaryAction
           icon={session.accountAccessState === 'active' ? 'home-outline' : 'key-outline'}
-          label={session.accountAccessState === 'active' ? 'Ir al inicio' : 'Usar otra invitacion'}
+          label={session.accountAccessState === 'active' ? 'Ir al inicio' : 'Usar otra invitación'}
           onPress={() => {
             if (session.accountAccessState === 'active') {
               void navigateHome();
@@ -356,7 +356,7 @@ export function AccountInviteScreen() {
                 subtitle={`${channelLabel(preview.channel)} | vence ${new Date(
                   preview.expiresAt,
                 ).toLocaleString('es-CO')}`}
-                title={preview.inviterDisplayName ?? 'Invitacion privada'}
+                title={preview.inviterDisplayName ?? 'Invitación privada'}
               />
             ) : null}
 
@@ -418,7 +418,7 @@ export function AccountInviteScreen() {
                 ) : null}
                 {!needsSetup && needsTrustedDevice ? (
                   <IdentityFlowPrimaryAction
-                    label="Confiar este telefono"
+                    label="Confiar este teléfono"
                     onPress={() => returnToRoute(router, buildSetupAccountHref('security'))}
                   />
                 ) : null}
@@ -437,7 +437,7 @@ export function AccountInviteScreen() {
               <AppText style={styles.actionHint}>
                 {needsSetup
                   ? setupBlockerSubtitle
-                  : 'Hace falta validar este telefono antes de activar la cuenta.'}
+                  : 'Hace falta validar este teléfono antes de activar la cuenta.'}
               </AppText>
             ) : null}
           </IdentityFlowForm>

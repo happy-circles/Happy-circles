@@ -195,12 +195,10 @@ describe('session remembered account helpers', () => {
 describe('session step-up helpers', () => {
   it('keeps sensitive action error copy deterministic', () => {
     expect(formatStepUpErrorMessage('cambiar el perfil', 'Face ID', 'device_untrusted')).toBe(
-      'Este dispositivo aun no es confiable. Validalo primero desde Perfil.',
+      'Este dispositivo aún no es confiable. Valídalo primero desde Perfil.',
     );
     expect(
       formatStepUpErrorMessage('agregar una contraseña', 'Face ID', 'authentication_failed'),
-    ).toBe(
-      'No se pudo validar Face ID para agregar una contraseña.',
-    );
+    ).toBe('No se pudo validar Face ID para agregar una contraseña.');
   });
 });

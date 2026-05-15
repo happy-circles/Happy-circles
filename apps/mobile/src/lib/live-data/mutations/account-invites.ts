@@ -39,7 +39,7 @@ export function useActivateAccountFromInviteMutation() {
       readonly currentDeviceId: string;
     }) => {
       if (session.deviceTrustState !== 'trusted') {
-        throw new Error('Este dispositivo aun no es confiable. Validalo primero desde seguridad.');
+        throw new Error('Este dispositivo aún no es confiable. Valídalo primero desde seguridad.');
       }
 
       return invokeParsedEdgeFunction<

@@ -57,7 +57,7 @@ export function validateSetupProfile(input: {
     phoneNationalNumber:
       !input.needsPhoneInput || input.phoneNationalNumber.trim().length >= 7
         ? undefined
-        : 'Ingresa un celular valido.',
+        : 'Ingresa un celular válido.',
     photo: undefined,
   };
 

@@ -32,7 +32,7 @@ export function getNotificationSupport(): NotificationSupport {
   if (Platform.OS === 'web') {
     return {
       supported: false,
-      reason: 'Las notificaciones locales no estan habilitadas en web para este flujo.',
+      reason: 'Las notificaciones locales no están habilitadas en web para este flujo.',
     };
   }
 
@@ -40,7 +40,7 @@ export function getNotificationSupport(): NotificationSupport {
     return {
       supported: false,
       reason:
-        'En Expo Go esta integracion muestra limitaciones. Usa un development build para probar notificaciones sin warnings.',
+        'En Expo Go esta integración muestra limitaciones. Usa una versión instalada de desarrollo para probar notificaciones sin avisos.',
     };
   }
 
@@ -164,7 +164,7 @@ export async function scheduleDailyPendingReminder(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
       badge: 1,
-      body: 'Revisa solicitudes y saldos que esperan tu accion.',
+      body: 'Revisa solicitudes y saldos que esperan tu acción.',
       color: theme.colors.treasure,
       data: { href: '/activity' },
       interruptionLevel: 'active',

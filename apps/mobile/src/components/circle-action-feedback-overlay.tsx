@@ -40,8 +40,8 @@ const APPROVE_PHASES: readonly CircleFeedbackPhase[] = [
   {
     centerLabel: 'tu nodo',
     icon: 'radio-button-on-outline',
-    message: 'Tu decision entra al anillo y toca el calculo de todos.',
-    title: 'Tu aprobacion entra al Circle',
+    message: 'Tu aprobación afecta el cálculo de todos.',
+    title: 'Tu aprobación entra al Circle',
   },
   {
     centerLabel: 'saldo vivo',
@@ -52,7 +52,7 @@ const APPROVE_PHASES: readonly CircleFeedbackPhase[] = [
   {
     centerLabel: 'anillo',
     icon: 'sync-outline',
-    message: 'Si era la ultima aprobacion, el Circle se cierra ahora.',
+    message: 'Si era la última aprobación, el Circle se cierra ahora.',
     title: 'Actualizando el anillo',
   },
   {
@@ -71,7 +71,7 @@ const EXECUTE_PHASES: readonly CircleFeedbackPhase[] = [
     title: 'Cerrando Circle',
   },
   {
-    centerLabel: 'ledger',
+    centerLabel: 'historial',
     icon: 'git-compare-outline',
     message: 'Los movimientos se escriben como una historia confirmada.',
     title: 'Escribiendo movimientos',
@@ -85,7 +85,7 @@ const EXECUTE_PHASES: readonly CircleFeedbackPhase[] = [
 ];
 
 const FALLBACK_PARTICIPANTS: readonly HappyCircleRingParticipant[] = [
-  { decision: 'pending', label: 'Tu', userId: 'circle-feedback:self' },
+  { decision: 'pending', label: 'Tú', userId: 'circle-feedback:self' },
   { decision: 'pending', label: 'Happy', userId: 'circle-feedback:one' },
   { decision: 'pending', label: 'Happy', userId: 'circle-feedback:two' },
   { decision: 'pending', label: 'Happy', userId: 'circle-feedback:three' },
@@ -317,9 +317,7 @@ export function CircleActionFeedbackOverlay({
 
   return (
     <Modal animationType="none" statusBarTranslucent transparent visible={mounted}>
-      <Animated.View
-        style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}
-      >
+      <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
           style={[
             styles.card,

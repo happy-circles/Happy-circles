@@ -154,7 +154,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         if (nextStatus === 'stale') {
           triggerAppWarningHaptic();
           setBanner({
-            message: 'Hay un calculo nuevo.',
+            message: 'Hay un cálculo nuevo.',
             tone: 'warning',
           });
         } else if (nextStatus === 'executed') {
@@ -262,7 +262,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         title="Happy Circle"
       >
         <EmptyState
-          description="Confirma que sigas siendo participante o que el id exista en Supabase."
+          description="Confirma que sigas siendo participante o vuelve a abrir la propuesta desde tu historial."
           title="Propuesta no visible"
         />
       </ScreenShell>
@@ -432,7 +432,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         {canDecide ? (
           <View style={styles.actionStory}>
             <AppText style={[styles.actionHint, { color: activeTheme.colors.textMuted }]}>
-              Tu decision define si este calculo se aplica o queda cancelado para todos.
+              Tu aprobación define si este cálculo se aplica o queda cancelado para todos.
             </AppText>
             <View style={styles.cardActions}>
               <Pressable
@@ -508,10 +508,10 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         <View style={styles.versionsHeader}>
           <View style={styles.versionsTitleBlock}>
             <AppText style={[styles.versionsTitle, { color: activeTheme.colors.text }]}>
-              Como llego aqui
+              Cómo llegó aquí
             </AppText>
             <AppText style={[styles.versionsSubtitle, { color: activeTheme.colors.textMuted }]}>
-              Versiones y resultado de cada calculo.
+              Versiones y resultado de cada cálculo.
             </AppText>
           </View>
           <View
@@ -536,7 +536,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <PrimaryAction
               color={cycleColor}
               icon="arrow-forward"
-              label="Abrir calculo actual"
+              label="Abrir cálculo actual"
               onPress={() => {
                 triggerAppSelectionHaptic();
                 pushRoute(router, `/settlements/${replacementProposalId}`);

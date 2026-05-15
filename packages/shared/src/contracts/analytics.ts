@@ -52,7 +52,7 @@ export interface AnalyticsEventCatalogEntry {
 export const ANALYTICS_EVENT_CATALOG = [
   {
     eventName: 'app_opened',
-    description: 'La app se abrio con una sesion autenticada.',
+    description: 'La app se abrió con una sesión autenticada.',
     family: 'session',
     kind: 'lifecycle',
     featureKey: 'session',
@@ -60,7 +60,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'app_backgrounded',
-    description: 'La app paso a segundo plano o cerro la sesion visual.',
+    description: 'La app pasó a segundo plano o cerró la sesión visual.',
     family: 'session',
     kind: 'lifecycle',
     featureKey: 'session',
@@ -76,7 +76,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'registration_started',
-    description: 'El usuario inicio un paso autenticado del registro o setup.',
+    description: 'El usuario inició un paso autenticado del registro o configuración.',
     family: 'onboarding',
     kind: 'intent',
     featureKey: 'onboarding',
@@ -84,7 +84,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'registration_completed',
-    description: 'El usuario completo el registro/setup requerido.',
+    description: 'El usuario completó el registro o la configuración requerida.',
     family: 'onboarding',
     kind: 'outcome',
     featureKey: 'onboarding',
@@ -92,7 +92,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'financial_request_started',
-    description: 'El usuario envio el formulario para crear una solicitud financiera.',
+    description: 'El usuario envió el formulario para crear una solicitud financiera.',
     family: 'financial_request',
     kind: 'intent',
     featureKey: 'financial_requests',
@@ -100,7 +100,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'financial_request_created',
-    description: 'La solicitud financiera se creo correctamente.',
+    description: 'La solicitud financiera se creó correctamente.',
     family: 'financial_request',
     kind: 'outcome',
     featureKey: 'financial_requests',
@@ -108,7 +108,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'financial_request_accepted',
-    description: 'Una solicitud financiera fue aceptada y genero ledger.',
+    description: 'Una solicitud financiera fue aceptada y generó historial.',
     family: 'financial_request',
     kind: 'outcome',
     featureKey: 'financial_requests',
@@ -116,7 +116,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'friendship_invite_created',
-    description: 'Se creo una invitacion de amistad.',
+    description: 'Se creó una invitación de amistad.',
     family: 'invite',
     kind: 'outcome',
     featureKey: 'invites',
@@ -124,7 +124,7 @@ export const ANALYTICS_EVENT_CATALOG = [
   },
   {
     eventName: 'friendship_invite_accepted',
-    description: 'Una invitacion de amistad fue aceptada.',
+    description: 'Una invitación de amistad fue aceptada.',
     family: 'invite',
     kind: 'outcome',
     featureKey: 'invites',

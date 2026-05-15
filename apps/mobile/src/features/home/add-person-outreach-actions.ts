@@ -94,12 +94,12 @@ export function useAddPersonOutreachActions({
     try {
       await Share.share({
         message: shareMessage,
-        title: 'Invitacion a Happy Circles',
+        title: 'Invitación a Happy Circles',
       });
       setMessage(`Listo. Ya puedes compartir el acceso privado con ${alias}.`);
     } catch {
       await Clipboard.setStringAsync(inviteLink);
-      setMessage(`No pudimos abrir compartir. Copiamos el link privado de ${alias}.`);
+      setMessage(`No pudimos abrir compartir. Copiamos el enlace privado de ${alias}.`);
     }
   }
 
@@ -200,7 +200,7 @@ export function useAddPersonOutreachActions({
       }
 
       if (!isAccountInviteDeliveryResult(response.result)) {
-        throw new Error('No pudimos preparar el link de acceso para este contacto.');
+        throw new Error('No pudimos preparar el enlace de acceso para este contacto.');
       }
 
       await shareAccountInviteLink(input.alias, response.result);

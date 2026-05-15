@@ -91,7 +91,7 @@ function normalizeError(error: unknown): SafeError {
   ) {
     return {
       code: 'auth_required',
-      message: 'Autenticacion requerida.',
+      message: 'Autenticación requerida.',
       status: 401,
     };
   }
@@ -115,7 +115,7 @@ function normalizeError(error: unknown): SafeError {
   if (normalized.includes('permission denied') || normalized.includes('not allowed')) {
     return {
       code: 'forbidden',
-      message: 'No tienes permisos para realizar esta accion.',
+      message: 'No tienes permisos para realizar esta acción.',
       status: 403,
     };
   }

@@ -21,7 +21,7 @@ export function settlementParticipantLabel(input: {
   readonly names: Map<string, string>;
 }): string | null {
   if (input.participantUserId === input.currentUserId) {
-    return 'Tu';
+    return 'Tú';
   }
 
   if (input.visibleCounterpartyUserIds.has(input.participantUserId)) {
@@ -61,26 +61,26 @@ export function buildSettlementParticipantLabels(input: {
   if (hiddenCount === 1) {
     labels.push('Otra persona');
   } else if (hiddenCount > 1) {
-    labels.push(`${hiddenCount} personas mas`);
+    labels.push(`${hiddenCount} personas más`);
   }
 
   return labels;
 }
 
 export function summarizeSettlementParticipants(labels: readonly string[]): string {
-  const others = labels.filter((label) => label !== 'Tu');
+  const others = labels.filter((label) => label !== 'Tú' && label !== 'Tu');
 
   if (others.length === 0) {
-    return 'tu circulo';
+    return 'tu círculo';
   }
 
   if (others.length === 1) {
-    return others[0] ?? 'tu circulo';
+    return others[0] ?? 'tu círculo';
   }
 
   if (others.length === 2) {
     return `${others[0]} y ${others[1]}`;
   }
 
-  return `${others[0]} y ${others.length - 1} mas`;
+  return `${others[0]} y ${others.length - 1} más`;
 }

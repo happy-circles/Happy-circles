@@ -121,7 +121,7 @@ const NOTIFICATION_CATEGORIES: readonly NotificationCategoryDefinition[] = [
   },
   {
     key: 'transactions',
-    label: 'Transacciones',
+    label: 'Movimientos',
     icon: 'cash-outline',
   },
   {
@@ -256,16 +256,16 @@ function nameFromInviteTitle(title: string): string | null {
     /^(.+) quiere conectar contigo$/i,
     /^Esperando a (.+)$/i,
     /^Verifica a (.+)$/i,
-    /^(.+) reclamo la invitacion para .+$/i,
-    /^Invitacion lista para (.+)$/i,
+    /^(.+) reclamó la invitación para .+$/i,
+    /^Invitación lista para (.+)$/i,
     /^QR temporal para (.+)$/i,
-    /^Esperando validacion de (.+)$/i,
+    /^Esperando validación de (.+)$/i,
     /^Acceso privado para (.+)$/i,
     /^Confirmaste a (.+)$/i,
     /^Rechazaste a (.+)$/i,
-    /^(.+) acepto tu invitacion$/i,
-    /^(.+) rechazo tu invitacion$/i,
-    /^(.+) entro con el telefono esperado$/i,
+    /^(.+) aceptó tu invitación$/i,
+    /^(.+) rechazó tu invitación$/i,
+    /^(.+) entró con el teléfono esperado$/i,
   ];
 
   for (const pattern of patterns) {
@@ -449,7 +449,11 @@ function buildPendingSnippetContent(item: ActivityItemDto): PendingSnippetConten
   if (item.kind === 'financial_request') {
     const [creatorLabel, detail, createdAtLabel] = parts;
     const createdByLabel =
-      creatorLabel === 'Tu' ? 'Creado por ti' : creatorLabel ? `Creado por ${creatorLabel}` : null;
+      creatorLabel === 'Tú' || creatorLabel === 'Tu'
+        ? 'Creado por ti'
+        : creatorLabel
+          ? `Creado por ${creatorLabel}`
+          : null;
 
     return {
       detail: detail ?? item.subtitle,
@@ -1169,9 +1173,7 @@ export function ActivityScreen() {
           <View style={styles.loadingMotion}>
             <HappyCirclesMotion size={108} variant="loading" />
           </View>
-          <AppText style={styles.supportText}>
-            Estamos leyendo las acciones reales desde Supabase.
-          </AppText>
+          <AppText style={styles.supportText}>Estamos cargando tus movimientos.</AppText>
         </View>
       </SafeAreaView>
     );

@@ -71,7 +71,7 @@ export function useAddPersonQrActions({
   function navigateToInviteToken(rawValue: string) {
     const token = extractInviteToken(rawValue);
     if (!token) {
-      setMessage('Pega un link completo o un codigo valido de invitacion.');
+      setMessage('Pega un enlace completo o un código válido de invitación.');
       return;
     }
 
@@ -96,7 +96,7 @@ export function useAddPersonQrActions({
 
     const permission = await requestCameraPermission();
     if (!permission.granted) {
-      setMessage('Necesitamos permiso de camara para escanear QR.');
+      setMessage('Necesitamos permiso de cámara para escanear QR.');
       return;
     }
 
@@ -113,7 +113,7 @@ export function useAddPersonQrActions({
         sourceContext: 'home_add_my_qr',
       });
       if (!delivery.deliveryToken) {
-        throw new Error('El servidor no devolvio un token para el QR.');
+        throw new Error('No pudimos preparar tu QR.');
       }
       setMyQrDelivery(delivery);
     } catch (error) {
@@ -145,12 +145,12 @@ export function useAddPersonQrActions({
 
     try {
       await Share.share({
-        message: `Escanea o abre este link para conectar conmigo en Happy Circles: ${myQrLink}`,
+        message: `Escanea o abre este enlace para conectar conmigo en Happy Circles: ${myQrLink}`,
         title: 'Mi QR de Happy Circles',
       });
     } catch {
       await Clipboard.setStringAsync(myQrLink);
-      setMyQrMessage('No pudimos abrir compartir. Copiamos tu link de QR.');
+      setMyQrMessage('No pudimos abrir compartir. Copiamos tu enlace de QR.');
     }
   }
 
@@ -162,7 +162,7 @@ export function useAddPersonQrActions({
     const token = extractInviteToken(result.data);
     if (!token) {
       setScannerLocked(true);
-      setScannerMessage('Ese QR no parece ser una invitacion valida de Happy Circles.');
+      setScannerMessage('Ese QR no parece ser una invitación válida de Happy Circles.');
       setTimeout(() => {
         setScannerLocked(false);
       }, 1200);

@@ -25,14 +25,14 @@ function settlementLifecycleCopy(input: {
     if (input.actorDecision === 'approved') {
       return {
         detail,
-        title: 'Tu aprobaste esta version',
+        title: 'Aprobaste esta versión',
       };
     }
 
     if (input.actorDecision === 'rejected') {
       return {
         detail,
-        title: 'No aprobaste esta version',
+        title: 'No aprobaste esta versión',
       };
     }
 
@@ -51,7 +51,7 @@ function settlementLifecycleCopy(input: {
 
     return {
       detail: `${reason} No cambió el saldo.`,
-      title: 'Tu aprobaste este Circle',
+      title: 'Aprobaste este Circle',
     };
   }
 
@@ -111,7 +111,7 @@ export function buildSettlementProposalHistoryTimelineItems(input: {
         : (actorParticipant?.decided_at ?? proposal.updated_at ?? proposal.created_at);
     const otherNames = participants
       .map((participant) => input.names.get(participant.participant_user_id) ?? 'Persona')
-      .filter((name) => name !== 'Tu');
+      .filter((name) => name !== 'Tú' && name !== 'Tu');
     const pendingCount = participants.filter(
       (participant) => participant.decision === 'pending',
     ).length;

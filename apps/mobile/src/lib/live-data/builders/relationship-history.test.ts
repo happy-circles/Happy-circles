@@ -31,7 +31,7 @@ function row(value: Partial<RelationshipHistoryRow>): RelationshipHistoryRow {
 }
 
 const names = new Map([
-  [CURRENT_USER_ID, 'Tu'],
+  [CURRENT_USER_ID, 'Tú'],
   [SOFIA_ID, 'Sofia'],
 ]);
 
@@ -59,6 +59,6 @@ describe('relationship history cycle settlement copy', () => {
     expect(buildCycleSettlementImpactLabel(row({}))).toBeNull();
     expect(subtitle).not.toContain('Completaste un Circle');
     expect(subtitle).toContain('Happy Circle');
-    expect(subtitle).toContain('Tu -> Sofia');
+    expect(subtitle).toContain('Tú -> Sofia');
   });
 });

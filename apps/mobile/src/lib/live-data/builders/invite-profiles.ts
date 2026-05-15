@@ -1,7 +1,4 @@
-import type {
-  ActivityItemDto,
-  PersonTimelineItemDto,
-} from '@happy-circles/application';
+import type { ActivityItemDto, PersonTimelineItemDto } from '@happy-circles/application';
 import type { Database } from '@happy-circles/shared';
 import type {
   AccountInviteListItem,
@@ -310,7 +307,7 @@ export function inviteTimelineEvent(input: {
   readonly subtitle: string;
   readonly status: string;
   readonly sourceLabel: string;
-  readonly detail: 'Invitacion de amistad' | 'Acceso privado';
+  readonly detail: 'Invitación de amistad' | 'Acceso privado';
   readonly happenedAt: string | null | undefined;
   readonly originInviteId: string;
   readonly nowMs: number;
@@ -387,7 +384,7 @@ export function inviteProfileDisplayName(
   }
 
   const knownName = names.get(userId)?.trim();
-  if (knownName && knownName !== 'Tu') {
+  if (knownName && knownName !== 'Tú' && knownName !== 'Tu') {
     return knownName;
   }
 
@@ -480,7 +477,7 @@ export function upsertInviteProfilePeople(input: {
     const headline =
       nextPendingItems.length > 0 && netAmountMinor === 0
         ? `${pendingLabel} por resolver con ${displayName}`
-        : (existingPerson?.headline ?? `Con ${displayName} estan al dia`);
+        : (existingPerson?.headline ?? `Con ${displayName} están al día`);
 
     input.peopleById[userId] = {
       userId,

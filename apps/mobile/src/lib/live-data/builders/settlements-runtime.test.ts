@@ -73,7 +73,7 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
       counterpartyUserId: 'user-sofia',
       currentUserId: CURRENT_USER_ID,
       names: new Map([
-        [CURRENT_USER_ID, 'Tu'],
+        [CURRENT_USER_ID, 'Tú'],
         ['user-sofia', 'Sofia'],
       ]),
       nowMs: NOW,
@@ -93,7 +93,7 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
     expect(item).toMatchObject({
       happenedAt: '2026-05-04T12:00:00.000Z',
       status: 'stale',
-      title: 'Tu aprobaste esta version',
+      title: 'Aprobaste esta versión',
     });
   });
 
@@ -107,7 +107,7 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
       counterpartyUserId: 'user-sofia',
       currentUserId: CURRENT_USER_ID,
       names: new Map([
-        [CURRENT_USER_ID, 'Tu'],
+        [CURRENT_USER_ID, 'Tú'],
         ['user-sofia', 'Sofia'],
       ]),
       nowMs: NOW,
@@ -156,7 +156,7 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
     const baseInput = {
       currentUserId: CURRENT_USER_ID,
       names: new Map([
-        [CURRENT_USER_ID, 'Tu'],
+        [CURRENT_USER_ID, 'Tú'],
         ['user-ana', 'Ana'],
         ['user-carlos', 'Carlos'],
       ]),
@@ -223,7 +223,7 @@ describe('buildSettlementProposalHistoryTimelineItems', () => {
     const baseInput = {
       currentUserId: CURRENT_USER_ID,
       names: new Map([
-        [CURRENT_USER_ID, 'Tu'],
+        [CURRENT_USER_ID, 'Tú'],
         ['user-ana', 'Ana'],
         ['user-carlos', 'Carlos'],
         ['user-sofia', 'Sofia'],

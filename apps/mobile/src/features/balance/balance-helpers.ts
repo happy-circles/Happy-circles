@@ -33,7 +33,7 @@ const BALANCE_ANALYTICS_PERIODS: readonly BalanceAnalyticsPeriod[] = [
 export const FOCUS_OPTIONS: readonly FocusOption[] = [
   { label: 'Balance', value: 'balance', icon: 'wallet-outline' },
   { label: 'Personas', value: 'people', icon: 'people-outline' },
-  { label: 'Categorias', value: 'categories', icon: 'pricetags-outline' },
+  { label: 'Categorías', value: 'categories', icon: 'pricetags-outline' },
   { label: 'Happy Circles', value: 'circles', icon: 'happy-outline' },
 ];
 
@@ -213,7 +213,7 @@ function compactFirstNames(values: readonly string[]): string | null {
   const hiddenCount = names.length - visibleNames.length;
 
   return hiddenCount > 0
-    ? `${visibleNames.join(', ')} y ${hiddenCount} mas`
+    ? `${visibleNames.join(', ')} y ${hiddenCount} más`
     : visibleNames.join(', ');
 }
 

@@ -128,10 +128,10 @@ describe('history case presentation', () => {
   it('does not render Circle copy as a right-side timeline amount', () => {
     const ledgerStep = item({
       category: 'cycle',
-      flowLabel: 'Tu -> Sofia',
+      flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Happy Circle completado: Tu -> Sofia',
+      title: 'Happy Circle completado: Tú -> Sofia',
     });
 
     expect(friendlyHistoryStepLabel(ledgerStep)).toBe('Pagaste a Sofia');
@@ -141,10 +141,10 @@ describe('history case presentation', () => {
   it('does not use completion copy as the Circle case impact label', () => {
     const ledgerStep = item({
       category: 'cycle',
-      flowLabel: 'Tu -> Sofia',
+      flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Happy Circle completado: Tu -> Sofia',
+      title: 'Happy Circle completado: Tú -> Sofia',
     });
 
     expect(
@@ -161,7 +161,7 @@ describe('history case presentation', () => {
   it('does not title a ledger-only Circle row as completed', () => {
     const ledgerStep = item({
       category: 'cycle',
-      flowLabel: 'Tu -> Sofia',
+      flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
       title: 'Pagaste a Sofia',

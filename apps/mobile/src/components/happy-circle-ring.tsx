@@ -52,7 +52,7 @@ export function standardHappyCircleParticipants(
   const nodes: HappyCircleRingParticipant[] = [
     {
       ...currentParticipant,
-      label: 'Tu',
+      label: 'Tú',
     },
   ];
 

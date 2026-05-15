@@ -353,7 +353,7 @@ export function ProfileScreen() {
       session.resendEmailConfirmation(accountEmailValue),
     );
 
-    if (result.includes('Enviamos') || result.includes('ya esta confirmado')) {
+    if (result.includes('Enviamos') || result.includes('ya está confirmado')) {
       triggerSuccessHaptic();
     } else {
       triggerWarningHaptic();
@@ -406,7 +406,7 @@ export function ProfileScreen() {
   async function handleTakeAvatarPhoto() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setMessage('Necesitas permitir acceso a la camara para tomar la foto.');
+      setMessage('Necesitas permitir acceso a la cámara para tomar la foto.');
       return;
     }
 
@@ -664,7 +664,7 @@ export function ProfileScreen() {
                   ? 'Primero valida este dispositivo'
                   : 'No disponible'
             }
-            title="Biometria"
+            title="Biometría"
             tone={session.biometricsEnabled ? 'success' : 'muted'}
             trailing={
               <Switch
@@ -895,8 +895,8 @@ export function ProfileScreen() {
             <View style={styles.actionCluster}>
               {session.canTrustCurrentDeviceWithoutPassword ? (
                 <AppText style={styles.sectionBody}>
-                  Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla otra
-                  vez.
+                  Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla
+                  otra vez.
                 </AppText>
               ) : null}
               <View style={styles.inlineActionRow}>
@@ -987,7 +987,7 @@ export function ProfileScreen() {
               ) : null}
               {trustMethods.length === 0 ? (
                 <AppText style={styles.sectionBody}>
-                  Esta cuenta no tiene un metodo disponible para revalidar el dispositivo.
+                  Esta cuenta no tiene un método disponible para revalidar el dispositivo.
                 </AppText>
               ) : null}
             </View>
@@ -1049,14 +1049,14 @@ export function ProfileScreen() {
             onPress={() =>
               void openExternalUrl(
                 PRIVACY_POLICY_URL,
-                'No pudimos abrir la politica de privacidad.',
+                'No pudimos abrir la política de privacidad.',
               )
             }
             style={({ pressed }) => [pressed ? styles.rowPressed : null]}
           >
             <ProfileStatusRow
               icon="shield-checkmark"
-              subtitle="Uso de datos, retencion y derechos"
+              subtitle="Uso de datos, retención y derechos"
               title="Privacidad"
               tone="primary"
               trailing={
@@ -1070,14 +1070,14 @@ export function ProfileScreen() {
           <Pressable
             accessibilityRole="link"
             onPress={() =>
-              void openExternalUrl(TERMS_URL, 'No pudimos abrir los terminos de servicio.')
+              void openExternalUrl(TERMS_URL, 'No pudimos abrir los términos de servicio.')
             }
             style={({ pressed }) => [pressed ? styles.rowPressed : null]}
           >
             <ProfileStatusRow
               icon="document-text"
               subtitle="Reglas de uso y responsabilidades"
-              title="Terminos"
+              title="Términos"
               tone="muted"
               trailing={
                 <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />

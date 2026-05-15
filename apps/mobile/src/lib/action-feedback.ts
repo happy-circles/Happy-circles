@@ -304,23 +304,23 @@ function resolveBlockedAction(
         ? 'Confirma tu correo para continuar'
         : 'Completa tu perfil para continuar',
       message: missingEmail
-        ? 'Reenvia el correo desde tu perfil y abre el enlace de confirmacion.'
-        : 'Antes de mover dinero necesitamos nombre usable y celular unico en tu cuenta.',
+        ? 'Reenvía el correo desde tu perfil y abre el enlace de confirmación.'
+        : 'Antes de mover dinero necesitamos nombre usable y celular único en tu cuenta.',
       ctaLabel: missingEmail ? 'Abrir perfil' : 'Completar ahora',
       route: buildSetupAccountHref(nextRequiredStep),
     };
   }
 
   if (
+    normalized.includes('dispositivo aún no es confiable') ||
     normalized.includes('dispositivo aun no es confiable') ||
     normalized.includes('confiar este dispositivo') ||
     (normalized.includes('solo puedes') && normalized.includes('dispositivo confiable'))
   ) {
     return {
       title: 'Valida este dispositivo para continuar',
-      message:
-        'Esta acción requiere un dispositivo confiable. Puedes validarlo en el setup de seguridad.',
-      ctaLabel: 'Abrir setup',
+      message: 'Esta acción requiere un dispositivo confiable. Puedes validarlo en seguridad.',
+      ctaLabel: 'Abrir seguridad',
       route: buildSetupAccountHref('security'),
     };
   }
@@ -335,7 +335,7 @@ function resolveBlockedAction(
     return {
       title: 'Valida tu identidad para continuar',
       message,
-      ctaLabel: 'Abrir setup',
+      ctaLabel: 'Abrir seguridad',
       route: buildSetupAccountHref('security'),
     };
   }

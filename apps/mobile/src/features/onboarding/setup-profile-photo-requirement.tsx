@@ -36,7 +36,7 @@ export function SetupProfilePhotoRequirement({
         <AppText style={styles.photoRequirementTitle}>Foto de perfil</AppText>
         <AppText style={styles.photoRequirementSubtitle}>
           {hasSavedPhoto
-            ? 'Lista para que tus circulos te reconozcan.'
+            ? 'Lista para que tus círculos te reconozcan.'
             : 'Opcional; puedes agregarla ahora o despues.'}
         </AppText>
       </View>

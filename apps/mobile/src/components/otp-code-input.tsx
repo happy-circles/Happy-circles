@@ -39,7 +39,7 @@ export function OtpCodeInput({
 
   return (
     <Pressable
-      accessibilityLabel="Codigo de confirmacion"
+      accessibilityLabel="Código de confirmación"
       disabled={disabled}
       onPress={() => inputRef.current?.focus()}
       style={[styles.container, style, disabled ? styles.disabled : null]}

@@ -18,8 +18,8 @@ const GATEWAY_COPY: Record<
     fallbackPath: '/join',
   },
   'friendship-invite': {
-    title: 'Invitacion privada',
-    subtitle: 'Abre Happy Circles para continuar con esta invitacion.',
+    title: 'Invitación privada',
+    subtitle: 'Abre Happy Circles para continuar con esta invitación.',
     fallbackPath: '/invite',
   },
   join: {
@@ -29,13 +29,13 @@ const GATEWAY_COPY: Record<
     nativePath: '/join?mode=sign-in',
   },
   'reset-password': {
-    title: 'Restablecer clave',
-    subtitle: 'Abre Happy Circles para terminar el cambio de clave.',
+    title: 'Restablecer contraseña',
+    subtitle: 'Abre Happy Circles para terminar el cambio de contraseña.',
     fallbackPath: '/reset-password',
   },
   'setup-account': {
     title: 'Completar perfil',
-    subtitle: 'Abre Happy Circles para terminar tu configuracion.',
+    subtitle: 'Abre Happy Circles para terminar tu configuración.',
     fallbackPath: '/setup-account',
   },
 };

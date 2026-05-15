@@ -922,10 +922,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       : 'negative';
   const balanceVisual = toneVisual(balanceTone, activeTheme);
   const balanceSummary = isSettledBalance
-    ? 'Estan al dia'
+    ? 'Están al día'
     : person.direction === 'owes_me'
-      ? `Te debe ${formatCop(person.netAmountMinor)}`
-      : `Debes ${formatCop(person.netAmountMinor)}`;
+      ? `Por cobrar ${formatCop(person.netAmountMinor)}`
+      : `Por pagar ${formatCop(person.netAmountMinor)}`;
   const balanceSummaryColor = balanceVisual?.accentColor;
   const heroMeta = hasPendingItems
     ? isSettledBalance

@@ -50,7 +50,14 @@ export function historyTimelineStepDetailLabel(item: HistoryCaseItem): string | 
   }
 
   const ignored = new Set(
-    [item.title, item.detail, item.happenedAtLabel, 'Invitacion de amistad', 'Acceso privado']
+    [
+      item.title,
+      item.detail,
+      item.happenedAtLabel,
+      'Invitación de amistad',
+      'Invitacion de amistad',
+      'Acceso privado',
+    ]
       .filter((value): value is string => Boolean(value))
       .map((value) => value.toLocaleLowerCase('es-CO')),
   );
@@ -86,36 +93,39 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
   }
 
   if (item.kind === 'payment') {
-    return 'Se registro el movimiento';
+    return 'Se registró el movimiento';
   }
 
   if (item.title.endsWith(' propuso un nuevo monto')) {
     const actor = item.title.replace(' propuso un nuevo monto', '');
-    return actor === 'Tu' ? 'Tu propusiste un nuevo monto' : `${actor} propuso un nuevo monto`;
+    return actor === 'Tú' || actor === 'Tu'
+      ? 'Propusiste un nuevo monto'
+      : `${actor} propuso un nuevo monto`;
   }
 
-  if (item.title.startsWith('Tu creo ')) {
-    return item.title.replace('Tu creo ', 'Tu creaste ');
-  }
-
-  if (item.title.startsWith('Tu acepto ')) {
-    return item.title.replace('Tu acepto ', 'Tu aceptaste ');
-  }
-
-  if (item.title.startsWith('Tu rechazo ')) {
-    return item.title.replace('Tu rechazo ', 'Tu rechazaste ');
-  }
-
-  if (item.title.startsWith('Tu registro ')) {
-    return item.title.replace('Tu registro ', 'Tu registraste ');
-  }
-
-  if (item.title.startsWith('Tu confirmo ')) {
-    return item.title.replace('Tu confirmo ', 'Tu confirmaste ');
-  }
-
-  if (item.title.startsWith('Tu aplico ')) {
-    return item.title.replace('Tu aplico ', 'Tu aplicaste ');
+  const selfAction = item.title.match(
+    /^T[uú] (cre[oó]|acept[oó]|rechaz[oó]|registr[oó]|confirm[oó]|aplic[oó]) (.+)$/i,
+  );
+  if (selfAction?.[1] && selfAction[2]) {
+    const action = selfAction[1].toLowerCase();
+    if (action === 'creo' || action === 'creó') {
+      return `Creaste ${selfAction[2]}`;
+    }
+    if (action === 'acepto' || action === 'aceptó') {
+      return `Aceptaste ${selfAction[2]}`;
+    }
+    if (action === 'rechazo' || action === 'rechazó') {
+      return `Rechazaste ${selfAction[2]}`;
+    }
+    if (action === 'registro' || action === 'registró') {
+      return `Registraste ${selfAction[2]}`;
+    }
+    if (action === 'confirmo' || action === 'confirmó') {
+      return `Confirmaste ${selfAction[2]}`;
+    }
+    if (action === 'aplico' || action === 'aplicó') {
+      return `Aplicaste ${selfAction[2]}`;
+    }
   }
 
   return item.title;
@@ -229,11 +239,11 @@ export function historyImpactLabel(item: HistoryCaseItem): string | null {
 function cycleLedgerStepLabel(item: Pick<HistoryCaseItem, 'flowLabel' | 'title'>): string {
   const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
 
-  if (from === 'Tu' && to) {
+  if ((from === 'Tú' || from === 'Tu') && to) {
     return `Pagaste a ${to}`;
   }
 
-  if (to === 'Tu' && from) {
+  if ((to === 'Tú' || to === 'Tu') && from) {
     return `${from} te pagó`;
   }
 
@@ -285,9 +295,13 @@ function inviteMismatchLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>
 
   const mismatchStep = itemCase.steps.find(
     (step) =>
+      step.title.includes('reclamó la invitación enviada') ||
       step.title.includes('reclamo la invitacion enviada') ||
+      step.title.includes('activó el acceso enviado') ||
       step.title.includes('activo el acceso enviado') ||
+      step.subtitle.includes('reclamó la invitación enviada') ||
       step.subtitle.includes('reclamo la invitacion enviada') ||
+      step.subtitle.includes('activó el acceso enviado') ||
       step.subtitle.includes('activo el acceso enviado'),
   );
 
@@ -296,7 +310,9 @@ function inviteMismatchLabel<T extends HistoryCaseItem>(itemCase: HistoryCase<T>
   }
 
   if (
+    mismatchStep.title.includes('reclamó la invitación enviada') ||
     mismatchStep.title.includes('reclamo la invitacion enviada') ||
+    mismatchStep.title.includes('activó el acceso enviado') ||
     mismatchStep.title.includes('activo el acceso enviado')
   ) {
     return mismatchStep.title;

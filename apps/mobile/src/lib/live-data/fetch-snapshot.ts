@@ -33,11 +33,11 @@ async function fetchLiveSnapshot(
     const rows = await Promise.race([rowsPromise, snapshotAbort.timeoutPromise]);
 
     if (snapshotAbort.wasTimedOut()) {
-      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
+      throw new Error('La sincronización tardó demasiado. Revisa tu conexión e intenta de nuevo.');
     }
 
     if (requestSignal?.aborted) {
-      throw new Error('Sincronizacion cancelada.');
+      throw new Error('Sincronización cancelada.');
     }
 
     hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
@@ -55,11 +55,11 @@ async function fetchLiveSnapshot(
     return snapshot;
   } catch (error) {
     if (snapshotAbort.wasTimedOut()) {
-      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
+      throw new Error('La sincronización tardó demasiado. Revisa tu conexión e intenta de nuevo.');
     }
 
     if (requestSignal?.aborted) {
-      throw new Error('Sincronizacion cancelada.');
+      throw new Error('Sincronización cancelada.');
     }
 
     throw error;
@@ -70,7 +70,7 @@ async function fetchLiveSnapshot(
 
 async function fetchAppSnapshot(userId: string | null, signal?: AbortSignal) {
   if (!userId) {
-    throw new Error('No hay una sesion lista para cargar datos.');
+    throw new Error('No hay una sesión lista para cargar datos.');
   }
 
   try {

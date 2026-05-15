@@ -9,7 +9,7 @@ import {
 } from './settlement-core';
 
 function settlementVersionTitle(versionNumber: number | null): string {
-  return versionNumber ? `Version ${versionNumber}` : 'Version';
+  return versionNumber ? `Versión ${versionNumber}` : 'Versión';
 }
 
 export function staleReasonDetail(reason: string | null): string {
@@ -32,7 +32,7 @@ function settlementVersionDetail(input: {
   readonly approvalsPending: number;
 }): string {
   if (input.proposal.status === 'pending_approvals') {
-    return `Faltan ${input.approvalsPending} aprobacion${input.approvalsPending === 1 ? '' : 'es'}.`;
+    return `Faltan ${input.approvalsPending} ${input.approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}.`;
   }
   if (input.proposal.status === 'approved') {
     return 'Aprobada.';
@@ -41,7 +41,7 @@ function settlementVersionDetail(input: {
     return 'Movimientos registrados.';
   }
   if (input.proposal.status === 'rejected') {
-    return 'No se aplico.';
+    return 'No se aplicó.';
   }
   if (input.proposal.status === 'stale') {
     return staleReasonDetail(input.proposal.stale_reason);

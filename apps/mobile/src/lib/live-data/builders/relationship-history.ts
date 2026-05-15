@@ -83,7 +83,7 @@ export function buildHistoryTitle(
     }
 
     if (row.status === 'rejected') {
-      return `${counterpartyName} no acepto la propuesta`;
+      return `${counterpartyName} no aceptó la propuesta`;
     }
 
     return `Propuesta con ${counterpartyName}`;
@@ -149,13 +149,13 @@ export function buildTimelineStepTitle(
 ): string {
   const creator =
     row.creator_user_id === currentUserId
-      ? 'Tu'
+      ? 'Tú'
       : row.creator_user_id
         ? (names.get(row.creator_user_id) ?? counterpartyName)
         : 'Sistema';
   const responder =
     row.responder_user_id === currentUserId
-      ? 'Tu'
+      ? 'Tú'
       : row.responder_user_id
         ? (names.get(row.responder_user_id) ?? counterpartyName)
         : 'La otra persona';
@@ -172,14 +172,14 @@ export function buildTimelineStepTitle(
 
     if (row.status === 'accepted') {
       if (row.subtype === 'transaction_reversal') {
-        return `${responder} acepto el ajuste`;
+        return `${responder} aceptó el ajuste`;
       }
 
       if (row.subtype === 'balance_increase') {
-        return `${responder} acepto la propuesta`;
+        return `${responder} aceptó la propuesta`;
       }
 
-      return `${responder} acepto el ajuste`;
+      return `${responder} aceptó el ajuste`;
     }
 
     if (row.status === 'amended') {
@@ -187,21 +187,21 @@ export function buildTimelineStepTitle(
     }
 
     if (row.status === 'rejected') {
-      return `${responder} no acepto la propuesta`;
+      return `${responder} no aceptó la propuesta`;
     }
   }
 
   if (row.subtype === 'balance_increase_acceptance') {
     const flowLabel = historyFlowLabelForCurrentUser(row, currentUserId) ?? 'entrada';
     return sourceTypeForRow(row) === 'system'
-      ? `Sistema registro la ${flowLabel}`
-      : `${creator} registro la ${flowLabel}`;
+      ? `Sistema registró la ${flowLabel}`
+      : `${creator} registró la ${flowLabel}`;
   }
 
   if (row.subtype === 'transaction_reversal_acceptance') {
     return sourceTypeForRow(row) === 'system'
-      ? 'Sistema aplico el ajuste'
-      : `${creator} aplico el ajuste`;
+      ? 'Sistema aplicó el ajuste'
+      : `${creator} aplicó el ajuste`;
   }
 
   if (row.subtype === 'cycle_settlement') {

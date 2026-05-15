@@ -28,26 +28,26 @@ const DELETE_ACCOUNT_PHASES: readonly AccountFeedbackPhase[] = [
   {
     icon: 'shield-checkmark-outline',
     label: 'seguridad',
-    message: 'Confirmamos que esta accion venga desde un dispositivo confiable.',
+    message: 'Confirmamos que esta acción venga desde un dispositivo confiable.',
     title: 'Validando seguridad',
   },
   {
     icon: 'finger-print-outline',
     label: 'identidad',
-    message: 'Pedimos una verificacion extra antes de tocar tu cuenta.',
+    message: 'Pedimos una verificación extra antes de tocar tu cuenta.',
     title: 'Confirmando identidad',
   },
   {
     icon: 'lock-closed-outline',
-    label: 'ledger',
+    label: 'historial',
     message: 'Protegemos historial y saldos para que no pierdan consistencia.',
-    title: 'Protegiendo el ledger',
+    title: 'Protegiendo el historial',
   },
   {
     icon: 'log-out-outline',
     label: 'salida',
-    message: 'Cerramos la sesion cuando la cuenta queda anonimizada.',
-    title: 'Cerrando sesion',
+    message: 'Cerramos la sesión cuando la cuenta queda anonimizada.',
+    title: 'Cerrando sesión',
   },
 ];
 
@@ -64,7 +64,7 @@ function resultCopy(input: {
     return {
       icon: 'alert-circle-outline',
       label: 'revisar',
-      message: input.message ?? 'No se pudo completar la accion.',
+      message: input.message ?? 'No se pudo completar la acción.',
       title: input.title ?? 'No se pudo',
     };
   }
@@ -206,9 +206,7 @@ export function AccountActionFeedbackOverlay({
 
   return (
     <Modal animationType="none" statusBarTranslucent transparent visible={mounted}>
-      <Animated.View
-        style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}
-      >
+      <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
           style={[
             styles.card,

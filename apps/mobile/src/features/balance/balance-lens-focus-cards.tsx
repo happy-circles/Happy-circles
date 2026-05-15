@@ -780,7 +780,7 @@ function CategoryParticleField({
               >
                 {onCategoryPress ? (
                   <Pressable
-                    accessibilityLabel={`Abrir categoria ${row.label}`}
+                    accessibilityLabel={`Abrir categoría ${row.label}`}
                     accessibilityRole="button"
                     onPress={(event) => {
                       event.stopPropagation();
@@ -891,7 +891,7 @@ export function PeopleFocusCard({
     <SurfaceCard padding="lg" style={[styles.focusCard, styles.visualFocusCard]}>
       <FocusCardTitle>Personas</FocusCardTitle>
       {visiblePeople.length === 0 ? (
-        <EmptyCardState icon="people-outline" label="Todavia no hay actividad visible." />
+        <EmptyCardState icon="people-outline" label="Todavía no hay actividad visible." />
       ) : (
         <View style={styles.peopleRankingScene}>
           <View pointerEvents="none" style={styles.peopleRankingGuide} />
@@ -992,11 +992,11 @@ export function CategoriesFocusCard({
     >
       <View style={styles.categoryUniverse}>
         <View pointerEvents="none" style={styles.categoryFixedHeader}>
-          <FocusCardTitle align="start">Categorias</FocusCardTitle>
+          <FocusCardTitle align="start">Categorías</FocusCardTitle>
         </View>
         {visibleCategories.length === 0 ? (
           <View style={styles.categoryUniverseEmptyState}>
-            <EmptyCardState icon="pricetags-outline" label="Todavia no hay categorias activas." />
+            <EmptyCardState icon="pricetags-outline" label="Todavía no hay categorías activas." />
           </View>
         ) : (
           <View style={styles.categoryProgressFrame}>
@@ -1116,7 +1116,7 @@ function anonymizedCircleParticipants(
   if (currentParticipant) {
     nodes.push({
       decision: currentParticipant.decision,
-      label: 'Tu',
+      label: 'Tú',
       userId: currentParticipant.userId,
     });
   }

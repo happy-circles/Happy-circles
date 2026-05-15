@@ -25,12 +25,7 @@ describe('app smoke checks', () => {
     expect(buildNativeAppUrl('/join/sample-token', '?source=email', '#open')).toBe(
       `${scheme}://join/sample-token?source=email#open`,
     );
-    expect(APP_LINK_PATHS).toEqual([
-      '/invite/*',
-      '/join*',
-      '/reset-password*',
-      '/setup-account*',
-    ]);
+    expect(APP_LINK_PATHS).toEqual(['/invite/*', '/join*', '/reset-password*', '/setup-account*']);
 
     for (const routePath of [
       ['apps', 'landing', 'app', '(app-links)', 'invite', '[token]', 'page.tsx'],
@@ -80,9 +75,9 @@ describe('app smoke checks', () => {
 
     expect(inviteSurface).not.toContain('Fallback light');
     expect(inviteSurface).not.toContain('Receiver');
-    expect(inviteSurface).toContain('Invitacion a Happy Circles');
-    expect(inviteSurface).toContain('Puede recibir invitacion');
-    expect(inviteSurface).toContain('Pega un link completo o un codigo valido de invitacion.');
+    expect(inviteSurface).toContain('Invitación a Happy Circles');
+    expect(inviteSurface).toContain('Puede recibir invitación');
+    expect(inviteSurface).toContain('Pega un link completo o un código válido de invitación.');
   });
 
   it('keeps reset-password recovery and invalid-link states separated', () => {
@@ -131,7 +126,7 @@ describe('app smoke checks', () => {
     const notifications = readRepoFile('apps', 'mobile', 'src', 'lib', 'notifications.ts');
     const appLayout = readRepoFile('apps', 'mobile', 'app', '_layout.tsx');
 
-    expect(setupReminder).toContain("title: 'Confia este telefono'");
+    expect(setupReminder).toContain("title: 'Confía este teléfono'");
     expect(setupReminder).toContain("title: 'Activa tus contactos'");
     expect(setupReminder).toContain("title: 'Activa tus notificaciones'");
     expect(setupReminder).toContain("'/people?addPerson=1'");

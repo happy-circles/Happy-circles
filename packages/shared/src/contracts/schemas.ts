@@ -37,7 +37,7 @@ export const transactionCategorySchema = z.enum(TRANSACTION_CATEGORIES);
 export const userTransactionCategorySchema = transactionCategorySchema.refine(
   (value) => value !== 'cycle',
   {
-    message: 'La categoria ciclo esta reservada para cierres automaticos.',
+    message: 'La categoría ciclo está reservada para cierres automáticos.',
   },
 );
 export const transactionSourceTypeSchema = z.enum(TRANSACTION_SOURCE_TYPES);
@@ -229,7 +229,7 @@ export const createExternalFriendshipInviteSchema = z
       if (!value.intendedRecipientAlias) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'La invitacion remota requiere un alias de contacto.',
+          message: 'La invitación remota requiere un alias de contacto.',
           path: ['intendedRecipientAlias'],
         });
       }
@@ -237,7 +237,7 @@ export const createExternalFriendshipInviteSchema = z
       if (!value.intendedRecipientPhoneE164) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'La invitacion remota requiere un numero de contacto.',
+          message: 'La invitación remota requiere un número de contacto.',
           path: ['intendedRecipientPhoneE164'],
         });
       }
@@ -327,7 +327,7 @@ export const emailOtpVerificationSchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^\d{8}$/, 'Ingresa el codigo de 8 digitos.'),
+    .regex(/^\d{8}$/, 'Ingresa el código de 8 dígitos.'),
   email: z.string().trim().email(),
 });
 

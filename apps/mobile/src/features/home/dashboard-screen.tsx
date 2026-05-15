@@ -157,7 +157,7 @@ export function DashboardScreen() {
   const notificationCount = snapshotQuery.data ? pendingNotificationCount + unreadSetupCount : 0;
   const homeEntryReady =
     !snapshotQuery.isRestoringCache && (Boolean(dashboard) || Boolean(snapshotQuery.error));
-  const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu';
+  const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú';
   const homeContentContainerStyle = useMemo(
     () => ({
       paddingBottom: HOME_REGISTER_FAB_CLEARANCE + Math.max(0, insets.bottom),
@@ -309,7 +309,7 @@ export function DashboardScreen() {
       />
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
-        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tu'}
+        currentUserLabel={currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú'}
         onClose={() => setAddPersonSheetVisible(false)}
         visible={addPersonSheetVisible}
       />
