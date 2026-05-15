@@ -1,18 +1,10 @@
 name: EAS Mobile Testing Release
 
 on:
-  workflow_run:
-    workflows:
-      - Security CI
-    branches:
-      - main
-    types:
-      - completed
   workflow_dispatch:
 
 jobs:
   build-and-submit-testing:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
