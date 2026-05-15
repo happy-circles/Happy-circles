@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 120
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_AUTO_SUBMIT: ${{ vars.EAS_AUTO_SUBMIT }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -34,6 +35,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve EAS release mode
+        id: eas-release
+        shell: bash
+        run: |
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "::warning::EXPO_TOKEN is not configured; skipping EAS production builds."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+          if [ "${EAS_AUTO_SUBMIT}" = "true" ]; then
+            echo "auto_submit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "auto_submit=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Queue EAS production builds
+        if: steps.eas-release.outputs.should_run == 'true'
         working-directory: apps/mobile
-        run: pnpm dlx eas-cli@latest build --platform all --profile production --non-interactive --no-wait --auto-submit
+        shell: bash
+        run: |
+          args=(build --platform all --profile production --non-interactive --no-wait)
+
+          if [ "${{ steps.eas-release.outputs.auto_submit }}" = "true" ]; then
+            args+=(--auto-submit)
+          fi
+
+          pnpm dlx eas-cli@latest "${args[@]}"
+
+      - name: Skip EAS production builds
+        if: steps.eas-release.outputs.should_run != 'true'
+        run: echo "EXPO_TOKEN is not configured; EAS production builds were skipped."
