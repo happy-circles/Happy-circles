@@ -123,6 +123,63 @@ begin
     v_request_id
   );
 
+  v_request := public.create_balance_request(
+    v_b,
+    'test-score-exec-b-c-request',
+    'balance_increase',
+    v_c,
+    v_b,
+    v_c,
+    90000,
+    'Score cycle B to C',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_c,
+    'test-score-exec-b-c-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
+  v_request := public.create_balance_request(
+    v_c,
+    'test-score-exec-c-d-request',
+    'balance_increase',
+    v_d,
+    v_c,
+    v_d,
+    90000,
+    'Score cycle C to D',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_d,
+    'test-score-exec-c-d-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
+  v_request := public.create_balance_request(
+    v_d,
+    'test-score-exec-d-a-request',
+    'balance_increase',
+    v_a,
+    v_d,
+    v_a,
+    90000,
+    'Score cycle D to A',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_a,
+    'test-score-exec-d-a-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
   v_snapshot := public.compute_graph_component_snapshot(v_a, v_b, 'COP');
 
   select min((edge.value ->> 'amount_minor')::bigint)

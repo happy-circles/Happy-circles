@@ -197,8 +197,10 @@ describe('session step-up helpers', () => {
     expect(formatStepUpErrorMessage('cambiar el perfil', 'Face ID', 'device_untrusted')).toBe(
       'Este dispositivo aun no es confiable. Validalo primero desde Perfil.',
     );
-    expect(formatStepUpErrorMessage('agregar una clave', 'Face ID', 'authentication_failed')).toBe(
-      'No se pudo validar Face ID para agregar una clave.',
+    expect(
+      formatStepUpErrorMessage('agregar una contraseña', 'Face ID', 'authentication_failed'),
+    ).toBe(
+      'No se pudo validar Face ID para agregar una contraseña.',
     );
   });
 });

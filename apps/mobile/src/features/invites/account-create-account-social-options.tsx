@@ -87,7 +87,7 @@ export function AccountCreateAccountSocialOptions({
         disabled={authBusy}
         icon={showEmailPasswordFallback ? 'chevron-up' : 'mail'}
         label={
-          showEmailPasswordFallback ? 'Ocultar correo y contrasena' : 'Usar correo y contrasena'
+          showEmailPasswordFallback ? 'Ocultar correo y contraseña' : 'Usar correo y contraseña'
         }
         onPress={onToggleEmailPassword}
       />

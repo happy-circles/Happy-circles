@@ -66,7 +66,7 @@ export function ResetPasswordScreen() {
 
       setMessage(result);
 
-      if (result === 'Clave actualizada.') {
+      if (result === 'Contraseña actualizada.') {
         triggerIdentitySuccessHaptic();
         await beginHomeEntryHandoffAfterScrollReset();
         returnToRoute(router, '/home');
@@ -83,7 +83,7 @@ export function ResetPasswordScreen() {
     ? 'error'
     : busy
       ? 'loading'
-      : message === 'Clave actualizada.'
+      : message === 'Contraseña actualizada.'
         ? 'success'
         : 'idle';
 
@@ -102,7 +102,7 @@ export function ResetPasswordScreen() {
         <IdentityFlowLogoCopy
           subtitle={
             hasRecoverySession
-              ? 'Elige una clave segura para tu cuenta.'
+              ? 'Elige una contraseña segura para tu cuenta.'
               : 'Pide un enlace nuevo para continuar.'
           }
           title={hasRecoverySession ? 'Restablece tu contraseña' : 'Enlace no disponible'}
@@ -118,7 +118,7 @@ export function ResetPasswordScreen() {
         ) : message ? (
           <MessageBanner
             message={message}
-            tone={message === 'Clave actualizada.' ? 'success' : 'neutral'}
+            tone={message === 'Contraseña actualizada.' ? 'success' : 'neutral'}
           />
         ) : null}
       </IdentityFlowMessageSlot>
@@ -181,7 +181,7 @@ export function ResetPasswordScreen() {
                   setConfirmPassword(value);
                   setErrors((current) => ({ ...current, confirmPassword: undefined }));
                 }}
-                placeholder="Repite la nueva clave"
+                placeholder="Repite la nueva contraseña"
                 value={confirmPassword}
               />
             </IdentityFlowField>
@@ -190,7 +190,7 @@ export function ResetPasswordScreen() {
           <IdentityFlowPrimaryAction
             disabled={busy}
             icon="checkmark"
-            label={busy ? 'Actualizando...' : 'Guardar nueva clave'}
+            label={busy ? 'Actualizando...' : 'Guardar nueva contraseña'}
             loading={busy}
             onPress={busy ? undefined : () => void handleSubmit()}
           />

@@ -45,7 +45,7 @@ function buildReminderItem({
 export function buildDeviceTrustReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-device-trust-reminder',
-    title: 'Confia este telefono',
+    title: 'Confía este teléfono',
     subtitle: 'Seguridad',
     detail: 'Abrir seguridad del perfil.',
     href: '/profile?section=device&focus=trust-password',
@@ -65,9 +65,9 @@ export function buildBiometricsReminderItem(): ActivityItemDto {
 export function buildPasswordAuthReminderItem(): ActivityItemDto {
   return buildReminderItem({
     id: 'local-password-auth-reminder',
-    title: 'Crea tu clave de respaldo',
+    title: 'Crea tu contraseña de respaldo',
     subtitle: 'Acceso',
-    detail: 'Abrir metodos de acceso.',
+    detail: 'Abrir métodos de acceso.',
     href: '/profile?section=methods&focus=attach-password',
   });
 }
@@ -77,7 +77,7 @@ export function buildGoogleAuthReminderItem(): ActivityItemDto {
     id: 'local-google-auth-reminder',
     title: 'Vincula tu cuenta Google',
     subtitle: 'Acceso',
-    detail: 'Abrir metodos de acceso.',
+    detail: 'Abrir métodos de acceso.',
     href: '/profile?section=methods',
   });
 }
@@ -87,7 +87,7 @@ export function buildAppleAuthReminderItem(): ActivityItemDto {
     id: 'local-apple-auth-reminder',
     title: 'Vincula tu cuenta Apple',
     subtitle: 'Acceso',
-    detail: 'Abrir metodos de acceso.',
+    detail: 'Abrir métodos de acceso.',
     href: '/profile?section=methods',
   });
 }

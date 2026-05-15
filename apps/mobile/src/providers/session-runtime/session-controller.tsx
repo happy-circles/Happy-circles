@@ -174,7 +174,7 @@ export function useSessionController(): SessionContextValue {
   const [notificationsPermissionStatus, setNotificationsPermissionStatus] =
     useState<SetupPermissionStatus>('loading');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricLabel, setBiometricLabel] = useState('biometria');
+  const [biometricLabel, setBiometricLabel] = useState('biometría');
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [passwordRecoverySessionUserId, setPasswordRecoverySessionUserIdState] = useState<
     string | null
@@ -699,7 +699,7 @@ export function useSessionController(): SessionContextValue {
     ): Promise<{ readonly message: string; readonly userId: string | null }> => {
       if (!supabase) {
         return {
-          message: 'Supabase no esta configurado en esta app.',
+          message: 'El servicio de acceso no está disponible en este momento.',
           userId: null,
         };
       }
@@ -728,7 +728,7 @@ export function useSessionController(): SessionContextValue {
 
         if (typeof authApi.linkIdentity !== 'function') {
           return {
-            message: 'Esta version de Supabase no expone linkIdentity para Google.',
+            message: 'No pudimos vincular Google en esta versión de la app.',
             userId: null,
           };
         }
@@ -781,7 +781,7 @@ export function useSessionController(): SessionContextValue {
 
       const { data } = await supabase.auth.getSession();
       return {
-        message: mode === 'link' ? 'Google vinculado.' : 'Sesion iniciada.',
+        message: mode === 'link' ? 'Google vinculado.' : 'Sesión iniciada.',
         userId: data.session?.user.id ?? null,
       };
     },
@@ -794,14 +794,14 @@ export function useSessionController(): SessionContextValue {
     ): Promise<{ readonly message: string; readonly userId: string | null }> => {
       if (Platform.OS !== 'ios') {
         return {
-          message: 'Apple solo esta disponible en iPhone.',
+          message: 'Apple solo está disponible en iPhone.',
           userId: null,
         };
       }
 
       if (!supabase) {
         return {
-          message: 'Supabase no esta configurado en esta app.',
+          message: 'El servicio de acceso no está disponible en este momento.',
           userId: null,
         };
       }
@@ -809,7 +809,7 @@ export function useSessionController(): SessionContextValue {
       const available = await AppleAuthentication.isAvailableAsync().catch(() => false);
       if (!available) {
         return {
-          message: 'Apple no esta disponible en este dispositivo.',
+          message: 'Apple no está disponible en este dispositivo.',
           userId: null,
         };
       }
@@ -842,7 +842,7 @@ export function useSessionController(): SessionContextValue {
 
           if (typeof authApi.linkIdentity !== 'function') {
             return {
-              message: 'Esta version de Supabase no expone linkIdentity para Apple.',
+              message: 'No pudimos vincular Apple en esta versión de la app.',
               userId: null,
             };
           }
@@ -895,7 +895,7 @@ export function useSessionController(): SessionContextValue {
 
         const { data } = await supabase.auth.getSession();
         return {
-          message: mode === 'link' ? 'Apple vinculado.' : 'Sesion iniciada.',
+          message: mode === 'link' ? 'Apple vinculado.' : 'Sesión iniciada.',
           userId: data.session?.user.id ?? null,
         };
       } catch (error) {
@@ -927,7 +927,7 @@ export function useSessionController(): SessionContextValue {
       const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
 
       if (!supabase) {
-        return 'Supabase no esta configurado en esta app.';
+        return 'El servicio de acceso no está disponible en este momento.';
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -943,7 +943,7 @@ export function useSessionController(): SessionContextValue {
         setRecentPasswordAuth(createRecentPasswordAuth(data.user.id));
       }
 
-      return 'Sesion iniciada.';
+      return 'Sesión iniciada.';
     } catch (error) {
       return formatValidationMessage(error);
     }
@@ -959,11 +959,11 @@ export function useSessionController(): SessionContextValue {
       const pendingIntent = await readPendingInviteIntent();
 
       if (!supabase) {
-        return 'Supabase no esta configurado en esta app.';
+        return 'El servicio de acceso no está disponible en este momento.';
       }
 
       if (pendingIntent?.type !== 'account_invite') {
-        return 'Necesitas una invitacion valida para crear una cuenta nueva.';
+        return 'Necesitas una invitación válida para crear una cuenta nueva.';
       }
 
       const supportId = createSupportId();
@@ -996,7 +996,7 @@ export function useSessionController(): SessionContextValue {
         registrationPreview.data.status !== 'pending_activation' ||
         registrationPreview.data.deliveryStatus !== 'issued'
       ) {
-        return 'Esta invitacion ya fue usada o ya no esta disponible.';
+        return 'Esta invitación ya fue usada o ya no está disponible.';
       }
 
       const accountInviteDeliveryTokenHash = await hashInviteTokenForRegistration(
@@ -1024,7 +1024,7 @@ export function useSessionController(): SessionContextValue {
 
       if (data.session) {
         setRecentPasswordAuth(createRecentPasswordAuth(data.session.user.id));
-        return 'Cuenta creada. Ahora termina tu setup.';
+        return 'Cuenta creada. Ahora completa tu configuración.';
       }
 
       return 'Cuenta creada. Revisa tu correo.';
@@ -1049,7 +1049,7 @@ export function useSessionController(): SessionContextValue {
       const normalizedEmail = parsed.email.trim().toLocaleLowerCase('en-US');
 
       if (!supabase) {
-        return 'Supabase no esta configurado en esta app.';
+        return 'El servicio de acceso no está disponible en este momento.';
       }
 
       const redirectTo = buildEmailAuthRedirect('/reset-password');
@@ -1061,7 +1061,7 @@ export function useSessionController(): SessionContextValue {
         return formatSupabaseAuthErrorMessage(error.message);
       }
 
-      return 'Si el correo existe, enviamos un enlace para restablecer la clave.';
+      return 'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
     } catch (error) {
       return formatValidationMessage(error);
     }
@@ -1070,7 +1070,7 @@ export function useSessionController(): SessionContextValue {
   const resendEmailConfirmation = useCallback(
     async (emailInput?: string) => {
       if (!supabase) {
-        return 'Supabase no esta configurado en esta app.';
+        return 'El servicio de acceso no está disponible en este momento.';
       }
 
       const email = (emailInput ?? sessionRef.current?.user.email)
@@ -1082,7 +1082,7 @@ export function useSessionController(): SessionContextValue {
 
       if (sessionRef.current && isSessionEmailConfirmed(sessionRef.current)) {
         await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-        return 'Tu correo ya esta confirmado.';
+        return 'Tu correo ya está confirmado.';
       }
 
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
@@ -1098,7 +1098,7 @@ export function useSessionController(): SessionContextValue {
         return formatSupabaseAuthErrorMessage(error.message);
       }
 
-      return 'Enviamos un nuevo correo de confirmacion. Puedes abrir el enlace o copiar el codigo de 8 digitos.';
+      return 'Enviamos un nuevo correo de confirmación. Puedes abrir el enlace o copiar el código de 8 dígitos.';
     },
     [refreshAccountState],
   );
@@ -1111,7 +1111,7 @@ export function useSessionController(): SessionContextValue {
         const token = parsed.code.trim();
 
         if (!supabase) {
-          return 'Supabase no esta configurado en esta app.';
+          return 'El servicio de acceso no está disponible en este momento.';
         }
 
         const { error } = await supabase.auth.verifyOtp({
@@ -1144,7 +1144,7 @@ export function useSessionController(): SessionContextValue {
         const token = parsed.code.trim();
 
         if (!supabase) {
-          return 'Supabase no esta configurado en esta app.';
+          return 'El servicio de acceso no está disponible en este momento.';
         }
 
         const { data, error } = await supabase.auth.verifyOtp({
@@ -1159,12 +1159,12 @@ export function useSessionController(): SessionContextValue {
 
         const nextSession = data.session ?? (await supabase.auth.getSession()).data.session;
         if (!nextSession) {
-          return 'Codigo verificado, pero no pudimos abrir la sesion de recuperacion. Pide un enlace nuevo.';
+          return 'Código verificado, pero no pudimos abrir la sesión de recuperación. Pide un enlace nuevo.';
         }
 
         setPasswordRecoverySessionUserId(nextSession.user.id);
         await refreshAccountState({ preserveLocked: false });
-        return 'Codigo verificado.';
+        return 'Código verificado.';
       } catch (error) {
         return formatValidationMessage(error);
       }
@@ -1195,7 +1195,7 @@ export function useSessionController(): SessionContextValue {
 
         setPasswordRecoverySessionUserId(null);
         await refreshAccountState();
-        return 'Clave actualizada.';
+        return 'Contraseña actualizada.';
       } catch (error) {
         return formatValidationMessage(error);
       }
@@ -1287,7 +1287,7 @@ export function useSessionController(): SessionContextValue {
           if (!result.success) {
             return {
               ok: false,
-              message: 'No se pudo validar tu identidad para desactivar la biometria.',
+              message: 'No se pudo validar tu identidad para desactivar la biometría.',
             };
           }
         }
@@ -1302,14 +1302,14 @@ export function useSessionController(): SessionContextValue {
 
         return {
           ok: true,
-          message: 'Ingreso con biometria desactivado.',
+          message: 'Ingreso con biometría desactivado.',
         };
       }
 
       if (deviceTrustState !== 'trusted') {
         return {
           ok: false,
-          message: 'Primero valida este dispositivo para activar la biometria.',
+          message: 'Primero valida este dispositivo para activar la biometría.',
         };
       }
 
@@ -1320,7 +1320,7 @@ export function useSessionController(): SessionContextValue {
       if (!support.available) {
         return {
           ok: false,
-          message: 'Este dispositivo no tiene biometria disponible.',
+          message: 'Este dispositivo no tiene biometría disponible.',
         };
       }
 
@@ -1328,7 +1328,7 @@ export function useSessionController(): SessionContextValue {
       if (!authenticated) {
         return {
           ok: false,
-          message: 'No se pudo confirmar la biometria.',
+          message: 'No se pudo confirmar la biometría.',
         };
       }
 
@@ -1338,7 +1338,7 @@ export function useSessionController(): SessionContextValue {
 
       return {
         ok: true,
-        message: `Happy Circles pedira ${support.label} al abrirse y volvera a entrar apenas se valide.`,
+        message: `Happy Circles pedirá ${support.label} al abrirse y volverá a entrar apenas se valide.`,
       };
     },
     [biometricsEnabled, deviceTrustState, setSessionStatus, stepUpAuth],
@@ -1416,7 +1416,7 @@ export function useSessionController(): SessionContextValue {
         }
 
         if (!supabase || !sessionRef.current) {
-          return 'No hay una sesion activa.';
+          return 'No hay una sesión activa.';
         }
 
         const wasCompletingRequiredProfile = profileCompletionState !== 'complete';
@@ -1537,20 +1537,20 @@ export function useSessionController(): SessionContextValue {
         const parsed = attachEmailPasswordSchema.parse(input);
 
         if (!supabase || !sessionRef.current) {
-          return 'No hay una sesion activa.';
+          return 'No hay una sesión activa.';
         }
 
         if (!sessionRef.current.user.email) {
-          return 'Esta cuenta no tiene un correo disponible para adjuntar clave.';
+          return 'Esta cuenta no tiene un correo disponible para agregar contraseña.';
         }
 
         if (deviceTrustState !== 'trusted') {
-          return 'Solo puedes agregar clave desde un dispositivo confiable.';
+          return 'Solo puedes agregar contraseña desde un dispositivo confiable.';
         }
 
         const result = await stepUpAuth(true);
         if (!result.success) {
-          return formatStepUpErrorMessage('agregar una clave', biometricLabel, result.error);
+          return formatStepUpErrorMessage('agregar una contraseña', biometricLabel, result.error);
         }
 
         const { error } = await supabase.auth.updateUser({
@@ -1562,7 +1562,7 @@ export function useSessionController(): SessionContextValue {
         }
 
         await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-        return 'Clave agregada a tu cuenta actual.';
+        return 'Contraseña agregada a tu cuenta actual.';
       } catch (error) {
         return formatValidationMessage(error);
       }
@@ -1573,7 +1573,7 @@ export function useSessionController(): SessionContextValue {
   const trustCurrentDevice = useCallback(
     async (input?: TrustCurrentDeviceInput) => {
       if (!supabase || !sessionRef.current || !currentDeviceId) {
-        return 'No hay una sesion activa.';
+        return 'No hay una sesión activa.';
       }
 
       if (deviceTrustState === 'trusted') {
@@ -1599,7 +1599,7 @@ export function useSessionController(): SessionContextValue {
 
       if (method === 'password') {
         if (!linkedMethods.hasEmailPassword) {
-          return 'Esta cuenta no tiene clave para revalidar el dispositivo.';
+          return 'Esta cuenta no tiene contraseña para revalidar el dispositivo.';
         }
 
         if (!hasRecentPasswordAuth) {
@@ -1608,7 +1608,7 @@ export function useSessionController(): SessionContextValue {
           }
 
           if (!input?.password) {
-            return 'Escribe tu clave actual para confiar este dispositivo.';
+            return 'Escribe tu contraseña actual para confiar este dispositivo.';
           }
 
           const { error, data } = await supabase.auth.signInWithPassword({
@@ -1624,18 +1624,18 @@ export function useSessionController(): SessionContextValue {
             await supabase.auth.signOut();
             clearSignedInState();
             setSessionStatus('signed_out');
-            return 'La validacion abrio otra cuenta. Cerramos la sesion por seguridad.';
+            return 'La validación abrió otra cuenta. Cerramos la sesión por seguridad.';
           }
 
           setRecentPasswordAuth(createRecentPasswordAuth(expectedUserId));
         }
       } else if (method === 'google') {
         if (!linkedMethods.hasGoogle) {
-          return 'Google no esta vinculado a esta cuenta.';
+          return 'Google no está vinculado a esta cuenta.';
         }
 
         const result = await performGoogleAuth('sign-in');
-        if (result.message !== 'Sesion iniciada.') {
+        if (result.message !== 'Sesión iniciada.') {
           return result.message;
         }
 
@@ -1645,15 +1645,15 @@ export function useSessionController(): SessionContextValue {
           await supabase.auth.signOut();
           clearSignedInState();
           setSessionStatus('signed_out');
-          return 'Google abrio otra cuenta. Cerramos la sesion por seguridad.';
+          return 'Google abrió otra cuenta. Cerramos la sesión por seguridad.';
         }
       } else if (method === 'apple') {
         if (!linkedMethods.hasApple) {
-          return 'Apple no esta vinculado a esta cuenta.';
+          return 'Apple no está vinculado a esta cuenta.';
         }
 
         const result = await performAppleAuth('sign-in');
-        if (result.message !== 'Sesion iniciada.') {
+        if (result.message !== 'Sesión iniciada.') {
           return result.message;
         }
 
@@ -1663,10 +1663,10 @@ export function useSessionController(): SessionContextValue {
           await supabase.auth.signOut();
           clearSignedInState();
           setSessionStatus('signed_out');
-          return 'Apple abrio otra cuenta. Cerramos la sesion por seguridad.';
+          return 'Apple abrió otra cuenta. Cerramos la sesión por seguridad.';
         }
       } else {
-        return 'Esta cuenta no tiene un metodo disponible para revalidar el dispositivo.';
+        return 'Esta cuenta no tiene un método disponible para revalidar el dispositivo.';
       }
 
       const timestamp = new Date().toISOString();
@@ -1705,7 +1705,7 @@ export function useSessionController(): SessionContextValue {
   const revokeTrustedDevice = useCallback(
     async (deviceId: string) => {
       if (!supabase || !sessionRef.current) {
-        return 'No hay una sesion activa.';
+        return 'No hay una sesión activa.';
       }
 
       if (deviceTrustState !== 'trusted') {

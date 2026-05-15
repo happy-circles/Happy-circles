@@ -8,6 +8,7 @@ declare
   v_b uuid := '00000000-0000-0000-0000-0000000000b2';
   v_c uuid := '00000000-0000-0000-0000-0000000000c3';
   v_d uuid := '00000000-0000-0000-0000-0000000000d4';
+  v_request jsonb;
   v_snapshot jsonb;
   v_amount_minor bigint;
   v_movements jsonb;
@@ -26,6 +27,82 @@ begin
       stale_reason = coalesce(stale_reason, 'related_execution_changed_balance'::public.settlement_stale_reason),
       updated_at = timezone('utc', now())
   where status in ('pending_approvals', 'approved');
+
+  v_request := public.create_balance_request(
+    v_a,
+    'test-version-cycle-a-b-request',
+    'balance_increase',
+    v_b,
+    v_a,
+    v_b,
+    90000,
+    'Version cycle A to B',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_b,
+    'test-version-cycle-a-b-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
+  v_request := public.create_balance_request(
+    v_b,
+    'test-version-cycle-b-c-request',
+    'balance_increase',
+    v_c,
+    v_b,
+    v_c,
+    90000,
+    'Version cycle B to C',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_c,
+    'test-version-cycle-b-c-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
+  v_request := public.create_balance_request(
+    v_c,
+    'test-version-cycle-c-d-request',
+    'balance_increase',
+    v_d,
+    v_c,
+    v_d,
+    90000,
+    'Version cycle C to D',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_d,
+    'test-version-cycle-c-d-accept',
+    (v_request ->> 'requestId')::uuid
+  );
+
+  v_request := public.create_balance_request(
+    v_d,
+    'test-version-cycle-d-a-request',
+    'balance_increase',
+    v_a,
+    v_d,
+    v_a,
+    90000,
+    'Version cycle D to A',
+    null,
+    null
+  );
+
+  perform public.accept_financial_request(
+    v_a,
+    'test-version-cycle-d-a-accept',
+    (v_request ->> 'requestId')::uuid
+  );
 
   v_snapshot := public.compute_graph_component_snapshot(v_a, v_b, 'COP');
 

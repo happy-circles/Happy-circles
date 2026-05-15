@@ -27,7 +27,7 @@ export const PasswordTextInput = forwardRef<AppTextInputRef, PasswordTextInputPr
           style={[style, styles.inputWithToggle]}
         />
         <Pressable
-          accessibilityLabel={passwordVisible ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+          accessibilityLabel={passwordVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           accessibilityRole="button"
           accessibilityState={{ selected: passwordVisible }}
           hitSlop={8}

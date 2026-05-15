@@ -213,7 +213,7 @@ export function SetupAccountScreen() {
 
     if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
       if (!session.currentDeviceId) {
-        setMessage('Perfil guardado. No pudimos identificar este telefono para activar la cuenta.');
+        setMessage('Perfil guardado. No pudimos identificar este teléfono para activar la cuenta.');
         return;
       }
 
@@ -232,7 +232,7 @@ export function SetupAccountScreen() {
           return;
         }
 
-        setMessage('Perfil guardado, pero todavia no pudimos cerrar la invitacion.');
+        setMessage('Perfil guardado, pero todavía no pudimos cerrar la invitación.');
       } catch (error) {
         setMessage(
           error instanceof Error
@@ -252,7 +252,7 @@ export function SetupAccountScreen() {
   async function finishSecurityOnly() {
     if (!session.isTrustedDevice) {
       triggerWarningHaptic();
-      setMessage('Valida este telefono para continuar.');
+      setMessage('Valida este teléfono para continuar.');
       return;
     }
 
@@ -526,7 +526,7 @@ export function SetupAccountScreen() {
 
     if (!emailConfirmationCodeValid) {
       triggerWarningHaptic();
-      setMessage('Ingresa el codigo de 8 digitos del correo.');
+    setMessage('Ingresa el código de 8 dígitos del correo.');
       return;
     }
 
@@ -616,9 +616,9 @@ export function SetupAccountScreen() {
             subtitle={
               session.isTrustedDevice
                 ? 'Ya puedes volver al flujo que estabas completando.'
-                : 'Confirma este telefono con un metodo vinculado a tu cuenta.'
+                : 'Confirma este teléfono con un método vinculado a tu cuenta.'
             }
-            title={session.isTrustedDevice ? 'Telefono validado' : 'Valida este telefono'}
+            title={session.isTrustedDevice ? 'Teléfono validado' : 'Valida este teléfono'}
           />
         ) : undefined
       }
@@ -753,7 +753,7 @@ export function SetupAccountScreen() {
                   subtitle={
                     session.isEmailConfirmed
                       ? accountEmailLabel
-                      : 'Abre el enlace o pega el codigo de 8 digitos'
+                      : 'Abre el enlace o pega el código de 8 dígitos'
                   }
                   title="Correo confirmado"
                   tone={session.isEmailConfirmed ? 'success' : 'danger'}
@@ -780,7 +780,7 @@ export function SetupAccountScreen() {
                 {!session.isEmailConfirmed ? (
                   <View style={styles.securityAction}>
                     <AppText style={styles.helperText}>
-                      Usa el codigo de 8 digitos si el enlace no abre la app.
+                      Usa el código de 8 dígitos si el enlace no abre la app.
                     </AppText>
                     <OtpCodeInput
                       disabled={securityBusyKey !== null}
@@ -797,7 +797,7 @@ export function SetupAccountScreen() {
                         label={
                           securityBusyKey === 'verify-email-code'
                             ? 'Confirmando...'
-                            : 'Confirmar codigo'
+                            : 'Confirmar código'
                         }
                         loading={securityBusyKey === 'verify-email-code'}
                         onPress={securityBusyKey ? undefined : () => void handleVerifyEmailCode()}
@@ -834,7 +834,7 @@ export function SetupAccountScreen() {
                   ? 'Acciones sensibles habilitadas'
                   : session.canTrustCurrentDeviceWithoutPassword
                     ? 'Confirma con un toque'
-                    : 'Valida este telefono'
+                    : 'Valida este teléfono'
               }
               title="Dispositivo confiable"
               tone={session.isTrustedDevice ? 'success' : 'danger'}
@@ -843,7 +843,7 @@ export function SetupAccountScreen() {
               <View style={styles.securityAction}>
                 {session.canTrustCurrentDeviceWithoutPassword ? (
                   <AppText style={styles.helperText}>
-                    Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
+                    Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla otra
                     vez.
                   </AppText>
                 ) : null}
@@ -900,7 +900,7 @@ export function SetupAccountScreen() {
                     ]}
                   >
                     <AppText style={styles.inlineButtonText}>
-                      {showTrustPasswordFallback ? 'Ocultar clave' : 'Usar clave'}
+                      {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
                     </AppText>
                   </Pressable>
                 ) : null}
@@ -909,7 +909,7 @@ export function SetupAccountScreen() {
                     <PasswordTextInput
                       autoCapitalize="none"
                       onChangeText={setTrustPassword}
-                      placeholder="Tu clave actual"
+                      placeholder="Tu contraseña actual"
                       placeholderTextColor={theme.colors.muted}
                       ref={trustPasswordInputRef}
                       value={trustPassword}
@@ -937,7 +937,7 @@ export function SetupAccountScreen() {
                 ) : null}
                 {trustMethods.length === 0 ? (
                   <AppText style={styles.helperText}>
-                    Esta cuenta no tiene un metodo disponible para revalidar el dispositivo.
+                    Esta cuenta no tiene un método disponible para revalidar el dispositivo.
                   </AppText>
                 ) : null}
               </View>

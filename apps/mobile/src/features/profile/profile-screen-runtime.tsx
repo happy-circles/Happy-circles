@@ -144,7 +144,7 @@ export function ProfileScreen() {
     currentUserProfile?.displayName ??
     session.profile?.display_name ??
     session.email ??
-    'Sin sesion';
+    'Sin sesión';
   const profileAvatarUrl = localAvatarPath ?? currentUserProfile?.avatarUrl ?? null;
   const canViewProfileAvatar = Boolean(profileAvatarUrl);
   const accountEmailValue =
@@ -207,7 +207,7 @@ export function ProfileScreen() {
       return result;
     } catch (error) {
       const failureMessage =
-        error instanceof Error ? error.message : 'No se pudo completar esta accion.';
+        error instanceof Error ? error.message : 'No se pudo completar esta acción.';
       setMessage(failureMessage);
       return failureMessage;
     } finally {
@@ -508,7 +508,7 @@ export function ProfileScreen() {
     triggerSelectionHaptic();
     Alert.alert(
       'Eliminar cuenta',
-      'Anonimizaremos tu perfil, borraremos foto y datos de contacto, revocaremos tus dispositivos y cerraremos tu sesion. Conservamos el ledger y auditoria minima para que los saldos financieros sigan siendo consistentes.',
+      'Anonimizaremos tu perfil, borraremos foto y datos de contacto, revocaremos tus dispositivos y cerraremos tu sesión. Conservamos el historial financiero mínimo para que los saldos sigan siendo consistentes.',
       [
         { style: 'cancel', text: 'Cancelar' },
         {
@@ -523,13 +523,13 @@ export function ProfileScreen() {
   function confirmSignOut() {
     triggerSelectionHaptic();
     Alert.alert(
-      'Cerrar sesion',
-      'Al cerrar sesion, la biometria dejara de abrir esta cuenta hasta que vuelvas a entrar con tu contrasena. Despues, si la biometria sigue activa, podras desbloquear la app como siempre.',
+      'Cerrar sesión',
+      'Al cerrar sesión, la biometría dejará de abrir esta cuenta hasta que vuelvas a entrar con tu contraseña. Después, si la biometría sigue activa, podrás desbloquear la app como siempre.',
       [
         { style: 'cancel', text: 'Cancelar' },
         {
           style: 'destructive',
-          text: 'Cerrar sesion',
+          text: 'Cerrar sesión',
           onPress: () => void session.signOut(),
         },
       ],
@@ -543,7 +543,7 @@ export function ProfileScreen() {
       headerLeading={<View style={styles.headerActionPlaceholder} />}
       headerSlot={
         <Pressable
-          accessibilityLabel="Cerrar sesion"
+          accessibilityLabel="Cerrar sesión"
           accessibilityRole="button"
           hitSlop={8}
           onPress={confirmSignOut}
@@ -604,7 +604,7 @@ export function ProfileScreen() {
               ]}
             >
               <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
-                Abrir setup
+                Completar configuración
               </AppText>
             </Pressable>
           </Link>
@@ -741,8 +741,8 @@ export function ProfileScreen() {
           <ProfileStatusRow
             icon="key"
             status={session.linkedMethods.hasEmailPassword ? 'Listo' : 'Pendiente'}
-            subtitle="Correo y clave"
-            title="Clave"
+            subtitle="Correo y contraseña"
+            title="Contraseña"
             tone={session.linkedMethods.hasEmailPassword ? 'success' : 'danger'}
           />
           {!session.linkedMethods.hasEmailPassword ? (
@@ -750,7 +750,7 @@ export function ProfileScreen() {
               <PasswordTextInput
                 autoCapitalize="none"
                 onChangeText={setAttachPassword}
-                placeholder="Nueva clave"
+                placeholder="Nueva contraseña"
                 placeholderTextColor={theme.colors.muted}
                 ref={attachPasswordInputRef}
                 style={styles.input}
@@ -759,7 +759,7 @@ export function ProfileScreen() {
               <PasswordTextInput
                 autoCapitalize="none"
                 onChangeText={setAttachPasswordConfirm}
-                placeholder="Confirmar clave"
+                placeholder="Confirmar contraseña"
                 placeholderTextColor={theme.colors.muted}
                 style={styles.input}
                 value={attachPasswordConfirm}
@@ -768,7 +768,7 @@ export function ProfileScreen() {
                 <PrimaryAction
                   compact
                   fullWidth={false}
-                  label={busyAction === 'attach-password' ? 'Guardando...' : 'Agregar clave'}
+                  label={busyAction === 'attach-password' ? 'Guardando...' : 'Agregar contraseña'}
                   onPress={
                     busyAction
                       ? undefined
@@ -895,7 +895,7 @@ export function ProfileScreen() {
             <View style={styles.actionCluster}>
               {session.canTrustCurrentDeviceWithoutPassword ? (
                 <AppText style={styles.sectionBody}>
-                  Confirmaste tu clave hace poco. Puedes confiar este telefono sin escribirla otra
+                  Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla otra
                   vez.
                 </AppText>
               ) : null}
@@ -951,7 +951,7 @@ export function ProfileScreen() {
                   ]}
                 >
                   <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
-                    {showTrustPasswordFallback ? 'Ocultar clave' : 'Usar clave'}
+                    {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
                   </AppText>
                 </Pressable>
               ) : null}
@@ -960,7 +960,7 @@ export function ProfileScreen() {
                   <PasswordTextInput
                     autoCapitalize="none"
                     onChangeText={setTrustPassword}
-                    placeholder="Tu clave actual"
+                    placeholder="Tu contraseña actual"
                     placeholderTextColor={theme.colors.muted}
                     ref={trustPasswordInputRef}
                     style={styles.input}
@@ -1112,7 +1112,7 @@ export function ProfileScreen() {
 
         <View style={styles.accountDeletionRow}>
           <AppText style={[styles.sectionBody, styles.accountDeletionBody]}>
-            Esta accion es irreversible.
+            Esta acción es irreversible.
           </AppText>
 
           <Pressable

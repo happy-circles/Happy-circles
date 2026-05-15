@@ -259,7 +259,7 @@ export function AccountCreateAccountScreen() {
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
       setMessage(result);
 
-      if (result === 'Sesion iniciada.') {
+      if (result === 'Sesión iniciada.') {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
         await beginSetupEntryHandoff();
@@ -286,7 +286,7 @@ export function AccountCreateAccountScreen() {
 
     if (!verificationCodeValid) {
       triggerIdentityWarningHaptic();
-      setMessage('Ingresa el codigo de 8 digitos del correo.');
+      setMessage('Ingresa el código de 8 dígitos del correo.');
       return;
     }
 
@@ -359,7 +359,7 @@ export function AccountCreateAccountScreen() {
       });
       setMessage(result);
 
-      if (result === 'Sesion iniciada.') {
+      if (result === 'Sesión iniciada.') {
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
         await beginSetupEntryHandoff();
@@ -392,7 +392,7 @@ export function AccountCreateAccountScreen() {
             subtitle={
               preview?.inviterDisplayName
                 ? `${preview.inviterDisplayName} te invito.`
-                : 'Elige tu metodo para entrar.'
+                : 'Elige tu método para entrar.'
             }
             title="Crea tu cuenta"
           />
@@ -402,24 +402,24 @@ export function AccountCreateAccountScreen() {
       {!shouldPreview ? (
         <View style={styles.messageBlock}>
           <MessageBanner
-            message="Abre tu link de invitacion o pega el codigo completo desde la entrada."
+            message="Abre tu link de invitación o pega el código completo desde la entrada."
             tone="neutral"
           />
-          <PrimaryAction href="/join" label="Volver a invitacion" variant="secondary" />
+          <PrimaryAction href="/join" label="Volver a invitación" variant="secondary" />
         </View>
       ) : null}
 
       {shouldPreview && previewQuery.error ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={previewQuery.error.message} tone="warning" />
-          <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
+          <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
         </View>
       ) : null}
 
       {blockingMessage ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={blockingMessage} tone="warning" />
-          <PrimaryAction href="/join" label="Probar otro codigo" variant="secondary" />
+          <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
         </View>
       ) : null}
 

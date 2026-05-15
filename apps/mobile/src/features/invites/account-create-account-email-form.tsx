@@ -88,7 +88,7 @@ export function AccountCreateAccountEmailForm({
   return (
     <View style={styles.emailPasswordFallback}>
       <IdentityFlowField
-        error={emailStatus === 'invalid' ? 'Escribe un correo valido.' : null}
+        error={emailStatus === 'invalid' ? 'Escribe un correo válido.' : null}
         icon="mail"
         label="Correo"
         status={emailStatus === 'invalid' ? 'danger' : emailStatus === 'valid' ? 'success' : 'idle'}
@@ -108,7 +108,7 @@ export function AccountCreateAccountEmailForm({
       <IdentityFlowField
         error={passwordStatus === 'invalid' ? 'Debe tener al menos 8 caracteres.' : null}
         icon="lock-closed"
-        label="Contrasena"
+        label="Contraseña"
         status={
           passwordStatus === 'invalid'
             ? 'danger'
@@ -122,14 +122,14 @@ export function AccountCreateAccountEmailForm({
           autoComplete="password"
           onBlur={() => markFieldTouched('password')}
           onChangeText={setPassword}
-          placeholder="Tu contrasena"
+          placeholder="Tu contraseña"
           placeholderTextColor={theme.colors.muted}
           value={password}
         />
       </IdentityFlowField>
 
       <IdentityFlowField
-        error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 digitos.' : null}
+        error={phoneStatus === 'invalid' ? 'Debe tener entre 6 y 20 dígitos.' : null}
         icon="call"
         label="Celular"
         status={

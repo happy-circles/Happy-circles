@@ -18,13 +18,13 @@ export function formatValidationMessage(error: unknown): string {
       normalized.includes('invalid') &&
       normalized.includes('key')
     ) {
-      return 'No se pudo guardar la sesion local. Cierra y abre Expo, actualiza esta version e inicia sesion otra vez.';
+      return 'No se pudo guardar la sesión local. Cierra y abre la app, actualiza esta versión e inicia sesión otra vez.';
     }
 
     return error.message;
   }
 
-  return 'No se pudo completar la accion.';
+  return 'No se pudo completar la acción.';
 }
 
 export function readErrorMessage(error: unknown): string {
@@ -43,7 +43,7 @@ export function readErrorMessage(error: unknown): string {
     }
   }
 
-  return 'No se pudo completar la accion.';
+  return 'No se pudo completar la acción.';
 }
 
 export function formatSupabaseAuthErrorMessage(message: string): string {
@@ -56,21 +56,21 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
     normalized.includes('rate limit') ||
     normalized.includes('for security purposes')
   ) {
-    return 'Supabase bloqueo temporalmente el envio de correos por exceso de intentos. Espera antes de volver a probar o revisa los limites de Auth y tu proveedor SMTP.';
+    return 'No pudimos enviar el correo por exceso de intentos. Espera unos minutos antes de volver a probar.';
   }
 
   if (
     normalized.includes('error sending recovery email') ||
     normalized.includes('error sending confirmation email')
   ) {
-    return 'Supabase no pudo enviar el correo. Revisa en Supabase que Email use el SMTP de Resend, que el remitente pertenezca a un dominio verificado y que las URLs permitidas incluyan https://app.happy-circles.com/reset-password y https://app.happy-circles.com/setup-account.';
+    return 'No pudimos enviar el correo. Inténtalo de nuevo en unos minutos.';
   }
 
   if (
     normalized.includes('invalid login credentials') ||
     normalized.includes('invalid credentials')
   ) {
-    return 'Correo o clave incorrectos.';
+    return 'Correo o contraseña incorrectos.';
   }
 
   if (normalized.includes('email not confirmed')) {
@@ -83,11 +83,11 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
     normalized.includes('token has expired') ||
     normalized.includes('token is invalid')
   ) {
-    return 'Codigo invalido o vencido. Revisa el correo mas reciente o pide uno nuevo.';
+    return 'Código inválido o vencido. Revisa el correo más reciente o pide uno nuevo.';
   }
 
   if (normalized.includes('invalid') && normalized.includes('email')) {
-    return 'Correo invalido.';
+    return 'Correo inválido.';
   }
 
   if (
@@ -106,18 +106,18 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
       normalized.includes('at least') ||
       normalized.includes('characters'))
   ) {
-    return 'Clave no valida. Usa 8 a 72 caracteres.';
+    return 'Contraseña no válida. Usa entre 8 y 72 caracteres.';
   }
 
   if (
     normalized.includes('duplicate key value violates unique constraint') &&
     normalized.includes('user_profiles_phone_e164_unique_idx')
   ) {
-    return 'Ese celular ya esta vinculado.';
+    return 'Ese celular ya está vinculado.';
   }
 
   if (normalized.includes('database error saving new user')) {
-    return 'No pudimos crear la cuenta con esta invitacion. Revisa que el link siga disponible y que el celular no este vinculado.';
+    return 'No pudimos crear la cuenta con esta invitación. Revisa que el link siga disponible y que el celular no esté vinculado.';
   }
 
   return message;

@@ -13,20 +13,20 @@ export const AUTH_CONTENT_EXIT_MS = 190;
 export const AUTH_MODE_ROUTE_DELAY_MS = 520;
 export const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 180;
 export const PASSWORD_RESET_SENT_MESSAGE =
-  'Si el correo existe, enviamos un enlace para restablecer la clave.';
-export const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Codigo verificado.';
+  'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
+export const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Código verificado.';
 export const PASSWORD_RESET_RESEND_SECONDS = 60;
 
 export function biometricMessage(error: string | null, label: string): string {
   if (error === 'user_cancel') {
-    return `Cancelaste ${label}. Puedes entrar con correo y contrasena.`;
+    return `Cancelaste ${label}. Puedes entrar con correo y contraseña.`;
   }
 
   if (error === 'not_available') {
-    return 'Este dispositivo no tiene biometria disponible. Entra con correo y contrasena.';
+    return 'Este dispositivo no tiene biometría disponible. Entra con correo y contraseña.';
   }
 
-  return `No pudimos validar ${label}. Entra con correo y contrasena.`;
+  return `No pudimos validar ${label}. Entra con correo y contraseña.`;
 }
 
 export function isRecoveryCodeValid(value: string): boolean {
@@ -40,7 +40,7 @@ export function validateEmailForAuth(value: string): string | undefined {
   }
 
   if (!trimmedEmail.includes('@')) {
-    return 'Escribe un correo valido.';
+    return 'Escribe un correo válido.';
   }
 
   return undefined;
@@ -50,7 +50,7 @@ export function validatePasswordForAuth(input: {
   readonly isRecovery: boolean;
   readonly password: string;
 }): string | undefined {
-  return !input.isRecovery && input.password.length === 0 ? 'Escribe tu contrasena.' : undefined;
+  return !input.isRecovery && input.password.length === 0 ? 'Escribe tu contraseña.' : undefined;
 }
 
 export function resolveTokenFieldError(input: {
@@ -79,14 +79,14 @@ export function resolveTokenLogoSubtitle(input: {
   readonly isFetching: boolean;
 }): string {
   if (input.inviterDisplayName && !input.blockingMessage) {
-    return `${input.inviterDisplayName} te invito.`;
+    return `${input.inviterDisplayName} te invitó.`;
   }
 
   if (input.isFetching) {
-    return 'Validando tu invitacion.';
+    return 'Validando tu invitación.';
   }
 
-  return 'Pega tu codigo de invitacion para continuar.';
+  return 'Pega tu código de invitación para continuar.';
 }
 
 export function resolveAuthLogoCopy(input: {
@@ -107,7 +107,7 @@ export function resolveAuthLogoCopy(input: {
         }
       : {
           subtitle: 'Te enviaremos un enlace a tu correo.',
-          title: 'Recupera tu contrasena',
+          title: 'Recupera tu contraseña',
         };
   }
 
@@ -121,7 +121,7 @@ export function resolveAuthLogoCopy(input: {
   return {
     subtitle: input.isOtherAccountMode
       ? 'Usa otra cuenta para continuar.'
-      : 'Elige tu metodo de ingreso.',
+      : 'Elige tu método de ingreso.',
     title: 'Ingresa a Happy Circles',
   };
 }
@@ -153,14 +153,14 @@ export function resolveSecondaryAuthAction(input: {
     return {
       icon: 'person-circle-outline',
       intent: 'show_sign_in',
-      label: 'Iniciar sesion',
+      label: 'Iniciar sesión',
     };
   }
 
   return {
     icon: 'key-outline',
     intent: 'exit_to_invite',
-    label: 'Volver a invitacion',
+    label: 'Volver a invitación',
   };
 }
 

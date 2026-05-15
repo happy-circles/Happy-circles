@@ -33,7 +33,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: true,
         hasGoogle: false,
       }),
-    ).toBe('Validar con clave');
+    ).toBe('Validar con contraseña');
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: false,

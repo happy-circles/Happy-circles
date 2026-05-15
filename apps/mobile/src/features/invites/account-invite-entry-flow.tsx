@@ -793,7 +793,7 @@ export function AccountSignInEntry({
 
     if (session.status === 'signed_out') {
       showRememberedReauthMode(
-        'Tu sesion vencio. Confirma tu acceso para continuar.',
+        'Tu sesión venció. Confirma tu acceso para continuar.',
         'session-expired',
       );
       return;
@@ -838,7 +838,7 @@ export function AccountSignInEntry({
       const result =
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
 
-      if (result === 'Sesion iniciada.') {
+      if (result === 'Sesión iniciada.') {
         completeSuccessfulSignIn();
         await session.refreshAccountState({ preserveLocked: false });
         return;
@@ -873,7 +873,7 @@ export function AccountSignInEntry({
         email: locksRememberedEmail ? (account?.email ?? email) : email,
         password,
       });
-      if (result === 'Sesion iniciada.') {
+      if (result === 'Sesión iniciada.') {
         completeSuccessfulSignIn();
         await session.refreshAccountState({ preserveLocked: false });
         return;
@@ -935,7 +935,7 @@ export function AccountSignInEntry({
     if (!recoveryCodeValid) {
       triggerIdentityWarningHaptic();
       setAuthResultState('error');
-      setMessage('Ingresa el codigo de 8 digitos del correo.');
+      setMessage('Ingresa el código de 8 dígitos del correo.');
       return;
     }
 
@@ -1007,7 +1007,7 @@ export function AccountSignInEntry({
     if (token.length < MIN_ACCOUNT_INVITE_TOKEN_LENGTH) {
       setTokenTouched(true);
       triggerIdentityWarningHaptic();
-      setTokenMessage('Abre tu link de invitacion o pega el token completo para continuar.');
+      setTokenMessage('Abre tu link de invitación o pega el código completo para continuar.');
       return;
     }
 
@@ -1024,7 +1024,7 @@ export function AccountSignInEntry({
     const nextPreview = previewResult.data;
     if (!nextPreview) {
       triggerIdentityErrorHaptic();
-      setTokenMessage('No pudimos validar esta invitacion. Intenta otra vez.');
+      setTokenMessage('No pudimos validar esta invitación. Intenta otra vez.');
       return;
     }
 
@@ -1133,7 +1133,7 @@ export function AccountSignInEntry({
             ? 'Procesando...'
             : isRecovery
               ? recoveryLinkSent
-                ? 'Confirmar codigo'
+                ? 'Confirmar código'
                 : 'Enviar enlace'
               : 'Ingresar'
       }
@@ -1303,7 +1303,7 @@ export function AccountSignInEntry({
                     disabled={authBusy}
                     icon={showPasswordFallback ? 'chevron-up' : 'mail'}
                     label={
-                      showPasswordFallback ? 'Correo y contrasena' : 'Usar correo y contrasena'
+                      showPasswordFallback ? 'Correo y contraseña' : 'Usar correo y contraseña'
                     }
                     onPress={() => {
                       triggerIdentitySelectionHaptic();
@@ -1345,7 +1345,7 @@ export function AccountSignInEntry({
                       {isRecovery && recoveryLinkSent ? (
                         <View style={styles.recoveryCodeBlock}>
                           <AppText style={styles.recoveryCodeHelp}>
-                            Abre el enlace o pega el codigo de 8 digitos del correo.
+                            Abre el enlace o pega el código de 8 dígitos del correo.
                           </AppText>
                           <OtpCodeInput
                             disabled={authBusy}
@@ -1383,7 +1383,7 @@ export function AccountSignInEntry({
                           <IdentityFlowField
                             error={authErrors.password ?? null}
                             icon="lock-closed"
-                            label="Contrasena"
+                            label="Contraseña"
                             status={
                               authErrors.password
                                 ? 'danger'
@@ -1397,7 +1397,7 @@ export function AccountSignInEntry({
                               autoComplete="password"
                               onBlur={validatePasswordField}
                               onChangeText={handlePasswordChange}
-                              placeholder="Tu contrasena"
+                              placeholder="Tu contraseña"
                               placeholderTextColor={activeTheme.colors.muted}
                               value={password}
                             />
@@ -1415,7 +1415,7 @@ export function AccountSignInEntry({
                               ]}
                             >
                               <AppText style={styles.forgotPasswordInlineText}>
-                                Olvide contrasena
+                                Olvidé mi contraseña
                               </AppText>
                             </Pressable>
                           ) : null}

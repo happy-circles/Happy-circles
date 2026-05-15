@@ -4,7 +4,7 @@ import { normalizePhoneDigits } from '@/lib/phone';
 export type FieldStatus = 'idle' | 'valid' | 'invalid';
 export type FieldName = 'email' | 'phone' | 'password';
 
-export const ACCOUNT_CREATED_SETUP_MESSAGE = 'Cuenta creada. Ahora termina tu setup.';
+export const ACCOUNT_CREATED_SETUP_MESSAGE = 'Cuenta creada. Ahora completa tu configuración.';
 export const ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE = 'Cuenta creada. Revisa tu correo.';
 export const ACCOUNT_CREATE_GENERIC_ERROR_MESSAGE = 'No se pudo crear la cuenta.';
 
@@ -38,7 +38,7 @@ export function formatCreateAccountValidationMessage(input: {
   }
 
   if (!input.passwordValid) {
-    invalidFields.push('clave');
+    invalidFields.push('contraseña');
   }
 
   return `Revisa ${joinReadableList(invalidFields)}.`;

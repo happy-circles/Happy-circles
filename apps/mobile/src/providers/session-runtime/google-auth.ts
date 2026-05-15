@@ -99,14 +99,14 @@ function formatGoogleSignInError(
     if (error.code === googleSignIn.statusCodes.IN_PROGRESS) {
       return {
         ok: false,
-        message: 'Google ya tiene una validacion en curso.',
+        message: 'Google ya tiene una validación en curso.',
       };
     }
 
     if (error.code === googleSignIn.statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       return {
         ok: false,
-        message: 'Google Play Services no esta disponible o necesita actualizarse.',
+        message: 'Google Play Services no está disponible o necesita actualizarse.',
       };
     }
   }
@@ -121,14 +121,14 @@ export async function getNativeGoogleCredential(): Promise<NativeGoogleCredentia
   if (Platform.OS === 'web') {
     return {
       ok: false,
-      message: 'Google nativo no esta disponible en web.',
+      message: 'Google nativo no está disponible en web.',
     };
   }
 
   if (isExpoGoRuntime()) {
     return {
       ok: false,
-      message: 'Google nativo requiere una development build; no esta disponible en Expo Go.',
+      message: 'Google nativo requiere una versión instalada de desarrollo; no está disponible en Expo Go.',
     };
   }
 
@@ -137,7 +137,7 @@ export async function getNativeGoogleCredential(): Promise<NativeGoogleCredentia
     return {
       ok: false,
       message:
-        'Google nativo no esta disponible en este binario. Instala una development build nueva.',
+        'Google nativo no está disponible en esta versión instalada. Instala una versión de desarrollo nueva.',
     };
   }
 
@@ -178,7 +178,7 @@ export async function getNativeGoogleCredential(): Promise<NativeGoogleCredentia
     if (!idToken || !tokens.accessToken) {
       return {
         ok: false,
-        message: 'Google no devolvio credenciales validas.',
+        message: 'Google no devolvió credenciales válidas.',
       };
     }
 

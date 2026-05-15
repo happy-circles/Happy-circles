@@ -40,7 +40,7 @@ export function AccountCreateAccountVerificationForm({
   return (
     <IdentityFlowForm>
       <IdentityFlowLogoCopy
-        subtitle={`Enviamos el enlace y el codigo a ${pendingVerificationEmail}.`}
+        subtitle={`Enviamos el enlace y el código a ${pendingVerificationEmail}.`}
         title="Confirma tu correo"
       />
 
@@ -74,7 +74,7 @@ export function AccountCreateAccountVerificationForm({
         <IdentityFlowSecondaryAction
           disabled={disabled}
           icon="mail"
-          label={resendBusy ? 'Enviando...' : 'Reenviar codigo'}
+          label={resendBusy ? 'Enviando...' : 'Reenviar código'}
           onPress={disabled ? undefined : onResendEmailCode}
         />
         <IdentityFlowSecondaryAction

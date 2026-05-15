@@ -47,7 +47,7 @@ export function resolveTrustActionLabel(input: TrustedDeviceAuthAvailability): s
   }
 
   if (method === 'password') {
-    return 'Validar con clave';
+    return 'Validar con contraseña';
   }
 
   return 'Validar dispositivo';
@@ -67,5 +67,5 @@ export function resolveTrustMethodLabel(input: {
 
   return input.canTrustCurrentDeviceWithoutPassword
     ? 'Confiar este dispositivo'
-    : 'Validar con clave';
+    : 'Validar con contraseña';
 }

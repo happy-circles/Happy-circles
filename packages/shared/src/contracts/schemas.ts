@@ -346,7 +346,7 @@ export const registrationSchema = emailPasswordSignInSchema
     if (value.password !== value.confirmPassword) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Las claves no coinciden.',
+        message: 'Las contraseñas no coinciden.',
         path: ['confirmPassword'],
       });
     }
@@ -366,7 +366,7 @@ export const attachEmailPasswordSchema = z
     if (value.password !== value.confirmPassword) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Las claves no coinciden.',
+        message: 'Las contraseñas no coinciden.',
         path: ['confirmPassword'],
       });
     }
@@ -381,7 +381,7 @@ export const passwordResetSchema = z
     if (value.password !== value.confirmPassword) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Las claves no coinciden.',
+        message: 'Las contraseñas no coinciden.',
         path: ['confirmPassword'],
       });
     }
