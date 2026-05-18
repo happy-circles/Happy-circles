@@ -12,11 +12,17 @@ async function loadSetupEntryHandoff() {
   return { handoff, remeasure };
 }
 
+async function advanceAnimationFrames(count: number) {
+  for (let frame = 0; frame < count; frame += 1) {
+    await vi.advanceTimersByTimeAsync(16);
+  }
+}
+
 describe('setup entry handoff coordinator', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (callback: RafCallback) =>
-      setTimeout(() => callback(Date.now()), 0),
+      setTimeout(() => callback(Date.now()), 16),
     );
     vi.stubGlobal('cancelAnimationFrame', (handle: ReturnType<typeof setTimeout>) => {
       clearTimeout(handle);
@@ -50,5 +56,35 @@ describe('setup entry handoff coordinator', () => {
     expect(remeasureCount).toBe(1);
     unsubscribeHandoff();
     unsubscribeRemeasure();
+  });
+
+  it('keeps navigation pending briefly after publishing the setup overlay request', async () => {
+    const { handoff } = await loadSetupEntryHandoff();
+    let requestPublished = false;
+    let settled = false;
+    const unsubscribeHandoff = handoff.subscribeSetupEntryHandoff(() => {
+      requestPublished = true;
+    });
+
+    const request = handoff.beginSetupEntryHandoff();
+    void request.then(() => {
+      settled = true;
+    });
+
+    for (let attempts = 0; attempts < 30 && !requestPublished; attempts += 1) {
+      await advanceAnimationFrames(1);
+    }
+
+    expect(requestPublished).toBe(true);
+    expect(settled).toBe(false);
+
+    await advanceAnimationFrames(1);
+    expect(settled).toBe(false);
+
+    await advanceAnimationFrames(1);
+    await request;
+
+    expect(settled).toBe(true);
+    unsubscribeHandoff();
   });
 });

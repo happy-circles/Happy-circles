@@ -10,6 +10,19 @@ type SetupEntryHandoffListener = (request: SetupEntryHandoffRequest) => void;
 let nextRequestId = 0;
 const listeners = new Set<SetupEntryHandoffListener>();
 let pendingSetupEntryHandoff: Promise<void> | null = null;
+const SETUP_ENTRY_OVERLAY_SETTLE_FRAMES = 2;
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function waitForFrames(frameCount: number) {
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    await waitForNextFrame();
+  }
+}
 
 async function runSetupEntryHandoff() {
   await prepareIdentityFlowTargetForHandoff({ animated: true });
@@ -20,6 +33,7 @@ async function runSetupEntryHandoff() {
   };
 
   listeners.forEach((listener) => listener(request));
+  await waitForFrames(SETUP_ENTRY_OVERLAY_SETTLE_FRAMES);
 }
 
 export async function beginSetupEntryHandoff() {

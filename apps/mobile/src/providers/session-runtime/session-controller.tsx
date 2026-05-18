@@ -289,6 +289,12 @@ export function useSessionController(): SessionContextValue {
 
       const loadId = accountLoadIdRef.current + 1;
       accountLoadIdRef.current = loadId;
+      const shouldPreserveLockedStatus =
+        options.preserveLocked && statusRef.current === 'signed_in_locked';
+
+      if (!shouldPreserveLockedStatus) {
+        setSessionStatus('loading');
+      }
 
       setProfileCompletionState('loading');
       setDeviceTrustState((current) =>

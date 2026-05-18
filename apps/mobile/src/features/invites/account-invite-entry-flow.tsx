@@ -46,6 +46,7 @@ import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { pushRoute, returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
+import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
@@ -86,6 +87,7 @@ import {
 } from './account-invite-entry-helpers';
 import { AccountInviteSocialProviderRow } from './account-invite-social-provider-row';
 import { AppText } from '@/components/app-text';
+import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
 
 const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
@@ -94,6 +96,19 @@ const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function isSetupAccountDestination(destination: Href) {
+  if (typeof destination === 'string') {
+    return destination.startsWith('/setup-account');
+  }
+
+  return (
+    typeof destination === 'object' &&
+    destination !== null &&
+    'pathname' in destination &&
+    destination.pathname === '/setup-account'
+  );
 }
 
 export function AccountSignInEntry({
@@ -110,6 +125,7 @@ export function AccountSignInEntry({
   readonly isPreviewMode?: boolean;
 }) {
   const activeTheme = useAppTheme();
+  const launchIntroVisible = useLaunchIntroVisible();
   const session = useSession();
   const router = useRouter();
   const account = session.rememberedAccount;
@@ -180,6 +196,7 @@ export function AccountSignInEntry({
   const successCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasLockedForRememberedUnlockRef = useRef(session.status === 'signed_in_locked');
   const automaticUnlockHandledRef = useRef(false);
+  const automaticBiometricPromptAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (showAuthOptions) {
@@ -327,6 +344,7 @@ export function AccountSignInEntry({
       authMode !== 'sign-in' ||
       authEntryMode !== 'remembered' ||
       showAuthOptions ||
+      authRequestBusy ||
       authSurfaceTransitioning ||
       authSuccess ||
       authResultState === 'success' ||
@@ -351,6 +369,7 @@ export function AccountSignInEntry({
     authEntryMode,
     authMode,
     authResultState,
+    authRequestBusy,
     authSuccess,
     authSurfaceTransitioning,
     entrySurface,
@@ -428,6 +447,8 @@ export function AccountSignInEntry({
         clearAuthRouteTransitionHold();
         if (destination === '/home') {
           await beginHomeEntryHandoffAfterScrollReset();
+        } else if (isSetupAccountDestination(destination)) {
+          await beginSetupEntryHandoff();
         }
         if (cancelled) {
           return;
@@ -784,12 +805,16 @@ export function AccountSignInEntry({
     });
   }
 
-  async function handleContinue() {
+  async function handleContinue(options?: { readonly automatic?: boolean }) {
     if (authBusy || !account) {
       return;
     }
 
-    triggerIdentityImpactHaptic();
+    const isAutomatic = options?.automatic ?? false;
+
+    if (!isAutomatic) {
+      triggerIdentityImpactHaptic();
+    }
 
     if (session.status === 'signed_out') {
       showRememberedReauthMode(
@@ -808,6 +833,18 @@ export function AccountSignInEntry({
     try {
       const result = await session.unlock();
       if (!result.success) {
+        if (
+          isAutomatic &&
+          (result.error === 'user_cancel' ||
+            result.error === 'app_cancel' ||
+            result.error === 'system_cancel')
+        ) {
+          clearAuthRouteTransitionHold();
+          setAuthResultState(null);
+          setMessage(null);
+          return;
+        }
+
         showRememberedReauthMode(biometricMessage(result.error, session.biometricLabel));
         return;
       }
@@ -818,6 +855,46 @@ export function AccountSignInEntry({
       setBiometricBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (session.status !== 'signed_in_locked') {
+      automaticBiometricPromptAttemptedRef.current = false;
+      return;
+    }
+
+    if (
+      automaticBiometricPromptAttemptedRef.current ||
+      launchIntroVisible ||
+      !account ||
+      entrySurface !== 'auth' ||
+      authMode !== 'sign-in' ||
+      authEntryMode !== 'remembered' ||
+      rememberedReauthReason !== null ||
+      showAuthOptions ||
+      authBusy ||
+      authSurfaceTransitioning ||
+      authSuccess ||
+      isPreviewMode
+    ) {
+      return;
+    }
+
+    automaticBiometricPromptAttemptedRef.current = true;
+    void handleContinue({ automatic: true });
+  }, [
+    account,
+    authBusy,
+    authEntryMode,
+    authMode,
+    authSuccess,
+    authSurfaceTransitioning,
+    entrySurface,
+    isPreviewMode,
+    launchIntroVisible,
+    rememberedReauthReason,
+    session.status,
+    showAuthOptions,
+  ]);
 
   async function handleSocialSignIn(provider: SocialProvider) {
     if (authBusy) {
@@ -839,12 +916,14 @@ export function AccountSignInEntry({
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
 
       if (result === 'Sesión iniciada.') {
-        completeSuccessfulSignIn();
         await session.refreshAccountState({ preserveLocked: false });
+        completeSuccessfulSignIn();
         return;
       }
 
       showAuthFailure(result);
+    } catch (error) {
+      showAuthFailure(error instanceof Error ? error.message : 'No pudimos validar tu sesion.');
     } finally {
       setSocialBusyProvider(null);
     }
@@ -874,12 +953,14 @@ export function AccountSignInEntry({
         password,
       });
       if (result === 'Sesión iniciada.') {
-        completeSuccessfulSignIn();
         await session.refreshAccountState({ preserveLocked: false });
+        completeSuccessfulSignIn();
         return;
       }
 
       showAuthFailure(result);
+    } catch (error) {
+      showAuthFailure(error instanceof Error ? error.message : 'No pudimos validar tu sesion.');
     } finally {
       setPasswordBusy(false);
     }

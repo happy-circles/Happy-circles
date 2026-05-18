@@ -257,19 +257,20 @@ export function AccountCreateAccountScreen() {
 
       const result =
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
-      setMessage(result);
 
       if (result === 'Sesión iniciada.') {
-        triggerIdentitySuccessHaptic();
-        setupNavigationStartedRef.current = true;
-        await beginSetupEntryHandoff();
         await session.refreshAccountState({
           preserveTrustedDeviceDuringLoad: true,
         });
+        setMessage(result);
+        triggerIdentitySuccessHaptic();
+        setupNavigationStartedRef.current = true;
+        await beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
         return;
       }
 
+      setMessage(result);
       triggerIdentityWarningHaptic();
     } catch (error) {
       triggerIdentityErrorHaptic();
@@ -357,14 +358,16 @@ export function AccountCreateAccountScreen() {
         email: pendingVerificationEmail,
         password,
       });
-      setMessage(result);
 
       if (result === 'Sesión iniciada.') {
+        await session.refreshAccountState({ preserveLocked: false });
+        setMessage(result);
         triggerIdentitySuccessHaptic();
         setupNavigationStartedRef.current = true;
         await beginSetupEntryHandoff();
         returnToRoute(router, buildSetupAccountHref('profile'));
       } else {
+        setMessage(result);
         triggerIdentityWarningHaptic();
       }
     } catch (error) {

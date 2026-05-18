@@ -94,7 +94,6 @@ const LAUNCH_INTRO_MIN_MS = 760;
 const LAUNCH_LAND_MS = 700;
 const LAUNCH_ROUTE_SETTLE_MS = 120;
 const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
-const LAUNCH_FACE_ID_DELAY_MS = 25;
 const LAUNCH_TARGET_WAIT_MS = 300;
 const LAUNCH_HOME_TARGET_WAIT_MS = 2600;
 const LAUNCH_SESSION_MAX_WAIT_MS = 3200;
@@ -461,20 +460,12 @@ function LaunchIntroOverlay({
   const [lockupState, setLockupState] = useState<BrandVerificationState>('loading');
   const mountedAtRef = useRef(Date.now());
   const homeReadyVersionAtStartRef = useRef(getHomeEntryReadyVersion());
-  const unlockAttemptedRef = useRef(false);
   const latestTargetRef = useRef<LaunchIntroTargetSnapshot | null>(target);
   const latestTargetPreferenceRef = useRef(targetPreference);
-  const latestStatusRef = useRef(session.status);
-  const latestUnlockRef = useRef(() => session.unlock());
   const introMotion = useRef(new Animated.Value(1)).current;
   const landMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
   const handoffMotion = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    latestStatusRef.current = session.status;
-    latestUnlockRef.current = () => session.unlock();
-  }, [session]);
 
   useEffect(() => {
     latestTargetRef.current = target;
@@ -536,21 +527,6 @@ function LaunchIntroOverlay({
         return;
       }
 
-      function requestUnlockAfterIntro() {
-        if (latestStatusRef.current !== 'signed_in_locked' || unlockAttemptedRef.current) {
-          return;
-        }
-
-        unlockAttemptedRef.current = true;
-        void wait(LAUNCH_FACE_ID_DELAY_MS).then(() => {
-          if (!active || latestStatusRef.current !== 'signed_in_locked') {
-            return;
-          }
-
-          void latestUnlockRef.current();
-        });
-      }
-
       function completeIntro() {
         if (!active || completing) {
           return;
@@ -572,7 +548,6 @@ function LaunchIntroOverlay({
             }
 
             setVisible(false);
-            requestUnlockAfterIntro();
           }, fadeDuration + 220);
           completionTimers.add(fadeFallbackTimer);
           Animated.timing(handoffMotion, {
@@ -588,7 +563,6 @@ function LaunchIntroOverlay({
             }
 
             setVisible(false);
-            requestUnlockAfterIntro();
           });
         });
       }

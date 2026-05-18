@@ -13,6 +13,9 @@ const appLinkPathPrefixes = ['/invite/', '/join', '/reset-password', '/setup-acc
 const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
 const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '1';
 const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '1', 10);
+const splashBackgroundColor = '#fbfcff';
+const splashDarkBackgroundColor = '#09111f';
+const splashImageWidth = 208;
 const supabaseUrl = firstNonEmpty(env.EXPO_PUBLIC_SUPABASE_URL);
 const supabaseAnonKey = firstNonEmpty(
   env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
@@ -60,7 +63,7 @@ const config: ExpoConfig = {
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#fbfcff',
+    backgroundColor: splashBackgroundColor,
   },
   userInterfaceStyle: 'automatic',
   plugins: [
@@ -70,11 +73,12 @@ const config: ExpoConfig = {
       'expo-splash-screen',
       {
         image: './assets/splash-icon.png',
-        imageWidth: 208,
+        imageWidth: splashImageWidth,
         resizeMode: 'contain',
-        backgroundColor: '#fbfcff',
+        backgroundColor: splashBackgroundColor,
         dark: {
-          backgroundColor: '#09111f',
+          image: './assets/splash-icon-dark.png',
+          backgroundColor: splashDarkBackgroundColor,
         },
       },
     ],
@@ -133,7 +137,7 @@ const config: ExpoConfig = {
     versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#fbfcff',
+      backgroundColor: splashBackgroundColor,
     },
     blockedPermissions: ['android.permission.WRITE_CONTACTS', 'android.permission.RECORD_AUDIO'],
     intentFilters: [
