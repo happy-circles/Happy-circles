@@ -1,4 +1,8 @@
 node_modules
+android
+apps/mobile/android
+/android
+/apps/mobile/android
 .expo
 dist
 web-build

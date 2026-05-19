@@ -51,7 +51,7 @@ import {
   extractAuthCallbackTokens,
   isPasswordRecoveryCallbackUrl,
 } from '../session/auth-callbacks';
-import { buildAppleFullName, generateSecureNonce } from '../session/apple-auth';
+import { buildAppleFullName, generateSecureNonce, hashNonceForApple } from '../session/apple-auth';
 import { getNativeGoogleCredential } from './google-auth';
 import {
   deriveAccountAccessState,
@@ -121,6 +121,37 @@ async function hashInviteTokenForRegistration(deliveryToken: string): Promise<st
   );
 
   return digest.toLocaleLowerCase('en-US');
+}
+
+async function revokeDuplicateActiveDeviceRows(input: {
+  readonly client: NonNullable<typeof supabase>;
+  readonly currentDeviceId: string;
+  readonly deviceName: string | null;
+  readonly platform: string;
+  readonly timestamp: string;
+  readonly userId: string;
+}): Promise<void> {
+  const deviceName = input.deviceName?.trim();
+  if (!deviceName) {
+    return;
+  }
+
+  const { error } = await input.client
+    .from('trusted_devices')
+    .update({
+      trust_state: 'revoked',
+      revoked_at: input.timestamp,
+      last_seen_at: input.timestamp,
+    } as never)
+    .eq('user_id', input.userId)
+    .eq('platform', input.platform)
+    .eq('device_name', deviceName)
+    .neq('device_id', input.currentDeviceId)
+    .in('trust_state', ['pending', 'trusted']);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function resolveUserIdentities(currentSession: Session): Promise<readonly AuthIdentity[]> {
@@ -397,10 +428,29 @@ export function useSessionController(): SessionContextValue {
         throw new Error(authUserResult.error.message);
       }
 
+      if (currentDevice.trust_state === 'trusted') {
+        try {
+          await revokeDuplicateActiveDeviceRows({
+            client,
+            currentDeviceId: deviceId,
+            deviceName: currentDevice.device_name,
+            platform: currentDevice.platform,
+            timestamp,
+            userId: nextSession.user.id,
+          });
+        } catch (error) {
+          console.warn(
+            'Failed to revoke duplicate trusted devices during account load',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
       const devicesResult = await client
         .from('trusted_devices')
         .select('*')
         .eq('user_id', nextSession.user.id)
+        .neq('trust_state', 'revoked')
         .order('created_at', { ascending: false });
 
       if (devicesResult.error) {
@@ -710,86 +760,93 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      const credentialResult = await getNativeGoogleCredential();
-      if (!credentialResult.ok) {
+      try {
+        const credentialResult = await getNativeGoogleCredential();
+        if (!credentialResult.ok) {
+          return {
+            message:
+              mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
+                ? 'Vinculación con Google cancelada.'
+                : credentialResult.message,
+            userId: null,
+          };
+        }
+
+        const { credential } = credentialResult;
+
+        if (mode === 'link') {
+          const authApi = supabase.auth as unknown as {
+            readonly linkIdentity?: (input: {
+              readonly provider: 'google';
+              readonly token: string;
+              readonly access_token: string;
+            }) => Promise<{ error?: { message: string } | null }>;
+          };
+
+          if (typeof authApi.linkIdentity !== 'function') {
+            return {
+              message: 'No pudimos vincular Google en esta versión de la app.',
+              userId: null,
+            };
+          }
+
+          const { error } = await authApi.linkIdentity({
+            provider: 'google',
+            token: credential.idToken,
+            access_token: credential.accessToken,
+          });
+
+          if (error) {
+            return {
+              message: formatSupabaseAuthErrorMessage(error.message),
+              userId: null,
+            };
+          }
+        } else {
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: credential.idToken,
+            access_token: credential.accessToken,
+          });
+
+          if (error) {
+            return {
+              message: formatSupabaseAuthErrorMessage(error.message),
+              userId: null,
+            };
+          }
+        }
+
+        if (credential.displayName || credential.givenName || credential.familyName) {
+          const { error: metadataError } = await supabase.auth.updateUser({
+            data: {
+              display_name: credential.displayName,
+              full_name: credential.displayName,
+              given_name: credential.givenName,
+              family_name: credential.familyName,
+              avatar_url: credential.photoUrl,
+            },
+          });
+
+          if (metadataError) {
+            console.warn(
+              'Failed to persist Google profile metadata',
+              metadataError instanceof Error ? metadataError.message : String(metadataError),
+            );
+          }
+        }
+
+        const { data } = await supabase.auth.getSession();
         return {
-          message:
-            mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
-              ? 'Vinculación con Google cancelada.'
-              : credentialResult.message,
+          message: mode === 'link' ? 'Google vinculado.' : 'Sesión iniciada.',
+          userId: data.session?.user.id ?? null,
+        };
+      } catch (error) {
+        return {
+          message: formatValidationMessage(error),
           userId: null,
         };
       }
-
-      const { credential } = credentialResult;
-
-      if (mode === 'link') {
-        const authApi = supabase.auth as unknown as {
-          readonly linkIdentity?: (input: {
-            readonly provider: 'google';
-            readonly token: string;
-            readonly access_token: string;
-          }) => Promise<{ error?: { message: string } | null }>;
-        };
-
-        if (typeof authApi.linkIdentity !== 'function') {
-          return {
-            message: 'No pudimos vincular Google en esta versión de la app.',
-            userId: null,
-          };
-        }
-
-        const { error } = await authApi.linkIdentity({
-          provider: 'google',
-          token: credential.idToken,
-          access_token: credential.accessToken,
-        });
-
-        if (error) {
-          return {
-            message: formatSupabaseAuthErrorMessage(error.message),
-            userId: null,
-          };
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: credential.idToken,
-          access_token: credential.accessToken,
-        });
-
-        if (error) {
-          return {
-            message: formatSupabaseAuthErrorMessage(error.message),
-            userId: null,
-          };
-        }
-      }
-
-      if (credential.displayName || credential.givenName || credential.familyName) {
-        const { error: metadataError } = await supabase.auth.updateUser({
-          data: {
-            display_name: credential.displayName,
-            full_name: credential.displayName,
-            given_name: credential.givenName,
-            family_name: credential.familyName,
-            avatar_url: credential.photoUrl,
-          },
-        });
-
-        if (metadataError) {
-          console.warn(
-            'Failed to persist Google profile metadata',
-            metadataError instanceof Error ? metadataError.message : String(metadataError),
-          );
-        }
-      }
-
-      const { data } = await supabase.auth.getSession();
-      return {
-        message: mode === 'link' ? 'Google vinculado.' : 'Sesión iniciada.',
-        userId: data.session?.user.id ?? null,
-      };
     },
     [],
   );
@@ -822,8 +879,9 @@ export function useSessionController(): SessionContextValue {
 
       try {
         const nonce = generateSecureNonce();
+        const appleNonce = await hashNonceForApple(nonce);
         const credential = await AppleAuthentication.signInAsync({
-          nonce,
+          nonce: appleNonce,
           requestedScopes: [
             AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
             AppleAuthentication.AppleAuthenticationScope.EMAIL,
@@ -1513,7 +1571,14 @@ export function useSessionController(): SessionContextValue {
 
     const googleResult = await performGoogleAuth('link');
     if (googleResult.message === 'Google vinculado.') {
-      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      try {
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      } catch (error) {
+        console.warn(
+          'Failed to refresh account state after Google link',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     return googleResult.message;
@@ -1531,7 +1596,14 @@ export function useSessionController(): SessionContextValue {
 
     const appleResult = await performAppleAuth('link');
     if (appleResult.message === 'Apple vinculado.') {
-      await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      try {
+        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      } catch (error) {
+        console.warn(
+          'Failed to refresh account state after Apple link',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     return appleResult.message;
@@ -1689,6 +1761,22 @@ export function useSessionController(): SessionContextValue {
 
       if (updateResult.error) {
         return updateResult.error.message;
+      }
+
+      try {
+        await revokeDuplicateActiveDeviceRows({
+          client: supabase,
+          currentDeviceId,
+          deviceName: getCurrentDeviceName(),
+          platform: Platform.OS,
+          timestamp,
+          userId: expectedUserId,
+        });
+      } catch (error) {
+        console.warn(
+          'Failed to revoke duplicate trusted devices',
+          error instanceof Error ? error.message : String(error),
+        );
       }
 
       setRecentPasswordAuth(null);

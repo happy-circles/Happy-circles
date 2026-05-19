@@ -1,4 +1,5 @@
 import type * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 
 export function generateSecureNonce(length = 32): string {
   const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -13,6 +14,10 @@ export function generateSecureNonce(length = 32): string {
   }
 
   return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join('');
+}
+
+export async function hashNonceForApple(rawNonce: string): Promise<string> {
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
 }
 
 export function buildAppleFullName(

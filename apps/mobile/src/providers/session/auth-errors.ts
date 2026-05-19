@@ -116,6 +116,26 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
     return 'Ese celular ya está vinculado.';
   }
 
+  if (
+    normalized.includes('nonces mismatch') ||
+    normalized.includes('passed nonce and nonce in id_token')
+  ) {
+    return 'No pudimos validar Apple. Intenta de nuevo.';
+  }
+
+  if (
+    normalized.includes('manual linking') ||
+    normalized.includes('identity linking') ||
+    normalized.includes('identity_already_exists') ||
+    normalized.includes('identity already exists')
+  ) {
+    return 'Ese metodo de acceso ya esta vinculado o la vinculacion no esta habilitada.';
+  }
+
+  if (normalized.includes('provider') && normalized.includes('disabled')) {
+    return 'Ese proveedor de acceso no esta habilitado.';
+  }
+
   if (normalized.includes('database error saving new user')) {
     return 'No pudimos crear la cuenta con esta invitación. Revisa que el enlace siga disponible y que el celular no esté vinculado.';
   }
