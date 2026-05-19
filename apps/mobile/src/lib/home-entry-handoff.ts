@@ -80,8 +80,8 @@ export async function beginHomeEntryHandoff(options?: {
 }
 
 async function runHomeEntryHandoffAfterScrollReset() {
-  await prepareIdentityFlowTargetForHandoff({ animated: true });
   await beginHomeEntryHandoff({ skipScrollReset: true, waitForSourceCentering: true });
+  await prepareIdentityFlowTargetForHandoff({ animated: true });
 }
 
 export async function beginHomeEntryHandoffAfterScrollReset() {

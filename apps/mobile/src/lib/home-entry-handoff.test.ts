@@ -31,13 +31,16 @@ describe('home entry handoff coordinator', () => {
 
   it('dedupes concurrent handoff preparation requests', async () => {
     const { handoff, remeasure } = await loadHomeEntryHandoff();
+    const events: string[] = [];
     const requestIds: number[] = [];
     let remeasureCount = 0;
     const unsubscribe = handoff.subscribeHomeEntryHandoff((request) => {
+      events.push(`handoff:${request.id}`);
       requestIds.push(request.id);
       request.completeSourceCentering();
     });
     const unsubscribeRemeasure = remeasure.subscribeLaunchTargetRemeasure(() => {
+      events.push('remeasure');
       remeasureCount += 1;
     });
 
@@ -48,6 +51,7 @@ describe('home entry handoff coordinator', () => {
     await Promise.all([firstRequest, secondRequest]);
 
     expect(requestIds).toEqual([1]);
+    expect(events[0]).toBe('handoff:1');
     expect(remeasureCount).toBe(1);
     unsubscribe();
     unsubscribeRemeasure();

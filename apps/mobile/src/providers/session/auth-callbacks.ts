@@ -1,5 +1,7 @@
 import type { AuthCallbackTokens } from './types';
 
+const APP_AUTH_CALLBACK_SEGMENTS = new Set(['join', 'reset-password', 'setup-account']);
+
 export function extractAuthCallbackTokens(url: string): AuthCallbackTokens | null {
   const hashIndex = url.indexOf('#');
   if (hashIndex === -1) {
@@ -31,6 +33,53 @@ export function extractAuthCallbackCode(url: string): string | null {
   const code = params.get('code');
 
   return code && code.length > 0 ? code : null;
+}
+
+function extractFirstPathSegment(pathname: string): string | null {
+  return pathname
+    .split('/')
+    .map((segment) => segment.trim().toLocaleLowerCase('en-US'))
+    .find((segment) => segment.length > 0) ?? null;
+}
+
+function extractAppRouteSegment(parsedUrl: URL): string | null {
+  if (parsedUrl.protocol.toLocaleLowerCase('en-US') === 'happycircles:') {
+    const hostSegment = parsedUrl.hostname.trim().toLocaleLowerCase('en-US');
+    return hostSegment || extractFirstPathSegment(parsedUrl.pathname);
+  }
+
+  return extractFirstPathSegment(parsedUrl.pathname);
+}
+
+function isConfiguredWebOrigin(parsedUrl: URL, appWebOrigin: string): boolean {
+  try {
+    const parsedOrigin = new URL(appWebOrigin);
+    return (
+      parsedUrl.protocol.toLocaleLowerCase('en-US') === 'https:' &&
+      parsedUrl.host.toLocaleLowerCase('en-US') === parsedOrigin.host.toLocaleLowerCase('en-US')
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isAppAuthCallbackUrl(url: string, appWebOrigin: string): boolean {
+  if (!extractAuthCallbackCode(url) && !extractAuthCallbackTokens(url)) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const protocol = parsedUrl.protocol.toLocaleLowerCase('en-US');
+    if (protocol !== 'happycircles:' && !isConfiguredWebOrigin(parsedUrl, appWebOrigin)) {
+      return false;
+    }
+
+    const routeSegment = extractAppRouteSegment(parsedUrl);
+    return routeSegment ? APP_AUTH_CALLBACK_SEGMENTS.has(routeSegment) : false;
+  } catch {
+    return false;
+  }
 }
 
 export function extractUrlSearchParams(url: string): URLSearchParams {

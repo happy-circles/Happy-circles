@@ -23,6 +23,7 @@ import {
 import {
   extractAuthCallbackCode,
   extractAuthCallbackTokens,
+  isAppAuthCallbackUrl,
   isPasswordRecoveryCallbackUrl,
 } from './auth-callbacks';
 import { deriveLinkedMethods, normalizeIdentityProvider } from './linked-methods';
@@ -82,6 +83,33 @@ describe('session auth callback helpers', () => {
     );
     expect(isPasswordRecoveryCallbackUrl('happycircles://reset-password?code=abc')).toBe(true);
     expect(isPasswordRecoveryCallbackUrl('happycircles://join#type=recovery')).toBe(true);
+  });
+
+  it('only treats app and configured web auth links as Supabase callbacks', () => {
+    expect(
+      isAppAuthCallbackUrl(
+        'https://app.happy-circles.com/reset-password?code=oauth-code',
+        'https://app.happy-circles.com',
+      ),
+    ).toBe(true);
+    expect(
+      isAppAuthCallbackUrl(
+        'happycircles://setup-account?code=oauth-code',
+        'https://app.happy-circles.com',
+      ),
+    ).toBe(true);
+    expect(
+      isAppAuthCallbackUrl(
+        'com.googleusercontent.apps.123456:/oauthredirect?code=google-code',
+        'https://app.happy-circles.com',
+      ),
+    ).toBe(false);
+    expect(
+      isAppAuthCallbackUrl(
+        'https://accounts.google.com/o/oauth2/v2/auth?code=google-code',
+        'https://app.happy-circles.com',
+      ),
+    ).toBe(false);
   });
 });
 
