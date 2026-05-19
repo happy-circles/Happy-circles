@@ -1401,7 +1401,6 @@ function HomeEntryHandoffOverlay({
                   ? !visualSourceTarget.avatarEditable
                   : undefined
               }
-              releaseSpinOnExit={false}
               showOuterInIdle
               size={LAUNCH_LOGO_SIZE}
               state={lockupState}
