@@ -35,6 +35,7 @@ import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { appConfig } from '@/lib/config';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
+import { prefetchAppSnapshot } from '@/lib/live-data/app-snapshot-prefetch';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import {
   getLocalNotificationPermissionStatus,
@@ -527,6 +528,26 @@ export function useSessionController(): SessionContextValue {
         throw new Error(authUserResult.error.message);
       }
 
+      const nextProfile = profileResult.data;
+      const nextEmailConfirmed = isAuthUserEmailConfirmed(
+        authUserResult.data.user ?? nextSession.user,
+      );
+      const nextAccountAccessState =
+        deriveAccountAccessState(nextProfile) === 'needs_invite' &&
+        pendingInviteIntent?.type === 'account_invite'
+          ? 'needs_activation'
+          : deriveAccountAccessState(nextProfile);
+      const nextLinkedMethods = deriveLinkedMethods({
+        session: nextSession,
+        profile: nextProfile,
+        identities,
+      });
+      const nextDeviceTrustState = deriveDeviceTrustState(currentDevice);
+      const nextProfileCompletionState = deriveProfileCompletionState(
+        nextProfile,
+        nextEmailConfirmed,
+      );
+
       if (currentDevice.trust_state === 'trusted') {
         try {
           await revokeDuplicateActiveDeviceRows({
@@ -545,6 +566,16 @@ export function useSessionController(): SessionContextValue {
         }
       }
 
+      if (
+        loadId === accountLoadIdRef.current &&
+        nextAccountAccessState === 'active' &&
+        nextEmailConfirmed &&
+        nextProfileCompletionState === 'complete' &&
+        nextDeviceTrustState === 'trusted'
+      ) {
+        void prefetchAppSnapshot(nextSession.user.id).catch(() => undefined);
+      }
+
       const devicesResult = await client
         .from('trusted_devices')
         .select('*')
@@ -560,29 +591,13 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
-      const nextProfile = profileResult.data;
-      const nextEmailConfirmed = isAuthUserEmailConfirmed(
-        authUserResult.data.user ?? nextSession.user,
-      );
-      const nextAccountAccessState =
-        deriveAccountAccessState(nextProfile) === 'needs_invite' &&
-        pendingInviteIntent?.type === 'account_invite'
-          ? 'needs_activation'
-          : deriveAccountAccessState(nextProfile);
-      const nextLinkedMethods = deriveLinkedMethods({
-        session: nextSession,
-        profile: nextProfile,
-        identities,
-      });
-      const nextDeviceTrustState = deriveDeviceTrustState(currentDevice);
-
       sessionRef.current = nextSession;
       setSession(nextSession);
       setProfile(nextProfile);
       setIsEmailConfirmed(nextEmailConfirmed);
       setAccountAccessState(nextAccountAccessState);
       setLinkedMethods(nextLinkedMethods);
-      setProfileCompletionState(deriveProfileCompletionState(nextProfile, nextEmailConfirmed));
+      setProfileCompletionState(nextProfileCompletionState);
       setDeviceTrustState(nextDeviceTrustState);
       setTrustedDevices(devicesResult.data ?? []);
       setCurrentDeviceId(deviceId);

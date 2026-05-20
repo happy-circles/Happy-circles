@@ -19,7 +19,6 @@ import type {
   SettlementProposalRow,
 } from '../types';
 import { computeChangeRatio, dateMs, isWithinRange, periodRange } from '../utils/dates';
-import { buildWaterfalls } from './balance-analytics-waterfalls';
 import { formatPeriodComparison } from './balance-analytics-labels';
 import { groupBy } from '../utils/context';
 import { buildSettlementMetrics } from './settlement-metrics';
@@ -449,16 +448,6 @@ export function buildBalanceAnalytics(input: {
           range,
         });
 
-        const waterfalls = buildWaterfalls({
-          period,
-          currentSummary: input.currentSummary,
-          currentEvents,
-          history: input.history,
-          currentUserId: input.currentUserId,
-          range,
-          counterpartyByRelationshipId: input.counterpartyByRelationshipId,
-        });
-
         return [
           period,
           {
@@ -468,8 +457,6 @@ export function buildBalanceAnalytics(input: {
               previous: range.previousLabel,
             },
             summaries,
-            waterfallByCategory: waterfalls.byCategory,
-            waterfallByPerson: waterfalls.byPerson,
             people,
             categories,
             settlements,

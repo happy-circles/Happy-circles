@@ -2,6 +2,7 @@ import type { Href } from 'expo-router';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
+import { notificationSummaryCategoryForItem } from '@/lib/notification-summary';
 import { transactionCircleHref } from '@/lib/transaction-people';
 import { isPendingTransactionItem, transactionFocusId } from '@/lib/transaction-presentation';
 
@@ -58,17 +59,7 @@ export function initialCategoryFromDomain(
 export function notificationCategoryForItem(
   item: ActivityItemDto,
 ): Exclude<NotificationCategoryKey, 'all'> {
-  const kind = String(item.kind);
-
-  if (kind === 'friendship_invite' || kind === 'account_invite') {
-    return 'friends';
-  }
-
-  if (kind === 'system' || kind === 'system_note' || kind === 'reminder') {
-    return 'reminders';
-  }
-
-  return 'transactions';
+  return notificationSummaryCategoryForItem(item);
 }
 
 export function matchesNotificationCategory(

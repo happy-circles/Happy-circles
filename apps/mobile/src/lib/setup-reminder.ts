@@ -111,3 +111,47 @@ export function buildNotificationsReminderItem(): ActivityItemDto {
     href: '/profile?focus=notifications',
   });
 }
+
+export interface PendingSetupReminderInput {
+  readonly accountAccessState?: string | null;
+  readonly appleSignInAvailable: boolean;
+  readonly biometricAvailable: boolean;
+  readonly biometricsEnabled: boolean;
+  readonly isTrustedDevice: boolean;
+  readonly linkedMethods: {
+    readonly hasApple: boolean;
+    readonly hasEmailPassword: boolean;
+    readonly hasGoogle: boolean;
+  };
+  readonly notificationsEnabled: boolean;
+  readonly profileCompletionState?: string | null;
+  readonly setupState: {
+    readonly contactsPermissionStatus?: string | null;
+  };
+}
+
+export function buildPendingSetupReminderItems(
+  input: PendingSetupReminderInput,
+): readonly ActivityItemDto[] {
+  const accountSetupEligible =
+    input.accountAccessState === 'active' && input.profileCompletionState === 'complete';
+  const contactsPermissionStatus = input.setupState.contactsPermissionStatus;
+  const needsContacts =
+    contactsPermissionStatus !== 'granted' && contactsPermissionStatus !== 'limited';
+  const needsPasswordAuth = accountSetupEligible && !input.linkedMethods.hasEmailPassword;
+  const needsGoogleAuth = accountSetupEligible && !input.linkedMethods.hasGoogle;
+  const needsAppleAuth =
+    accountSetupEligible && input.appleSignInAvailable && !input.linkedMethods.hasApple;
+
+  return [
+    accountSetupEligible && !input.isTrustedDevice ? buildDeviceTrustReminderItem() : null,
+    accountSetupEligible && input.biometricAvailable && !input.biometricsEnabled
+      ? buildBiometricsReminderItem()
+      : null,
+    needsPasswordAuth ? buildPasswordAuthReminderItem() : null,
+    needsGoogleAuth ? buildGoogleAuthReminderItem() : null,
+    needsAppleAuth ? buildAppleAuthReminderItem() : null,
+    needsContacts ? buildContactsReminderItem() : null,
+    !input.notificationsEnabled ? buildNotificationsReminderItem() : null,
+  ].filter((item): item is ActivityItemDto => Boolean(item));
+}

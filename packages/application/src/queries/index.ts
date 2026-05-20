@@ -100,18 +100,6 @@ export interface BalanceLensSummaryDto {
   readonly movementCount: number;
 }
 
-export interface BalanceWaterfallGroupDto {
-  readonly key: string;
-  readonly label: string;
-  readonly category?: TransactionCategory | 'starting_balance' | 'ending_balance';
-  readonly personId?: string;
-  readonly iOweMinor: number;
-  readonly owedToMeMinor: number;
-  readonly resolvedMinor: number;
-  readonly netMinor: number;
-  readonly cumulativeBalanceMinor: number;
-}
-
 export interface BalanceAnalyticsPersonRowDto {
   readonly key: string;
   readonly userId: string;
@@ -152,8 +140,6 @@ export interface BalanceAnalyticsPeriodDto {
     readonly previous: string | null;
   };
   readonly summaries: Readonly<Record<BalanceAnalyticsLens, BalanceLensSummaryDto>>;
-  readonly waterfallByCategory: readonly BalanceWaterfallGroupDto[];
-  readonly waterfallByPerson: readonly BalanceWaterfallGroupDto[];
   readonly people: readonly BalanceAnalyticsPersonRowDto[];
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
   readonly settlements: BalanceSettlementMetricsDto;

@@ -30,25 +30,17 @@ import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { formatCop } from '@/lib/data';
 import {
   markNotificationItemsViewed,
-  notificationItemCanAlert,
   notificationViewKeyForItem,
   notificationViewedKeysWithLocalCache,
   useAppSnapshot,
 } from '@/lib/live-data';
+import { buildNotificationSummary } from '@/lib/notification-summary';
 import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
 import {
   pendingNotificationDotColor,
   pendingNotificationSurfaceColor,
 } from '@/lib/pending-notification-visuals';
-import {
-  buildAppleAuthReminderItem,
-  buildBiometricsReminderItem,
-  buildContactsReminderItem,
-  buildDeviceTrustReminderItem,
-  buildGoogleAuthReminderItem,
-  buildNotificationsReminderItem,
-  buildPasswordAuthReminderItem,
-} from '@/lib/setup-reminder';
+import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { theme, type AppTheme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
@@ -651,63 +643,17 @@ export function ActivityScreen() {
     session.userId,
     snapshotQuery.data?.notificationViewedKeys,
   ]);
-  const accountSetupEligible =
-    session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
-  const needsContacts =
-    session.setupState.contactsPermissionStatus !== 'granted' &&
-    session.setupState.contactsPermissionStatus !== 'limited';
-  const needsNotifications = !session.notificationsEnabled;
-  const needsPasswordAuth = accountSetupEligible && !session.linkedMethods.hasEmailPassword;
-  const needsGoogleAuth = accountSetupEligible && !session.linkedMethods.hasGoogle;
-  const needsAppleAuth =
-    accountSetupEligible && session.appleSignInAvailable && !session.linkedMethods.hasApple;
-  const setupReminderItems = useMemo(
-    () =>
-      [
-        accountSetupEligible && !session.isTrustedDevice ? buildDeviceTrustReminderItem() : null,
-        accountSetupEligible && session.biometricAvailable && !session.biometricsEnabled
-          ? buildBiometricsReminderItem()
-          : null,
-        needsPasswordAuth ? buildPasswordAuthReminderItem() : null,
-        needsGoogleAuth ? buildGoogleAuthReminderItem() : null,
-        needsAppleAuth ? buildAppleAuthReminderItem() : null,
-        needsContacts ? buildContactsReminderItem() : null,
-        needsNotifications ? buildNotificationsReminderItem() : null,
-      ].filter((item): item is ActivityItemDto => Boolean(item)),
-    [
-      accountSetupEligible,
-      needsAppleAuth,
-      needsContacts,
-      needsGoogleAuth,
-      needsNotifications,
-      needsPasswordAuth,
-      session.biometricAvailable,
-      session.biometricsEnabled,
-      session.isTrustedDevice,
-    ],
-  );
+  const setupReminderItems = useMemo(() => buildPendingSetupReminderItems(session), [session]);
   const allPendingItems = useMemo(
     () => [...setupReminderItems, ...basePendingItems],
     [basePendingItems, setupReminderItems],
   );
-  const alertablePendingItems = useMemo(
-    () => allPendingItems.filter(notificationItemCanAlert),
-    [allPendingItems],
+  const notificationSummary = useMemo(
+    () => buildNotificationSummary(allPendingItems, notificationViewedKeys),
+    [allPendingItems, notificationViewedKeys],
   );
-  const unviewedPendingItems = useMemo(
-    () =>
-      alertablePendingItems.filter(
-        (item) => !notificationViewedKeys.has(notificationViewKeyForItem(item)),
-      ),
-    [alertablePendingItems, notificationViewedKeys],
-  );
-  const reviewedPendingItems = useMemo(
-    () =>
-      alertablePendingItems.filter((item) =>
-        notificationViewedKeys.has(notificationViewKeyForItem(item)),
-      ),
-    [alertablePendingItems, notificationViewedKeys],
-  );
+  const unviewedPendingItems = notificationSummary.unviewedItems;
+  const reviewedPendingItems = notificationSummary.reviewedItems;
   const people = snapshotQuery.data?.people ?? [];
   const inviteRequests = usePeopleInviteRequestsController({
     accountInviteHistoryItems: snapshotQuery.data?.accountInviteHistoryItems ?? [],
@@ -717,19 +663,12 @@ export function ActivityScreen() {
   });
   const categoryCounts = useMemo(() => {
     const counts: Record<NotificationCategoryKey, number> = {
-      all: unviewedPendingItems.length,
-      transactions: 0,
-      friends: 0,
-      reminders: 0,
+      all: notificationSummary.unreadCount,
+      ...notificationSummary.categoryCounts,
     };
 
-    for (const item of unviewedPendingItems) {
-      const category = notificationCategoryForItem(item);
-      counts[category] += 1;
-    }
-
     return counts;
-  }, [unviewedPendingItems]);
+  }, [notificationSummary]);
 
   useEffect(() => {
     setVisualActiveCategory(activeCategory);
@@ -753,7 +692,7 @@ export function ActivityScreen() {
   function markNotificationItemViewed(item: ActivityItemDto) {
     if (
       !session.userId ||
-      !notificationItemCanAlert(item) ||
+      !notificationSummary.alertableItems.includes(item) ||
       notificationViewedKeys.has(notificationViewKeyForItem(item))
     ) {
       return;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -67,13 +67,20 @@ import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
 import {
   addNotificationResponseListener,
+  cancelScheduledPendingReminders,
+  cancelScheduledReminders,
   configureNotifications,
   getLastNotificationRoute,
   notificationRouteFromResponse,
+  scheduleDailyPendingReminder,
+  setLocalNotificationBadgeCount,
   type NotificationRoute,
 } from '@/lib/notifications';
+import { notificationViewedKeysWithLocalCache, useAppSnapshot } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
+import { buildNotificationSummary } from '@/lib/notification-summary';
 import { buildSetupAccountHref } from '@/lib/setup-account';
+import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
@@ -242,7 +249,60 @@ function isSameStableLaunchTarget(
 
 function NotificationBridge() {
   const router = useRouter();
+  const session = useSession();
+  const snapshotQuery = useAppSnapshot();
   const handledNotificationIdsRef = useRef<Set<string>>(new Set());
+  const lastNotificationSyncSignatureRef = useRef<string | null>(null);
+  const notificationSyncVersionRef = useRef(0);
+  const pendingSection = snapshotQuery.data?.activitySections.find(
+    (section) => section.key === 'pending',
+  );
+  const notificationViewedKeys = useMemo(
+    () =>
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    [session.userId, snapshotQuery.data?.notificationViewedKeys],
+  );
+  const setupReminderItems = useMemo(() => buildPendingSetupReminderItems(session), [session]);
+  const notificationSummary = useMemo(
+    () =>
+      buildNotificationSummary(
+        snapshotQuery.data ? [...setupReminderItems, ...(pendingSection?.items ?? [])] : [],
+        notificationViewedKeys,
+      ),
+    [notificationViewedKeys, pendingSection?.items, setupReminderItems, snapshotQuery.data],
+  );
+  const notificationSyncSignature = useMemo(() => {
+    if (session.status === 'loading') {
+      return null;
+    }
+
+    if (!session.userId || !session.notificationsEnabled) {
+      return 'off';
+    }
+
+    if (!snapshotQuery.data) {
+      return null;
+    }
+
+    return [
+      notificationSummary.unreadCount,
+      notificationSummary.categoryCounts.transactions,
+      notificationSummary.categoryCounts.friends,
+      notificationSummary.categoryCounts.reminders,
+    ].join(':');
+  }, [
+    notificationSummary.categoryCounts.friends,
+    notificationSummary.categoryCounts.reminders,
+    notificationSummary.categoryCounts.transactions,
+    notificationSummary.unreadCount,
+    session.notificationsEnabled,
+    session.status,
+    session.userId,
+    snapshotQuery.data,
+  ]);
 
   useEffect(() => {
     void configureNotifications();
@@ -276,6 +336,61 @@ function NotificationBridge() {
       currentSubscription?.remove();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (
+      !notificationSyncSignature ||
+      notificationSyncSignature === lastNotificationSyncSignatureRef.current
+    ) {
+      return undefined;
+    }
+
+    lastNotificationSyncSignatureRef.current = notificationSyncSignature;
+    const syncVersion = notificationSyncVersionRef.current + 1;
+    notificationSyncVersionRef.current = syncVersion;
+
+    const isStale = () => notificationSyncVersionRef.current !== syncVersion;
+
+    async function syncNativeNotificationState() {
+      if (notificationSyncSignature === 'off') {
+        await setLocalNotificationBadgeCount(0);
+        if (!isStale()) {
+          await cancelScheduledReminders();
+        }
+        return;
+      }
+
+      await configureNotifications();
+      if (isStale()) {
+        return;
+      }
+
+      await setLocalNotificationBadgeCount(notificationSummary.unreadCount);
+      if (isStale()) {
+        return;
+      }
+
+      await cancelScheduledPendingReminders();
+      if (isStale() || notificationSummary.unreadCount <= 0) {
+        return;
+      }
+
+      await scheduleDailyPendingReminder({
+        friendCount: notificationSummary.categoryCounts.friends,
+        reminderCount: notificationSummary.categoryCounts.reminders,
+        transactionCount: notificationSummary.categoryCounts.transactions,
+        unreadCount: notificationSummary.unreadCount,
+      });
+    }
+
+    void syncNativeNotificationState().catch(() => {
+      if (!isStale()) {
+        lastNotificationSyncSignatureRef.current = null;
+      }
+    });
+
+    return undefined;
+  }, [notificationSummary, notificationSyncSignature]);
 
   return null;
 }

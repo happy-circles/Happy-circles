@@ -18,7 +18,6 @@ import {
 } from '@/features/home/dashboard-main-sections';
 import { buildDashboardTransactionPreview } from '@/features/home/dashboard-transaction-preview';
 import {
-  setupNotificationKey,
   transactionPersonForItem,
   transactionPersonHref,
 } from '@/features/home/dashboard-preview-cards';
@@ -32,12 +31,14 @@ import {
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { pushRoute } from '@/lib/navigation';
+import { buildNotificationSummary } from '@/lib/notification-summary';
 import {
   notificationItemCanAlert,
   notificationViewKeyForItem,
   notificationViewedKeysWithLocalCache,
   useAppSnapshot,
 } from '@/lib/live-data';
+import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
@@ -121,40 +122,16 @@ export function DashboardScreen() {
     notificationViewedKeys,
     pendingItems: pendingSection?.items ?? [],
   });
-  const accountSetupEligible =
-    session.accountAccessState === 'active' && session.profileCompletionState === 'complete';
-  const needsContacts =
-    session.setupState.contactsPermissionStatus !== 'granted' &&
-    session.setupState.contactsPermissionStatus !== 'limited';
-  const needsNotifications = !session.notificationsEnabled;
-  const deviceTrustPending = accountSetupEligible && !session.isTrustedDevice;
-  const biometricsPending =
-    accountSetupEligible && session.biometricAvailable && !session.biometricsEnabled;
-  const passwordAuthPending = accountSetupEligible && !session.linkedMethods.hasEmailPassword;
-  const googleAuthPending = accountSetupEligible && !session.linkedMethods.hasGoogle;
-  const appleAuthPending =
-    accountSetupEligible && session.appleSignInAvailable && !session.linkedMethods.hasApple;
-  const pendingSetupNotificationKeys = [
-    needsContacts ? setupNotificationKey('local-contacts-reminder') : null,
-    needsNotifications ? setupNotificationKey('local-notifications-reminder') : null,
-    deviceTrustPending ? setupNotificationKey('local-device-trust-reminder') : null,
-    biometricsPending ? setupNotificationKey('local-biometrics-reminder') : null,
-    passwordAuthPending ? setupNotificationKey('local-password-auth-reminder') : null,
-    googleAuthPending ? setupNotificationKey('local-google-auth-reminder') : null,
-    appleAuthPending ? setupNotificationKey('local-apple-auth-reminder') : null,
-  ].filter((key): key is string => Boolean(key));
-  const unreadSetupCount = pendingSetupNotificationKeys.filter(
-    (key) => !notificationViewedKeys.has(key),
-  ).length;
-  const pendingNotificationCount =
-    pendingSection?.items.filter(
-      (item) =>
-        notificationItemCanAlert(item) &&
-        !notificationViewedKeys.has(notificationViewKeyForItem(item)),
-    ).length ??
-    snapshotQuery.data?.notificationUnreadCount ??
-    0;
-  const notificationCount = snapshotQuery.data ? pendingNotificationCount + unreadSetupCount : 0;
+  const setupReminderItems = useMemo(() => buildPendingSetupReminderItems(session), [session]);
+  const notificationSummary = useMemo(
+    () =>
+      buildNotificationSummary(
+        [...setupReminderItems, ...(pendingSection?.items ?? [])],
+        notificationViewedKeys,
+      ),
+    [notificationViewedKeys, pendingSection?.items, setupReminderItems],
+  );
+  const notificationCount = snapshotQuery.data ? notificationSummary.unreadCount : 0;
   const homeEntryReady =
     !snapshotQuery.isRestoringCache && (Boolean(dashboard) || Boolean(snapshotQuery.error));
   const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú';

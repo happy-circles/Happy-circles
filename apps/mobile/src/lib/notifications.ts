@@ -10,6 +10,7 @@ let configured = false;
 type NotificationsModule = typeof ExpoNotifications;
 
 const PENDING_NOTIFICATION_CHANNEL_ID = 'happy-pending';
+const DAILY_PENDING_REMINDER_KIND = 'daily-pending-reminder';
 const PENDING_NOTIFICATION_VIBRATION_PATTERN = [0, 250, 160, 250];
 
 interface NotificationSupport {
@@ -23,6 +24,13 @@ export interface NotificationRoute {
 }
 
 export type NotificationPermissionStatus = 'unavailable' | 'undetermined' | 'denied' | 'granted';
+
+export interface PendingReminderOptions {
+  readonly friendCount?: number;
+  readonly reminderCount?: number;
+  readonly transactionCount?: number;
+  readonly unreadCount?: number;
+}
 
 function isExpoGo(): boolean {
   return String(Constants.appOwnership) === 'expo';
@@ -155,22 +163,53 @@ export async function cancelScheduledReminders(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
-export async function scheduleDailyPendingReminder(): Promise<void> {
+export async function cancelScheduledPendingReminders(): Promise<void> {
   const Notifications = await loadNotificationsModule();
   if (!Notifications) {
     return;
   }
 
+  const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduledNotifications
+      .filter(isDailyPendingReminderRequest)
+      .map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier)),
+  );
+}
+
+export async function setLocalNotificationBadgeCount(count: number): Promise<boolean> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return false;
+  }
+
+  try {
+    return await Notifications.setBadgeCountAsync(Math.max(0, Math.floor(count)));
+  } catch {
+    return false;
+  }
+}
+
+export async function scheduleDailyPendingReminder(
+  options: PendingReminderOptions = {},
+): Promise<void> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return;
+  }
+
+  const content = pendingReminderContent(options);
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      badge: 1,
-      body: 'Revisa solicitudes y saldos que esperan tu acción.',
+      badge: content.badge,
+      body: content.body,
       color: theme.colors.treasure,
-      data: { href: '/activity' },
+      data: { href: '/activity', reminderKind: DAILY_PENDING_REMINDER_KIND },
       interruptionLevel: 'active',
       priority: 'max',
       sound: 'default',
-      title: 'Tienes pendientes en Happy Circles',
+      title: content.title,
       vibrate: PENDING_NOTIFICATION_VIBRATION_PATTERN,
     },
     trigger: {
@@ -246,4 +285,67 @@ export function addNotificationResponseListener(
   return loadNotificationsModule().then((Notifications) =>
     Notifications ? Notifications.addNotificationResponseReceivedListener(listener) : null,
   );
+}
+
+function pendingReminderContent(options: PendingReminderOptions): {
+  readonly badge: number;
+  readonly body: string;
+  readonly title: string;
+} {
+  const unreadCount = Math.max(1, Math.floor(options.unreadCount ?? 1));
+  const transactionCount = Math.max(0, Math.floor(options.transactionCount ?? 0));
+  const friendCount = Math.max(0, Math.floor(options.friendCount ?? 0));
+  const reminderCount = Math.max(0, Math.floor(options.reminderCount ?? 0));
+  const parts = [
+    notificationPartLabel(transactionCount, 'movimiento', 'movimientos'),
+    notificationPartLabel(friendCount, 'invitación', 'invitaciones'),
+    notificationPartLabel(reminderCount, 'recordatorio', 'recordatorios'),
+  ].filter((part): part is string => Boolean(part));
+
+  return {
+    badge: unreadCount,
+    title:
+      unreadCount === 1
+        ? 'Tienes una notificación sin ver'
+        : `Tienes ${unreadCount > 99 ? '99+' : unreadCount} notificaciones sin ver`,
+    body:
+      parts.length > 0
+        ? `Hay ${formatSpanishList(parts)} por revisar.`
+        : unreadCount === 1
+          ? 'Hay una novedad pendiente por revisar.'
+          : `Hay ${unreadCount} novedades pendientes por revisar.`,
+  };
+}
+
+function isDailyPendingReminderRequest(request: {
+  readonly content: {
+    readonly data?: Record<string, unknown>;
+    readonly title?: string | null;
+  };
+}): boolean {
+  return (
+    request.content.data?.reminderKind === DAILY_PENDING_REMINDER_KIND ||
+    (request.content.data?.href === '/activity' &&
+      request.content.title === 'Tienes pendientes en Happy Circles')
+  );
+}
+
+function notificationPartLabel(count: number, singular: string, plural: string): string | null {
+  if (count <= 0) {
+    return null;
+  }
+
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatSpanishList(parts: readonly string[]): string {
+  if (parts.length <= 1) {
+    return parts[0] ?? '';
+  }
+
+  if (parts.length === 2) {
+    return `${parts[0]} y ${parts[1]}`;
+  }
+
+  return `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
 }

@@ -34,13 +34,15 @@ import {
 } from '@/lib/app-haptics';
 import { useActionFeedbackOverlay } from '@/lib/action-feedback';
 import {
+  notificationViewedKeysWithLocalCache,
   useAppSnapshot,
   useRequestAccountDeletionMutation,
   useUpdateProfileAvatarMutation,
 } from '@/lib/live-data';
-import { cancelScheduledReminders, scheduleDailyPendingReminder } from '@/lib/notifications';
 import { pushRoute } from '@/lib/navigation';
+import { buildNotificationSummary } from '@/lib/notification-summary';
 import { buildSetupAccountHref } from '@/lib/setup-account';
+import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import {
   resolveTrustedDeviceAuthMethods,
@@ -92,7 +94,28 @@ export function ProfileScreen() {
     () => [styles.centeredContent, { paddingTop: topInset + theme.spacing.xs }],
     [topInset],
   );
+  const pendingSection = snapshotQuery.data?.activitySections.find(
+    (section) => section.key === 'pending',
+  );
   const pendingCount = snapshotQuery.data?.pendingCount ?? 0;
+  const setupReminderItems = useMemo(() => buildPendingSetupReminderItems(session), [session]);
+  const notificationViewedKeys = useMemo(
+    () =>
+      notificationViewedKeysWithLocalCache(
+        session.userId,
+        snapshotQuery.data?.notificationViewedKeys ?? [],
+      ),
+    [session.userId, snapshotQuery.data?.notificationViewedKeys],
+  );
+  const notificationSummary = useMemo(
+    () =>
+      buildNotificationSummary(
+        [...setupReminderItems, ...(pendingSection?.items ?? [])],
+        notificationViewedKeys,
+      ),
+    [notificationViewedKeys, pendingSection?.items, setupReminderItems],
+  );
+  const totalPendingCount = pendingCount + setupReminderItems.length;
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const avatarMutation = useUpdateProfileAvatarMutation();
   const accountDeletionMutation = useRequestAccountDeletionMutation();
@@ -156,9 +179,11 @@ export function ProfileScreen() {
   const happyCircleClosedCount = happyCircleScore?.closedCircleCount ?? 0;
   const reminderSummary = snapshotQuery.isLoading
     ? 'Calculando...'
-    : pendingCount > 0
-      ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''} hoy`
-      : 'Sin pendientes';
+    : notificationSummary.unreadCount > 0
+      ? `${notificationSummary.unreadCount} sin ver`
+      : totalPendingCount > 0
+        ? 'Todo lo pendiente ya fue visto'
+        : 'Sin pendientes';
   const contactsPermissionStatus = session.setupState.contactsPermissionStatus;
   const contactsActionLabel = resolveContactsPermissionActionLabel(contactsPermissionStatus);
   const phoneLabel = session.profile?.phone_e164 ?? 'Falta completar';
@@ -284,17 +309,11 @@ export function ProfileScreen() {
         return;
       }
 
-      await cancelScheduledReminders();
-      if (pendingCount > 0) {
-        await scheduleDailyPendingReminder();
-      }
-
       setMessage('Recordatorios activados.');
       return;
     }
 
     await session.setNotificationsEnabled(false);
-    await cancelScheduledReminders();
     setMessage('Recordatorios desactivados.');
   }
 
