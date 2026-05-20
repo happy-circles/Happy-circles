@@ -60,7 +60,9 @@ declare
   v_day date := (timezone('utc', now())::date - 20);
   v_day0 timestamptz := (timezone('utc', now())::date - 20)::timestamptz + interval '10 hours';
   v_day1 timestamptz := (timezone('utc', now())::date - 19)::timestamptz + interval '10 hours';
+  v_stale_start timestamptz := timezone('utc', now()) - interval '2 days';
   v_result jsonb;
+  v_stale_session public.app_sessions%rowtype;
   v_user_facts public.analytics_daily_user_facts%rowtype;
   v_lifecycle public.analytics_user_lifecycle_facts%rowtype;
   v_active_usage record;
@@ -274,8 +276,52 @@ begin
   ) then
     raise exception 'expected power users row';
   end if;
+
+  v_result := public.ingest_product_analytics(
+    v_user_id,
+    jsonb_build_object(
+      'clientSessionId', 'analytics-v2-session-stale',
+      'platform', 'ios',
+      'appVersion', '2.0.0',
+      'deviceId', 'analytics-v2-raw-device',
+      'startedAt', v_stale_start
+    ),
+    jsonb_build_array(
+      jsonb_build_object(
+        'clientEventId', 'analytics-v2-stale-backgrounded',
+        'eventName', 'app_backgrounded',
+        'occurredAt', v_stale_start - interval '1 hour',
+        'screenName', 'home',
+        'metadata', jsonb_build_object('route', 'home')
+      )
+    )
+  );
+
+  if (v_result ->> 'acceptedEventCount')::integer <> 0 then
+    raise exception 'expected stale queued event to be ignored, got %', v_result;
+  end if;
+
+  if exists (
+    select 1
+    from public.product_events
+    where user_id = v_user_id
+      and client_event_id = 'analytics-v2-stale-backgrounded'
+  ) then
+    raise exception 'expected stale queued event not to be recorded';
+  end if;
+
+  select *
+    into v_stale_session
+  from public.app_sessions
+  where user_id = v_user_id
+    and client_session_id = 'analytics-v2-session-stale';
+
+  if not found or v_stale_session.ended_at is not null then
+    raise exception 'expected stale queued event not to close session: %', row_to_json(v_stale_session);
+  end if;
 end
 $$;
 
-select '1..1';
+select '1..2';
 select 'ok 1 - analytics v2 batch ingest, facts, lifecycle, and metric views';
+select 'ok 2 - analytics v2 ignores stale queued events from prior app sessions';

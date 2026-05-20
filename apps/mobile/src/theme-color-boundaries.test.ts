@@ -21,7 +21,7 @@ function listSourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const fullPath = join(directory, entry);
     if (statSync(fullPath).isDirectory()) {
-      if (entry === 'node_modules' || entry === '.expo' || entry === '.next') {
+      if (entry === 'node_modules' || entry === '.expo' || entry === '.next' || entry === '.tmp') {
         return [];
       }
 

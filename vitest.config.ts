@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    exclude: ['**/node_modules/**', '**/.git/**', '**/.tmp/**'],
     include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'],
     coverage: {
       reporter: ['text', 'html'],

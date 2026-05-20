@@ -1844,7 +1844,10 @@ function SetupEntryHandoffOverlay({
 function SessionRouteGuard() {
   const { accountAccessState, profileCompletionState, setupState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
-  const params = useLocalSearchParams<{ preview?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    auth_callback?: string | string[];
+    preview?: string | string[];
+  }>();
   const router = useRouter();
   const segments = useSegments();
 
@@ -1863,8 +1866,14 @@ function SessionRouteGuard() {
       const isJoinRoute = currentRootSegment === 'join';
       const hasJoinToken = isJoinRoute && segments.length > 1;
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
+      const rawAuthCallback = Array.isArray(params.auth_callback)
+        ? params.auth_callback[0]
+        : params.auth_callback;
+      const isGoogleAuthCallback = rawAuthCallback === 'google' || rawAuthCallback === 'google-link';
+      const isOAuthCallbackRoute = isSetupAccountRoute && isGoogleAuthCallback;
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
-      const isPublicSignedOutRoute = isPublicInviteRoute || isResetPasswordRoute;
+      const isPublicSignedOutRoute =
+        isPublicInviteRoute || isResetPasswordRoute || isOAuthCallbackRoute;
       const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
       const isQaPreviewRoute = __DEV__ && rawPreview === 'true';
       const isAuthRouteTransitionHeld =
@@ -1928,6 +1937,16 @@ function SessionRouteGuard() {
       if (
         accountAccessState === 'active' &&
         profileCompletionState === 'complete' &&
+        isOAuthCallbackRoute &&
+        !cancelled
+      ) {
+        returnToRoute(router, rawAuthCallback === 'google-link' ? '/profile' : '/home');
+        return;
+      }
+
+      if (
+        accountAccessState === 'active' &&
+        profileCompletionState === 'complete' &&
         isJoinRoute &&
         !hasJoinToken &&
         !inviteAwareHref &&
@@ -1955,6 +1974,7 @@ function SessionRouteGuard() {
     };
   }, [
     accountAccessState,
+    params.auth_callback,
     params.preview,
     profileCompletionState,
     rootNavigationState?.key,

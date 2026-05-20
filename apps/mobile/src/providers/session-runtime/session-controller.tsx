@@ -53,8 +53,9 @@ import {
   isAppAuthCallbackUrl,
   isPasswordRecoveryCallbackUrl,
 } from '../session/auth-callbacks';
-import { buildAppleFullName, generateSecureNonce, hashNonceForApple } from '../session/apple-auth';
-import { getNativeGoogleCredential } from './google-auth';
+import { performNativeAppleAuth } from './apple-native-auth';
+import { performNativeGoogleAuth } from './google-native-auth';
+import { performSupabaseGoogleOAuth } from './google-oauth';
 import {
   deriveAccountAccessState,
   deriveDeviceTrustState,
@@ -185,13 +186,11 @@ type NativeAuthMode = 'link' | 'sign-in';
 type NativeAuthStage =
   | 'link_identity'
   | 'native_credential'
+  | 'oauth_callback'
+  | 'oauth_start'
   | 'profile_metadata'
   | 'sign_in_with_id_token'
   | 'unexpected';
-
-function isNativeAuthCancellationMessage(message: string): boolean {
-  return message.toLocaleLowerCase('en-US').includes('cancelad');
-}
 
 function reportNativeAuthFailure(input: {
   readonly provider: NativeAuthProvider;
@@ -299,13 +298,13 @@ export function useSessionController(): SessionContextValue {
   }, []);
 
   const applySessionFromUrl = useCallback(
-    async (url: string | null) => {
+    async (url: string | null): Promise<boolean> => {
       if (!supabase || !url) {
-        return;
+        return false;
       }
 
       if (!isAppAuthCallbackUrl(url, appConfig.appWebOrigin)) {
-        return;
+        return false;
       }
 
       const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
@@ -331,16 +330,17 @@ export function useSessionController(): SessionContextValue {
             'Failed to exchange Supabase auth code from auth callback',
             error instanceof Error ? error.message : String(error),
           );
+          return false;
         } else if (isPasswordRecoveryCallback && data.session) {
           setPasswordRecoverySessionUserId(data.session.user.id);
         }
 
-        return;
+        return true;
       }
 
       const tokens = extractAuthCallbackTokens(url);
       if (!tokens) {
-        return;
+        return false;
       }
 
       const { data, error } = await supabase.auth.setSession({
@@ -366,9 +366,12 @@ export function useSessionController(): SessionContextValue {
           'Failed to restore Supabase session from auth callback',
           error instanceof Error ? error.message : String(error),
         );
+        return false;
       } else if (isPasswordRecoveryCallback && data.session) {
         setPasswordRecoverySessionUserId(data.session.user.id);
       }
+
+      return true;
     },
     [setPasswordRecoverySessionUserId],
   );
@@ -830,153 +833,30 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      try {
-        const credentialResult = await getNativeGoogleCredential();
-        if (!credentialResult.ok) {
-          const message =
-            mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
-              ? 'Vinculación con Google cancelada.'
-              : credentialResult.message;
-
-          if (!isNativeAuthCancellationMessage(message)) {
-            reportNativeAuthFailure({
-              message,
-              mode,
-              provider: 'google',
-              reason: 'credential_result',
-              stage: 'native_credential',
-            });
-          }
-
-          return {
-            message:
-              mode === 'link' && credentialResult.message === 'Inicio con Google cancelado.'
-                ? 'Vinculación con Google cancelada.'
-                : credentialResult.message,
-            userId: null,
-          };
-        }
-
-        const { credential } = credentialResult;
-
-        if (mode === 'link') {
-          const authApi = supabase.auth as unknown as {
-            readonly linkIdentity?: (input: {
-              readonly provider: 'google';
-              readonly token: string;
-              readonly access_token: string;
-            }) => Promise<{ error?: { message: string } | null }>;
-          };
-
-          if (typeof authApi.linkIdentity !== 'function') {
-            reportNativeAuthFailure({
-              message: 'No pudimos vincular Google en esta versión de la app.',
-              mode,
-              provider: 'google',
-              reason: 'link_identity_unavailable',
-              stage: 'link_identity',
-            });
-
-            return {
-              message: 'No pudimos vincular Google en esta versión de la app.',
-              userId: null,
-            };
-          }
-
-          const { error } = await authApi.linkIdentity({
-            provider: 'google',
-            token: credential.idToken,
-            access_token: credential.accessToken,
-          });
-
-          if (error) {
-            reportNativeAuthFailure({
-              error,
-              message: error.message,
-              mode,
-              provider: 'google',
-              reason: 'supabase_error',
-              stage: 'link_identity',
-            });
-
-            return {
-              message: formatSupabaseAuthErrorMessage(error.message),
-              userId: null,
-            };
-          }
-        } else {
-          const { error } = await supabase.auth.signInWithIdToken({
-            provider: 'google',
-            token: credential.idToken,
-            access_token: credential.accessToken,
-          });
-
-          if (error) {
-            reportNativeAuthFailure({
-              error,
-              message: error.message,
-              mode,
-              provider: 'google',
-              reason: 'supabase_error',
-              stage: 'sign_in_with_id_token',
-            });
-
-            return {
-              message: formatSupabaseAuthErrorMessage(error.message),
-              userId: null,
-            };
-          }
-        }
-
-        if (credential.displayName || credential.givenName || credential.familyName) {
-          const { error: metadataError } = await supabase.auth.updateUser({
-            data: {
-              display_name: credential.displayName,
-              full_name: credential.displayName,
-              given_name: credential.givenName,
-              family_name: credential.familyName,
-              avatar_url: credential.photoUrl,
-            },
-          });
-
-          if (metadataError) {
-            reportNativeAuthFailure({
-              error: metadataError,
-              message: metadataError.message,
-              mode,
-              provider: 'google',
-              reason: 'metadata_update_error',
-              stage: 'profile_metadata',
-            });
-            console.warn(
-              'Failed to persist Google profile metadata',
-              metadataError instanceof Error ? metadataError.message : String(metadataError),
-            );
-          }
-        }
-
-        const { data } = await supabase.auth.getSession();
-        return {
-          message: mode === 'link' ? 'Google vinculado.' : 'Sesión iniciada.',
-          userId: data.session?.user.id ?? null,
-        };
-      } catch (error) {
-        reportNativeAuthFailure({
-          error,
-          message: readErrorMessage(error),
+      if (Platform.OS === 'ios') {
+        return performSupabaseGoogleOAuth({
+          applySessionFromUrl,
+          client: supabase,
           mode,
-          provider: 'google',
-          reason: 'unexpected_exception',
-          stage: 'unexpected',
+          reportFailure: (failure) =>
+            reportNativeAuthFailure({
+              ...failure,
+              mode,
+            }),
         });
-
-        return {
-          message: formatValidationMessage(error),
-          userId: null,
-        };
       }
+
+      return performNativeGoogleAuth({
+        client: supabase,
+        mode,
+        reportFailure: (failure) =>
+          reportNativeAuthFailure({
+            ...failure,
+            mode,
+          }),
+      });
     },
-    [],
+    [applySessionFromUrl],
   );
 
   const performAppleAuth = useCallback(
@@ -997,169 +877,15 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      const available = await AppleAuthentication.isAvailableAsync().catch(() => false);
-      if (!available) {
-        return {
-          message: 'Apple no está disponible en este dispositivo.',
-          userId: null,
-        };
-      }
-
-      try {
-        const nonce = generateSecureNonce();
-        const appleNonce = await hashNonceForApple(nonce);
-        const credential = await AppleAuthentication.signInAsync({
-          nonce: appleNonce,
-          requestedScopes: [
-            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-            AppleAuthentication.AppleAuthenticationScope.EMAIL,
-          ],
-        });
-
-        if (!credential.identityToken) {
+      return performNativeAppleAuth({
+        client: supabase,
+        mode,
+        reportFailure: (failure) =>
           reportNativeAuthFailure({
-            message: 'Apple did not return an identity token.',
+            ...failure,
             mode,
-            provider: 'apple',
-            reason: 'missing_identity_token',
-            stage: 'native_credential',
-          });
-
-          return {
-            message: 'Apple no devolvió la credencial necesaria.',
-            userId: null,
-          };
-        }
-
-        if (mode === 'link') {
-          const authApi = supabase.auth as unknown as {
-            readonly linkIdentity?: (input: {
-              readonly provider: 'apple';
-              readonly token: string;
-              readonly nonce: string;
-            }) => Promise<{ error?: { message: string } | null }>;
-          };
-
-          if (typeof authApi.linkIdentity !== 'function') {
-            reportNativeAuthFailure({
-              message: 'No pudimos vincular Apple en esta version de la app.',
-              mode,
-              provider: 'apple',
-              reason: 'link_identity_unavailable',
-              stage: 'link_identity',
-            });
-
-            return {
-              message: 'No pudimos vincular Apple en esta versión de la app.',
-              userId: null,
-            };
-          }
-
-          const { error } = await authApi.linkIdentity({
-            provider: 'apple',
-            token: credential.identityToken,
-            nonce,
-          });
-
-          if (error) {
-            reportNativeAuthFailure({
-              error,
-              message: error.message,
-              mode,
-              provider: 'apple',
-              reason: 'supabase_error',
-              stage: 'link_identity',
-            });
-
-            return {
-              message: formatSupabaseAuthErrorMessage(error.message),
-              userId: null,
-            };
-          }
-        } else {
-          const { error } = await supabase.auth.signInWithIdToken({
-            provider: 'apple',
-            token: credential.identityToken,
-            nonce,
-          });
-
-          if (error) {
-            reportNativeAuthFailure({
-              error,
-              message: error.message,
-              mode,
-              provider: 'apple',
-              reason: 'supabase_error',
-              stage: 'sign_in_with_id_token',
-            });
-
-            return {
-              message: formatSupabaseAuthErrorMessage(error.message),
-              userId: null,
-            };
-          }
-        }
-
-        const fullName = buildAppleFullName(credential.fullName);
-        if (fullName) {
-          const { error: metadataError } = await supabase.auth.updateUser({
-            data: {
-              display_name: fullName,
-              full_name: fullName,
-              given_name: credential.fullName?.givenName?.trim() ?? null,
-              family_name: credential.fullName?.familyName?.trim() ?? null,
-            },
-          });
-
-          if (metadataError) {
-            reportNativeAuthFailure({
-              error: metadataError,
-              message: metadataError.message,
-              mode,
-              provider: 'apple',
-              reason: 'metadata_update_error',
-              stage: 'profile_metadata',
-            });
-            console.warn(
-              'Failed to persist Apple full name metadata',
-              metadataError instanceof Error ? metadataError.message : String(metadataError),
-            );
-          }
-        }
-
-        const { data } = await supabase.auth.getSession();
-        return {
-          message: mode === 'link' ? 'Apple vinculado.' : 'Sesión iniciada.',
-          userId: data.session?.user.id ?? null,
-        };
-      } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          (error as { readonly code?: string }).code === 'ERR_REQUEST_CANCELED'
-        ) {
-          return {
-            message:
-              mode === 'link' ? 'Vinculación con Apple cancelada.' : 'Inicio con Apple cancelado.',
-            userId: null,
-          };
-        }
-
-        reportNativeAuthFailure({
-          error,
-          message: readErrorMessage(error),
-          mode,
-          provider: 'apple',
-          reason: 'unexpected_exception',
-          stage: 'unexpected',
-        });
-
-        return {
-          message: formatValidationMessage(error),
-          userId: null,
-        };
-      }
+          }),
+      });
     },
     [],
   );

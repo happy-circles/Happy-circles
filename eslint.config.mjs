@@ -8,6 +8,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       '.tmp/**',
+      '**/.tmp/**',
       '**/.next/**',
       '**/.expo/**',
       'supabase/migrations/**/*.sql',
