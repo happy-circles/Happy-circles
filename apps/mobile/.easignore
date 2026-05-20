@@ -4,6 +4,7 @@ apps/mobile/android
 /android
 /apps/mobile/android
 .expo
+.tmp
 dist
 web-build
 coverage
