@@ -16,10 +16,20 @@ function readRepoFile(...segments: readonly string[]): string {
 describe('app smoke checks', () => {
   it('keeps landing value prop, legal links, and app-link routes aligned', () => {
     const page = readRepoFile('apps', 'landing', 'app', 'page.tsx');
+    const landingOpenButton = readRepoFile(
+      'apps',
+      'landing',
+      'app',
+      '_components',
+      'landing-open-app-button.tsx',
+    );
     const scheme = process.env.NEXT_PUBLIC_APP_SCHEME ?? 'happycircles';
 
     expect(page).toContain('Happy Circles');
-    expect(page).toContain('Abrir Happy Circles');
+    expect(page).toContain('LandingOpenAppButton');
+    expect(landingOpenButton).toContain('Abrir Happy Circles');
+    expect(landingOpenButton).toContain('/join?mode=sign-in');
+    expect(landingOpenButton).toContain("window.location.assign('/download')");
     expect(page).toContain('Términos');
     expect(page).not.toContain('Terminos');
     expect(buildNativeAppUrl('/join/sample-token', '?source=email', '#open')).toBe(

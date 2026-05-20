@@ -1,4 +1,5 @@
 import { HappyCirclesMark, StoreButtonGrid } from './_components/brand-assets';
+import { LandingOpenAppButton } from './_components/landing-open-app-button';
 
 function FooterIcon({ kind }: Readonly<{ kind: 'privacy' | 'terms' | 'support' }>) {
   if (kind === 'privacy') {
@@ -42,9 +43,7 @@ export default function LandingPage() {
         </div>
 
         <nav className="landingActions" aria-label="Descargar Happy Circles">
-          <a className="primaryButton" href="/download">
-            Abrir Happy Circles
-          </a>
+          <LandingOpenAppButton />
           <StoreButtonGrid />
           <div className="footerLinks" aria-label="Legal y soporte">
             <a href="/privacy">

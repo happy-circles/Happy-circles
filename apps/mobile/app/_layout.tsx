@@ -527,13 +527,18 @@ function LaunchIntroOverlay({
         return;
       }
 
-      function completeIntro() {
+      function completeIntro(options?: { readonly immediate?: boolean }) {
         if (!active || completing) {
           return;
         }
 
         completing = true;
-        onVisibleChange(false);
+
+        if (options?.immediate) {
+          setVisible(false);
+          onVisibleChange(false);
+          return;
+        }
 
         void waitForNextFrame().then(() => {
           if (!active) {
@@ -548,6 +553,7 @@ function LaunchIntroOverlay({
             }
 
             setVisible(false);
+            onVisibleChange(false);
           }, fadeDuration + 220);
           completionTimers.add(fadeFallbackTimer);
           Animated.timing(handoffMotion, {
@@ -563,14 +569,18 @@ function LaunchIntroOverlay({
             }
 
             setVisible(false);
+            onVisibleChange(false);
           });
         });
       }
 
-      function scheduleCompletionFallback(duration: number) {
+      function scheduleCompletionFallback(
+        duration: number,
+        options?: { readonly immediate?: boolean },
+      ) {
         const timer = setTimeout(() => {
           completionTimers.delete(timer);
-          completeIntro();
+          completeIntro(options);
         }, duration + 180);
 
         completionTimers.add(timer);
@@ -647,7 +657,11 @@ function LaunchIntroOverlay({
           return;
         }
 
-        const completionTimer = scheduleCompletionFallback(LAUNCH_REDUCED_MOTION_EXIT_MS);
+        const completionOptions = { immediate: Boolean(nextLandingTarget) };
+        const completionTimer = scheduleCompletionFallback(
+          LAUNCH_REDUCED_MOTION_EXIT_MS,
+          completionOptions,
+        );
         Animated.timing(reducedExitMotion, {
           duration: LAUNCH_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
@@ -657,7 +671,7 @@ function LaunchIntroOverlay({
           if (finished) {
             clearTimeout(completionTimer);
             completionTimers.delete(completionTimer);
-            completeIntro();
+            completeIntro(completionOptions);
           }
         });
         return;
@@ -697,7 +711,8 @@ function LaunchIntroOverlay({
       }
 
       const landDuration = nextLandingTarget ? LAUNCH_LAND_MS : LAUNCH_REDUCED_MOTION_EXIT_MS + 220;
-      const completionTimer = scheduleCompletionFallback(landDuration);
+      const completionOptions = { immediate: Boolean(nextLandingTarget) };
+      const completionTimer = scheduleCompletionFallback(landDuration, completionOptions);
       Animated.timing(landMotion, {
         duration: landDuration,
         easing: LAUNCH_EASING,
@@ -707,7 +722,7 @@ function LaunchIntroOverlay({
         if (finished) {
           clearTimeout(completionTimer);
           completionTimers.delete(completionTimer);
-          completeIntro();
+          completeIntro(completionOptions);
         }
       });
     }
@@ -768,31 +783,23 @@ function LaunchIntroOverlay({
     outputRange: activeTarget?.visualKind === 'headerBrand' ? [1, 1, 0] : [1, 1, 1],
   });
   const logoScale = Animated.multiply(introScale, landingScale);
-  const backdropOpacity =
-    reducedMotion || !activeTarget
-      ? landMotion.interpolate({
-          inputRange: [0, 0.72, 1],
-          outputRange: [1, 1, 0],
-        })
-      : 1;
   const overlayFadeOpacity = landMotion.interpolate({
     inputRange: [0, 0.72, 1],
     outputRange: [1, 1, 0],
   });
-  const overlayOpacity = reducedMotion
-    ? reducedExitMotion.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0],
-      })
-    : overlayFadeOpacity;
+  const reducedOverlayOpacity = reducedExitMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const overlayOpacity = reducedMotion ? reducedOverlayOpacity : overlayFadeOpacity;
+  const backdropOpacity = activeTarget ? 1 : reducedMotion ? 1 : overlayFadeOpacity;
   const handoffOpacity = handoffMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
   });
-  const rootOpacity =
-    reducedMotion || !activeTarget
-      ? Animated.multiply(overlayOpacity, handoffOpacity)
-      : handoffOpacity;
+  const rootOpacity = activeTarget
+    ? handoffOpacity
+    : Animated.multiply(overlayOpacity, handoffOpacity);
   const headerGlyphOpacity = landMotion.interpolate({
     inputRange: [0, 0.9, 1],
     outputRange: activeTarget?.visualKind === 'headerBrand' ? [0, 0, 1] : [0, 0, 0],
@@ -1127,7 +1134,11 @@ function HomeEntryHandoffOverlay({
           return;
         }
 
-        const completionTimer = scheduleCompletionFallback(HOME_ENTRY_REDUCED_MOTION_EXIT_MS);
+        const completionOptions = { immediate: Boolean(nextTarget) };
+        const completionTimer = scheduleCompletionFallback(
+          HOME_ENTRY_REDUCED_MOTION_EXIT_MS,
+          completionOptions,
+        );
         Animated.timing(reducedExitMotion, {
           duration: HOME_ENTRY_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
@@ -1137,7 +1148,7 @@ function HomeEntryHandoffOverlay({
           if (finished) {
             clearTimeout(completionTimer);
             completionTimers.delete(completionTimer);
-            completeHandoff();
+            completeHandoff(completionOptions);
           }
         });
         return;
@@ -1259,20 +1270,15 @@ function HomeEntryHandoffOverlay({
     outputRange: [sourceTarget ? 1 : 0.96, 1],
   });
   const logoScale = Animated.multiply(entryScale, landingScale);
-  const backdropOpacity = Animated.multiply(
-    entryMotion,
-    reducedMotion
-      ? reducedExitMotion.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 0],
-        })
-      : activeTarget
-        ? landMotion.interpolate({
-            inputRange: [0, 0.76, 1],
-            outputRange: [1, 0.16, 0],
-          })
-        : 1,
-  );
+  const fallbackBackdropOpacity = reducedMotion
+    ? reducedExitMotion.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+      })
+    : 1;
+  const backdropOpacity = activeTarget
+    ? entryMotion
+    : Animated.multiply(entryMotion, fallbackBackdropOpacity);
   const rootOpacity = handoffMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
@@ -1505,13 +1511,18 @@ function SetupEntryHandoffOverlay({
     const completionTimers = new Set<ReturnType<typeof setTimeout>>();
     let completing = false;
 
-    function completeHandoff() {
+    function completeHandoff(options?: { readonly immediate?: boolean }) {
       if (!active || completing) {
         return;
       }
 
       completing = true;
-      onVisibleChange(false);
+
+      if (options?.immediate) {
+        setVisible(false);
+        onVisibleChange(false);
+        return;
+      }
 
       void waitForNextFrame().then(() => {
         if (!active) {
@@ -1522,6 +1533,7 @@ function SetupEntryHandoffOverlay({
           completionTimers.delete(fadeFallbackTimer);
           if (active) {
             setVisible(false);
+            onVisibleChange(false);
           }
         }, SETUP_ENTRY_FADE_MS + 220);
         completionTimers.add(fadeFallbackTimer);
@@ -1535,15 +1547,19 @@ function SetupEntryHandoffOverlay({
           completionTimers.delete(fadeFallbackTimer);
           if (active) {
             setVisible(false);
+            onVisibleChange(false);
           }
         });
       });
     }
 
-    function scheduleCompletionFallback(duration: number) {
+    function scheduleCompletionFallback(
+      duration: number,
+      options?: { readonly immediate?: boolean },
+    ) {
       const timer = setTimeout(() => {
         completionTimers.delete(timer);
-        completeHandoff();
+        completeHandoff(options);
       }, duration + 220);
 
       completionTimers.add(timer);
@@ -1601,7 +1617,11 @@ function SetupEntryHandoffOverlay({
           return;
         }
 
-        const completionTimer = scheduleCompletionFallback(SETUP_ENTRY_REDUCED_MOTION_EXIT_MS);
+        const completionOptions = { immediate: Boolean(nextTarget) };
+        const completionTimer = scheduleCompletionFallback(
+          SETUP_ENTRY_REDUCED_MOTION_EXIT_MS,
+          completionOptions,
+        );
         Animated.timing(reducedExitMotion, {
           duration: SETUP_ENTRY_REDUCED_MOTION_EXIT_MS,
           easing: Easing.out(Easing.quad),
@@ -1611,7 +1631,7 @@ function SetupEntryHandoffOverlay({
           if (finished) {
             clearTimeout(completionTimer);
             completionTimers.delete(completionTimer);
-            completeHandoff();
+            completeHandoff(completionOptions);
           }
         });
         return;
@@ -1646,7 +1666,8 @@ function SetupEntryHandoffOverlay({
       }
 
       const duration = nextTarget ? SETUP_ENTRY_LAND_MS : SETUP_ENTRY_REDUCED_MOTION_EXIT_MS + 220;
-      const completionTimer = scheduleCompletionFallback(duration);
+      const completionOptions = { immediate: Boolean(nextTarget) };
+      const completionTimer = scheduleCompletionFallback(duration, completionOptions);
       Animated.timing(landMotion, {
         duration,
         easing: LAUNCH_EASING,
@@ -1656,7 +1677,7 @@ function SetupEntryHandoffOverlay({
         if (finished) {
           clearTimeout(completionTimer);
           completionTimers.delete(completionTimer);
-          completeHandoff();
+          completeHandoff(completionOptions);
         }
       });
     }
@@ -1709,18 +1730,18 @@ function SetupEntryHandoffOverlay({
     outputRange: [sourceTarget ? 1 : 0.96, 1],
   });
   const logoScale = Animated.multiply(entryScale, landingScale);
-  const backdropOpacity = Animated.multiply(
-    entryMotion,
-    reducedMotion
-      ? reducedExitMotion.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 0],
-        })
-      : landMotion.interpolate({
-          inputRange: [0, 0.82, 1],
-          outputRange: [1, 1, 0],
-        }),
-  );
+  const fallbackBackdropOpacity = reducedMotion
+    ? reducedExitMotion.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+      })
+    : landMotion.interpolate({
+        inputRange: [0, 0.82, 1],
+        outputRange: [1, 1, 0],
+      });
+  const backdropOpacity = activeTarget
+    ? entryMotion
+    : Animated.multiply(entryMotion, fallbackBackdropOpacity);
   const rootOpacity = handoffMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],

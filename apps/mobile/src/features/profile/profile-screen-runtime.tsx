@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -137,6 +137,7 @@ export function ProfileScreen() {
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busyActionRef = useRef<string | null>(null);
   const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
 
@@ -197,6 +198,13 @@ export function ProfileScreen() {
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
 
   async function runAction(actionKey: string, action: () => Promise<string>) {
+    if (busyActionRef.current) {
+      const inProgressMessage = 'Ya hay una accion en curso.';
+      setMessage(inProgressMessage);
+      return inProgressMessage;
+    }
+
+    busyActionRef.current = actionKey;
     triggerImpactHaptic();
     setBusyAction(actionKey);
     setMessage(null);
@@ -211,6 +219,7 @@ export function ProfileScreen() {
       setMessage(failureMessage);
       return failureMessage;
     } finally {
+      busyActionRef.current = null;
       setBusyAction(null);
     }
   }
@@ -795,11 +804,17 @@ export function ProfileScreen() {
             trailing={
               !session.linkedMethods.hasGoogle ? (
                 <Pressable
-                  onPress={() => void runAction('link-google', async () => session.linkGoogle())}
+                  disabled={busyAction !== null}
+                  onPress={
+                    busyAction
+                      ? undefined
+                      : () => void runAction('link-google', async () => session.linkGoogle())
+                  }
                   style={({ pressed }) => [
                     styles.inlineButton,
                     inlineButtonThemeStyle,
-                    pressed ? styles.rowPressed : null,
+                    pressed && busyAction === null ? styles.rowPressed : null,
+                    busyAction !== null ? styles.disabledButton : null,
                   ]}
                 >
                   <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
@@ -821,11 +836,17 @@ export function ProfileScreen() {
                 trailing={
                   !session.linkedMethods.hasApple ? (
                     <Pressable
-                      onPress={() => void runAction('link-apple', async () => session.linkApple())}
+                      disabled={busyAction !== null}
+                      onPress={
+                        busyAction
+                          ? undefined
+                          : () => void runAction('link-apple', async () => session.linkApple())
+                      }
                       style={({ pressed }) => [
                         styles.inlineButton,
                         inlineButtonThemeStyle,
-                        pressed ? styles.rowPressed : null,
+                        pressed && busyAction === null ? styles.rowPressed : null,
+                        busyAction !== null ? styles.disabledButton : null,
                       ]}
                     >
                       <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>

@@ -13,7 +13,8 @@ import type { AuthIdentity } from '../session/types';
 
 type SupabaseClient = NonNullable<typeof supabase>;
 type GoogleOAuthMode = 'link' | 'sign-in';
-type GoogleOAuthStage = 'oauth_callback' | 'oauth_start' | 'unexpected';
+type GoogleOAuthStage = 'browser_open' | 'oauth_callback' | 'oauth_start' | 'unexpected';
+type GoogleOAuthEventResult = 'cancelled' | 'started' | 'succeeded';
 
 export interface GoogleOAuthFailureReport {
   readonly provider: 'google';
@@ -24,12 +25,29 @@ export interface GoogleOAuthFailureReport {
   readonly reason?: string;
 }
 
+export interface GoogleOAuthEventReport {
+  readonly provider: 'google';
+  readonly mode: GoogleOAuthMode;
+  readonly stage: GoogleOAuthStage;
+  readonly result: GoogleOAuthEventResult;
+  readonly message?: string;
+  readonly reason?: string;
+}
+
 export interface GoogleOAuthResult {
   readonly message: string;
   readonly userId: string | null;
 }
 
 void WebBrowser.maybeCompleteAuthSession();
+
+async function dismissStaleAuthBrowser(): Promise<void> {
+  try {
+    await WebBrowser.dismissBrowser();
+  } catch {
+    // No-op: there may be no browser session to dismiss on this platform.
+  }
+}
 
 function buildGoogleOAuthRedirect(mode: GoogleOAuthMode): string {
   const callbackMode = mode === 'link' ? 'google-link' : 'google';
@@ -70,6 +88,7 @@ export async function performSupabaseGoogleOAuth(input: {
   readonly applySessionFromUrl: (url: string | null) => Promise<boolean>;
   readonly client: SupabaseClient;
   readonly mode: GoogleOAuthMode;
+  readonly reportEvent?: (event: GoogleOAuthEventReport) => void;
   readonly reportFailure: (failure: GoogleOAuthFailureReport) => void;
 }): Promise<GoogleOAuthResult> {
   try {
@@ -108,8 +127,54 @@ export async function performSupabaseGoogleOAuth(input: {
       };
     }
 
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    input.reportEvent?.({
+      message: 'Google OAuth URL created.',
+      mode: input.mode,
+      provider: 'google',
+      reason: 'oauth_url_created',
+      result: 'succeeded',
+      stage: 'oauth_start',
+    });
+
+    await dismissStaleAuthBrowser();
+    input.reportEvent?.({
+      message: 'Opening Google auth session.',
+      mode: input.mode,
+      provider: 'google',
+      reason: 'browser_open_attempt',
+      result: 'started',
+      stage: 'browser_open',
+    });
+
+    let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
+    try {
+      result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    } catch (error) {
+      input.reportFailure({
+        error,
+        message: readErrorMessage(error),
+        mode: input.mode,
+        provider: 'google',
+        reason: 'browser_open_failed',
+        stage: 'browser_open',
+      });
+
+      return {
+        message: formatValidationMessage(error),
+        userId: null,
+      };
+    }
+
     if (result.type !== 'success') {
+      input.reportEvent?.({
+        message: `Google auth session returned ${result.type}.`,
+        mode: input.mode,
+        provider: 'google',
+        reason: result.type,
+        result: 'cancelled',
+        stage: 'browser_open',
+      });
+
       return {
         message:
           input.mode === 'link'
@@ -118,6 +183,15 @@ export async function performSupabaseGoogleOAuth(input: {
         userId: null,
       };
     }
+
+    input.reportEvent?.({
+      message: 'Google OAuth callback received.',
+      mode: input.mode,
+      provider: 'google',
+      reason: 'callback_received',
+      result: 'started',
+      stage: 'oauth_callback',
+    });
 
     const callbackApplied = await input.applySessionFromUrl(result.url);
     const { data: sessionData } = await input.client.auth.getSession();
@@ -130,12 +204,30 @@ export async function performSupabaseGoogleOAuth(input: {
         identities.some((identity) => normalizeIdentityProvider(identity.provider) === 'google');
 
       if (googleLinked) {
+        input.reportEvent?.({
+          message: 'Google linked.',
+          mode: input.mode,
+          provider: 'google',
+          reason: 'google_linked',
+          result: 'succeeded',
+          stage: 'oauth_callback',
+        });
+
         return {
           message: 'Google vinculado.',
           userId: sessionData.session?.user.id ?? null,
         };
       }
     } else if (sessionData.session) {
+      input.reportEvent?.({
+        message: 'Google sign in completed.',
+        mode: input.mode,
+        provider: 'google',
+        reason: 'session_created',
+        result: 'succeeded',
+        stage: 'oauth_callback',
+      });
+
       return {
         message: 'Sesión iniciada.',
         userId: sessionData.session.user.id,

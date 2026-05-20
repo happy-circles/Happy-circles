@@ -184,6 +184,7 @@ async function resolveUserIdentities(currentSession: Session): Promise<readonly 
 type NativeAuthProvider = 'apple' | 'google';
 type NativeAuthMode = 'link' | 'sign-in';
 type NativeAuthStage =
+  | 'browser_open'
   | 'link_identity'
   | 'native_credential'
   | 'oauth_callback'
@@ -191,6 +192,7 @@ type NativeAuthStage =
   | 'profile_metadata'
   | 'sign_in_with_id_token'
   | 'unexpected';
+type NativeAuthEventResult = 'cancelled' | 'started' | 'succeeded';
 
 function reportNativeAuthFailure(input: {
   readonly provider: NativeAuthProvider;
@@ -212,6 +214,30 @@ function reportNativeAuthFailure(input: {
       operation,
       reason: input.reason ?? null,
       result: 'failed',
+      source: 'native_auth',
+    },
+  });
+}
+
+function reportNativeAuthEvent(input: {
+  readonly provider: NativeAuthProvider;
+  readonly mode: NativeAuthMode;
+  readonly stage: NativeAuthStage;
+  readonly result: NativeAuthEventResult;
+  readonly message?: string;
+  readonly reason?: string;
+}): void {
+  const operation = `${input.provider}_${input.mode.replace('-', '_')}_${input.stage}`;
+  reportClientErrorSafe({
+    errorCode: operation,
+    errorMessage: input.message ?? operation,
+    fatal: false,
+    kind: 'client_action',
+    metadata: {
+      action: input.provider,
+      operation,
+      reason: input.reason ?? null,
+      result: input.result,
       source: 'native_auth',
     },
   });
@@ -838,6 +864,11 @@ export function useSessionController(): SessionContextValue {
           applySessionFromUrl,
           client: supabase,
           mode,
+          reportEvent: (event) =>
+            reportNativeAuthEvent({
+              ...event,
+              mode,
+            }),
           reportFailure: (failure) =>
             reportNativeAuthFailure({
               ...failure,
