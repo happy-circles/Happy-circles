@@ -244,6 +244,18 @@ export function IdentityFlowScreen({
     [animateKeyboard],
   );
 
+  const forceResetKeyboardTranslation = useCallback(() => {
+    keyboardAdjustmentGenerationRef.current += 1;
+    if (keyboardAdjustmentTimeoutRef.current) {
+      clearTimeout(keyboardAdjustmentTimeoutRef.current);
+      keyboardAdjustmentTimeoutRef.current = null;
+    }
+    keyboardEventRef.current = null;
+    keyboardTranslateY.stopAnimation(() => {
+      keyboardTranslateY.setValue(0);
+    });
+  }, [keyboardTranslateY]);
+
   const adjustKeyboardForFocusedInput = useCallback(
     (event = keyboardEventRef.current) => {
       if (!shouldUseManualKeyboardLift) {
@@ -426,6 +438,12 @@ export function IdentityFlowScreen({
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
       resetKeyboardTranslation(event);
     });
+    const didHideSubscription =
+      Platform.OS === 'ios'
+        ? Keyboard.addListener('keyboardDidHide', () => {
+            forceResetKeyboardTranslation();
+          })
+        : null;
 
     return () => {
       if (keyboardAdjustmentTimeoutRef.current) {
@@ -434,6 +452,7 @@ export function IdentityFlowScreen({
       }
       showSubscription.remove();
       hideSubscription.remove();
+      didHideSubscription?.remove();
       keyboardEventRef.current = null;
       keyboardTranslateY.stopAnimation(() => {
         keyboardTranslateY.setValue(0);
@@ -441,6 +460,7 @@ export function IdentityFlowScreen({
     };
   }, [
     adjustKeyboardForFocusedInput,
+    forceResetKeyboardTranslation,
     keyboardTranslateY,
     resetKeyboardTranslation,
     shouldUseManualKeyboardLift,
