@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, type Href } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import {
   HOME_REGISTER_FAB_CLEARANCE,
   dashboardStyles as styles,
@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScreenShell } from '@/components/screen-shell';
+import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { BalanceLensCarousel } from '@/features/balance/balance-lens-carousel';
 import { usePreferredBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
@@ -48,6 +49,17 @@ import { AppText } from '@/components/app-text';
 const TRANSACTION_PREVIEW_LIMIT = 15;
 const HOME_REFRESH_INDICATOR_CLEARANCE = theme.spacing.xl;
 const HOME_REFRESH_MINIMUM_VISIBLE_MS = 700;
+
+function DashboardLoadingState({ message }: { readonly message: string }) {
+  return (
+    <View style={styles.homeLoadingState}>
+      <HappyCirclesMotion size={74} variant="loading" />
+      <AppText style={styles.homeLoadingTitle}>Sincronizando</AppText>
+      <AppText style={styles.homeLoadingText}>{message}</AppText>
+    </View>
+  );
+}
+
 export function DashboardScreen() {
   const router = useRouter();
   const session = useSession();
@@ -132,8 +144,9 @@ export function DashboardScreen() {
     [notificationViewedKeys, pendingSection?.items, setupReminderItems],
   );
   const notificationCount = snapshotQuery.data ? notificationSummary.unreadCount : 0;
-  const homeEntryReady =
-    !snapshotQuery.isRestoringCache && (Boolean(dashboard) || Boolean(snapshotQuery.error));
+  const homeLoadingMessage = snapshotQuery.isRestoringCache
+    ? 'Preparando tus datos guardados.'
+    : 'Cargando tu Circle.';
   const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú';
   const homeContentContainerStyle = useMemo(
     () => ({
@@ -181,10 +194,6 @@ export function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!homeEntryReady) {
-        return undefined;
-      }
-
       let secondFrame: ReturnType<typeof requestAnimationFrame> | null = null;
       const firstFrame = requestAnimationFrame(() => {
         secondFrame = requestAnimationFrame(() => {
@@ -198,7 +207,7 @@ export function DashboardScreen() {
           cancelAnimationFrame(secondFrame);
         }
       };
-    }, [homeEntryReady]),
+    }, []),
   );
 
   if (snapshotQuery.error && !dashboard && !snapshotQuery.isRestoringCache) {
@@ -235,7 +244,9 @@ export function DashboardScreen() {
         scrollEventThrottle={16}
         title="Happy Circles"
         titleAlign="center"
-      />
+      >
+        <DashboardLoadingState message={homeLoadingMessage} />
+      </ScreenShell>
     );
   }
 

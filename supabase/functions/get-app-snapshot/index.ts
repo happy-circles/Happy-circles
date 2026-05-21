@@ -514,15 +514,28 @@ function accountInviteScope(actorUserId: string) {
 Deno.serve((request) =>
   handleRpc(request, async (_body, actorUserId) => {
     const client = createServiceRoleClient();
+    const snapshotStartedAt = performance.now();
+    const serverTimings: Record<string, number> = {};
+    async function timed<T>(label: string, promise: Promise<T>): Promise<T> {
+      const startedAt = performance.now();
+      try {
+        return await promise;
+      } finally {
+        serverTimings[label] = Math.max(0, Math.round(performance.now() - startedAt));
+      }
+    }
 
-    const relationships = await expectRows<Record<string, unknown>>(
-      client
-        .from('relationships')
-        .select(RELATIONSHIP_SELECT)
-        .eq('status', 'active')
-        .or(`user_low_id.eq.${actorUserId},user_high_id.eq.${actorUserId}`)
-        .order('created_at', { ascending: false }),
+    const relationships = await timed(
       'relationships',
+      expectRows<Record<string, unknown>>(
+        client
+          .from('relationships')
+          .select(RELATIONSHIP_SELECT)
+          .eq('status', 'active')
+          .or(`user_low_id.eq.${actorUserId},user_high_id.eq.${actorUserId}`)
+          .order('created_at', { ascending: false }),
+        'relationships',
+      ),
     );
 
     const relationshipIds = relationships.map((relationship) => relationship.id as string);
@@ -537,25 +550,28 @@ Deno.serve((request) =>
             openDebts: [],
             history: [],
           })
-        : Promise.all([
-            expectRows<Record<string, unknown>>(
-              client
-                .from('v_open_debts')
-                .select(OPEN_DEBT_SELECT)
-                .in('relationship_id', relationshipIds)
-                .order('relationship_id', { ascending: true }),
-              'open_debts',
-            ),
-            expectRows<Record<string, unknown>>(
-              client
-                .from('v_relationship_history')
-                .select(RELATIONSHIP_HISTORY_SELECT)
-                .in('relationship_id', relationshipIds)
-                .order('happened_at', { ascending: false })
-                .limit(LIMITS.relationshipHistory),
-              'relationship_history',
-            ),
-          ]).then(([openDebts, history]) => ({ openDebts, history }));
+        : timed(
+            'relationship_scoped_rows',
+            Promise.all([
+              expectRows<Record<string, unknown>>(
+                client
+                  .from('v_open_debts')
+                  .select(OPEN_DEBT_SELECT)
+                  .in('relationship_id', relationshipIds)
+                  .order('relationship_id', { ascending: true }),
+                'open_debts',
+              ),
+              expectRows<Record<string, unknown>>(
+                client
+                  .from('v_relationship_history')
+                  .select(RELATIONSHIP_HISTORY_SELECT)
+                  .in('relationship_id', relationshipIds)
+                  .order('happened_at', { ascending: false })
+                  .limit(LIMITS.relationshipHistory),
+                'relationship_history',
+              ),
+            ]).then(([openDebts, history]) => ({ openDebts, history })),
+          );
 
     const [
       { openDebts, history },
@@ -571,7 +587,7 @@ Deno.serve((request) =>
       happyCircleScoreEvents,
       notificationViews,
       auditEvents,
-    ] = await Promise.all([
+    ] = await timed('initial_parallel_queries', Promise.all([
       relationshipScopedRows,
       expectRows<Record<string, unknown>>(
         client
@@ -683,7 +699,7 @@ Deno.serve((request) =>
           .limit(LIMITS.auditEvents),
         'audit_events',
       ),
-    ]);
+    ]));
 
     const financialRequests = mergeRowsById(
       pendingFinancialRequests as { readonly id: string }[],
@@ -701,28 +717,31 @@ Deno.serve((request) =>
     const friendshipInviteIds = friendshipInvites.map((invite) => invite.id);
     const accountInviteIds = accountInvites.map((invite) => invite.id);
 
-    const [friendshipInviteDeliveries, accountInviteDeliveries] = await Promise.all([
-      friendshipInviteIds.length === 0
-        ? Promise.resolve([])
-        : expectRows<Record<string, unknown>>(
-            client
-              .from('v_friendship_invite_deliveries_live')
-              .select(FRIENDSHIP_INVITE_DELIVERY_SELECT)
-              .in('invite_id', friendshipInviteIds)
-              .order('created_at', { ascending: false }),
-            'friendship_invite_deliveries',
-          ),
-      accountInviteIds.length === 0
-        ? Promise.resolve([])
-        : expectRows<Record<string, unknown>>(
-            client
-              .from('v_account_invite_deliveries_live')
-              .select(ACCOUNT_INVITE_DELIVERY_SELECT)
-              .in('invite_id', accountInviteIds)
-              .order('created_at', { ascending: false }),
-            'account_invite_deliveries',
-          ),
-    ]);
+    const [friendshipInviteDeliveries, accountInviteDeliveries] = await timed(
+      'invite_deliveries',
+      Promise.all([
+        friendshipInviteIds.length === 0
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('v_friendship_invite_deliveries_live')
+                .select(FRIENDSHIP_INVITE_DELIVERY_SELECT)
+                .in('invite_id', friendshipInviteIds)
+                .order('created_at', { ascending: false }),
+              'friendship_invite_deliveries',
+            ),
+        accountInviteIds.length === 0
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('v_account_invite_deliveries_live')
+                .select(ACCOUNT_INVITE_DELIVERY_SELECT)
+                .in('invite_id', accountInviteIds)
+                .order('created_at', { ascending: false }),
+              'account_invite_deliveries',
+            ),
+      ]),
+    );
 
     let settlementProposals = mergeRowsById(
       activeSettlementProposals as (Record<string, unknown> & { readonly id: string })[],
@@ -738,14 +757,17 @@ Deno.serve((request) =>
     const caseSettlementProposals =
       settlementCaseIds.length === 0
         ? []
-        : await expectRows<Record<string, unknown>>(
-            client
-              .from('settlement_proposals')
-              .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
-              .eq('settlement_proposal_participants.participant_user_id', actorUserId)
-              .in('happy_circle_case_id', settlementCaseIds)
-              .order('version_number', { ascending: true }),
+        : await timed(
             'settlement_proposal_versions',
+            expectRows<Record<string, unknown>>(
+              client
+                .from('settlement_proposals')
+                .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
+                .eq('settlement_proposal_participants.participant_user_id', actorUserId)
+                .in('happy_circle_case_id', settlementCaseIds)
+                .order('version_number', { ascending: true }),
+              'settlement_proposal_versions',
+            ),
           );
     settlementProposals = mergeRowsById(
       settlementProposals,
@@ -755,13 +777,16 @@ Deno.serve((request) =>
     let settlementParticipants =
       settlementProposalIds.length === 0
         ? []
-        : await expectRows<Record<string, unknown>>(
-            client
-              .from('settlement_proposal_participants')
-              .select(SETTLEMENT_PARTICIPANT_SELECT)
-              .in('settlement_proposal_id', settlementProposalIds)
-              .order('created_at', { ascending: true }),
+        : await timed(
             'settlement_participants',
+            expectRows<Record<string, unknown>>(
+              client
+                .from('settlement_proposal_participants')
+                .select(SETTLEMENT_PARTICIPANT_SELECT)
+                .in('settlement_proposal_id', settlementProposalIds)
+                .order('created_at', { ascending: true }),
+              'settlement_participants',
+            ),
           );
     const actorScopedSettlements = sanitizeSettlementRowsForActor({
       actorUserId,
@@ -829,15 +854,22 @@ Deno.serve((request) =>
       addIds(visibleUserIds, participant.participant_user_id);
     }
 
-    const profiles = await expectRows<Record<string, unknown>>(
-      client
-        .from('user_profiles')
-        .select(PROFILE_SELECT)
-        .in('id', Array.from(visibleUserIds))
-        .order('display_name', { ascending: true }),
+    const profiles = await timed(
       'profiles',
+      expectRows<Record<string, unknown>>(
+        client
+          .from('user_profiles')
+          .select(PROFILE_SELECT)
+          .in('id', Array.from(visibleUserIds))
+          .order('display_name', { ascending: true }),
+        'profiles',
+      ),
     );
-    const avatarSignedUrlsByPath = await createSignedAvatarUrlsByPath(client, profiles);
+    const avatarSignedUrlsByPath = await timed(
+      'avatar_signed_urls',
+      createSignedAvatarUrlsByPath(client, profiles),
+    );
+    serverTimings.total = Math.max(0, Math.round(performance.now() - snapshotStartedAt));
 
     return {
       profiles,
@@ -857,6 +889,7 @@ Deno.serve((request) =>
       notificationViews,
       auditEvents,
       limits: LIMITS,
+      serverTimings,
       fetchedAt: new Date().toISOString(),
     };
   }),

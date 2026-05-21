@@ -13,6 +13,8 @@ const appLinkPathPrefixes = ['/invite/', '/join', '/reset-password', '/setup-acc
 const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.0';
 const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '1';
 const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '1', 10);
+const includeDevClient =
+  env.EXPO_PUBLIC_INCLUDE_DEV_CLIENT === '1' || env.EAS_BUILD_PROFILE === 'development';
 const splashBackgroundColor = '#fbfcff';
 const splashDarkBackgroundColor = '#09111f';
 const splashImageWidth = 208;
@@ -68,7 +70,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   plugins: [
     'expo-router',
-    'expo-dev-client',
+    ...(includeDevClient ? ['expo-dev-client'] : []),
     [
       'expo-splash-screen',
       {

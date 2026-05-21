@@ -18,6 +18,29 @@ export const dashboardStyles = StyleSheet.create({
   homeSectionHeader: {
     paddingHorizontal: theme.spacing.lg,
   },
+  homeLoadingState: {
+    alignItems: 'center',
+    flex: 1,
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    minHeight: 320,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.xxl,
+  },
+  homeLoadingTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title3,
+    fontWeight: '800',
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  homeLoadingText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.callout,
+    fontWeight: '600',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
   supportText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.callout,

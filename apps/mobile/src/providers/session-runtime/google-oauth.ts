@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 
-import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
+import { buildSocialOAuthRedirect } from '@/lib/auth-redirects';
 import type { supabase } from '@/lib/supabase';
 import {
   formatSupabaseAuthErrorMessage,
@@ -51,7 +51,7 @@ async function dismissStaleAuthBrowser(): Promise<void> {
 
 function buildGoogleOAuthRedirect(mode: GoogleOAuthMode): string {
   const callbackMode = mode === 'link' ? 'google-link' : 'google';
-  return buildEmailAuthRedirect(`/setup-account?auth_callback=${callbackMode}`);
+  return buildSocialOAuthRedirect(`/setup-account?auth_callback=${callbackMode}`);
 }
 
 function hasGoogleIdentity(currentSession: Session | null): boolean {

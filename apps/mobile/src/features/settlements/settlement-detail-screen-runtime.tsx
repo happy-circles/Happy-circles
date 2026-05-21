@@ -216,7 +216,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     }
   }
 
-  if (snapshotQuery.isLoading) {
+  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
@@ -234,7 +234,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     );
   }
 
-  if (snapshotQuery.error) {
+  if (snapshotQuery.error && !snapshotQuery.data) {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}

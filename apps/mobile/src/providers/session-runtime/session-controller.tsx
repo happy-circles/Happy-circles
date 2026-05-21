@@ -58,6 +58,11 @@ import { performNativeAppleAuth } from './apple-native-auth';
 import { performNativeGoogleAuth } from './google-native-auth';
 import { performSupabaseGoogleOAuth } from './google-oauth';
 import {
+  reportNativeAuthEvent,
+  reportNativeAuthFailure,
+  shouldFallbackToSupabaseGoogleOAuth,
+} from './native-auth-reporting';
+import {
   deriveAccountAccessState,
   deriveDeviceTrustState,
   deriveProfileCompletionState,
@@ -180,68 +185,6 @@ async function resolveUserIdentities(currentSession: Session): Promise<readonly 
 
   const user = currentSession.user as { readonly identities?: readonly AuthIdentity[] | null };
   return user.identities ?? [];
-}
-
-type NativeAuthProvider = 'apple' | 'google';
-type NativeAuthMode = 'link' | 'sign-in';
-type NativeAuthStage =
-  | 'browser_open'
-  | 'link_identity'
-  | 'native_credential'
-  | 'oauth_callback'
-  | 'oauth_start'
-  | 'profile_metadata'
-  | 'sign_in_with_id_token'
-  | 'unexpected';
-type NativeAuthEventResult = 'cancelled' | 'started' | 'succeeded';
-
-function reportNativeAuthFailure(input: {
-  readonly provider: NativeAuthProvider;
-  readonly mode: NativeAuthMode;
-  readonly stage: NativeAuthStage;
-  readonly error?: unknown;
-  readonly message?: string;
-  readonly reason?: string;
-}): void {
-  const operation = `${input.provider}_${input.mode.replace('-', '_')}_${input.stage}`;
-  reportClientErrorSafe({
-    error: input.error,
-    errorCode: operation,
-    errorMessage: input.message ?? readErrorMessage(input.error),
-    fatal: false,
-    kind: 'client_action',
-    metadata: {
-      action: input.provider,
-      operation,
-      reason: input.reason ?? null,
-      result: 'failed',
-      source: 'native_auth',
-    },
-  });
-}
-
-function reportNativeAuthEvent(input: {
-  readonly provider: NativeAuthProvider;
-  readonly mode: NativeAuthMode;
-  readonly stage: NativeAuthStage;
-  readonly result: NativeAuthEventResult;
-  readonly message?: string;
-  readonly reason?: string;
-}): void {
-  const operation = `${input.provider}_${input.mode.replace('-', '_')}_${input.stage}`;
-  reportClientErrorSafe({
-    errorCode: operation,
-    errorMessage: input.message ?? operation,
-    fatal: false,
-    kind: 'client_action',
-    metadata: {
-      action: input.provider,
-      operation,
-      reason: input.reason ?? null,
-      result: input.result,
-      source: 'native_auth',
-    },
-  });
 }
 
 export function useSessionController(): SessionContextValue {
@@ -874,10 +817,11 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      if (Platform.OS === 'ios') {
-        return performSupabaseGoogleOAuth({
+      const client = supabase;
+      const runSupabaseGoogleOAuth = () =>
+        performSupabaseGoogleOAuth({
           applySessionFromUrl,
-          client: supabase,
+          client,
           mode,
           reportEvent: (event) =>
             reportNativeAuthEvent({
@@ -890,10 +834,13 @@ export function useSessionController(): SessionContextValue {
               mode,
             }),
         });
+
+      if (Platform.OS === 'web') {
+        return runSupabaseGoogleOAuth();
       }
 
-      return performNativeGoogleAuth({
-        client: supabase,
+      const nativeResult = await performNativeGoogleAuth({
+        client,
         mode,
         reportFailure: (failure) =>
           reportNativeAuthFailure({
@@ -901,6 +848,21 @@ export function useSessionController(): SessionContextValue {
             mode,
           }),
       });
+
+      if (nativeResult.userId || !shouldFallbackToSupabaseGoogleOAuth(nativeResult.message)) {
+        return nativeResult;
+      }
+
+      reportNativeAuthEvent({
+        message: 'Falling back to Supabase Google OAuth.',
+        mode,
+        provider: 'google',
+        reason: 'native_google_unavailable',
+        result: 'started',
+        stage: 'oauth_start',
+      });
+
+      return runSupabaseGoogleOAuth();
     },
     [applySessionFromUrl],
   );

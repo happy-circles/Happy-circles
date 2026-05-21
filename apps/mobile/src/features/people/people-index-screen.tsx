@@ -1161,7 +1161,7 @@ export function PeopleIndexScreen() {
     openInviteRequests(parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab);
   }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab]);
 
-  if (snapshotQuery.isLoading) {
+  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} title="Personas">
         <View style={styles.loadingMotion}>
@@ -1172,7 +1172,7 @@ export function PeopleIndexScreen() {
     );
   }
 
-  if (snapshotQuery.error) {
+  if (snapshotQuery.error && !snapshotQuery.data) {
     return (
       <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Personas">
         <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>

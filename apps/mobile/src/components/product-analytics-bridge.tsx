@@ -13,6 +13,11 @@ import {
   startProductAnalyticsSession,
 } from '@/lib/analytics-client';
 import { getCurrentAppVersion } from '@/lib/device-trust';
+import {
+  recordPerformanceAppStart,
+  recordPerformanceScreenReady,
+  setCurrentPerformanceRoute,
+} from '@/lib/performance-metrics';
 import { setSupportErrorContext } from '@/lib/support-errors';
 import { useSession } from '@/providers/session-provider';
 
@@ -85,6 +90,7 @@ export function ProductAnalyticsBridge() {
   const route = useMemo(() => routeFromSegments(segments), [segments]);
 
   useEffect(() => {
+    setCurrentPerformanceRoute(route);
     setSupportErrorContext({ route, screenName });
   }, [route, screenName]);
 
@@ -138,6 +144,10 @@ export function ProductAnalyticsBridge() {
   }, [session.currentDeviceId, session.isSignedIn, session.userId]);
 
   useEffect(() => {
+    recordPerformanceAppStart();
+  }, []);
+
+  useEffect(() => {
     if (!analyticsSessionId || lastScreenRouteRef.current === route) {
       return;
     }
@@ -149,6 +159,14 @@ export function ProductAnalyticsBridge() {
       metadata: { route },
     });
   }, [analyticsSessionId, route, screenName]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      recordPerformanceScreenReady({ route, screenName });
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [route, screenName]);
 
   useEffect(() => {
     if (!analyticsSessionId) {

@@ -59,6 +59,7 @@ import {
   subscribeHomeEntryReady,
 } from '@/lib/home-entry-handoff';
 import { requestLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
+import { markSplashHidden, subscribeFirstScreenReady } from '@/lib/performance-metrics';
 import { subscribeSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { PrimaryAction } from '@/components/primary-action';
 import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
@@ -102,7 +103,7 @@ const LAUNCH_LAND_MS = 700;
 const LAUNCH_ROUTE_SETTLE_MS = 120;
 const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
 const LAUNCH_TARGET_WAIT_MS = 300;
-const LAUNCH_HOME_TARGET_WAIT_MS = 2600;
+const LAUNCH_HOME_TARGET_WAIT_MS = 1400;
 const LAUNCH_SESSION_MAX_WAIT_MS = 3200;
 const LAUNCH_TARGET_STABLE_SAMPLES = 4;
 const LAUNCH_TARGET_STABLE_THRESHOLD = 1.25;
@@ -117,7 +118,7 @@ const HOME_ENTRY_ROUTE_SETTLE_MS = 120;
 const HOME_ENTRY_LAND_MS = 720;
 const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
 const HOME_ENTRY_FADE_MS = 120;
-const HOME_ENTRY_READY_WAIT_MS = 8000;
+const HOME_ENTRY_READY_WAIT_MS = 2400;
 const SETUP_ENTRY_SPIN_MS = 420;
 const SETUP_ENTRY_SUCCESS_MS = 220;
 const SETUP_ENTRY_ROUTE_SETTLE_MS = 120;
@@ -2129,14 +2130,21 @@ function RootNavigator() {
   const [launchIntroVisible, setLaunchIntroVisible] = useState(true);
   const [homeEntryHandoffVisible, setHomeEntryHandoffVisible] = useState(false);
   const [setupEntryHandoffVisible, setSetupEntryHandoffVisible] = useState(false);
+  const [deferredStartupWorkReady, setDeferredStartupWorkReady] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void SplashScreen.hideAsync().catch(() => undefined);
+      void SplashScreen.hideAsync()
+        .then(() => {
+          markSplashHidden();
+        })
+        .catch(() => undefined);
     });
 
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => subscribeFirstScreenReady(() => setDeferredStartupWorkReady(true)), []);
 
   return (
     <LaunchIntroVisibilityProvider
@@ -2208,9 +2216,11 @@ function RootNavigator() {
         <Stack.Screen name="settlements/[id]" dangerouslySingular />
         <Stack.Screen name="transactions" dangerouslySingular />
       </Stack>
-      <HappyCircleDiscoveryBridge
-        disabled={launchIntroVisible || homeEntryHandoffVisible || setupEntryHandoffVisible}
-      />
+      {deferredStartupWorkReady ? (
+        <HappyCircleDiscoveryBridge
+          disabled={launchIntroVisible || homeEntryHandoffVisible || setupEntryHandoffVisible}
+        />
+      ) : null}
       <MandatoryUpdateGate />
       <ProductAnalyticsBridge />
       <LaunchIntroOverlay onVisibleChange={setLaunchIntroVisible} />
@@ -2222,7 +2232,7 @@ function RootNavigator() {
         disabled={launchIntroVisible || setupEntryHandoffVisible}
         onVisibleChange={setHomeEntryHandoffVisible}
       />
-      <GlobalFeedbackOverlay />
+      {deferredStartupWorkReady ? <GlobalFeedbackOverlay /> : null}
     </LaunchIntroVisibilityProvider>
   );
 }

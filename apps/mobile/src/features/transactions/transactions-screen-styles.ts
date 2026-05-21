@@ -80,4 +80,23 @@ export const transactionsScreenStyles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
+  historyListFooter: {
+    height: theme.spacing.md,
+  },
+  historyListSeparator: {
+    height: theme.spacing.sm,
+  },
+  virtualHistoryContent: {
+    flex: 1,
+  },
+  virtualHistorySection: {
+    flex: 1,
+    minHeight: 260,
+  },
+  virtualList: {
+    flex: 1,
+  },
+  virtualListContent: {
+    paddingBottom: theme.spacing.md,
+  },
 });

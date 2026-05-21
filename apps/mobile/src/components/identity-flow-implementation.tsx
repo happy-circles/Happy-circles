@@ -166,6 +166,7 @@ export function IdentityFlowScreen({
   const resolvedFooter = footer;
   const [actionDockHeight, setActionDockHeight] = useState(0);
   const lockedBodyHeightRef = useRef(0);
+  const usedFallbackBodyHeightRef = useRef(false);
   const [bodyHeight, setBodyHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [hasMeasuredBody, setHasMeasuredBody] = useState(false);
@@ -192,6 +193,7 @@ export function IdentityFlowScreen({
   const shouldReserveMessageSlot = layoutMetrics.shouldReserveMessageSlot;
   const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
   const contentMotion = useRef(new Animated.Value(contentVisible ? 1 : 0)).current;
+  const previousContentTransitionKeyRef = useRef(contentTransitionKey);
   const topIdentityY = layoutMetrics.topIdentityY;
   const centerIdentityY = layoutMetrics.centerIdentityY;
   const topContentY = layoutMetrics.topContentY;
@@ -347,10 +349,34 @@ export function IdentityFlowScreen({
 
   useEffect(() => {
     lockedBodyHeightRef.current = 0;
+    usedFallbackBodyHeightRef.current = false;
     setBodyHeight(0);
     setContentHeight(0);
     setHasMeasuredBody(false);
   }, [windowHeight, windowWidth]);
+
+  useEffect(() => {
+    if (hasMeasuredBody || windowHeight <= 0) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      if (lockedBodyHeightRef.current > 0) {
+        return;
+      }
+
+      const fallbackBodyHeight = Math.max(
+        1,
+        windowHeight - Math.max(0, insets.top) - Math.max(0, insets.bottom),
+      );
+      usedFallbackBodyHeightRef.current = true;
+      lockedBodyHeightRef.current = fallbackBodyHeight;
+      setHasMeasuredBody(true);
+      setBodyHeight(fallbackBodyHeight);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [hasMeasuredBody, insets.bottom, insets.top, windowHeight]);
 
   useEffect(() => {
     updateIdentityFlowScrollMetrics({ viewportHeight: windowHeight });
@@ -476,7 +502,15 @@ export function IdentityFlowScreen({
   }, [identityMotion, isCenterIdentity]);
 
   useEffect(() => {
+    const contentKeyChanged = previousContentTransitionKeyRef.current !== contentTransitionKey;
+    previousContentTransitionKeyRef.current = contentTransitionKey;
+
     contentMotion.stopAnimation();
+    if (!contentVisible && contentKeyChanged) {
+      contentMotion.setValue(0);
+      return;
+    }
+
     Animated.timing(contentMotion, {
       duration: contentVisible ? 360 : 220,
       easing: contentVisible ? BRAND_VERIFICATION_EASING : Easing.in(Easing.quad),
@@ -541,10 +575,11 @@ export function IdentityFlowScreen({
                   return;
                 }
 
-                if (lockedBodyHeightRef.current > 0) {
+                if (lockedBodyHeightRef.current > 0 && !usedFallbackBodyHeightRef.current) {
                   return;
                 }
 
+                usedFallbackBodyHeightRef.current = false;
                 lockedBodyHeightRef.current = nextHeight;
                 setHasMeasuredBody(true);
                 setBodyHeight(nextHeight);

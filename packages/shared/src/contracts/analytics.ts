@@ -5,11 +5,19 @@ export const ANALYTICS_METADATA_KEYS = [
   'decision',
   'flow',
   'itemKind',
+  'cacheState',
+  'cacheHit',
+  'cachedAgeMs',
+  'durationMs',
+  'phase',
   'reason',
   'result',
   'route',
   'source',
+  'startKind',
   'status',
+  'networkStatus',
+  'snapshotVersion',
 ] as const;
 
 export type AnalyticsMetadataKey = (typeof ANALYTICS_METADATA_KEYS)[number];
@@ -21,6 +29,7 @@ export const ANALYTICS_EVENT_FAMILIES = [
   'financial_request',
   'invite',
   'settlement',
+  'performance',
 ] as const;
 
 export type AnalyticsEventFamily = (typeof ANALYTICS_EVENT_FAMILIES)[number];
@@ -36,6 +45,7 @@ export const ANALYTICS_FEATURE_KEYS = [
   'financial_requests',
   'invites',
   'settlements',
+  'performance',
 ] as const;
 
 export type AnalyticsFeatureKey = (typeof ANALYTICS_FEATURE_KEYS)[number];
@@ -73,6 +83,53 @@ export const ANALYTICS_EVENT_CATALOG = [
     kind: 'navigation',
     featureKey: 'navigation',
     allowedMetadataKeys: ['route'],
+  },
+  {
+    eventName: 'performance_app_start',
+    description: 'La app registro el inicio de carga del runtime mobile.',
+    family: 'performance',
+    kind: 'lifecycle',
+    featureKey: 'performance',
+    allowedMetadataKeys: ['durationMs', 'phase', 'startKind'],
+  },
+  {
+    eventName: 'performance_snapshot_cache_restored',
+    description: 'La app completo la restauracion local del snapshot cacheado.',
+    family: 'performance',
+    kind: 'outcome',
+    featureKey: 'performance',
+    allowedMetadataKeys: [
+      'cacheHit',
+      'cacheState',
+      'cachedAgeMs',
+      'durationMs',
+      'networkStatus',
+      'snapshotVersion',
+    ],
+  },
+  {
+    eventName: 'performance_snapshot_network_resolved',
+    description: 'La app resolvio el snapshot vivo desde red.',
+    family: 'performance',
+    kind: 'outcome',
+    featureKey: 'performance',
+    allowedMetadataKeys: ['durationMs', 'networkStatus', 'snapshotVersion'],
+  },
+  {
+    eventName: 'performance_screen_ready',
+    description: 'Una pantalla quedo lista para interaccion visual.',
+    family: 'performance',
+    kind: 'outcome',
+    featureKey: 'performance',
+    allowedMetadataKeys: ['cacheState', 'durationMs', 'route', 'startKind'],
+  },
+  {
+    eventName: 'performance_background_refetch_failed',
+    description: 'Un refetch en segundo plano fallo mientras habia datos disponibles.',
+    family: 'performance',
+    kind: 'outcome',
+    featureKey: 'performance',
+    allowedMetadataKeys: ['cacheState', 'networkStatus', 'reason', 'route', 'snapshotVersion'],
   },
   {
     eventName: 'registration_started',
@@ -162,6 +219,11 @@ export const ANALYTICS_EVENT_NAMES = [
   'app_opened',
   'app_backgrounded',
   'screen_viewed',
+  'performance_app_start',
+  'performance_snapshot_cache_restored',
+  'performance_snapshot_network_resolved',
+  'performance_screen_ready',
+  'performance_background_refetch_failed',
   'registration_started',
   'registration_completed',
   'financial_request_started',

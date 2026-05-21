@@ -11,7 +11,7 @@ const functionSource = readFileSync(
 );
 const configSource = readFileSync(resolve(repoRoot, 'supabase/config.toml'), 'utf8');
 const mobileFetcherSource = readFileSync(
-  resolve(repoRoot, 'apps/mobile/src/lib/live-data/fetch-snapshot.ts'),
+  resolve(repoRoot, 'apps/mobile/src/lib/live-data/app-snapshot-fetcher.ts'),
   'utf8',
 );
 

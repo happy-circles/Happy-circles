@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       account_deletion_requests: {
@@ -854,6 +879,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      edge_rate_limits: {
+        Row: {
+          request_count: number
+          scope: string
+          subject_key: string
+          updated_at: string
+          window_seconds: number
+          window_started_at: string
+        }
+        Insert: {
+          request_count?: number
+          scope: string
+          subject_key: string
+          updated_at?: string
+          window_seconds: number
+          window_started_at: string
+        }
+        Update: {
+          request_count?: number
+          scope?: string
+          subject_key?: string
+          updated_at?: string
+          window_seconds?: number
+          window_started_at?: string
+        }
+        Relationships: []
       }
       financial_requests: {
         Row: {
@@ -4016,6 +4068,16 @@ export type Database = {
         }
         Returns: Json
       }
+      check_edge_rate_limit: {
+        Args: {
+          p_actor_user_id?: string
+          p_client_fingerprint_hash?: string
+          p_limit?: number
+          p_scope: string
+          p_window_seconds?: number
+        }
+        Returns: Json
+      }
       claim_account_invite_for_registration_hash: {
         Args: {
           p_delivery_token_hash: string
@@ -4416,6 +4478,10 @@ export type Database = {
       sanitize_support_error_metadata: {
         Args: { p_metadata_json: Json }
         Returns: Json
+      }
+      sanitize_support_error_text: {
+        Args: { p_max_length?: number; p_text: string }
+        Returns: string
       }
       start_app_session: {
         Args: {
@@ -5093,6 +5159,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       account_access_state: ["needs_invite", "needs_activation", "active"],

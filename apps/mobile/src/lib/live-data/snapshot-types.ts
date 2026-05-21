@@ -101,5 +101,6 @@ export interface LiveSnapshotRows {
   readonly notificationViews: readonly NotificationViewRow[];
   readonly auditEvents: readonly AuditEventRow[];
   readonly limits: LiveSnapshotLimits;
+  readonly serverTimings?: Readonly<Record<string, number>>;
   readonly fetchedAt: string;
 }

@@ -26,3 +26,11 @@ export function buildEmailAuthRedirect(path: string): string {
 
   return buildNativeRedirect(path);
 }
+
+export function buildSocialOAuthRedirect(path: string): string {
+  if (Platform.OS === 'web') {
+    return buildWebRedirect(path);
+  }
+
+  return buildNativeRedirect(path);
+}

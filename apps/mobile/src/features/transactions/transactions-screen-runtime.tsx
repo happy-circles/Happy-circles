@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -118,6 +118,10 @@ function FilterPill({
   );
 }
 
+function HistoryListSeparator() {
+  return <View style={styles.historyListSeparator} />;
+}
+
 export function TransactionsScreen() {
   const activeTheme = useAppTheme();
   const { top: topInset } = useSafeAreaInsets();
@@ -140,7 +144,10 @@ export function TransactionsScreen() {
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
   const activePrimaryFilter = primaryTransactionFilter(activeFilter);
-  const pendingTransactionItems = (pendingSection?.items ?? []).filter(isPendingTransactionItem);
+  const pendingTransactionItems = useMemo(
+    () => (pendingSection?.items ?? []).filter(isPendingTransactionItem),
+    [pendingSection?.items],
+  );
   const notificationViewedKeys = useMemo(
     () =>
       notificationViewedKeysWithLocalCache(
@@ -213,7 +220,60 @@ export function TransactionsScreen() {
     router.setParams({ category: 'cycle', filter: undefined });
   }
 
-  if (snapshotQuery.isLoading) {
+  function renderHistoryCase({ item }: { readonly item: (typeof historyCases)[number] }) {
+    const latest = item.latest;
+    const caseAmountLabel = historyCaseAmountLabel(latest);
+    const caseTone = (item.isCycleSnippet ? 'cycle' : historyImpactTone(latest)) as HistoryCaseTone;
+    const caseTitle = friendlyHistoryStepLabel(latest);
+    const caseDescription = historyCardTitle(item);
+    const caseEyebrow = historyCaseEyebrow(item);
+    const historyPerson = transactionPersonForHistoryCase(people, item);
+    const fallbackPerson = {
+      displayName: caseEyebrow ?? latest.counterpartyLabel ?? 'Persona',
+      userId: historyPerson?.userId ?? item.id,
+    };
+
+    return (
+      <HistoryCaseCard
+        actorAvatarUrl={item.isCycleSnippet ? null : (historyPerson?.avatarUrl ?? null)}
+        actorFallbackColor={
+          item.isCycleSnippet ? undefined : initialsBackgroundColor(fallbackPerson, activeTheme)
+        }
+        amountLabel={caseAmountLabel}
+        amountStruckThrough={historyAmountIsVoided(latest)}
+        category={historyCaseVisualCategory(item)}
+        description={null}
+        eyebrow={caseEyebrow}
+        expandable={false}
+        isCycleSnippet={item.isCycleSnippet}
+        isExpanded={false}
+        meta={historyCaseMeta(item)}
+        onPress={() => pushRoute(router, transactionHistoryCaseHref(people, item))}
+        statusLabel={historyCaseStatusLabel(item)}
+        statusTone={historyCaseStatusTone(item)}
+        steps={item.steps.map((step, index) => {
+          const amountLabel = historyTimelineStepAmountLabel(item, step, index);
+          const impact = historyImpactLabel(step);
+
+          return {
+            amountLabel,
+            category: historyTimelineStepCategory(item, step, index),
+            detail: historyTimelineStepDetailLabel(step),
+            id: step.id,
+            impact:
+              !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel) ? null : impact,
+            meta: historyTimelineStepMetaLabel(item, step),
+            title: friendlyHistoryStepLabel(step),
+            tone: historyImpactTone(step) as HistoryCaseTone,
+          };
+        })}
+        title={caseDescription || caseTitle}
+        tone={caseTone}
+      />
+    );
+  }
+
+  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
@@ -231,7 +291,7 @@ export function TransactionsScreen() {
     );
   }
 
-  if (snapshotQuery.error) {
+  if (snapshotQuery.error && !snapshotQuery.data) {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
@@ -264,6 +324,7 @@ export function TransactionsScreen() {
       largeTitle={false}
       refresh={refresh}
       safeAreaEdges={['left', 'right']}
+      scrollEnabled={false}
       title="Movimientos"
       titleAlign="center"
     >
@@ -337,70 +398,22 @@ export function TransactionsScreen() {
       ) : null}
 
       {historyCases.length > 0 ? (
-        <SectionBlock title="Historial">
-          <View style={styles.list}>
-            {historyCases.map((itemCase) => {
-              const latest = itemCase.latest;
-              const caseAmountLabel = historyCaseAmountLabel(latest);
-              const caseTone = (
-                itemCase.isCycleSnippet ? 'cycle' : historyImpactTone(latest)
-              ) as HistoryCaseTone;
-              const caseTitle = friendlyHistoryStepLabel(latest);
-              const caseDescription = historyCardTitle(itemCase);
-              const caseEyebrow = historyCaseEyebrow(itemCase);
-              const historyPerson = transactionPersonForHistoryCase(people, itemCase);
-              const fallbackPerson = {
-                displayName: caseEyebrow ?? latest.counterpartyLabel ?? 'Persona',
-                userId: historyPerson?.userId ?? itemCase.id,
-              };
-
-              return (
-                <HistoryCaseCard
-                  actorAvatarUrl={
-                    itemCase.isCycleSnippet ? null : (historyPerson?.avatarUrl ?? null)
-                  }
-                  actorFallbackColor={
-                    itemCase.isCycleSnippet
-                      ? undefined
-                      : initialsBackgroundColor(fallbackPerson, activeTheme)
-                  }
-                  amountLabel={caseAmountLabel}
-                  amountStruckThrough={historyAmountIsVoided(latest)}
-                  category={historyCaseVisualCategory(itemCase)}
-                  description={null}
-                  eyebrow={caseEyebrow}
-                  expandable={false}
-                  isCycleSnippet={itemCase.isCycleSnippet}
-                  isExpanded={false}
-                  key={itemCase.id}
-                  meta={historyCaseMeta(itemCase)}
-                  onPress={() => pushRoute(router, transactionHistoryCaseHref(people, itemCase))}
-                  statusLabel={historyCaseStatusLabel(itemCase)}
-                  statusTone={historyCaseStatusTone(itemCase)}
-                  steps={itemCase.steps.map((step, index) => {
-                    const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
-                    const impact = historyImpactLabel(step);
-
-                    return {
-                      amountLabel,
-                      category: historyTimelineStepCategory(itemCase, step, index),
-                      detail: historyTimelineStepDetailLabel(step),
-                      id: step.id,
-                      impact:
-                        !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
-                          ? null
-                          : impact,
-                      meta: historyTimelineStepMetaLabel(itemCase, step),
-                      title: friendlyHistoryStepLabel(step),
-                      tone: historyImpactTone(step) as HistoryCaseTone,
-                    };
-                  })}
-                  title={caseDescription || caseTitle}
-                  tone={caseTone}
-                />
-              );
-            })}
-          </View>
+        <SectionBlock
+          title="Historial"
+          contentStyle={styles.virtualHistoryContent}
+          style={styles.virtualHistorySection}
+        >
+          <FlatList
+            ItemSeparatorComponent={HistoryListSeparator}
+            ListFooterComponent={<View style={styles.historyListFooter} />}
+            contentContainerStyle={styles.virtualListContent}
+            data={historyCases}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            renderItem={renderHistoryCase}
+            showsVerticalScrollIndicator={false}
+            style={styles.virtualList}
+          />
         </SectionBlock>
       ) : null}
     </ScreenShell>

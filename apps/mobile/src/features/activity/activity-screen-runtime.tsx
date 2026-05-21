@@ -1102,7 +1102,7 @@ export function ActivityScreen() {
     );
   }
 
-  if (snapshotQuery.isLoading) {
+  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <SafeAreaView
         edges={['left', 'right']}
@@ -1118,7 +1118,7 @@ export function ActivityScreen() {
     );
   }
 
-  if (snapshotQuery.error) {
+  if (snapshotQuery.error && !snapshotQuery.data) {
     return (
       <SafeAreaView
         edges={['left', 'right']}

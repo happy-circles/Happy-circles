@@ -222,10 +222,15 @@ export function ProfileScreen() {
     !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
 
+  function showActionMessage(nextMessage: string) {
+    setMessage(nextMessage);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
   async function runAction(actionKey: string, action: () => Promise<string>) {
     if (busyActionRef.current) {
       const inProgressMessage = 'Ya hay una accion en curso.';
-      setMessage(inProgressMessage);
+      showActionMessage(inProgressMessage);
       return inProgressMessage;
     }
 
@@ -236,12 +241,12 @@ export function ProfileScreen() {
 
     try {
       const result = await action();
-      setMessage(result);
+      showActionMessage(result);
       return result;
     } catch (error) {
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo completar esta acción.';
-      setMessage(failureMessage);
+      showActionMessage(failureMessage);
       return failureMessage;
     } finally {
       busyActionRef.current = null;

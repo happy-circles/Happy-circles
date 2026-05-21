@@ -899,11 +899,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }
 
-  if (snapshotQuery.isLoading) {
+  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return <PersonDetailLoadingState />;
   }
 
-  if (snapshotQuery.error) {
+  if (snapshotQuery.error && !snapshotQuery.data) {
     return <PersonDetailErrorState message={snapshotQuery.error.message} refresh={refresh} />;
   }
 
