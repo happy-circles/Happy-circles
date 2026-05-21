@@ -842,6 +842,10 @@ export function useSessionController(): SessionContextValue {
         return nativeResult;
       }
 
+      if (Platform.OS === 'ios') {
+        return nativeResult;
+      }
+
       reportNativeAuthEvent({
         message: 'Falling back to Supabase Google OAuth.',
         mode,

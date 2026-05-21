@@ -41,6 +41,8 @@ export interface GoogleOAuthResult {
 
 void WebBrowser.maybeCompleteAuthSession();
 
+let googleOAuthSessionOpen = false;
+
 async function dismissStaleAuthBrowser(): Promise<void> {
   try {
     await WebBrowser.dismissBrowser();
@@ -92,6 +94,21 @@ export async function performSupabaseGoogleOAuth(input: {
   readonly reportFailure: (failure: GoogleOAuthFailureReport) => void;
 }): Promise<GoogleOAuthResult> {
   try {
+    if (googleOAuthSessionOpen) {
+      input.reportFailure({
+        message: 'Google ya tiene una validacion en curso.',
+        mode: input.mode,
+        provider: 'google',
+        reason: 'browser_session_in_progress',
+        stage: 'browser_open',
+      });
+
+      return {
+        message: 'Google ya tiene una validacion en curso.',
+        userId: null,
+      };
+    }
+
     const redirectTo = buildGoogleOAuthRedirect(input.mode);
     const { data, error } =
       input.mode === 'link'
@@ -148,6 +165,7 @@ export async function performSupabaseGoogleOAuth(input: {
 
     let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
     try {
+      googleOAuthSessionOpen = true;
       result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     } catch (error) {
       input.reportFailure({
@@ -163,6 +181,8 @@ export async function performSupabaseGoogleOAuth(input: {
         message: formatValidationMessage(error),
         userId: null,
       };
+    } finally {
+      googleOAuthSessionOpen = false;
     }
 
     if (result.type !== 'success') {
