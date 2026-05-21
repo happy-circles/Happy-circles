@@ -1,4 +1,4 @@
-import { buildNativeAppUrl, type AppLinkGatewayKind } from '@/lib/app-links';
+import type { AppLinkGatewayKind } from '@/lib/app-links';
 
 import { AppOpenButton } from './app-open-button';
 import { HappyCirclesMark, StoreButtonGrid } from './brand-assets';
@@ -10,6 +10,7 @@ const GATEWAY_COPY: Record<
     readonly subtitle: string;
     readonly fallbackPath: string;
     readonly nativePath?: string;
+    readonly preserveCurrentUrlParams?: boolean;
   }
 > = {
   'account-invite': {
@@ -32,11 +33,13 @@ const GATEWAY_COPY: Record<
     title: 'Restablecer contraseña',
     subtitle: 'Abre Happy Circles para terminar el cambio de contraseña.',
     fallbackPath: '/reset-password',
+    preserveCurrentUrlParams: true,
   },
   'setup-account': {
     title: 'Completar perfil',
     subtitle: 'Abre Happy Circles para terminar tu configuración.',
     fallbackPath: '/setup-account',
+    preserveCurrentUrlParams: true,
   },
 };
 
@@ -52,7 +55,6 @@ export function AppLinkGateway({
     ? `${copy.fallbackPath}/${encodeURIComponent(token)}`
     : copy.fallbackPath;
   const nativePath = token ? fallbackPath : (copy.nativePath ?? fallbackPath);
-  const nativeHref = buildNativeAppUrl(nativePath);
 
   return (
     <main className="landingShell gatewayShell">
@@ -66,11 +68,20 @@ export function AppLinkGateway({
         </div>
 
         <nav className="landingActions gatewayActions" aria-label="Abrir Happy Circles">
-          <AppOpenButton fallbackPath={fallbackPath} nativePath={nativePath} />
+          <AppOpenButton
+            fallbackPath={fallbackPath}
+            nativePath={nativePath}
+            preserveCurrentUrlParams={copy.preserveCurrentUrlParams === true}
+          />
           <StoreButtonGrid />
-          <a className="textLink" href={nativeHref}>
-            Reintentar abrir la app
-          </a>
+          <AppOpenButton
+            autoOpen={false}
+            className="textLink"
+            fallbackPath={fallbackPath}
+            label="Reintentar abrir la app"
+            nativePath={nativePath}
+            preserveCurrentUrlParams={copy.preserveCurrentUrlParams === true}
+          />
         </nav>
       </section>
     </main>

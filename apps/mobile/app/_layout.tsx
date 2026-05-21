@@ -50,7 +50,7 @@ import {
   type LaunchIntroTargetVisualKind,
   useLaunchIntroTargets,
 } from '@/components/launch-intro-presence';
-import { hrefForPendingInviteIntent, readPendingInviteIntent } from '@/lib/invite-intent';
+import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { isAuthRouteTransitionHoldActive } from '@/lib/auth-route-transition-hold';
 import {
   beginHomeEntryHandoffAfterScrollReset,
@@ -80,7 +80,7 @@ import {
 import { notificationViewedKeysWithLocalCache, useAppSnapshot } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
-import { buildSetupAccountHref } from '@/lib/setup-account';
+import { resolvePreHomeRouteDecision } from '@/lib/pre-home-routing';
 import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
@@ -2006,96 +2006,43 @@ function SessionRouteGuard() {
       const rawAuthCallback = Array.isArray(params.auth_callback)
         ? params.auth_callback[0]
         : params.auth_callback;
-      const isGoogleAuthCallback = rawAuthCallback === 'google' || rawAuthCallback === 'google-link';
+      const isGoogleAuthCallback =
+        rawAuthCallback === 'google' || rawAuthCallback === 'google-link';
       const isOAuthCallbackRoute = isSetupAccountRoute && isGoogleAuthCallback;
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
-      const isPublicSignedOutRoute =
-        isPublicInviteRoute || isResetPasswordRoute || isOAuthCallbackRoute;
       const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
       const isQaPreviewRoute = __DEV__ && rawPreview === 'true';
       const isAuthRouteTransitionHeld =
         isJoinRoute && !hasJoinToken && isAuthRouteTransitionHoldActive();
 
-      if (status === 'signed_out') {
-        if (isRootRoute && !cancelled) {
-          returnToRoute(router, '/join');
-          return;
+      const pendingInviteIntent = await readPendingInviteIntent();
+      const decision = resolvePreHomeRouteDecision({
+        accountAccessState,
+        hasJoinToken,
+        isAuthRouteTransitionHeld,
+        isInviteLinkRoute,
+        isJoinRoute,
+        isOAuthCallbackRoute,
+        isPublicInviteRoute,
+        isQaPreviewRoute,
+        isResetPasswordRoute,
+        isRootRoute,
+        isSetupAccountRoute,
+        pendingInviteIntent,
+        profileCompletionState,
+        rawAuthCallback,
+        setupState,
+        status,
+      });
+
+      if (decision.action === 'replace' && !cancelled) {
+        if (decision.handoff === 'home') {
+          await beginHomeEntryHandoffAfterScrollReset();
         }
-
-        if (!isPublicSignedOutRoute && !cancelled) {
-          returnToRoute(router, '/join?mode=sign-in');
-        }
-        return;
-      }
-
-      if (status === 'signed_in_locked') {
-        if (!isJoinRoute && !isInviteLinkRoute && !cancelled) {
-          returnToRoute(router, '/join');
-        }
-        return;
-      }
-
-      const pendingIntent = await readPendingInviteIntent();
-      const inviteAwareHref = pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : null;
-      const joinRootHref: Href = '/join';
-
-      if (accountAccessState === 'needs_invite') {
-        if (!isJoinRoute && !cancelled) {
-          returnToRoute(router, inviteAwareHref ?? joinRootHref);
-        }
-        return;
-      }
-
-      if (
-        !setupState.requiredComplete &&
-        !isSetupAccountRoute &&
-        !isResetPasswordRoute &&
-        !isPublicInviteRoute
-      ) {
-        if (!cancelled) {
-          returnToRoute(
-            router,
-            buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile'),
-          );
-        }
-        return;
-      }
-
-      if (
-        accountAccessState === 'needs_activation' &&
-        !isJoinRoute &&
-        !isSetupAccountRoute &&
-        !cancelled
-      ) {
-        returnToRoute(router, inviteAwareHref ?? joinRootHref);
-        return;
-      }
-
-      if (
-        accountAccessState === 'active' &&
-        profileCompletionState === 'complete' &&
-        isOAuthCallbackRoute &&
-        !cancelled
-      ) {
-        returnToRoute(router, rawAuthCallback === 'google-link' ? '/profile' : '/home');
-        return;
-      }
-
-      if (
-        accountAccessState === 'active' &&
-        profileCompletionState === 'complete' &&
-        isJoinRoute &&
-        !hasJoinToken &&
-        !inviteAwareHref &&
-        !isAuthRouteTransitionHeld &&
-        !isQaPreviewRoute &&
-        !cancelled
-      ) {
-        await beginHomeEntryHandoffAfterScrollReset();
         if (cancelled) {
           return;
         }
-        returnToRoute(router, '/home');
+        returnToRoute(router, decision.href);
         return;
       }
 

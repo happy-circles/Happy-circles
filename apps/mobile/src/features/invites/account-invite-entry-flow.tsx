@@ -432,14 +432,16 @@ export function AccountSignInEntry({
     let cancelled = false;
     const destination = !session.setupState.requiredComplete
       ? buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile')
-      : pendingToken
-        ? ({
-            pathname: '/join/[token]',
-            params: { token: pendingToken },
-          } as unknown as Href)
-        : session.accountAccessState === 'active'
-          ? ('/home' as Href)
-          : ('/join' as Href);
+      : session.setupState.securityPending
+        ? buildSetupAccountHref('security')
+        : pendingToken
+          ? ({
+              pathname: '/join/[token]',
+              params: { token: pendingToken },
+            } as unknown as Href)
+          : session.accountAccessState === 'active'
+            ? ('/home' as Href)
+            : ('/join' as Href);
 
     successNavigationTimerRef.current = setTimeout(() => {
       successNavigationTimerRef.current = null;
@@ -472,6 +474,7 @@ export function AccountSignInEntry({
     session.profileCompletionState,
     session.setupState.pendingRequiredSteps,
     session.setupState.requiredComplete,
+    session.setupState.securityPending,
     session.status,
   ]);
 

@@ -43,6 +43,7 @@ import {
   hrefForPendingInviteIntent,
   readPendingInviteIntent,
   shouldActivateAccountInviteAfterSetup,
+  type PendingInviteIntent,
 } from '@/lib/invite-intent';
 import {
   useActivateAccountFromInviteMutation,
@@ -52,6 +53,7 @@ import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff'
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
 import {
+  buildSetupAccountHref,
   hasProfilePhoto,
   isLowQualityDisplayName,
   resolveInitialSetupFullName,
@@ -211,6 +213,39 @@ export function SetupAccountScreen() {
     setMessage('Confirma tu correo para poder enviar solicitudes e invitaciones.');
   }, [requestedStep, session.isEmailConfirmed]);
 
+  async function activatePendingAccountInvite(
+    pendingIntent: Extract<PendingInviteIntent, { readonly type: 'account_invite' }>,
+  ) {
+    if (!session.currentDeviceId) {
+      setMessage('No pudimos identificar este telefono para activar la cuenta.');
+      return;
+    }
+
+    try {
+      const response = await activateInvite.mutateAsync({
+        deliveryToken: pendingIntent.token,
+        currentDeviceId: session.currentDeviceId,
+      });
+
+      await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+
+      if (response.status === 'accepted' || response.status === 'pending_inviter_review') {
+        await clearPendingInviteIntent();
+        await beginHomeEntryHandoffAfterScrollReset();
+        returnToRoute(router, '/home');
+        return;
+      }
+
+      setMessage('Todavia no pudimos cerrar la invitacion.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'No pudimos activar la cuenta con esta invitacion.',
+      );
+    }
+  }
+
   async function finishSetup() {
     if (returnTo === 'profile') {
       returnToRoute(router, '/profile');
@@ -219,35 +254,20 @@ export function SetupAccountScreen() {
 
     const pendingIntent = await readPendingInviteIntent();
 
+    if (!session.isTrustedDevice) {
+      setMessage('Perfil guardado. Valida este telefono para entrar.');
+      returnToRoute(router, buildSetupAccountHref('security'));
+      return;
+    }
+
     if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
-      if (!session.currentDeviceId) {
-        setMessage('Perfil guardado. No pudimos identificar este teléfono para activar la cuenta.');
-        return;
-      }
+      await activatePendingAccountInvite(pendingIntent);
+      return;
+    }
 
-      try {
-        const response = await activateInvite.mutateAsync({
-          deliveryToken: pendingIntent.token,
-          currentDeviceId: session.currentDeviceId,
-        });
-
-        await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-
-        if (response.status === 'accepted' || response.status === 'pending_inviter_review') {
-          await clearPendingInviteIntent();
-          await beginHomeEntryHandoffAfterScrollReset();
-          returnToRoute(router, '/home');
-          return;
-        }
-
-        setMessage('Perfil guardado, pero todavía no pudimos cerrar la invitación.');
-      } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : 'Perfil guardado, pero no pudimos activar la cuenta.',
-        );
-      }
+    if (session.accountAccessState !== 'active') {
+      setMessage('Perfil guardado. Abre tu enlace de invitacion para activar la cuenta.');
+      returnToRoute(router, '/join?mode=token');
       return;
     }
 
@@ -260,7 +280,7 @@ export function SetupAccountScreen() {
   async function finishSecurityOnly() {
     if (!session.isTrustedDevice) {
       triggerWarningHaptic();
-      setMessage('Valida este teléfono para continuar.');
+      setMessage('Valida este telefono para continuar.');
       return;
     }
 
@@ -270,8 +290,19 @@ export function SetupAccountScreen() {
     }
 
     const pendingIntent = await readPendingInviteIntent();
+    if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
+      await activatePendingAccountInvite(pendingIntent);
+      return;
+    }
+
     if (pendingIntent) {
       returnToRoute(router, hrefForPendingInviteIntent(pendingIntent));
+      return;
+    }
+
+    if (session.accountAccessState !== 'active') {
+      setMessage('Abre tu enlace de invitacion para activar la cuenta.');
+      returnToRoute(router, '/join?mode=token');
       return;
     }
 

@@ -659,22 +659,6 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
-      if (!nextBiometricsEnabled) {
-        const { error } = await supabase.auth.signOut({ scope: 'local' });
-        if (error) {
-          console.warn(
-            'Failed to clear restored Supabase session without biometrics',
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-
-        clearSignedInState();
-        setRememberedAccount(rememberedSnapshot);
-        setSessionStatus('signed_out');
-        setHydrated(true);
-        return;
-      }
-
       try {
         await loadAccountState(nextSession, {
           initialLock: nextBiometricsEnabled,
