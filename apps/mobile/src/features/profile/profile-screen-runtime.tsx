@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,6 +18,7 @@ import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
 import { AppText } from '@/components/app-text';
+import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
 import { HappyFacesCounter } from '@/components/happy-faces-counter';
 import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
@@ -41,7 +42,7 @@ import {
 } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
-import { buildSetupAccountHref } from '@/lib/setup-account';
+import { buildSetupAccountHref, isLowQualityDisplayName } from '@/lib/setup-account';
 import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
 import { theme } from '@/lib/theme';
 import {
@@ -120,6 +121,7 @@ export function ProfileScreen() {
   const avatarMutation = useUpdateProfileAvatarMutation();
   const accountDeletionMutation = useRequestAccountDeletionMutation();
   const actionFeedback = useActionFeedbackOverlay();
+  const displayNameInputRef = useRef<AppTextInputRef | null>(null);
   const headerSignOutButtonThemeStyle = useMemo(
     () => ({
       backgroundColor: activeTheme.colors.dangerSoft,
@@ -153,9 +155,19 @@ export function ProfileScreen() {
     }),
     [activeTheme],
   );
+  const accountNameIconButtonThemeStyle = useMemo(
+    () => ({
+      backgroundColor: activeTheme.colors.surfaceSoft,
+      borderColor: activeTheme.colors.border,
+    }),
+    [activeTheme],
+  );
 
   const [message, setMessage] = useState<string | null>(null);
   const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
+  const [localDisplayName, setLocalDisplayName] = useState<string | null>(null);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [displayNameEditing, setDisplayNameEditing] = useState(false);
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
@@ -164,11 +176,12 @@ export function ProfileScreen() {
   const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
 
-  const accountLabel =
-    currentUserProfile?.displayName ??
+  const baseAccountLabel =
     session.profile?.display_name ??
+    currentUserProfile?.displayName ??
     session.email ??
     'Sin sesión';
+  const accountLabel = localDisplayName ?? baseAccountLabel;
   const profileAvatarUrl = localAvatarPath ?? currentUserProfile?.avatarUrl ?? null;
   const canViewProfileAvatar = Boolean(profileAvatarUrl);
   const accountEmailValue =
@@ -222,6 +235,18 @@ export function ProfileScreen() {
     !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
 
+  useEffect(() => {
+    if (!displayNameEditing) {
+      return;
+    }
+
+    const focusTimer = setTimeout(() => {
+      displayNameInputRef.current?.focus();
+    }, 120);
+
+    return () => clearTimeout(focusTimer);
+  }, [displayNameEditing]);
+
   function showActionMessage(nextMessage: string) {
     setMessage(nextMessage);
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -252,6 +277,84 @@ export function ProfileScreen() {
       busyActionRef.current = null;
       setBusyAction(null);
     }
+  }
+
+  function startDisplayNameEdit() {
+    if (busyActionRef.current) {
+      showActionMessage('Ya hay una accion en curso.');
+      return;
+    }
+
+    triggerSelectionHaptic();
+    setMessage(null);
+    setDisplayNameDraft(accountLabel);
+    setDisplayNameEditing(true);
+  }
+
+  function cancelDisplayNameEdit() {
+    if (busyAction === 'display-name') {
+      return;
+    }
+
+    triggerSelectionHaptic();
+    setDisplayNameDraft(accountLabel);
+    setDisplayNameEditing(false);
+  }
+
+  async function saveDisplayName() {
+    if (busyAction === 'display-name') {
+      return;
+    }
+
+    const normalizedDisplayName = displayNameDraft.trim();
+
+    if (isLowQualityDisplayName(normalizedDisplayName)) {
+      triggerWarningHaptic();
+      showActionMessage('Escribe tu nombre, no el correo.');
+      displayNameInputRef.current?.focus();
+      return;
+    }
+
+    if (normalizedDisplayName === accountLabel.trim()) {
+      setDisplayNameDraft(accountLabel);
+      setDisplayNameEditing(false);
+      return;
+    }
+
+    const profile = session.profile;
+    if (
+      !profile?.phone_country_iso2 ||
+      !profile.phone_country_calling_code ||
+      !profile.phone_national_number
+    ) {
+      triggerWarningHaptic();
+      showActionMessage('Completa tu celular antes de editar el nombre.');
+      return;
+    }
+
+    const phoneCountryIso2 = profile.phone_country_iso2;
+    const phoneCountryCallingCode = profile.phone_country_calling_code;
+    const phoneNationalNumber = profile.phone_national_number;
+
+    await runAction('display-name', async () => {
+      const result = await session.completeProfile({
+        fullName: normalizedDisplayName,
+        phoneCountryIso2,
+        phoneCountryCallingCode,
+        phoneNationalNumber,
+      });
+
+      if (result !== 'Perfil actualizado.') {
+        return result;
+      }
+
+      setLocalDisplayName(normalizedDisplayName);
+      setDisplayNameDraft(normalizedDisplayName);
+      setDisplayNameEditing(false);
+      void snapshotQuery.refetch().catch(() => undefined);
+      triggerSuccessHaptic();
+      return 'Nombre actualizado.';
+    });
   }
 
   async function handleTrustDevice(method: TrustedDeviceAuthMethod) {
@@ -616,7 +719,75 @@ export function ProfileScreen() {
           variant="avatar"
         />
         <View style={styles.accountCopy}>
-          <AppText style={styles.accountValue}>{accountLabel}</AppText>
+          {displayNameEditing ? (
+            <View style={styles.accountNameEditor}>
+              <AppTextInput
+                accessibilityLabel="Nombre"
+                autoCapitalize="words"
+                density="compact"
+                editable={busyAction !== 'display-name'}
+                onChangeText={setDisplayNameDraft}
+                onSubmitEditing={() => void saveDisplayName()}
+                placeholder="Nombre y apellido"
+                ref={displayNameInputRef}
+                returnKeyType="done"
+                selectTextOnFocus
+                style={styles.accountNameInput}
+                value={displayNameDraft}
+              />
+              <View style={styles.accountNameActions}>
+                <Pressable
+                  accessibilityLabel="Guardar nombre"
+                  accessibilityRole="button"
+                  disabled={busyAction !== null}
+                  hitSlop={8}
+                  onPress={() => void saveDisplayName()}
+                  style={({ pressed }) => [
+                    styles.accountNameIconButton,
+                    accountNameIconButtonThemeStyle,
+                    pressed && busyAction === null ? styles.rowPressed : null,
+                    busyAction !== null ? styles.disabledButton : null,
+                  ]}
+                >
+                  <Ionicons color={activeTheme.colors.primary} name="checkmark" size={18} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Cancelar edicion de nombre"
+                  accessibilityRole="button"
+                  disabled={busyAction === 'display-name'}
+                  hitSlop={8}
+                  onPress={cancelDisplayNameEdit}
+                  style={({ pressed }) => [
+                    styles.accountNameIconButton,
+                    accountNameIconButtonThemeStyle,
+                    pressed && busyAction !== 'display-name' ? styles.rowPressed : null,
+                    busyAction === 'display-name' ? styles.disabledButton : null,
+                  ]}
+                >
+                  <Ionicons color={activeTheme.colors.textMuted} name="close" size={18} />
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.accountNameRow}>
+              <AppText numberOfLines={2} style={styles.accountValue}>
+                {accountLabel}
+              </AppText>
+              <Pressable
+                accessibilityLabel="Editar nombre"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={startDisplayNameEdit}
+                style={({ pressed }) => [
+                  styles.accountNameIconButton,
+                  accountNameIconButtonThemeStyle,
+                  pressed ? styles.rowPressed : null,
+                ]}
+              >
+                <Ionicons color={activeTheme.colors.textMuted} name="pencil" size={16} />
+              </Pressable>
+            </View>
+          )}
           <AppText style={styles.accountMeta}>{accountEmail}</AppText>
         </View>
       </View>
@@ -1239,8 +1410,41 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     width: '100%',
   },
+  accountNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  accountNameEditor: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    maxWidth: '100%',
+    width: '100%',
+  },
+  accountNameInput: {
+    flex: 1,
+    fontWeight: '700',
+    minWidth: 0,
+    textAlign: 'center',
+  },
+  accountNameActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  accountNameIconButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
   accountValue: {
     color: theme.colors.text,
+    flexShrink: 1,
     fontSize: theme.typography.title2,
     fontWeight: '800',
     letterSpacing: -0.2,

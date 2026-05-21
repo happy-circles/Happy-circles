@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
+import { SessionLoadingScreen } from '@/components/session-loading-screen';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 
@@ -9,7 +10,7 @@ export default function TabsLayout() {
   const { status } = useSession();
 
   if (status === 'loading') {
-    return null;
+    return <SessionLoadingScreen />;
   }
 
   if (status === 'signed_out') {

@@ -421,22 +421,22 @@ export function AccountSignInEntry({
       return undefined;
     }
 
-    if (!pendingToken && session.accountAccessState === 'loading') {
+    if (session.accountAccessState === 'loading') {
       return undefined;
     }
 
-    if (!pendingToken && session.profileCompletionState === 'loading') {
+    if (session.profileCompletionState === 'loading') {
       return undefined;
     }
 
     let cancelled = false;
-    const destination = pendingToken
-      ? ({
-          pathname: '/join/[token]',
-          params: { token: pendingToken },
-        } as unknown as Href)
-      : !session.setupState.requiredComplete
-        ? buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile')
+    const destination = !session.setupState.requiredComplete
+      ? buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile')
+      : pendingToken
+        ? ({
+            pathname: '/join/[token]',
+            params: { token: pendingToken },
+          } as unknown as Href)
         : session.accountAccessState === 'active'
           ? ('/home' as Href)
           : ('/join' as Href);
@@ -1354,7 +1354,7 @@ export function AccountSignInEntry({
       keyboardActionClearance={activeKeyboardActionClearance}
       message={activeMessage}
       scrollEnabled
-      transitionScrollPolicy={shouldRevealAuthPrimaryAction ? 'reveal-end' : 'preserve'}
+      transitionScrollPolicy="preserve"
     >
       {isTokenSurface ? (
         tokenContent

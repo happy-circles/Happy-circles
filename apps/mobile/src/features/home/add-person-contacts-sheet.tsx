@@ -378,7 +378,9 @@ export function AddPersonContactsSheet({
                             ? 'Agregado'
                             : resolution?.status === 'pending_friendship'
                               ? 'Pendiente'
-                              : 'Puede recibir invitación'}
+                              : resolution?.status === 'pending_activation'
+                                ? 'Pendiente de abrir'
+                                : 'Puede recibir invitación'}
                       </AppText>
                     </View>
                     <Pressable

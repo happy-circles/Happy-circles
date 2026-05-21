@@ -51,7 +51,11 @@ import {
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
-import { hasProfilePhoto, isLowQualityDisplayName } from '@/lib/setup-account';
+import {
+  hasProfilePhoto,
+  isLowQualityDisplayName,
+  resolveInitialSetupFullName,
+} from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
@@ -94,8 +98,12 @@ export function SetupAccountScreen() {
     [profile?.phone_country_calling_code, profile?.phone_country_iso2],
   );
   const initialFullName = useMemo(
-    () => (isLowQualityDisplayName(profile?.display_name) ? '' : (profile?.display_name ?? '')),
-    [profile?.display_name],
+    () =>
+      resolveInitialSetupFullName({
+        displayName: profile?.display_name,
+        email: session.email ?? profile?.email,
+      }),
+    [profile?.display_name, profile?.email, session.email],
   );
 
   const [fullName, setFullName] = useState(initialFullName);

@@ -14,6 +14,40 @@ export function isLowQualityDisplayName(displayName: string | null | undefined):
   return normalized.includes('@');
 }
 
+function resolveEmailLocalPart(email: string | null | undefined): string {
+  const normalizedEmail = email?.trim().toLocaleLowerCase('en-US') ?? '';
+  const atIndex = normalizedEmail.indexOf('@');
+
+  return atIndex > 0 ? normalizedEmail.slice(0, atIndex) : '';
+}
+
+export function isEmailLocalPartDisplayName(input: {
+  readonly displayName: string | null | undefined;
+  readonly email: string | null | undefined;
+}): boolean {
+  const normalizedDisplayName = input.displayName?.trim().toLocaleLowerCase('en-US') ?? '';
+  const emailLocalPart = resolveEmailLocalPart(input.email);
+
+  return normalizedDisplayName.length > 0 && normalizedDisplayName === emailLocalPart;
+}
+
+export function resolveInitialSetupFullName(input: {
+  readonly displayName: string | null | undefined;
+  readonly email: string | null | undefined;
+}): string {
+  if (
+    isLowQualityDisplayName(input.displayName) ||
+    isEmailLocalPartDisplayName({
+      displayName: input.displayName,
+      email: input.email,
+    })
+  ) {
+    return '';
+  }
+
+  return input.displayName?.trim() ?? '';
+}
+
 export function hasRequiredProfileInfo(profile: UserProfileRow | null): boolean {
   if (!profile) {
     return false;

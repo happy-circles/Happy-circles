@@ -1,7 +1,10 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 
-import { CONTACT_RESOLUTION_CACHE_TTL_MS } from '@/features/home/contacts-sheet-helpers';
+import {
+  CONTACT_RESOLUTION_CACHE_TTL_MS,
+  isReusableCachedContactResolution,
+} from '@/features/home/contacts-sheet-helpers';
 import type { PeopleTargetResolution } from '@/lib/live-data';
 
 const DATABASE_NAME = 'happy-circles-people-target-resolution-cache.db';
@@ -160,10 +163,15 @@ export async function loadPeopleTargetResolutionCache(
         continue;
       }
 
-      result[phoneE164] = restorePhoneOnPeopleTargetResolution({
+      const restoredResolution = restorePhoneOnPeopleTargetResolution({
         phoneE164,
         storedResolution,
       });
+      if (!isReusableCachedContactResolution(restoredResolution)) {
+        continue;
+      }
+
+      result[phoneE164] = restoredResolution;
     }
   }
 
@@ -174,7 +182,9 @@ export async function savePeopleTargetResolutionsToCache(
   userId: string | null | undefined,
   resolutions: readonly PeopleTargetResolution[],
 ): Promise<void> {
-  if (!userId || resolutions.length === 0) {
+  const reusableResolutions = resolutions.filter(isReusableCachedContactResolution);
+
+  if (!userId || reusableResolutions.length === 0) {
     return;
   }
 
@@ -182,12 +192,12 @@ export async function savePeopleTargetResolutionsToCache(
   const now = Date.now();
   const hashPhonePairs = await buildHashPhonePairs(
     userId,
-    resolutions.map((resolution) => resolution.phoneE164),
+    reusableResolutions.map((resolution) => resolution.phoneE164),
   );
   const hashByPhone = new Map(hashPhonePairs.map((pair) => [pair.phoneE164, pair.phoneHash]));
 
   await database.withTransactionAsync(async () => {
-    for (const resolution of resolutions) {
+    for (const resolution of reusableResolutions) {
       const phoneHash = hashByPhone.get(resolution.phoneE164);
       if (!phoneHash) {
         continue;

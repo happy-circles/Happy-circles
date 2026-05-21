@@ -10,6 +10,7 @@ import {
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
+import { SessionLoadingScreen } from '@/components/session-loading-screen';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
   triggerIdentityErrorHaptic,
@@ -379,7 +380,7 @@ export function AccountCreateAccountScreen() {
   }
 
   if (session.status === 'loading') {
-    return null;
+    return <SessionLoadingScreen message="Preparando tu acceso" />;
   }
 
   return (

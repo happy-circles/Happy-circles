@@ -123,6 +123,26 @@ export function shouldShowInApp(resolution: PeopleTargetResolution | null): bool
   );
 }
 
+export function isReusableCachedContactResolution(
+  resolution: PeopleTargetResolution | null | undefined,
+): resolution is PeopleTargetResolution {
+  return resolution?.status === 'active_user' || resolution?.status === 'already_related';
+}
+
+export function filterReusableContactResolutionCache(
+  targetCache: Readonly<Record<string, PeopleTargetResolution>>,
+): Record<string, PeopleTargetResolution> {
+  const reusableCache: Record<string, PeopleTargetResolution> = {};
+
+  for (const [phoneE164, resolution] of Object.entries(targetCache)) {
+    if (isReusableCachedContactResolution(resolution)) {
+      reusableCache[phoneE164] = resolution;
+    }
+  }
+
+  return reusableCache;
+}
+
 export function rankContactResolution(resolution: PeopleTargetResolution | null): number {
   if (resolution?.status === 'active_user') {
     return 0;

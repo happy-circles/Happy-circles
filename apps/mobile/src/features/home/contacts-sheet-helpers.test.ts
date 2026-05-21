@@ -24,7 +24,9 @@ import {
   buildContactSectionItems,
   chunkContactPhoneE164List,
   CONTACT_TARGET_RESOLUTION_LIMIT,
+  filterReusableContactResolutionCache,
   getUnresolvedContactPhoneE164List,
+  isReusableCachedContactResolution,
 } from './contacts-sheet-helpers';
 import {
   createPeopleTargetResolutionCacheHashSource,
@@ -99,6 +101,33 @@ describe('contact resolution queue helpers', () => {
         },
       }),
     ).toEqual(['+573002']);
+  });
+
+  it('only reuses stable contact resolutions from cross-session caches', () => {
+    const cachedActive = resolution('+573001', 'active_user');
+    const cachedRelated = resolution('+573002', 'already_related');
+    const cachedPendingActivation = resolution('+573003', 'pending_activation');
+    const cachedPendingFriendship = resolution('+573004', 'pending_friendship');
+    const cachedNoAccount = resolution('+573005', 'no_account');
+
+    expect(isReusableCachedContactResolution(cachedActive)).toBe(true);
+    expect(isReusableCachedContactResolution(cachedRelated)).toBe(true);
+    expect(isReusableCachedContactResolution(cachedPendingActivation)).toBe(false);
+    expect(isReusableCachedContactResolution(cachedPendingFriendship)).toBe(false);
+    expect(isReusableCachedContactResolution(cachedNoAccount)).toBe(false);
+
+    expect(
+      filterReusableContactResolutionCache({
+        [cachedActive.phoneE164]: cachedActive,
+        [cachedRelated.phoneE164]: cachedRelated,
+        [cachedPendingActivation.phoneE164]: cachedPendingActivation,
+        [cachedPendingFriendship.phoneE164]: cachedPendingFriendship,
+        [cachedNoAccount.phoneE164]: cachedNoAccount,
+      }),
+    ).toEqual({
+      [cachedActive.phoneE164]: cachedActive,
+      [cachedRelated.phoneE164]: cachedRelated,
+    });
   });
 });
 

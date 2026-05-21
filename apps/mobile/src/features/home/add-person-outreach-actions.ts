@@ -16,6 +16,7 @@ import {
   type PendingContactSelection,
 } from '@/features/invites/people-outreach-utils';
 import { showBlockedActionAlert } from '@/lib/action-feedback';
+import { showGlobalFeedback } from '@/lib/global-feedback';
 import type {
   AccountInviteDeliveryResult,
   PeopleOutreachResult,
@@ -91,15 +92,40 @@ export function useAddPersonOutreachActions({
       inviteeAlias: alias,
     });
 
+    setMessage(`Acceso listo para ${alias}. Elige cómo enviarlo.`);
+
     try {
-      await Share.share({
+      const result = await Share.share({
         message: shareMessage,
         title: 'Invitación a Happy Circles',
       });
-      setMessage(`Listo. Ya puedes compartir el acceso privado con ${alias}.`);
+
+      if (result.action === Share.dismissedAction) {
+        setMessage(`Acceso privado listo para ${alias}. Si no lo enviaste, toca Reenviar.`);
+        showGlobalFeedback({
+          message: `Puedes reenviarlo a ${alias}.`,
+          title: 'Acceso listo',
+          tone: 'neutral',
+        });
+        return;
+      }
+
+      setMessage(
+        `Acceso privado listo para ${alias}. Quedó en Enviadas como "Pendiente de abrir".`,
+      );
+      showGlobalFeedback({
+        message: `Pendiente de abrir con ${alias}.`,
+        title: 'Acceso privado listo',
+        tone: 'success',
+      });
     } catch {
       await Clipboard.setStringAsync(inviteLink);
       setMessage(`No pudimos abrir compartir. Copiamos el enlace privado de ${alias}.`);
+      showGlobalFeedback({
+        message: `Pégalo para enviarlo a ${alias}.`,
+        title: 'Enlace copiado',
+        tone: 'neutral',
+      });
     }
   }
 
@@ -172,7 +198,7 @@ export function useAddPersonOutreachActions({
     }
 
     setBusyKey(input.phoneE164);
-    setMessage(null);
+    setMessage(`Preparando invitación para ${input.alias}.`);
 
     try {
       const response = await createPeopleOutreach.mutateAsync({
@@ -191,11 +217,19 @@ export function useAddPersonOutreachActions({
       }
 
       if (response.kind === 'friendship') {
-        setMessage(
+        const nextMessage =
           response.status === 'pending_friendship'
             ? `${input.alias} ya tiene una solicitud pendiente.`
-            : `Enviamos una solicitud de amistad a ${input.alias}.`,
-        );
+            : `Enviamos una solicitud de amistad a ${input.alias}.`;
+        setMessage(nextMessage);
+
+        if (response.status !== 'pending_friendship') {
+          showGlobalFeedback({
+            message: `A ${input.alias}.`,
+            title: 'Solicitud enviada',
+            tone: 'success',
+          });
+        }
         return;
       }
 

@@ -354,6 +354,7 @@ export function useSessionController(): SessionContextValue {
         readonly preserveLocked: boolean;
         readonly preserveTrustedDeviceDuringLoad: boolean;
         readonly biometricPreference?: boolean;
+        readonly setSessionStatusLoading?: boolean;
       },
     ) => {
       if (!supabase) {
@@ -365,8 +366,9 @@ export function useSessionController(): SessionContextValue {
       accountLoadIdRef.current = loadId;
       const shouldPreserveLockedStatus =
         options.preserveLocked && statusRef.current === 'signed_in_locked';
+      const shouldSetSessionStatusLoading = options.setSessionStatusLoading ?? true;
 
-      if (!shouldPreserveLockedStatus) {
+      if (!shouldPreserveLockedStatus && shouldSetSessionStatusLoading) {
         setSessionStatus('loading');
       }
 
@@ -590,6 +592,7 @@ export function useSessionController(): SessionContextValue {
         preserveLocked: options?.preserveLocked ?? statusRef.current === 'signed_in_locked',
         preserveTrustedDeviceDuringLoad: options?.preserveTrustedDeviceDuringLoad ?? false,
         biometricPreference: biometricsEnabled,
+        setSessionStatusLoading: false,
       });
     },
     [biometricsEnabled, clearSignedInState, loadAccountState, setSessionStatus],
@@ -678,6 +681,7 @@ export function useSessionController(): SessionContextValue {
           preserveLocked: false,
           preserveTrustedDeviceDuringLoad: false,
           biometricPreference: nextBiometricsEnabled,
+          setSessionStatusLoading: true,
         });
       } catch (error) {
         console.warn(
@@ -728,6 +732,7 @@ export function useSessionController(): SessionContextValue {
         preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
         preserveTrustedDeviceDuringLoad: event !== 'SIGNED_IN',
         biometricPreference: biometricsEnabled,
+        setSessionStatusLoading: false,
       }).catch((error) => {
         console.warn(
           'Failed to refresh account state after auth change',

@@ -29,6 +29,9 @@ export function ContactRow({
   const hasMultiplePhones = contact.phoneOptions.length > 1;
   const action = actionMetaForResolution(resolution, hasMultiplePhones);
   const disabled = action.disabled || busy;
+  const phoneMeta = contactMeta(contact.primaryPhone);
+  const detailMeta =
+    resolution?.status === 'pending_activation' ? `${phoneMeta} | Pendiente de abrir` : phoneMeta;
   const actionBackgroundColor =
     action.tone === 'invite'
       ? activeTheme.colors.warning
@@ -61,7 +64,7 @@ export function ContactRow({
           {contact.alias}
         </AppText>
         <AppText numberOfLines={2} style={styles.contactPhone}>
-          {contactMeta(contact.primaryPhone)}
+          {detailMeta}
         </AppText>
       </View>
       <Pressable
@@ -80,7 +83,7 @@ export function ContactRow({
           size={14}
         />
         <AppText numberOfLines={1} style={styles.contactActionText}>
-          {busy ? '...' : action.label}
+          {busy ? 'Preparando' : action.label}
         </AppText>
       </Pressable>
     </View>
