@@ -630,6 +630,43 @@ describe('buildLiveSnapshot', () => {
     });
   });
 
+  it('keeps activated account invites visible while sender review is pending', () => {
+    const snapshot = buildLiveSnapshot(
+      baseInput({
+        currentUserId: FRIEND_ID,
+        profiles: [profile(ACTOR_ID, 'Ana'), profile(FRIEND_ID, 'Ben')],
+        accountInvites: [
+          accountInvite({
+            id: 'account-review',
+            status: 'pending_inviter_review',
+            activated_user_id: FRIEND_ID,
+            activated_at: NOW,
+          }),
+        ],
+        accountInviteDeliveries: [
+          accountDelivery({
+            invite_id: 'account-review',
+            status: 'activated',
+            authenticated_user_id: FRIEND_ID,
+            activation_completed_at: NOW,
+          }),
+        ],
+      }),
+    );
+
+    expect(snapshot.people).toEqual([]);
+    expect(snapshot.accountInvitePendingItems[0]).toMatchObject({
+      actionState: 'waiting_sender_review',
+      actorRole: 'activated',
+      kind: 'account_invite',
+    });
+    expect(snapshot.dashboard.topPendingPreview).toMatchObject({
+      id: 'account-review',
+      kind: 'account_invite',
+      status: 'waiting_sender_review',
+    });
+  });
+
   it('keeps active settlement proposals available for balance analytics and details', () => {
     const snapshot = buildLiveSnapshot(
       baseInput({

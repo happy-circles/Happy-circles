@@ -48,7 +48,7 @@ export function buildDeviceTrustReminderItem(): ActivityItemDto {
     title: 'Confía este teléfono',
     subtitle: 'Seguridad',
     detail: 'Abrir seguridad del perfil.',
-    href: '/profile?section=device&focus=trust-password',
+    href: '/profile?section=device&focus=trust-device',
   });
 }
 

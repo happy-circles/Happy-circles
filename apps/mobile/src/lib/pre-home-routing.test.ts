@@ -86,7 +86,7 @@ describe('resolvePreHomeRouteDecision', () => {
     ).toEqual({ action: 'stay' });
   });
 
-  it('routes complete but untrusted users to security before Home', () => {
+  it('routes complete but untrusted users to security setup before Home', () => {
     expect(
       resolve({
         setupState: {
@@ -105,7 +105,7 @@ describe('resolvePreHomeRouteDecision', () => {
     });
   });
 
-  it('lets auth success handoff own join-to-security routing while the hold is active', () => {
+  it('lets auth success handoff own join-to-home routing while the hold is active', () => {
     expect(
       resolve({
         isAuthRouteTransitionHeld: true,
@@ -116,6 +116,15 @@ describe('resolvePreHomeRouteDecision', () => {
           securityPending: true,
         },
         status: 'signed_in_untrusted',
+      }),
+    ).toEqual({ action: 'stay' });
+  });
+
+  it('keeps password recovery available when the recovery session is locked', () => {
+    expect(
+      resolve({
+        isResetPasswordRoute: true,
+        status: 'signed_in_locked',
       }),
     ).toEqual({ action: 'stay' });
   });
@@ -145,6 +154,26 @@ describe('resolvePreHomeRouteDecision', () => {
       action: 'replace',
       handoff: 'home',
       href: '/home',
+    });
+  });
+
+  it('sends untrusted active users from join to security after auth handoff clears', () => {
+    expect(
+      resolve({
+        isJoinRoute: true,
+        setupState: {
+          pendingRequiredSteps: [],
+          requiredComplete: true,
+          securityPending: true,
+        },
+        status: 'signed_in_untrusted',
+      }),
+    ).toEqual({
+      action: 'replace',
+      href: {
+        pathname: '/setup-account',
+        params: { step: 'security' },
+      },
     });
   });
 });

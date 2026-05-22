@@ -91,7 +91,7 @@ import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
 
 const AUTH_STATE_TRANSITION_MS = 380;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
-const AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE = 112;
+const AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE = 148;
 const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -1312,7 +1312,7 @@ export function AccountSignInEntry({
   );
   const isTokenSurface = entrySurface === 'token';
   const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;
-  const activeIdentityPosition = isTokenSurface ? 'center' : authIdentityPosition;
+  const activeIdentityPosition = isTokenSurface ? 'top' : authIdentityPosition;
   const shouldRevealAuthPrimaryAction = !isTokenSurface && showPasswordFields;
   const activeKeyboardActionClearance = isTokenSurface
     ? AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE
@@ -1357,7 +1357,7 @@ export function AccountSignInEntry({
       keyboardActionClearance={activeKeyboardActionClearance}
       message={activeMessage}
       scrollEnabled
-      transitionScrollPolicy="preserve"
+      transitionScrollPolicy={shouldRevealAuthPrimaryAction ? 'reveal-end' : 'preserve'}
     >
       {isTokenSurface ? (
         tokenContent

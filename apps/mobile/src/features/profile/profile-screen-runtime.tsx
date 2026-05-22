@@ -5,7 +5,9 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   ActionSheetIOS,
   Alert,
+  KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -69,6 +71,8 @@ import { ThemePreferenceSection } from './theme-preference-section';
 const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
 const TERMS_URL = 'https://app.happy-circles.com/terms';
 const SUPPORT_URL = 'https://app.happy-circles.com/support';
+type SocialStepUpTarget = 'apple' | 'google';
+
 function triggerSelectionHaptic() {
   triggerAppSelectionHaptic();
 }
@@ -122,6 +126,7 @@ export function ProfileScreen() {
   const accountDeletionMutation = useRequestAccountDeletionMutation();
   const actionFeedback = useActionFeedbackOverlay();
   const displayNameInputRef = useRef<AppTextInputRef | null>(null);
+  const socialStepUpInputRef = useRef<AppTextInputRef | null>(null);
   const headerSignOutButtonThemeStyle = useMemo(
     () => ({
       backgroundColor: activeTheme.colors.dangerSoft,
@@ -171,6 +176,10 @@ export function ProfileScreen() {
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
+  const [socialStepUpPassword, setSocialStepUpPassword] = useState('');
+  const [socialStepUpError, setSocialStepUpError] = useState<string | null>(null);
+  const [socialStepUpTarget, setSocialStepUpTarget] = useState<SocialStepUpTarget | null>(null);
+  const [trustMethodPickerOpen, setTrustMethodPickerOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const busyActionRef = useRef<string | null>(null);
   const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
@@ -231,9 +240,39 @@ export function ProfileScreen() {
     sectionTarget: typeof params.section === 'string' ? params.section : null,
   });
   const showTrustPasswordFallback =
+    trustMethodPickerOpen &&
     hasPasswordTrustMethod &&
     !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
+
+  useEffect(() => {
+    if (trustPasswordFallbackOpen) {
+      setTrustMethodPickerOpen(true);
+    }
+  }, [trustPasswordFallbackOpen]);
+
+  useEffect(() => {
+    if (
+      (socialStepUpTarget === 'google' && session.linkedMethods.hasGoogle) ||
+      (socialStepUpTarget === 'apple' && session.linkedMethods.hasApple)
+    ) {
+      setSocialStepUpPassword('');
+      setSocialStepUpError(null);
+      setSocialStepUpTarget(null);
+    }
+  }, [session.linkedMethods.hasApple, session.linkedMethods.hasGoogle, socialStepUpTarget]);
+
+  useEffect(() => {
+    if (!socialStepUpTarget) {
+      return;
+    }
+
+    const focusTimer = setTimeout(() => {
+      socialStepUpInputRef.current?.focus();
+    }, 180);
+
+    return () => clearTimeout(focusTimer);
+  }, [socialStepUpTarget]);
 
   useEffect(() => {
     if (!displayNameEditing) {
@@ -252,7 +291,11 @@ export function ProfileScreen() {
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }
 
-  async function runAction(actionKey: string, action: () => Promise<string>) {
+  async function runAction(
+    actionKey: string,
+    action: () => Promise<string>,
+    options?: { readonly showMessage?: boolean },
+  ) {
     if (busyActionRef.current) {
       const inProgressMessage = 'Ya hay una accion en curso.';
       showActionMessage(inProgressMessage);
@@ -266,12 +309,16 @@ export function ProfileScreen() {
 
     try {
       const result = await action();
-      showActionMessage(result);
+      if (options?.showMessage !== false) {
+        showActionMessage(result);
+      }
       return result;
     } catch (error) {
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo completar esta acción.';
-      showActionMessage(failureMessage);
+      if (options?.showMessage !== false) {
+        showActionMessage(failureMessage);
+      }
       return failureMessage;
     } finally {
       busyActionRef.current = null;
@@ -366,11 +413,95 @@ export function ProfileScreen() {
       ),
     );
 
-    if (result === 'Este dispositivo ahora es confiable.') {
+    if (result === 'Este teléfono ahora es confiable.') {
       triggerSuccessHaptic();
       setTrustPassword('');
+      setTrustMethodPickerOpen(false);
       setTrustPasswordFallbackOpen(false);
     }
+  }
+
+  function shouldOfferSocialPasswordStepUp(result: string): boolean {
+    return (
+      session.linkedMethods.hasEmailPassword &&
+      result.startsWith('Este dispositivo no puede usar ')
+    );
+  }
+
+  function closeSocialStepUpPrompt() {
+    triggerSelectionHaptic();
+    setSocialStepUpPassword('');
+    setSocialStepUpError(null);
+    setSocialStepUpTarget(null);
+  }
+
+  function handleSocialStepUpPasswordChange(nextPassword: string) {
+    setSocialStepUpPassword(nextPassword);
+    if (socialStepUpError) {
+      setSocialStepUpError(null);
+    }
+  }
+
+  async function handleLinkSocial(target: SocialStepUpTarget, password?: string) {
+    const providerLabel = target === 'google' ? 'Google' : 'Apple';
+    const actionKey = password === undefined ? `link-${target}` : `link-${target}-password`;
+
+    if (password !== undefined && !password.trim()) {
+      triggerWarningHaptic();
+      setSocialStepUpError(`Escribe tu contraseña para añadir ${providerLabel} Auth.`);
+      return;
+    }
+
+    setSocialStepUpError(null);
+    const result = await runAction(
+      actionKey,
+      () =>
+        target === 'google'
+          ? session.linkGoogle(password === undefined ? undefined : { password })
+          : session.linkApple(password === undefined ? undefined : { password }),
+      { showMessage: false },
+    );
+
+    if (result === `${providerLabel} vinculado.`) {
+      triggerSuccessHaptic();
+      setSocialStepUpPassword('');
+      setSocialStepUpError(null);
+      setSocialStepUpTarget(null);
+      showActionMessage(result);
+      return;
+    }
+
+    if (shouldOfferSocialPasswordStepUp(result)) {
+      triggerWarningHaptic();
+      setSocialStepUpPassword('');
+      setSocialStepUpError(null);
+      setSocialStepUpTarget(target);
+      return;
+    }
+
+    triggerWarningHaptic();
+    if (password === undefined) {
+      showActionMessage(result);
+      return;
+    }
+
+    setSocialStepUpError(result);
+  }
+
+  function handleTrustEntryPress() {
+    triggerSelectionHaptic();
+
+    if (session.canTrustCurrentDeviceWithoutPassword && hasPasswordTrustMethod) {
+      void handleTrustDevice('password');
+      return;
+    }
+
+    if (trustMethods.length === 0) {
+      showActionMessage('Agrega Google, Apple o una contraseña para poder confiar este teléfono.');
+      return;
+    }
+
+    setTrustMethodPickerOpen(true);
   }
 
   async function openExternalUrl(url: string, failureMessage: string) {
@@ -614,7 +745,7 @@ export function ProfileScreen() {
     try {
       await actionFeedback.runBlockingAction('requestAccountDeletion', async () => {
         if (!session.isTrustedDevice) {
-          throw new Error('Valida este dispositivo antes de eliminar tu cuenta.');
+          throw new Error('Confía este teléfono antes de eliminar tu cuenta.');
         }
 
         const authResult = await session.stepUpAuth(true);
@@ -671,6 +802,10 @@ export function ProfileScreen() {
       ],
     );
   }
+
+  const socialStepUpProviderLabel = socialStepUpTarget === 'google' ? 'Google' : 'Apple';
+  const socialStepUpBusyAction =
+    socialStepUpTarget === null ? null : `link-${socialStepUpTarget}-password`;
 
   return (
     <ScreenShell
@@ -865,7 +1000,7 @@ export function ProfileScreen() {
               session.setupState.biometricsEligible
                 ? session.biometricLabel
                 : session.biometricAvailable
-                  ? 'Primero valida este dispositivo'
+                  ? 'Primero confía este teléfono'
                   : 'No disponible'
             }
             title="Biometría"
@@ -1003,7 +1138,7 @@ export function ProfileScreen() {
                   onPress={
                     busyAction
                       ? undefined
-                      : () => void runAction('link-google', async () => session.linkGoogle())
+                      : () => void handleLinkSocial('google')
                   }
                   style={({ pressed }) => [
                     styles.inlineButton,
@@ -1035,7 +1170,7 @@ export function ProfileScreen() {
                       onPress={
                         busyAction
                           ? undefined
-                          : () => void runAction('link-apple', async () => session.linkApple())
+                          : () => void handleLinkSocial('apple')
                       }
                       style={({ pressed }) => [
                         styles.inlineButton,
@@ -1095,7 +1230,7 @@ export function ProfileScreen() {
         style={[styles.sectionBlock, highlightTarget === 'device' ? styles.focusPanel : null]}
       >
         <View style={styles.sectionHeader}>
-          <AppText style={styles.sectionTitle}>Dispositivos</AppText>
+          <AppText style={styles.sectionTitle}>Teléfono confiable</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -1103,107 +1238,128 @@ export function ProfileScreen() {
             icon="phone-portrait"
             status={session.isTrustedDevice ? 'Confiable' : 'Pendiente'}
             subtitle={formatDeviceStateLabel(session.deviceTrustState)}
-            title="Dispositivo actual"
+            title="Este teléfono"
             tone={session.isTrustedDevice ? 'success' : 'danger'}
           />
 
           {!session.isTrustedDevice ? (
             <View style={styles.actionCluster}>
-              {session.canTrustCurrentDeviceWithoutPassword ? (
-                <AppText style={styles.sectionBody}>
-                  Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla
-                  otra vez.
-                </AppText>
-              ) : null}
-              <View style={styles.inlineActionRow}>
-                {socialTrustMethods.map((method) => (
-                  <PrimaryAction
-                    compact
-                    disabled={busyAction !== null}
-                    fullWidth={false}
-                    key={method}
-                    label={
-                      busyAction === `trust-device-${method}`
-                        ? 'Validando...'
-                        : resolveTrustMethodLabel({
-                            canTrustCurrentDeviceWithoutPassword:
-                              session.canTrustCurrentDeviceWithoutPassword,
-                            method,
-                          })
-                    }
-                    onPress={busyAction ? undefined : () => void handleTrustDevice(method)}
-                  />
-                ))}
-                {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+              <AppText style={styles.sectionBody}>
+                Para marcarlo como confiable, confirma que eres tú con un método de respaldo.
+              </AppText>
+
+              {!trustMethodPickerOpen ? (
+                <View style={styles.inlineActionRow}>
                   <PrimaryAction
                     compact
                     disabled={busyAction !== null}
                     fullWidth={false}
                     label={
-                      busyAction === 'trust-device-password'
-                        ? 'Validando...'
-                        : resolveTrustMethodLabel({
-                            canTrustCurrentDeviceWithoutPassword:
-                              session.canTrustCurrentDeviceWithoutPassword,
-                            method: 'password',
-                          })
+                      busyAction?.startsWith('trust-device-')
+                        ? 'Confirmando...'
+                        : 'Confiar este teléfono'
                     }
-                    onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
+                    onPress={busyAction ? undefined : handleTrustEntryPress}
                   />
-                ) : null}
-              </View>
-              {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
-                <Pressable
-                  disabled={busyAction !== null}
-                  onPress={() => {
-                    triggerSelectionHaptic();
-                    setTrustPasswordFallbackOpen((open) => !open);
-                  }}
-                  style={({ pressed }) => [
-                    styles.inlineButton,
-                    inlineButtonThemeStyle,
-                    pressed && busyAction === null ? styles.rowPressed : null,
-                    busyAction !== null ? styles.disabledButton : null,
-                  ]}
-                >
-                  <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
-                    {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
-                  </AppText>
-                </Pressable>
-              ) : null}
-              {showTrustPasswordFallback ? (
+                </View>
+              ) : (
                 <>
-                  <PasswordTextInput
-                    autoCapitalize="none"
-                    onChangeText={setTrustPassword}
-                    placeholder="Tu contraseña actual"
-                    placeholderTextColor={theme.colors.muted}
-                    ref={trustPasswordInputRef}
-                    style={styles.input}
-                    value={trustPassword}
-                  />
+                  <AppText style={styles.sectionBody}>
+                    Elige cómo confirmar tu identidad para confiar este teléfono.
+                  </AppText>
                   <View style={styles.inlineActionRow}>
-                    <PrimaryAction
-                      compact
-                      disabled={busyAction !== null}
-                      fullWidth={false}
-                      label={
-                        busyAction === 'trust-device-password'
-                          ? 'Validando...'
-                          : resolveTrustMethodLabel({
-                              canTrustCurrentDeviceWithoutPassword:
-                                session.canTrustCurrentDeviceWithoutPassword,
-                              method: 'password',
-                            })
-                      }
-                      onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
-                    />
+                    {socialTrustMethods.map((method) => (
+                      <PrimaryAction
+                        compact
+                        disabled={busyAction !== null}
+                        fullWidth={false}
+                        key={method}
+                        label={
+                          busyAction === `trust-device-${method}`
+                            ? 'Confirmando...'
+                            : resolveTrustMethodLabel({
+                                canTrustCurrentDeviceWithoutPassword:
+                                  session.canTrustCurrentDeviceWithoutPassword,
+                                method,
+                              })
+                        }
+                        onPress={busyAction ? undefined : () => void handleTrustDevice(method)}
+                      />
+                    ))}
+                    {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                      <PrimaryAction
+                        compact
+                        disabled={busyAction !== null}
+                        fullWidth={false}
+                        label={
+                          busyAction === 'trust-device-password'
+                            ? 'Confirmando...'
+                            : resolveTrustMethodLabel({
+                                canTrustCurrentDeviceWithoutPassword:
+                                  session.canTrustCurrentDeviceWithoutPassword,
+                                method: 'password',
+                              })
+                        }
+                        onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
+                      />
+                    ) : null}
                   </View>
+                  {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
+                    <Pressable
+                      disabled={busyAction !== null}
+                      onPress={() => {
+                        triggerSelectionHaptic();
+                        setTrustPasswordFallbackOpen((open) => !open);
+                      }}
+                      style={({ pressed }) => [
+                        styles.inlineButton,
+                        inlineButtonThemeStyle,
+                        pressed && busyAction === null ? styles.rowPressed : null,
+                        busyAction !== null ? styles.disabledButton : null,
+                      ]}
+                    >
+                      <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
+                        {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
+                      </AppText>
+                    </Pressable>
+                  ) : null}
+                  {showTrustPasswordFallback ? (
+                    <>
+                      <PasswordTextInput
+                        autoCapitalize="none"
+                        onChangeText={setTrustPassword}
+                        placeholder="Tu contraseña actual"
+                        placeholderTextColor={theme.colors.muted}
+                        ref={trustPasswordInputRef}
+                        style={styles.input}
+                        value={trustPassword}
+                      />
+                      <View style={styles.inlineActionRow}>
+                        <PrimaryAction
+                          compact
+                          disabled={busyAction !== null}
+                          fullWidth={false}
+                          label={
+                            busyAction === 'trust-device-password'
+                              ? 'Confirmando...'
+                              : resolveTrustMethodLabel({
+                                  canTrustCurrentDeviceWithoutPassword:
+                                    session.canTrustCurrentDeviceWithoutPassword,
+                                  method: 'password',
+                                })
+                          }
+                          onPress={
+                            busyAction ? undefined : () => void handleTrustDevice('password')
+                          }
+                        />
+                      </View>
+                    </>
+                  ) : null}
                 </>
-              ) : null}
-              {trustMethods.length === 0 ? (
+              )}
+              {trustMethodPickerOpen && trustMethods.length === 0 ? (
                 <AppText style={styles.sectionBody}>
-                  Esta cuenta no tiene un método disponible para revalidar el dispositivo.
+                  Agrega Google, Apple o una contraseña para poder confiar este teléfono.
                 </AppText>
               ) : null}
             </View>
@@ -1348,6 +1504,107 @@ export function ProfileScreen() {
           </Pressable>
         </View>
       </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeSocialStepUpPrompt}
+        statusBarTranslucent
+        transparent
+        visible={socialStepUpTarget !== null}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.stepUpModalRoot}
+        >
+          <Pressable
+            accessibilityLabel="Descartar validación"
+            onPress={closeSocialStepUpPrompt}
+            style={styles.stepUpModalBackdrop}
+          />
+          <View
+            accessibilityRole="alert"
+            accessibilityViewIsModal
+            style={[styles.stepUpDialog, { backgroundColor: activeTheme.colors.surface }]}
+          >
+            <View style={styles.stepUpDialogHeader}>
+              <View
+                style={[
+                  styles.stepUpDialogIcon,
+                  { backgroundColor: activeTheme.colors.primarySoft },
+                ]}
+              >
+                <Ionicons color={activeTheme.colors.primary} name="lock-closed" size={22} />
+              </View>
+              <View style={styles.stepUpDialogCopy}>
+                <AppText style={[styles.stepUpDialogTitle, { color: activeTheme.colors.text }]}>
+                  Confirmar con contraseña
+                </AppText>
+                <AppText style={[styles.stepUpDialogBody, { color: activeTheme.colors.textMuted }]}>
+                  Este dispositivo no puede usar {session.biometricLabel}. Valida tu identidad para
+                  añadir {socialStepUpProviderLabel} Auth.
+                </AppText>
+              </View>
+            </View>
+
+            <PasswordTextInput
+              autoCapitalize="none"
+              onChangeText={handleSocialStepUpPasswordChange}
+              onSubmitEditing={() =>
+                socialStepUpTarget
+                  ? void handleLinkSocial(socialStepUpTarget, socialStepUpPassword)
+                  : undefined
+              }
+              placeholder="Contraseña"
+              placeholderTextColor={theme.colors.muted}
+              ref={socialStepUpInputRef}
+              returnKeyType="done"
+              style={styles.input}
+              value={socialStepUpPassword}
+            />
+
+            {socialStepUpError ? (
+              <AppText style={[styles.stepUpDialogError, { color: activeTheme.colors.danger }]}>
+                {socialStepUpError}
+              </AppText>
+            ) : null}
+
+            <View style={styles.stepUpDialogActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busyAction !== null}
+                onPress={closeSocialStepUpPrompt}
+                style={({ pressed }) => [
+                  styles.stepUpDismissButton,
+                  { borderColor: activeTheme.colors.border },
+                  pressed && busyAction === null ? styles.rowPressed : null,
+                  busyAction !== null ? styles.disabledButton : null,
+                ]}
+              >
+                <AppText
+                  style={[styles.stepUpDismissButtonText, { color: activeTheme.colors.text }]}
+                >
+                  Descartar
+                </AppText>
+              </Pressable>
+              <PrimaryAction
+                compact
+                disabled={busyAction !== null || socialStepUpTarget === null}
+                fullWidth={false}
+                label={
+                  busyAction === socialStepUpBusyAction
+                    ? 'Validando...'
+                    : `Añadir ${socialStepUpProviderLabel} Auth`
+                }
+                onPress={() =>
+                  socialStepUpTarget
+                    ? void handleLinkSocial(socialStepUpTarget, socialStepUpPassword)
+                    : undefined
+                }
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <AvatarOptionsSheet
         canViewPhoto={canViewProfileAvatar}
@@ -1507,6 +1764,73 @@ const styles = StyleSheet.create({
   actionCluster: {
     gap: theme.spacing.sm,
     paddingLeft: 52,
+  },
+  stepUpModalRoot: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.overlay,
+    flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  stepUpModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  stepUpDialog: {
+    borderRadius: theme.radius.medium,
+    gap: theme.spacing.md,
+    maxWidth: 420,
+    padding: theme.spacing.lg,
+    width: '100%',
+    ...theme.shadow.floating,
+  },
+  stepUpDialogHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  stepUpDialogIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  stepUpDialogCopy: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  stepUpDialogTitle: {
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  stepUpDialogBody: {
+    fontSize: theme.typography.footnote,
+    lineHeight: 19,
+  },
+  stepUpDialogError: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  stepUpDialogActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    justifyContent: 'flex-end',
+  },
+  stepUpDismissButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.medium,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  stepUpDismissButtonText: {
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
   },
   inlineActionRow: {
     alignItems: 'flex-start',

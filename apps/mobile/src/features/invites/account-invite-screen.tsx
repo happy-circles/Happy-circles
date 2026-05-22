@@ -83,7 +83,7 @@ function setupRequirementLabel(step: SetupStep) {
   }
 
   if (step === 'security') {
-    return 'validar este teléfono';
+    return 'confiar este teléfono';
   }
 
   return 'completar nombre y celular';
@@ -437,7 +437,7 @@ export function AccountInviteScreen() {
               <AppText style={styles.actionHint}>
                 {needsSetup
                   ? setupBlockerSubtitle
-                  : 'Hace falta validar este teléfono antes de activar la cuenta.'}
+                  : 'Hace falta confiar este teléfono antes de activar la cuenta.'}
               </AppText>
             ) : null}
           </IdentityFlowForm>

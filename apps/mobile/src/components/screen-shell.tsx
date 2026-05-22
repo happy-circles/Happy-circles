@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode, RefObject } from 'react';
 import type { ScrollView, ScrollViewProps, StyleProp, ViewStyle } from 'react-native';
-import { StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import type { Edge } from 'react-native-safe-area-context';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,11 +31,15 @@ export interface ScreenShellProps extends PropsWithChildren {
   readonly refresh?: BrandedRefreshProps;
   readonly safeAreaEdges?: Edge[];
   readonly scrollEnabled?: boolean;
+  readonly onMomentumScrollEnd?: ScrollViewProps['onMomentumScrollEnd'];
   readonly onScroll?: ScrollViewProps['onScroll'];
+  readonly onScrollBeginDrag?: ScrollViewProps['onScrollBeginDrag'];
+  readonly onScrollEndDrag?: ScrollViewProps['onScrollEndDrag'];
   readonly scrollEventThrottle?: ScrollViewProps['scrollEventThrottle'];
   readonly scrollViewRef?: RefObject<ScrollView | null>;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
+  readonly footerContainerStyle?: StyleProp<ViewStyle>;
 }
 
 const SCREEN_SHELL_FOOTER_SCROLL_CLEARANCE = 140;
@@ -59,12 +63,16 @@ export function ScreenShell({
   refresh,
   safeAreaEdges = ['top', 'left', 'right'],
   scrollEnabled = true,
+  onMomentumScrollEnd,
   onScroll,
+  onScrollBeginDrag,
+  onScrollEndDrag,
   scrollEventThrottle,
   scrollViewRef,
   children,
   contentContainerStyle,
   contentWidthStyle,
+  footerContainerStyle,
 }: ScreenShellProps) {
   const activeTheme = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -166,6 +174,7 @@ export function ScreenShell({
     },
     { paddingBottom: theme.spacing.lg + bottomInset },
     !footerDivider ? styles.footerNoDivider : null,
+    footerContainerStyle,
   ];
 
   return (
@@ -180,7 +189,10 @@ export function ScreenShell({
           contentContainerStyle={contentStyle}
           fillViewport
           keyboardShouldPersistTaps="handled"
+          onMomentumScrollEnd={onMomentumScrollEnd}
           onScroll={onScroll}
+          onScrollBeginDrag={onScrollBeginDrag}
+          onScrollEndDrag={onScrollEndDrag}
           refresh={refresh}
           scrollEventThrottle={scrollEventThrottle}
           scrollEnabled={scrollEnabled}
@@ -192,9 +204,9 @@ export function ScreenShell({
         <View style={contentStyle}>{scrollBody}</View>
       )}
       {footer ? (
-        <View style={footerStyle}>
+        <Animated.View style={footerStyle}>
           <View style={styles.contentWidth}>{footer}</View>
-        </View>
+        </Animated.View>
       ) : null}
       {overlay}
     </SafeAreaView>

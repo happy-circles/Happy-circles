@@ -14,6 +14,7 @@ import { BalanceLensCarousel } from '@/features/balance/balance-lens-carousel';
 import { usePreferredBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
 import {
+  DashboardPendingActionSection,
   DashboardPeopleSection,
   DashboardTransactionsSection,
 } from '@/features/home/dashboard-main-sections';
@@ -22,7 +23,11 @@ import {
   transactionPersonForItem,
   transactionPersonHref,
 } from '@/features/home/dashboard-preview-cards';
-import { balanceFocusHref, type TransactionTargetPanel } from '@/features/home/dashboard-helpers';
+import {
+  balanceFocusHref,
+  shouldSurfaceHomePendingPreview,
+  type TransactionTargetPanel,
+} from '@/features/home/dashboard-helpers';
 import {
   HOME_CHROME_EXPANDED_HEIGHT,
   HomeCollapsibleChrome,
@@ -30,6 +35,7 @@ import {
   useCollapsibleHomeChrome,
 } from '@/features/home/home-collapsible-chrome';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
+import { appConfig } from '@/lib/config';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { pushRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
@@ -134,6 +140,10 @@ export function DashboardScreen() {
     notificationViewedKeys,
     pendingItems: pendingSection?.items ?? [],
   });
+  const topPendingPreview = dashboard?.topPendingPreview ?? null;
+  const homePendingPreview = shouldSurfaceHomePendingPreview(topPendingPreview)
+    ? topPendingPreview
+    : null;
   const setupReminderItems = useMemo(() => buildPendingSetupReminderItems(session), [session]);
   const notificationSummary = useMemo(
     () =>
@@ -147,6 +157,12 @@ export function DashboardScreen() {
   const homeLoadingMessage = snapshotQuery.isRestoringCache
     ? 'Preparando tus datos guardados.'
     : 'Cargando tu Circle.';
+  const homeRenderBranch =
+    snapshotQuery.error && !dashboard && !snapshotQuery.isRestoringCache
+      ? 'error'
+      : snapshotQuery.isRestoringCache || snapshotQuery.isLoading || !dashboard
+        ? 'loading'
+        : 'ready';
   const currentUserLabel = currentUserProfile?.displayName ?? currentUserProfile?.email ?? 'Tú';
   const homeContentContainerStyle = useMemo(
     () => ({
@@ -181,6 +197,37 @@ export function DashboardScreen() {
   useEffect(() => {
     setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
+
+  useEffect(() => {
+    if (!appConfig.authDebugEnabled) {
+      return;
+    }
+
+    console.info(
+      '[snapshot-debug]',
+      JSON.stringify({
+        branch: homeRenderBranch,
+        fetchStatus: snapshotQuery.fetchStatus,
+        hasDashboard: Boolean(dashboard),
+        hasData: Boolean(snapshotQuery.data),
+        hasUser: Boolean(session.userId),
+        isLoading: snapshotQuery.isLoading,
+        isRestoringCache: snapshotQuery.isRestoringCache,
+        networkStatus: snapshotQuery.networkStatus,
+        queryStatus: snapshotQuery.status,
+      }),
+    );
+  }, [
+    dashboard,
+    homeRenderBranch,
+    session.userId,
+    snapshotQuery.data,
+    snapshotQuery.fetchStatus,
+    snapshotQuery.isLoading,
+    snapshotQuery.isRestoringCache,
+    snapshotQuery.networkStatus,
+    snapshotQuery.status,
+  ]);
 
   function openTransactionPreviewItem(item: ActivityItemDto, panel: TransactionTargetPanel) {
     const person = transactionPersonForItem(dashboard?.activePeople ?? [], item);
@@ -217,7 +264,10 @@ export function DashboardScreen() {
         contentMode="full"
         headerVisible={false}
         headerVariant="plain"
+        onMomentumScrollEnd={homeChrome.onMomentumScrollEnd}
         onScroll={homeChrome.onScroll}
+        onScrollBeginDrag={homeChrome.onScrollBeginDrag}
+        onScrollEndDrag={homeChrome.onScrollEndDrag}
         overlay={homeChromeOverlay}
         refresh={refresh}
         safeAreaEdges={[]}
@@ -237,7 +287,10 @@ export function DashboardScreen() {
         contentMode="full"
         headerVisible={false}
         headerVariant="plain"
+        onMomentumScrollEnd={homeChrome.onMomentumScrollEnd}
         onScroll={homeChrome.onScroll}
+        onScrollBeginDrag={homeChrome.onScrollBeginDrag}
+        onScrollEndDrag={homeChrome.onScrollEndDrag}
         overlay={homeChromeOverlay}
         refresh={refresh}
         safeAreaEdges={[]}
@@ -257,7 +310,10 @@ export function DashboardScreen() {
       headerVisible={false}
       headerVariant="plain"
       contentWidthStyle={styles.homeContent}
+      onMomentumScrollEnd={homeChrome.onMomentumScrollEnd}
       onScroll={homeChrome.onScroll}
+      onScrollBeginDrag={homeChrome.onScrollBeginDrag}
+      onScrollEndDrag={homeChrome.onScrollEndDrag}
       overlay={homeChromeOverlay}
       refresh={refresh}
       safeAreaEdges={[]}
@@ -284,6 +340,8 @@ export function DashboardScreen() {
           period={balancePeriod}
         />
       ) : null}
+
+      {homePendingPreview ? <DashboardPendingActionSection item={homePendingPreview} /> : null}
 
       <DashboardPeopleSection
         activePeople={dashboard.activePeople}

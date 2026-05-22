@@ -80,6 +80,16 @@ function nextRequiredSetupStep(input: PreHomeRouteInput): SetupStep {
   return input.setupState.pendingRequiredSteps[0] ?? 'profile';
 }
 
+function shouldRouteToSecuritySetup(input: PreHomeRouteInput): boolean {
+  return (
+    input.accountAccessState === 'active' &&
+    input.profileCompletionState === 'complete' &&
+    input.setupState.requiredComplete &&
+    input.setupState.securityPending &&
+    input.status === 'signed_in_untrusted'
+  );
+}
+
 function shouldWaitForAuthHandoff(input: PreHomeRouteInput) {
   return input.isJoinRoute && !input.hasJoinToken && input.isAuthRouteTransitionHeld;
 }
@@ -105,7 +115,7 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
   }
 
   if (input.status === 'signed_in_locked') {
-    if (!input.isJoinRoute && !input.isInviteLinkRoute) {
+    if (!input.isJoinRoute && !input.isInviteLinkRoute && !input.isResetPasswordRoute) {
       return replace('/join');
     }
 
@@ -138,11 +148,11 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
   }
 
   if (
-    input.setupState.requiredComplete &&
-    input.setupState.securityPending &&
+    shouldRouteToSecuritySetup(input) &&
     !input.isSetupAccountRoute &&
     !input.isResetPasswordRoute &&
-    !input.isPublicInviteRoute
+    !input.isPublicInviteRoute &&
+    !input.isOAuthCallbackRoute
   ) {
     if (shouldWaitForAuthHandoff(input)) {
       return stay();
@@ -164,12 +174,19 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
     input.profileCompletionState === 'complete' &&
     input.isOAuthCallbackRoute
   ) {
-    return replace(input.rawAuthCallback === 'google-link' ? '/profile' : '/home');
+    return replace(
+      input.rawAuthCallback === 'google-link'
+        ? '/profile'
+        : shouldRouteToSecuritySetup(input)
+          ? buildPreHomeSetupAccountHref('security')
+          : '/home',
+    );
   }
 
   if (
     input.accountAccessState === 'active' &&
     input.profileCompletionState === 'complete' &&
+    !shouldRouteToSecuritySetup(input) &&
     input.isJoinRoute &&
     !input.hasJoinToken &&
     !inviteAwareHref &&

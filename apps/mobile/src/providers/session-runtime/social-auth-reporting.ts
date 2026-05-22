@@ -1,9 +1,10 @@
 import { reportClientErrorSafe } from '@/lib/support-errors';
 import { readErrorMessage } from '../session/auth-errors';
+import { traceAuthDebugEvent } from './auth-debug';
 
-type NativeAuthProvider = 'apple' | 'google';
-type NativeAuthMode = 'link' | 'sign-in';
-type NativeAuthStage =
+type SocialAuthProvider = 'apple' | 'google';
+type SocialAuthMode = 'link' | 'sign-in';
+type SocialAuthStage =
   | 'browser_open'
   | 'link_identity'
   | 'native_credential'
@@ -12,17 +13,28 @@ type NativeAuthStage =
   | 'profile_metadata'
   | 'sign_in_with_id_token'
   | 'unexpected';
-type NativeAuthEventResult = 'cancelled' | 'started' | 'succeeded';
+type SocialAuthEventResult = 'cancelled' | 'started' | 'succeeded';
+type AuthFlowSource = 'native_auth' | 'oauth_auth';
 
-export function reportNativeAuthFailure(input: {
-  readonly provider: NativeAuthProvider;
-  readonly mode: NativeAuthMode;
-  readonly stage: NativeAuthStage;
+export function reportSocialAuthFailure(input: {
+  readonly provider: SocialAuthProvider;
+  readonly mode: SocialAuthMode;
+  readonly stage: SocialAuthStage;
   readonly error?: unknown;
   readonly message?: string;
   readonly reason?: string;
+  readonly source?: AuthFlowSource;
 }): void {
   const operation = `${input.provider}_${input.mode.replace('-', '_')}_${input.stage}`;
+  traceAuthDebugEvent({
+    message: input.message ?? readErrorMessage(input.error),
+    mode: input.mode,
+    provider: input.provider,
+    reason: input.reason ?? null,
+    result: 'failed',
+    source: input.source ?? 'native_auth',
+    stage: input.stage,
+  });
   reportClientErrorSafe({
     error: input.error,
     errorCode: operation,
@@ -34,20 +46,30 @@ export function reportNativeAuthFailure(input: {
       operation,
       reason: input.reason ?? null,
       result: 'failed',
-      source: 'native_auth',
+      source: input.source ?? 'native_auth',
     },
   });
 }
 
-export function reportNativeAuthEvent(input: {
-  readonly provider: NativeAuthProvider;
-  readonly mode: NativeAuthMode;
-  readonly stage: NativeAuthStage;
-  readonly result: NativeAuthEventResult;
+export function reportSocialAuthEvent(input: {
+  readonly provider: SocialAuthProvider;
+  readonly mode: SocialAuthMode;
+  readonly stage: SocialAuthStage;
+  readonly result: SocialAuthEventResult;
   readonly message?: string;
   readonly reason?: string;
+  readonly source?: AuthFlowSource;
 }): void {
   const operation = `${input.provider}_${input.mode.replace('-', '_')}_${input.stage}`;
+  traceAuthDebugEvent({
+    message: input.message ?? null,
+    mode: input.mode,
+    provider: input.provider,
+    reason: input.reason ?? null,
+    result: input.result,
+    source: input.source ?? 'native_auth',
+    stage: input.stage,
+  });
   reportClientErrorSafe({
     errorCode: operation,
     errorMessage: input.message ?? operation,
@@ -58,7 +80,7 @@ export function reportNativeAuthEvent(input: {
       operation,
       reason: input.reason ?? null,
       result: input.result,
-      source: 'native_auth',
+      source: input.source ?? 'native_auth',
     },
   });
 }

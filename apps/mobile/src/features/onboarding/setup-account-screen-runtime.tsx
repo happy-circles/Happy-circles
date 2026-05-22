@@ -53,7 +53,6 @@ import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff'
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { returnToRoute } from '@/lib/navigation';
 import {
-  buildSetupAccountHref,
   hasProfilePhoto,
   isLowQualityDisplayName,
   resolveInitialSetupFullName,
@@ -118,6 +117,7 @@ export function SetupAccountScreen() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [emailConfirmationCode, setEmailConfirmationCode] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
+  const [trustMethodPickerOpen, setTrustMethodPickerOpen] = useState(false);
   const [trustPasswordFallbackOpen, setTrustPasswordFallbackOpen] = useState(false);
   const [securityBusyKey, setSecurityBusyKey] = useState<string | null>(null);
   const [localAvatarPath, setLocalAvatarPath] = useState<string | null>(null);
@@ -152,6 +152,7 @@ export function SetupAccountScreen() {
   const socialTrustMethods = trustMethods.filter((method) => method !== 'password');
   const hasPasswordTrustMethod = trustMethods.includes('password');
   const showTrustPasswordFallback =
+    trustMethodPickerOpen &&
     hasPasswordTrustMethod &&
     !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
@@ -254,13 +255,13 @@ export function SetupAccountScreen() {
 
     const pendingIntent = await readPendingInviteIntent();
 
-    if (!session.isTrustedDevice) {
-      setMessage('Perfil guardado. Valida este telefono para entrar.');
-      returnToRoute(router, buildSetupAccountHref('security'));
-      return;
-    }
-
     if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
+      if (!session.isTrustedDevice) {
+        setMessage('Perfil guardado. Vuelve a la invitación para continuar.');
+        returnToRoute(router, hrefForPendingInviteIntent(pendingIntent));
+        return;
+      }
+
       await activatePendingAccountInvite(pendingIntent);
       return;
     }
@@ -280,7 +281,7 @@ export function SetupAccountScreen() {
   async function finishSecurityOnly() {
     if (!session.isTrustedDevice) {
       triggerWarningHaptic();
-      setMessage('Valida este telefono para continuar.');
+      setMessage('Confía este teléfono para continuar.');
       return;
     }
 
@@ -596,11 +597,28 @@ export function SetupAccountScreen() {
       ),
     );
 
-    if (result === 'Este dispositivo ahora es confiable.') {
+    if (result === 'Este teléfono ahora es confiable.') {
       triggerSuccessHaptic();
       setTrustPassword('');
+      setTrustMethodPickerOpen(false);
       setTrustPasswordFallbackOpen(false);
     }
+  }
+
+  function handleTrustEntryPress() {
+    triggerSelectionHaptic();
+
+    if (session.canTrustCurrentDeviceWithoutPassword && hasPasswordTrustMethod) {
+      void handleTrustDevice('password');
+      return;
+    }
+
+    if (trustMethods.length === 0) {
+      setMessage('Agrega Google, Apple o una contraseña para poder confiar este teléfono.');
+      return;
+    }
+
+    setTrustMethodPickerOpen(true);
   }
 
   async function handleBiometricToggle(nextValue: boolean) {
@@ -616,10 +634,10 @@ export function SetupAccountScreen() {
   const primaryActionLoading = securityOnlyMode ? securityBusyKey !== null : isSaving;
   const primaryActionLabel = securityOnlyMode
     ? securityBusyKey !== null
-      ? 'Validando...'
+      ? 'Confirmando...'
       : session.isTrustedDevice
         ? 'Listo'
-        : 'Validación pendiente'
+        : 'Confianza pendiente'
     : isSaving
       ? 'Guardando...'
       : editPhoneMode
@@ -655,9 +673,9 @@ export function SetupAccountScreen() {
             subtitle={
               session.isTrustedDevice
                 ? 'Ya puedes volver al flujo que estabas completando.'
-                : 'Confirma este teléfono con un método vinculado a tu cuenta.'
+                : 'Para marcarlo como confiable, confirma que eres tú con un método de respaldo.'
             }
-            title={session.isTrustedDevice ? 'Teléfono validado' : 'Valida este teléfono'}
+            title={session.isTrustedDevice ? 'Teléfono confiable' : 'Confiar este teléfono'}
           />
         ) : undefined
       }
@@ -873,115 +891,135 @@ export function SetupAccountScreen() {
                   ? 'Acciones sensibles habilitadas'
                   : session.canTrustCurrentDeviceWithoutPassword
                     ? 'Confirma con un toque'
-                    : 'Valida este teléfono'
+                    : 'Confirma con un método de respaldo'
               }
-              title="Dispositivo confiable"
+              title="Teléfono confiable"
               tone={session.isTrustedDevice ? 'success' : 'danger'}
             />
             {!session.isTrustedDevice ? (
               <View style={styles.securityAction}>
-                {session.canTrustCurrentDeviceWithoutPassword ? (
-                  <AppText style={styles.helperText}>
-                    Confirmaste tu contraseña hace poco. Puedes confiar este teléfono sin escribirla
-                    otra vez.
-                  </AppText>
-                ) : null}
-                <View style={styles.inlineActionRow}>
-                  {socialTrustMethods.map((method) => (
-                    <PrimaryAction
-                      compact
-                      disabled={securityBusyKey !== null}
-                      fullWidth={false}
-                      key={method}
-                      label={
-                        securityBusyKey === `trust-device-${method}`
-                          ? 'Validando...'
-                          : resolveTrustMethodLabel({
-                              canTrustCurrentDeviceWithoutPassword:
-                                session.canTrustCurrentDeviceWithoutPassword,
-                              method,
-                            })
-                      }
-                      onPress={securityBusyKey ? undefined : () => void handleTrustDevice(method)}
-                    />
-                  ))}
-                  {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                <AppText style={styles.helperText}>
+                  Para marcarlo como confiable, confirma que eres tú con un método de respaldo.
+                </AppText>
+
+                {!trustMethodPickerOpen ? (
+                  <View style={styles.inlineActionRow}>
                     <PrimaryAction
                       compact
                       disabled={securityBusyKey !== null}
                       fullWidth={false}
                       label={
-                        securityBusyKey === 'trust-device-password'
-                          ? 'Validando...'
-                          : resolveTrustMethodLabel({
-                              canTrustCurrentDeviceWithoutPassword:
-                                session.canTrustCurrentDeviceWithoutPassword,
-                              method: 'password',
-                            })
+                        securityBusyKey?.startsWith('trust-device-')
+                          ? 'Confirmando...'
+                          : 'Confiar este teléfono'
                       }
-                      onPress={
-                        securityBusyKey ? undefined : () => void handleTrustDevice('password')
-                      }
+                      onPress={securityBusyKey ? undefined : handleTrustEntryPress}
                     />
-                  ) : null}
-                </View>
-                {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
-                  <Pressable
-                    disabled={securityBusyKey !== null}
-                    onPress={() => {
-                      triggerSelectionHaptic();
-                      setTrustPasswordFallbackOpen((open) => !open);
-                    }}
-                    style={({ pressed }) => [
-                      styles.inlineButton,
-                      pressed && securityBusyKey === null ? styles.pressed : null,
-                      securityBusyKey !== null ? styles.disabledAction : null,
-                    ]}
-                  >
-                    <AppText style={styles.inlineButtonText}>
-                      {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
-                    </AppText>
-                  </Pressable>
-                ) : null}
-                {showTrustPasswordFallback ? (
+                  </View>
+                ) : (
                   <>
-                    <PasswordTextInput
-                      autoCapitalize="none"
-                      onChangeText={setTrustPassword}
-                      placeholder="Tu contraseña actual"
-                      placeholderTextColor={theme.colors.muted}
-                      ref={trustPasswordInputRef}
-                      value={trustPassword}
-                    />
+                    <AppText style={styles.helperText}>
+                      Elige cómo confirmar tu identidad para confiar este teléfono.
+                    </AppText>
                     <View style={styles.inlineActionRow}>
-                      <PrimaryAction
-                        compact
-                        disabled={securityBusyKey !== null}
-                        fullWidth={false}
-                        label={
-                          securityBusyKey === 'trust-device-password'
-                            ? 'Validando...'
-                            : resolveTrustMethodLabel({
-                                canTrustCurrentDeviceWithoutPassword:
-                                  session.canTrustCurrentDeviceWithoutPassword,
-                                method: 'password',
-                              })
-                        }
-                        onPress={
-                          securityBusyKey ? undefined : () => void handleTrustDevice('password')
-                        }
-                      />
+                      {socialTrustMethods.map((method) => (
+                        <PrimaryAction
+                          compact
+                          disabled={securityBusyKey !== null}
+                          fullWidth={false}
+                          key={method}
+                          label={
+                            securityBusyKey === `trust-device-${method}`
+                              ? 'Confirmando...'
+                              : resolveTrustMethodLabel({
+                                  canTrustCurrentDeviceWithoutPassword:
+                                    session.canTrustCurrentDeviceWithoutPassword,
+                                  method,
+                                })
+                          }
+                          onPress={
+                            securityBusyKey ? undefined : () => void handleTrustDevice(method)
+                          }
+                        />
+                      ))}
+                      {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                        <PrimaryAction
+                          compact
+                          disabled={securityBusyKey !== null}
+                          fullWidth={false}
+                          label={
+                            securityBusyKey === 'trust-device-password'
+                              ? 'Confirmando...'
+                              : resolveTrustMethodLabel({
+                                  canTrustCurrentDeviceWithoutPassword:
+                                    session.canTrustCurrentDeviceWithoutPassword,
+                                  method: 'password',
+                                })
+                          }
+                          onPress={
+                            securityBusyKey ? undefined : () => void handleTrustDevice('password')
+                          }
+                        />
+                      ) : null}
                     </View>
+                    {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
+                      <Pressable
+                        disabled={securityBusyKey !== null}
+                        onPress={() => {
+                          triggerSelectionHaptic();
+                          setTrustPasswordFallbackOpen((open) => !open);
+                        }}
+                        style={({ pressed }) => [
+                          styles.inlineButton,
+                          pressed && securityBusyKey === null ? styles.pressed : null,
+                          securityBusyKey !== null ? styles.disabledAction : null,
+                        ]}
+                      >
+                        <AppText style={styles.inlineButtonText}>
+                          {showTrustPasswordFallback ? 'Ocultar contraseña' : 'Usar contraseña'}
+                        </AppText>
+                      </Pressable>
+                    ) : null}
+                    {showTrustPasswordFallback ? (
+                      <>
+                        <PasswordTextInput
+                          autoCapitalize="none"
+                          onChangeText={setTrustPassword}
+                          placeholder="Tu contraseña actual"
+                          placeholderTextColor={theme.colors.muted}
+                          ref={trustPasswordInputRef}
+                          value={trustPassword}
+                        />
+                        <View style={styles.inlineActionRow}>
+                          <PrimaryAction
+                            compact
+                            disabled={securityBusyKey !== null}
+                            fullWidth={false}
+                            label={
+                              securityBusyKey === 'trust-device-password'
+                                ? 'Confirmando...'
+                                : resolveTrustMethodLabel({
+                                    canTrustCurrentDeviceWithoutPassword:
+                                      session.canTrustCurrentDeviceWithoutPassword,
+                                    method: 'password',
+                                  })
+                            }
+                            onPress={
+                              securityBusyKey ? undefined : () => void handleTrustDevice('password')
+                            }
+                          />
+                        </View>
+                      </>
+                    ) : null}
                   </>
-                ) : null}
-                {trustMethods.length === 0 ? (
+                )}
+                {trustMethodPickerOpen && trustMethods.length === 0 ? (
                   <AppText style={styles.helperText}>
-                    Esta cuenta no tiene un método disponible para revalidar el dispositivo.
+                    Agrega Google, Apple o una contraseña para poder confiar este teléfono.
                   </AppText>
                 ) : null}
               </View>
             ) : null}
-
             {!securityOnlyMode ? (
               <>
                 <View style={styles.separator} />
@@ -992,7 +1030,7 @@ export function SetupAccountScreen() {
                     session.setupState.biometricsEligible
                       ? session.biometricLabel
                       : session.biometricAvailable
-                        ? 'Primero valida este dispositivo'
+                        ? 'Primero confía este teléfono'
                         : 'No disponible'
                   }
                   title="Biometría"
@@ -1016,19 +1054,21 @@ export function SetupAccountScreen() {
           </View>
         </View>
 
-        <IdentityFlowPrimaryAction
-          disabled={primaryActionDisabled}
-          icon="checkmark"
-          label={primaryActionLabel}
-          loading={primaryActionLoading}
-          onPress={
-            primaryActionDisabled
-              ? undefined
-              : securityOnlyMode
-                ? () => void finishSecurityOnly()
-                : () => void handleSaveAndFinish()
-          }
-        />
+        {!securityOnlyMode || session.isTrustedDevice ? (
+          <IdentityFlowPrimaryAction
+            disabled={primaryActionDisabled}
+            icon="checkmark"
+            label={primaryActionLabel}
+            loading={primaryActionLoading}
+            onPress={
+              primaryActionDisabled
+                ? undefined
+                : securityOnlyMode
+                  ? () => void finishSecurityOnly()
+                  : () => void handleSaveAndFinish()
+            }
+          />
+        ) : null}
       </View>
       <AvatarOptionsSheet
         canViewPhoto={canViewProfileAvatar}

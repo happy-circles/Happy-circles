@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { PendingActionDto } from '@happy-circles/application';
 import type { AccountInviteListItem, FriendshipInviteListItem } from '@/lib/live-data';
 import { inviteStatusCopy } from '@/lib/card-language';
 import { theme } from '@/lib/theme';
@@ -16,6 +17,10 @@ export type InviteCardIconName =
   | 'person-add-outline';
 
 export const INVITE_REQUEST_TABS: readonly InviteRequestsTab[] = ['received', 'sent', 'history'];
+const HOME_TRANSACTION_PENDING_KINDS = new Set<PendingActionDto['kind']>([
+  'financial_request',
+  'settlement_proposal',
+]);
 
 export function balanceFocusHref(focus: BalanceFocus): Href {
   if (focus === 'balance') {
@@ -31,6 +36,44 @@ export function balanceFocusHref(focus: BalanceFocus): Href {
   }
 
   return '/circles' as Href;
+}
+
+export function shouldSurfaceHomePendingPreview(
+  item: PendingActionDto | null | undefined,
+): item is PendingActionDto {
+  return Boolean(item && !HOME_TRANSACTION_PENDING_KINDS.has(item.kind));
+}
+
+export function statusLabelForHomePendingPreview(
+  item: Pick<PendingActionDto, 'kind' | 'status'>,
+): string {
+  if (item.kind === 'friendship_invite' || item.kind === 'account_invite') {
+    if (item.status === 'requires_you_response') {
+      return inviteStatusCopy.requiresResponse;
+    }
+
+    if (item.status === 'requires_you_review') {
+      return inviteStatusCopy.requiresReview;
+    }
+
+    if (item.status === 'pending_claim') {
+      return inviteStatusCopy.pendingClaim;
+    }
+
+    if (item.status === 'pending_activation') {
+      return inviteStatusCopy.pendingActivation;
+    }
+
+    if (item.status === 'waiting_sender_review') {
+      return inviteStatusCopy.waitingSenderReview;
+    }
+
+    if (item.status === 'waiting_other_side') {
+      return inviteStatusCopy.waitingOtherSide;
+    }
+  }
+
+  return item.status === 'pending' ? 'Pendiente' : 'En seguimiento';
 }
 
 export function sortInviteRequestItems(items: readonly InviteRequestItem[]): InviteRequestItem[] {

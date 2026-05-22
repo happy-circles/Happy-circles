@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 
 import { buildNativeAppUrl } from '@/lib/app-links';
 
@@ -43,25 +43,51 @@ export function AppOpenButton({
   );
   const [href, setHref] = useState(fallbackHref);
 
+  const resolveLiveHref = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return fallbackHref;
+    }
+
+    if (nativePath) {
+      return buildHref(nativePath);
+    }
+
+    return buildNativeAppUrl(window.location.pathname, window.location.search, window.location.hash);
+  }, [buildHref, fallbackHref, nativePath]);
+
+  const openApp = useCallback(() => {
+    const nextHref = resolveLiveHref();
+    setHref(nextHref);
+    window.location.assign(nextHref);
+  }, [resolveLiveHref]);
+
   useEffect(() => {
-    const nextHref = nativePath
-      ? buildHref(nativePath)
-      : buildNativeAppUrl(window.location.pathname, window.location.search, window.location.hash);
+    const nextHref = resolveLiveHref();
     setHref(nextHref);
 
     if (!autoOpen) {
       return undefined;
     }
 
-    const timer = window.setTimeout(() => {
-      window.location.assign(nextHref);
-    }, 350);
+    const frame = window.requestAnimationFrame(() => openApp());
+    const retryTimer = window.setTimeout(() => openApp(), 700);
 
-    return () => window.clearTimeout(timer);
-  }, [autoOpen, buildHref, nativePath]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(retryTimer);
+    };
+  }, [autoOpen, openApp, resolveLiveHref]);
+
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      openApp();
+    },
+    [openApp],
+  );
 
   return (
-    <a className={className} href={href}>
+    <a className={className} href={href} onClick={handleClick}>
       {label}
     </a>
   );

@@ -10,11 +10,16 @@ function buildNativeRedirect(path: string): string {
   return `happycircles://${ensureLeadingSlash(path).slice(1)}`;
 }
 
+function readCurrentWebOrigin(): string | null {
+  const location = (globalThis as { readonly location?: { readonly origin?: string } }).location;
+  const origin = location?.origin?.trim();
+  return origin || null;
+}
+
 function buildWebRedirect(path: string): string {
   const normalizedPath = ensureLeadingSlash(path);
-  const origin = appConfig.appWebOrigin.endsWith('/')
-    ? appConfig.appWebOrigin
-    : `${appConfig.appWebOrigin}/`;
+  const webOrigin = readCurrentWebOrigin() ?? appConfig.appWebOrigin;
+  const origin = webOrigin.endsWith('/') ? webOrigin : `${webOrigin}/`;
 
   return new URL(normalizedPath.slice(1), origin).toString();
 }

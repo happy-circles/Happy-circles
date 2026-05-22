@@ -17,7 +17,9 @@ import {
   isReceivedInvite,
   isSentInvite,
   isVisibleInviteHistory,
+  shouldSurfaceHomePendingPreview,
   sortInviteRequestItems,
+  statusLabelForHomePendingPreview,
   statusLabelForInvite,
   type InviteRequestItem,
 } from './dashboard-helpers';
@@ -121,6 +123,37 @@ describe('dashboard invite helpers', () => {
     expect(balanceFocusHref('people')).toBe('/people?filter=movements');
     expect(balanceFocusHref('categories')).toBe('/categories');
     expect(balanceFocusHref('circles')).toBe('/circles');
+  });
+
+  it('surfaces non-transaction pending previews on home', () => {
+    expect(
+      shouldSurfaceHomePendingPreview({
+        id: 'account-review',
+        kind: 'account_invite',
+        title: 'Esperando validacion',
+        subtitle: 'Ya activaste este acceso',
+        status: 'waiting_sender_review',
+        ctaLabel: 'Ver',
+        href: '/activity?domain=friendships',
+      }),
+    ).toBe(true);
+    expect(
+      shouldSurfaceHomePendingPreview({
+        id: 'request-1',
+        kind: 'financial_request',
+        title: 'Solicitud pendiente',
+        subtitle: 'Ben | hoy',
+        status: 'requires_you',
+        ctaLabel: 'Responder',
+        href: '/person/user-ben',
+      }),
+    ).toBe(false);
+    expect(
+      statusLabelForHomePendingPreview({
+        kind: 'account_invite',
+        status: 'waiting_sender_review',
+      }),
+    ).toBe('Esperando validaci\u00f3n');
   });
 });
 

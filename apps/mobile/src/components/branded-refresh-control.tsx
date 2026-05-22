@@ -109,7 +109,8 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
           : contentOffset,
       [contentOffset, iosNativeIndicatorTopInset],
     );
-    const nativeRefreshControl = refresh ? <BrandedRefreshControl refresh={refresh} /> : undefined;
+    const nativeRefreshControl =
+      refresh && Platform.OS !== 'web' ? <BrandedRefreshControl refresh={refresh} /> : undefined;
 
     return (
       <View style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}>

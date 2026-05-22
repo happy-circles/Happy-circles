@@ -1,12 +1,104 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
+import type { Href } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 
+import { ActivityItemCard } from '@/components/activity-item-card';
+import { CardPressable } from '@/components/card-shell';
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
-import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
-import type { TransactionTargetPanel } from './dashboard-helpers';
+import type { ActivityItemDto, PendingActionDto, PersonCardDto } from '@happy-circles/application';
+import {
+  statusLabelForHomePendingPreview,
+  type TransactionTargetPanel,
+} from './dashboard-helpers';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
 import { AppText } from '@/components/app-text';
+import { cardStateColor, cardStateIntentFromStatus, cardStateSoftColor } from '@/lib/card-language';
+import { useAppTheme } from '@/providers/theme-provider';
+
+function pendingPreviewIconName(item: PendingActionDto): keyof typeof Ionicons.glyphMap {
+  if (item.kind === 'account_invite') {
+    return 'key-outline';
+  }
+
+  if (item.kind === 'friendship_invite') {
+    return 'person-add-outline';
+  }
+
+  if (item.kind === 'reminder') {
+    return 'notifications-outline';
+  }
+
+  return 'information-circle-outline';
+}
+
+export function DashboardPendingActionSection({ item }: { readonly item: PendingActionDto }) {
+  const activeTheme = useAppTheme();
+  const statusLabel = statusLabelForHomePendingPreview(item);
+  const intent = cardStateIntentFromStatus(item.status);
+  const accentColor = cardStateColor(intent);
+  const iconBackgroundColor = cardStateSoftColor(intent);
+  const href = (item.href || '/activity') as Href;
+  const meta = [statusLabel, item.subtitle].filter(Boolean).join(' | ');
+
+  return (
+    <SectionBlock
+      action={
+        <Link href="/activity" asChild>
+          <Pressable
+            hitSlop={12}
+            pressRetentionOffset={12}
+            style={({ pressed }) => [
+              styles.peopleSectionAction,
+              pressed ? styles.quickActionPressed : null,
+            ]}
+          >
+            <AppText style={styles.peopleSectionActionText}>Ver todo</AppText>
+          </Pressable>
+        </Link>
+      }
+      contentStyle={styles.homeSectionContent}
+      headerStyle={styles.homeSectionHeader}
+      title="Pendiente"
+    >
+      <Link href={href} asChild>
+        <CardPressable accessibilityLabel={item.title} accessibilityRole="button" haptic="selection">
+          <ActivityItemCard
+            accentColor={accentColor}
+            compact
+            leadingNode={
+              <View
+                style={[
+                  styles.homePendingActionIcon,
+                  { backgroundColor: iconBackgroundColor },
+                ]}
+              >
+                <Ionicons color={accentColor} name={pendingPreviewIconName(item)} size={21} />
+              </View>
+            }
+            metaNode={
+              <AppText numberOfLines={2} style={styles.homePendingActionMeta}>
+                {meta}
+              </AppText>
+            }
+            sideNode={
+              <View style={styles.homePendingActionSide}>
+                <AppText numberOfLines={1} style={styles.homePendingActionCta}>
+                  {item.ctaLabel}
+                </AppText>
+                <Ionicons color={activeTheme.colors.textMuted} name="chevron-forward" size={18} />
+              </View>
+            }
+            title={item.title}
+            unread={intent === 'needsAction'}
+            variant="elevated"
+          />
+        </CardPressable>
+      </Link>
+    </SectionBlock>
+  );
+}
 
 export function DashboardPeopleSection({
   activePeople,

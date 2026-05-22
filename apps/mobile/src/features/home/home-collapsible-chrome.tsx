@@ -29,6 +29,9 @@ const HOME_CHROME_COMPACT_PROGRESS = 0.82;
 const HOME_CHROME_EXPANDED_PROGRESS = 0.18;
 const HOME_CHROME_SCROLL_EXPAND_DISTANCE = 82;
 const HOME_CHROME_SCROLL_COMPACT_DISTANCE = 112;
+const HOME_CHROME_SCROLL_DIRECTION_THRESHOLD = 4;
+const HOME_CHROME_SNAP_DELAY_MS = 90;
+const HOME_CHROME_SNAP_DURATION_MS = 180;
 const HOME_CHROME_CONTENT_MAX_WIDTH = 560;
 const HOME_CHROME_PROFILE_BUTTON_SIZE = 48;
 const HOME_CHROME_AVATAR_SIZE = 40;
@@ -51,6 +54,7 @@ const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 export const HOME_CHROME_EXPANDED_HEIGHT = 86;
 
 type HomeChromeProgress = Animated.Value;
+type HomeChromeScrollDirection = 'expand' | 'compact';
 
 const shouldMountNativeGlass = Platform.OS === 'ios';
 const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
@@ -161,6 +165,9 @@ export function useCollapsibleHomeChrome(scrollTopInset = 0) {
   const [isCompact, setIsCompact] = useState(false);
   const isCompactRef = useRef(false);
   const lastYRef = useRef(0);
+  const lastDirectionRef = useRef<HomeChromeScrollDirection | null>(null);
+  const snapAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const snapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateCompactState = useCallback((nextProgress: number) => {
     if (!isCompactRef.current && nextProgress >= HOME_CHROME_COMPACT_PROGRESS) {
@@ -185,15 +192,127 @@ export function useCollapsibleHomeChrome(scrollTopInset = 0) {
     [progress, updateCompactState],
   );
 
+  const clearQueuedSnap = useCallback(() => {
+    if (snapTimeoutRef.current === null) {
+      return;
+    }
+
+    clearTimeout(snapTimeoutRef.current);
+    snapTimeoutRef.current = null;
+  }, []);
+
+  const stopSnapAnimation = useCallback(() => {
+    if (snapAnimationRef.current === null) {
+      return;
+    }
+
+    snapAnimationRef.current.stop();
+    snapAnimationRef.current = null;
+  }, []);
+
+  const animateToSettledProgress = useCallback(
+    (nextProgress: number) => {
+      const clampedProgress = clampProgress(nextProgress);
+
+      clearQueuedSnap();
+      stopSnapAnimation();
+
+      if (reducedMotion || Math.abs(progressValueRef.current - clampedProgress) < 0.01) {
+        setProgressValue(clampedProgress);
+        return;
+      }
+
+      const animation = Animated.timing(progress, {
+        duration: HOME_CHROME_SNAP_DURATION_MS,
+        easing: Easing.out(Easing.cubic),
+        toValue: clampedProgress,
+        useNativeDriver: false,
+      });
+
+      snapAnimationRef.current = animation;
+      animation.start(({ finished }) => {
+        if (snapAnimationRef.current === animation) {
+          snapAnimationRef.current = null;
+        }
+
+        if (finished) {
+          setProgressValue(clampedProgress);
+        }
+      });
+    },
+    [clearQueuedSnap, progress, reducedMotion, setProgressValue, stopSnapAnimation],
+  );
+
+  const settleToLastDirection = useCallback(() => {
+    const direction = lastDirectionRef.current;
+    lastDirectionRef.current = null;
+
+    if (direction === 'compact') {
+      animateToSettledProgress(1);
+      return;
+    }
+
+    if (direction === 'expand') {
+      animateToSettledProgress(0);
+      return;
+    }
+
+    animateToSettledProgress(isCompactRef.current ? 1 : 0);
+  }, [animateToSettledProgress]);
+
+  const queueSnapToLastDirection = useCallback(() => {
+    clearQueuedSnap();
+    snapTimeoutRef.current = setTimeout(() => {
+      snapTimeoutRef.current = null;
+      settleToLastDirection();
+    }, HOME_CHROME_SNAP_DELAY_MS);
+  }, [clearQueuedSnap, settleToLastDirection]);
+
   useEffect(() => {
     setProgressValue(isCompactRef.current ? 1 : 0);
   }, [reducedMotion, setProgressValue]);
+
+  useEffect(() => {
+    const listenerId = progress.addListener(({ value }) => {
+      const clampedProgress = clampProgress(value);
+      progressValueRef.current = clampedProgress;
+      updateCompactState(clampedProgress);
+    });
+
+    return () => {
+      progress.removeListener(listenerId);
+    };
+  }, [progress, updateCompactState]);
+
+  useEffect(() => {
+    return () => {
+      clearQueuedSnap();
+      stopSnapAnimation();
+    };
+  }, [clearQueuedSnap, stopSnapAnimation]);
+
+  const onScrollBeginDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      clearQueuedSnap();
+      stopSnapAnimation();
+      lastDirectionRef.current = null;
+      lastYRef.current = Math.max(0, event.nativeEvent.contentOffset.y + scrollTopInset);
+    },
+    [clearQueuedSnap, scrollTopInset, stopSnapAnimation],
+  );
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = Math.max(0, event.nativeEvent.contentOffset.y + scrollTopInset);
       const delta = y - lastYRef.current;
       lastYRef.current = y;
+      const meaningfulDirection = Math.abs(delta) >= HOME_CHROME_SCROLL_DIRECTION_THRESHOLD;
+
+      if (meaningfulDirection) {
+        clearQueuedSnap();
+        stopSnapAnimation();
+        lastDirectionRef.current = delta > 0 ? 'compact' : 'expand';
+      }
 
       if (reducedMotion) {
         if (y <= HOME_CHROME_EXPANDED_STATE_Y || delta < 0) {
@@ -208,6 +327,7 @@ export function useCollapsibleHomeChrome(scrollTopInset = 0) {
       }
 
       if (y <= HOME_CHROME_MORPH_START_Y) {
+        lastDirectionRef.current = 'expand';
         setProgressValue(0);
         return;
       }
@@ -223,10 +343,17 @@ export function useCollapsibleHomeChrome(scrollTopInset = 0) {
         setProgressValue(progressValueRef.current + delta / HOME_CHROME_SCROLL_COMPACT_DISTANCE);
       }
     },
-    [reducedMotion, scrollTopInset, setProgressValue],
+    [clearQueuedSnap, reducedMotion, scrollTopInset, setProgressValue, stopSnapAnimation],
   );
 
-  return { isCompact, onScroll, progress };
+  return {
+    isCompact,
+    onMomentumScrollEnd: queueSnapToLastDirection,
+    onScroll,
+    onScrollBeginDrag,
+    onScrollEndDrag: queueSnapToLastDirection,
+    progress,
+  };
 }
 
 function HomeCompactAvatarFrame({ progress }: { readonly progress: HomeChromeProgress }) {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
 import {
   IdentityFlowField,
@@ -21,7 +22,10 @@ import {
   triggerIdentityWarningHaptic,
 } from '@/lib/identity-flow-haptics';
 import { returnToRoute } from '@/lib/navigation';
+import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+
+const RESET_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
 export function ResetPasswordScreen() {
   const router = useRouter();
@@ -96,8 +100,16 @@ export function ResetPasswordScreen() {
           onPress={() => returnToRoute(router, '/join?mode=recover')}
         />
       }
+      bodyStyle={styles.body}
+      contentTransitionKey={
+        hasRecoverySession ? 'reset-password:form' : 'reset-password:unavailable'
+      }
       identity={<IdentityFlowIdentity state={visualState} variant="status" />}
+      identityCenterLayout="balanced"
       identityPosition="top"
+      keyboardActionClearance={
+        hasRecoverySession ? RESET_PASSWORD_KEYBOARD_ACTION_CLEARANCE : undefined
+      }
       message={
         <IdentityFlowLogoCopy
           subtitle={
@@ -108,94 +120,117 @@ export function ResetPasswordScreen() {
           title={hasRecoverySession ? 'Restablece tu contraseña' : 'Enlace no disponible'}
         />
       }
+      scrollEnabled
+      transitionScrollPolicy="preserve"
     >
-      <IdentityFlowMessageSlot>
-        {!hasRecoverySession ? (
-          <MessageBanner
-            message="Este enlace ya no es válido o no se pudo abrir en la app. Pide uno nuevo desde Ingresar."
-            tone="warning"
-          />
-        ) : message ? (
-          <MessageBanner
-            message={message}
-            tone={message === 'Contraseña actualizada.' ? 'success' : 'neutral'}
-          />
-        ) : null}
-      </IdentityFlowMessageSlot>
+      <View style={styles.main}>
+        <IdentityFlowMessageSlot>
+          {!hasRecoverySession ? (
+            <MessageBanner
+              message="Este enlace ya no es válido o no se pudo abrir en la app. Pide uno nuevo desde Ingresar."
+              tone="warning"
+            />
+          ) : message ? (
+            <MessageBanner
+              message={message}
+              tone={message === 'Contraseña actualizada.' ? 'success' : 'neutral'}
+            />
+          ) : null}
+        </IdentityFlowMessageSlot>
 
-      {hasRecoverySession ? (
-        <>
-          <IdentityFlowForm>
-            <IdentityFlowField
-              error={errors.password ?? null}
-              icon="lock-closed"
-              label="Nueva contraseña"
-              status={errors.password ? 'danger' : password.length >= 8 ? 'success' : 'idle'}
-            >
-              <IdentityFlowPasswordInput
-                autoCapitalize="none"
-                autoComplete="new-password"
-                onBlur={() =>
-                  setErrors((current) => ({
-                    ...current,
-                    password:
-                      password.length > 0 && password.length < 8
-                        ? 'Debe tener al menos 8 caracteres.'
-                        : undefined,
-                  }))
-                }
-                onChangeText={(value) => {
-                  setPassword(value);
-                  setErrors((current) => ({ ...current, password: undefined }));
-                }}
-                placeholder="Mínimo 8 caracteres"
-                value={password}
-              />
-            </IdentityFlowField>
+        {hasRecoverySession ? (
+          <IdentityFlowForm style={styles.form}>
+            <View style={styles.fields}>
+              <IdentityFlowField
+                error={errors.password ?? null}
+                icon="lock-closed"
+                label="Nueva contraseña"
+                status={errors.password ? 'danger' : password.length >= 8 ? 'success' : 'idle'}
+              >
+                <IdentityFlowPasswordInput
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  onBlur={() =>
+                    setErrors((current) => ({
+                      ...current,
+                      password:
+                        password.length > 0 && password.length < 8
+                          ? 'Debe tener al menos 8 caracteres.'
+                          : undefined,
+                    }))
+                  }
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setErrors((current) => ({ ...current, password: undefined }));
+                  }}
+                  placeholder="Mínimo 8 caracteres"
+                  value={password}
+                />
+              </IdentityFlowField>
 
-            <IdentityFlowField
-              error={errors.confirmPassword ?? null}
-              icon="shield-checkmark"
-              label="Confirmar contraseña"
-              status={
-                errors.confirmPassword
-                  ? 'danger'
-                  : confirmPassword.length > 0 && confirmPassword === password
-                    ? 'success'
-                    : 'idle'
-              }
-            >
-              <IdentityFlowPasswordInput
-                autoCapitalize="none"
-                autoComplete="new-password"
-                onBlur={() =>
-                  setErrors((current) => ({
-                    ...current,
-                    confirmPassword:
-                      confirmPassword.length > 0 && confirmPassword !== password
-                        ? 'Las contraseñas deben coincidir.'
-                        : undefined,
-                  }))
+              <IdentityFlowField
+                error={errors.confirmPassword ?? null}
+                icon="shield-checkmark"
+                label="Confirmar contraseña"
+                status={
+                  errors.confirmPassword
+                    ? 'danger'
+                    : confirmPassword.length > 0 && confirmPassword === password
+                      ? 'success'
+                      : 'idle'
                 }
-                onChangeText={(value) => {
-                  setConfirmPassword(value);
-                  setErrors((current) => ({ ...current, confirmPassword: undefined }));
-                }}
-                placeholder="Repite la nueva contraseña"
-                value={confirmPassword}
-              />
-            </IdentityFlowField>
+              >
+                <IdentityFlowPasswordInput
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  onBlur={() =>
+                    setErrors((current) => ({
+                      ...current,
+                      confirmPassword:
+                        confirmPassword.length > 0 && confirmPassword !== password
+                          ? 'Las contraseñas deben coincidir.'
+                          : undefined,
+                    }))
+                  }
+                  onChangeText={(value) => {
+                    setConfirmPassword(value);
+                    setErrors((current) => ({ ...current, confirmPassword: undefined }));
+                  }}
+                  placeholder="Repite la nueva contraseña"
+                  value={confirmPassword}
+                />
+              </IdentityFlowField>
+            </View>
+
+            <IdentityFlowPrimaryAction
+              disabled={busy}
+              icon="checkmark"
+              label={busy ? 'Actualizando...' : 'Guardar nueva contraseña'}
+              loading={busy}
+              onPress={busy ? undefined : () => void handleSubmit()}
+            />
           </IdentityFlowForm>
-
-          <IdentityFlowPrimaryAction
-            disabled={busy}
-            icon="checkmark"
-            label={busy ? 'Actualizando...' : 'Guardar nueva contraseña'}
-            loading={busy}
-            onPress={busy ? undefined : () => void handleSubmit()}
-          />
-        </>
-      ) : null}
+        ) : null}
+      </View>
     </IdentityFlowScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  body: {
+    flex: 1,
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+  },
+  main: {
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  form: {
+    gap: theme.spacing.md,
+  },
+  fields: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
+});

@@ -153,7 +153,6 @@ export async function performSupabaseGoogleOAuth(input: {
       stage: 'oauth_start',
     });
 
-    await dismissStaleAuthBrowser();
     input.reportEvent?.({
       message: 'Opening Google auth session.',
       mode: input.mode,
@@ -162,6 +161,8 @@ export async function performSupabaseGoogleOAuth(input: {
       result: 'started',
       stage: 'browser_open',
     });
+
+    await dismissStaleAuthBrowser();
 
     let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
     try {

@@ -16,9 +16,10 @@ const mobileFetcherSource = readFileSync(
 );
 
 describe('get-app-snapshot contract', () => {
-  it('is registered as an authenticated Edge Function', () => {
-    expect(configSource).toMatch(/\[functions\.get-app-snapshot\][\s\S]*verify_jwt\s*=\s*true/);
+  it('allows browser preflight while authenticating inside the Edge Function', () => {
+    expect(configSource).toMatch(/\[functions\.get-app-snapshot\][\s\S]*verify_jwt\s*=\s*false/);
     expect(functionSource).toContain('handleRpc(request');
+    expect(functionSource).toContain('actorUserId');
   });
 
   it('uses explicit selects and actor-scoped reads', () => {

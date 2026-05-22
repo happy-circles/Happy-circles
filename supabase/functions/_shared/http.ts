@@ -9,6 +9,13 @@ const FUNCTION_BODY_LIMITS: Record<string, number> = {
   'get-app-snapshot': 4 * 1024,
   'process-graph-cycle-jobs': 16 * 1024,
 };
+const CORS_HEADERS = {
+  'access-control-allow-headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id, x-idempotency-key',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-origin': '*',
+  'access-control-max-age': '86400',
+} as const;
 const READ_FUNCTIONS = new Set(['get-app-snapshot', 'get-friendship-invite-preview']);
 const ANALYTICS_FUNCTIONS = new Set([
   'analytics-ingest',
@@ -294,9 +301,20 @@ export function jsonResponse(status: number, body: unknown, requestId?: string):
   return new Response(JSON.stringify(body), {
     status,
     headers: {
+      ...CORS_HEADERS,
       'content-type': 'application/json',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
+      ...(requestId ? { 'x-request-id': requestId } : {}),
+    },
+  });
+}
+
+function preflightResponse(requestId?: string): Response {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...CORS_HEADERS,
       ...(requestId ? { 'x-request-id': requestId } : {}),
     },
   });
@@ -536,6 +554,10 @@ export async function handleRpc(
   const functionName = getFunctionName(request);
 
   try {
+    if (request.method === 'OPTIONS') {
+      return preflightResponse(requestId);
+    }
+
     if (request.method !== 'POST') {
       return jsonResponse(
         405,
@@ -575,6 +597,10 @@ export async function handlePublicRpc(
   const functionName = getFunctionName(request);
 
   try {
+    if (request.method === 'OPTIONS') {
+      return preflightResponse(requestId);
+    }
+
     if (request.method !== 'POST') {
       return jsonResponse(
         405,

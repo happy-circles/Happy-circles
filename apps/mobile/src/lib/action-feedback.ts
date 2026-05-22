@@ -314,12 +314,18 @@ function resolveBlockedAction(
   if (
     normalized.includes('dispositivo aún no es confiable') ||
     normalized.includes('dispositivo aun no es confiable') ||
+    normalized.includes('teléfono aún no es confiable') ||
+    normalized.includes('telefono aun no es confiable') ||
     normalized.includes('confiar este dispositivo') ||
+    normalized.includes('confiar este teléfono') ||
+    normalized.includes('confiar este telefono') ||
+    normalized.includes('confía este teléfono') ||
+    normalized.includes('confia este telefono') ||
     (normalized.includes('solo puedes') && normalized.includes('dispositivo confiable'))
   ) {
     return {
-      title: 'Valida este dispositivo para continuar',
-      message: 'Esta acción requiere un dispositivo confiable. Puedes validarlo en seguridad.',
+      title: 'Confía este teléfono para continuar',
+      message: 'Esta acción requiere un teléfono confiable. Puedes hacerlo en seguridad.',
       ctaLabel: 'Abrir seguridad',
       route: buildSetupAccountHref('security'),
     };

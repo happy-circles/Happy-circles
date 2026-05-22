@@ -92,6 +92,15 @@ export interface TrustCurrentDeviceInput {
   readonly password?: string;
 }
 
+export interface StepUpAuthInput {
+  readonly force?: boolean;
+  readonly password?: string;
+}
+
+export interface LinkSocialInput {
+  readonly password?: string;
+}
+
 export interface RefreshAccountStateOptions {
   readonly preserveLocked?: boolean;
   readonly preserveTrustedDeviceDuringLoad?: boolean;
@@ -156,8 +165,8 @@ export interface SessionContextValue {
   signInWithGoogle(): Promise<string>;
   signInWithApple(): Promise<string>;
   completeProfile(input: CompleteProfileInput): Promise<string>;
-  linkGoogle(): Promise<string>;
-  linkApple(): Promise<string>;
+  linkGoogle(input?: LinkSocialInput): Promise<string>;
+  linkApple(input?: LinkSocialInput): Promise<string>;
   attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
   trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
   revokeTrustedDevice(deviceId: string): Promise<string>;
@@ -165,7 +174,7 @@ export interface SessionContextValue {
   signOut(): Promise<void>;
   unlock(): Promise<BiometricAuthResult>;
   lock(): void;
-  stepUpAuth(force?: boolean): Promise<BiometricAuthResult>;
+  stepUpAuth(input?: boolean | StepUpAuthInput): Promise<BiometricAuthResult>;
   setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
   requestContactsPermission(): Promise<string>;

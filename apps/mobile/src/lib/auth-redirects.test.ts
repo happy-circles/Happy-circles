@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   platform: {
@@ -28,6 +28,10 @@ describe('auth redirect builders', () => {
     mocks.platform.OS = 'ios';
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('keeps email auth on universal links when configured', () => {
     expect(buildEmailAuthRedirect('/setup-account?step=email')).toBe(
       'https://app.example.com/setup-account?step=email',
@@ -45,6 +49,15 @@ describe('auth redirect builders', () => {
 
     expect(buildSocialOAuthRedirect('/setup-account?auth_callback=google')).toBe(
       'https://app.example.com/setup-account?auth_callback=google',
+    );
+  });
+
+  it('uses the current browser origin for local web OAuth callbacks', () => {
+    mocks.platform.OS = 'web';
+    vi.stubGlobal('location', { origin: 'http://localhost:8093' });
+
+    expect(buildSocialOAuthRedirect('/setup-account?auth_callback=google')).toBe(
+      'http://localhost:8093/setup-account?auth_callback=google',
     );
   });
 });

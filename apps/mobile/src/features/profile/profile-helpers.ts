@@ -117,7 +117,7 @@ export function resolveContactsPermissionActionLabel(status: string): string | n
 
 export function formatStepUpFailure(error: string | null, biometricLabel: string): string {
   if (error === 'device_untrusted') {
-    return 'Valida este dispositivo antes de eliminar tu cuenta.';
+    return 'Confía este teléfono antes de eliminar tu cuenta.';
   }
 
   if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {

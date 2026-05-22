@@ -20,6 +20,8 @@ export default function IndexRoute() {
             ? '/join'
             : !setupState.requiredComplete
               ? buildSetupAccountHref(setupState.pendingRequiredSteps[0] ?? 'profile')
+              : setupState.securityPending
+                ? buildSetupAccountHref('security')
               : '/home'
       }
     />

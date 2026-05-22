@@ -5,6 +5,7 @@ interface AppConfig {
   readonly supabaseAnonKey: string;
   readonly appWebOrigin: string;
   readonly authRedirectMode: string;
+  readonly authDebugEnabled: string;
   readonly googleWebClientId: string;
   readonly googleIosClientId: string;
   readonly googleAndroidClientId: string;
@@ -15,6 +16,7 @@ interface ExpoExtraConfig {
   readonly supabaseAnonKey?: string;
   readonly appWebOrigin?: string;
   readonly authRedirectMode?: string;
+  readonly authDebugEnabled?: string;
   readonly googleWebClientId?: string;
   readonly googleIosClientId?: string;
   readonly googleAndroidClientId?: string;
@@ -42,6 +44,7 @@ export const appConfig: AppConfig = {
     extra?.appWebOrigin ?? runtimeEnv.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com',
   authRedirectMode:
     extra?.authRedirectMode ?? runtimeEnv.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link',
+  authDebugEnabled: firstNonEmpty(extra?.authDebugEnabled, runtimeEnv.EXPO_PUBLIC_AUTH_DEBUG),
   googleWebClientId: firstNonEmpty(
     extra?.googleWebClientId,
     runtimeEnv.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,

@@ -223,7 +223,7 @@ describe('session remembered account helpers', () => {
 describe('session step-up helpers', () => {
   it('keeps sensitive action error copy deterministic', () => {
     expect(formatStepUpErrorMessage('cambiar el perfil', 'Face ID', 'device_untrusted')).toBe(
-      'Este dispositivo aún no es confiable. Valídalo primero desde Perfil.',
+      'Este teléfono aún no es confiable. Confíalo primero desde Perfil.',
     );
     expect(
       formatStepUpErrorMessage('agregar una contraseña', 'Face ID', 'authentication_failed'),

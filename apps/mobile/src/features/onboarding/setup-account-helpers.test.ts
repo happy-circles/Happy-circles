@@ -9,7 +9,7 @@ import {
 } from './setup-account-helpers';
 
 describe('setup account helpers', () => {
-  it('derives trust action labels from available session methods', () => {
+  it('keeps the visible trust entry action independent from auth methods', () => {
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: true,
@@ -17,7 +17,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: false,
         hasGoogle: false,
       }),
-    ).toBe('Confiar este dispositivo');
+    ).toBe('Confiar este teléfono');
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: false,
@@ -25,7 +25,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: true,
         hasGoogle: true,
       }),
-    ).toBe('Validar con Google');
+    ).toBe('Confiar este teléfono');
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: false,
@@ -33,7 +33,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: true,
         hasGoogle: false,
       }),
-    ).toBe('Validar con contraseña');
+    ).toBe('Confiar este teléfono');
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: false,
@@ -41,7 +41,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: false,
         hasGoogle: true,
       }),
-    ).toBe('Validar con Google');
+    ).toBe('Confiar este teléfono');
     expect(
       resolveTrustActionLabel({
         canTrustCurrentDeviceWithoutPassword: false,
@@ -49,7 +49,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: false,
         hasGoogle: false,
       }),
-    ).toBe('Validar con Apple');
+    ).toBe('Confiar este teléfono');
   });
 
   it('orders trusted-device methods with social before password fallback', () => {

@@ -10,7 +10,7 @@ export function formatStepUpErrorMessage(
   error: string | null,
 ): string {
   if (error === 'device_untrusted') {
-    return 'Este dispositivo aún no es confiable. Valídalo primero desde Perfil.';
+    return 'Este teléfono aún no es confiable. Confíalo primero desde Perfil.';
   }
 
   if (error === 'not_available' || error === 'not_enrolled' || error === 'passcode_not_set') {
@@ -27,6 +27,22 @@ export function formatStepUpErrorMessage(
 
   if (error === 'authentication_failed') {
     return `No se pudo validar ${biometricLabel} para ${actionLabel}.`;
+  }
+
+  if (error === 'password_required') {
+    return `Escribe tu contraseña actual para ${actionLabel}.`;
+  }
+
+  if (error === 'password_unavailable') {
+    return `Esta cuenta no tiene una contraseña disponible para ${actionLabel}.`;
+  }
+
+  if (error === 'password_failed') {
+    return `No se pudo validar tu contraseña para ${actionLabel}.`;
+  }
+
+  if (error === 'account_mismatch') {
+    return 'La validación abrió otra cuenta. Cerramos la sesión por seguridad.';
   }
 
   return `No se pudo validar tu identidad para ${actionLabel}.`;

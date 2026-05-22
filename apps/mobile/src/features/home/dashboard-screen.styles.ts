@@ -47,6 +47,31 @@ export const dashboardStyles = StyleSheet.create({
     lineHeight: 22,
     marginHorizontal: theme.spacing.lg,
   },
+  homePendingActionIcon: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  homePendingActionMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
+  },
+  homePendingActionSide: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+    maxWidth: 92,
+  },
+  homePendingActionCta: {
+    color: theme.colors.primary,
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
   quickActionPressed: {
     opacity: 0.6,
   },

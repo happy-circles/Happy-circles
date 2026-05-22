@@ -24,7 +24,7 @@ describe('profile helpers', () => {
 
   it('keeps step-up failure copy stable', () => {
     expect(formatStepUpFailure('device_untrusted', 'Face ID')).toBe(
-      'Valida este dispositivo antes de eliminar tu cuenta.',
+      'Confía este teléfono antes de eliminar tu cuenta.',
     );
     expect(formatStepUpFailure('lockout', 'Face ID')).toBe(
       'Face ID está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.',

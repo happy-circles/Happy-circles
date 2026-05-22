@@ -32,25 +32,11 @@ export function resolveTrustedDeviceAuthMethods(
 }
 
 export function resolveTrustActionLabel(input: TrustedDeviceAuthAvailability): string {
-  const method = resolveTrustedDeviceAuthMethods(input)[0] ?? null;
-
-  if (input.canTrustCurrentDeviceWithoutPassword && method === 'password') {
-    return 'Confiar este dispositivo';
+  if (resolveTrustedDeviceAuthMethods(input).length === 0) {
+    return 'Confiar este teléfono';
   }
 
-  if (method === 'google') {
-    return 'Validar con Google';
-  }
-
-  if (method === 'apple') {
-    return 'Validar con Apple';
-  }
-
-  if (method === 'password') {
-    return 'Validar con contraseña';
-  }
-
-  return 'Validar dispositivo';
+  return 'Confiar este teléfono';
 }
 
 export function resolveTrustMethodLabel(input: {
@@ -58,14 +44,12 @@ export function resolveTrustMethodLabel(input: {
   readonly method: TrustedDeviceAuthMethod;
 }): string {
   if (input.method === 'google') {
-    return 'Validar con Google';
+    return 'Continuar con Google';
   }
 
   if (input.method === 'apple') {
-    return 'Validar con Apple';
+    return 'Continuar con Apple';
   }
 
-  return input.canTrustCurrentDeviceWithoutPassword
-    ? 'Confiar este dispositivo'
-    : 'Validar con contraseña';
+  return input.canTrustCurrentDeviceWithoutPassword ? 'Confiar este teléfono' : 'Usar contraseña';
 }
