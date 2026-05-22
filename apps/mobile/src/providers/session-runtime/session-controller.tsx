@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import { AppState, Platform } from 'react-native';
 import {
@@ -59,6 +58,12 @@ import { traceAuthDebugEvent } from './auth-debug';
 import { performGoogleAuthFlow } from './google-auth-flow';
 import { reportSocialAuthFailure } from './social-auth-reporting';
 import {
+  hashInviteTokenForRegistration,
+  normalizeStepUpAuthInput,
+  resolveUserIdentities,
+  revokeDuplicateActiveDeviceRows,
+} from './session-controller-helpers';
+import {
   deriveAccountAccessState,
   deriveDeviceTrustState,
   deriveProfileCompletionState,
@@ -96,7 +101,6 @@ import type {
   AccountAccessState,
   AccountRegistrationPreviewResult,
   AttachEmailPasswordInput,
-  AuthIdentity,
   AuthMode,
   BiometricToggleResult,
   CompleteProfileInput,
@@ -120,84 +124,6 @@ import type {
   TrustedDeviceRow,
   UserProfileRow,
 } from '../session/types';
-
-async function hashInviteTokenForRegistration(deliveryToken: string): Promise<string> {
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    deliveryToken.trim(),
-  );
-
-  return digest.toLocaleLowerCase('en-US');
-}
-
-function normalizeStepUpAuthInput(input?: boolean | StepUpAuthInput): Required<
-  Pick<StepUpAuthInput, 'force'>
-> &
-  Pick<StepUpAuthInput, 'password'> {
-  if (typeof input === 'boolean') {
-    return { force: input };
-  }
-
-  return {
-    force: input?.force ?? false,
-    password: input?.password,
-  };
-}
-
-async function revokeDuplicateActiveDeviceRows(input: {
-  readonly client: NonNullable<typeof supabase>;
-  readonly currentDeviceId: string;
-  readonly deviceName: string | null;
-  readonly platform: string;
-  readonly timestamp: string;
-  readonly userId: string;
-}): Promise<void> {
-  const deviceName = input.deviceName?.trim();
-  if (!deviceName) {
-    return;
-  }
-
-  const { error } = await input.client
-    .from('trusted_devices')
-    .update({
-      trust_state: 'revoked',
-      revoked_at: input.timestamp,
-      last_seen_at: input.timestamp,
-    } as never)
-    .eq('user_id', input.userId)
-    .eq('platform', input.platform)
-    .eq('device_name', deviceName)
-    .neq('device_id', input.currentDeviceId)
-    .in('trust_state', ['pending', 'trusted']);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function resolveUserIdentities(currentSession: Session): Promise<readonly AuthIdentity[]> {
-  if (!supabase) {
-    return [];
-  }
-
-  const authApi = supabase.auth as unknown as {
-    readonly getUserIdentities?: () => Promise<{
-      data?: { identities?: readonly AuthIdentity[] | null };
-    }>;
-  };
-
-  if (typeof authApi.getUserIdentities === 'function') {
-    try {
-      const result = await authApi.getUserIdentities();
-      return result.data?.identities ?? [];
-    } catch {
-      return [];
-    }
-  }
-
-  const user = currentSession.user as { readonly identities?: readonly AuthIdentity[] | null };
-  return user.identities ?? [];
-}
 
 export function useSessionController(): SessionContextValue {
   const authMode: AuthMode = 'supabase';
@@ -548,7 +474,7 @@ export function useSessionController(): SessionContextValue {
             )
             .eq('id', nextSession.user.id)
             .single(),
-          resolveUserIdentities(nextSession),
+          resolveUserIdentities(client, nextSession),
           persistCurrentDevice(),
           readPendingInviteIntent(),
           client.auth.getUser(),

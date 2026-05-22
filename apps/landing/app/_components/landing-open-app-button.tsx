@@ -15,7 +15,11 @@ export function LandingOpenAppButton() {
     event.preventDefault();
 
     let didLeavePage = false;
-    let fallbackTimer: number | undefined;
+    const fallbackTimer = window.setTimeout(() => {
+      if (!didLeavePage && document.visibilityState === 'visible') {
+        window.location.assign('/download');
+      }
+    }, FALLBACK_DELAY_MS);
 
     const cleanup = () => {
       didLeavePage = true;
@@ -36,12 +40,6 @@ export function LandingOpenAppButton() {
     window.addEventListener('pagehide', cleanup);
     window.addEventListener('blur', cleanup);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    fallbackTimer = window.setTimeout(() => {
-      if (!didLeavePage && document.visibilityState === 'visible') {
-        window.location.assign('/download');
-      }
-    }, FALLBACK_DELAY_MS);
 
     window.location.assign(nativeHref);
   }

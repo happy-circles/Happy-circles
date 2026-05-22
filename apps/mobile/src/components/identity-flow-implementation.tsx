@@ -147,7 +147,6 @@ export function IdentityFlowScreen({
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const shouldUseManualKeyboardLift = Platform.OS === 'ios';
-  const bottomInset = Math.max(0, insets.bottom);
   const screenBackgroundColor = activeTheme.colors.background;
   const screenTitleTop = Math.max(0, insets.top) + theme.spacing.xxs;
   const titleClearedTopOffset = Math.max(
