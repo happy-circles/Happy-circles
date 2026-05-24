@@ -385,6 +385,7 @@ function NotificationCategoryTab({
 
   return (
     <Pressable
+      hitSlop={{ bottom: 8, left: 10, right: 10, top: 8 }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.notificationTab,
@@ -1177,6 +1178,7 @@ export function ActivityScreen() {
 
             <SwipePager
               accessibilityLabel="Categorias de notificaciones"
+              offscreenPageLimit={1}
               onChange={changeActiveCategory}
               onPreviewChange={setVisualActiveCategory}
               pageStyle={[styles.notificationPage, { backgroundColor: activeTheme.colors.surface }]}

@@ -84,6 +84,9 @@ const IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT = 28;
 const IDENTITY_FLOW_TOP_OFFSET = theme.spacing.xl + theme.spacing.md;
 const IDENTITY_FLOW_STAGE_TRANSITION_MS = 780;
 const IDENTITY_FLOW_CONTENT_ENTER_DISTANCE = 8;
+const IDENTITY_FLOW_CONTENT_HIDDEN_OPACITY = 0.18;
+const IDENTITY_FLOW_CONTENT_ENTER_MS = 240;
+const IDENTITY_FLOW_CONTENT_EXIT_MS = 140;
 const IDENTITY_FLOW_KEYBOARD_FIELD_GAP = theme.spacing.md;
 const IDENTITY_FLOW_KEYBOARD_SCROLL_RESET_THRESHOLD = 8;
 
@@ -219,11 +222,15 @@ export function IdentityFlowScreen({
     inputRange: [0, 1],
     outputRange: [IDENTITY_FLOW_CONTENT_ENTER_DISTANCE, 0],
   });
+  const contentOpacity = contentMotion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [IDENTITY_FLOW_CONTENT_HIDDEN_OPACITY, 1],
+  });
   const transitionedFooter = resolvedFooter ? (
     <Animated.View
       style={[
         styles.transitionedFooter,
-        { opacity: contentMotion, transform: [{ translateY: contentEnterTranslateY }] },
+        { opacity: contentOpacity, transform: [{ translateY: contentEnterTranslateY }] },
       ]}
     >
       {resolvedFooter}
@@ -607,7 +614,7 @@ export function IdentityFlowScreen({
     }
 
     Animated.timing(contentMotion, {
-      duration: contentVisible ? 360 : 220,
+      duration: contentVisible ? IDENTITY_FLOW_CONTENT_ENTER_MS : IDENTITY_FLOW_CONTENT_EXIT_MS,
       easing: contentVisible ? BRAND_VERIFICATION_EASING : Easing.in(Easing.quad),
       toValue: contentVisible ? 1 : 0,
       useNativeDriver: true,
@@ -703,7 +710,7 @@ export function IdentityFlowScreen({
                   style={[
                     styles.transitionedContent,
                     {
-                      opacity: contentMotion,
+                      opacity: contentOpacity,
                       transform: [{ translateY: contentEnterTranslateY }],
                     },
                   ]}
@@ -739,7 +746,7 @@ export function IdentityFlowScreen({
             style={[
               styles.actionDock,
               {
-                opacity: contentMotion,
+                opacity: contentOpacity,
                 paddingBottom: actionDockBottomPadding,
               },
               shouldUseManualKeyboardLift
@@ -789,11 +796,12 @@ export function IdentityFlowIdentity({
   const outerRotationDegrees =
     variant === 'avatar' && editable ? IDENTITY_FLOW_AVATAR_OUTER_ROTATION_DEGREES : 0;
   const avatarEditPencilIsDark = activeTheme.scheme === 'dark';
+  const avatarEditPencilAccentColor = activeTheme.colors.primary;
   const avatarEditPencilBackgroundColor = avatarEditPencilIsDark
     ? activeTheme.colors.white
-    : activeTheme.colors.cycle;
+    : avatarEditPencilAccentColor;
   const avatarEditPencilIconColor = avatarEditPencilIsDark
-    ? activeTheme.colors.cycle
+    ? avatarEditPencilAccentColor
     : activeTheme.colors.white;
   const identity =
     variant === 'avatar' ? (

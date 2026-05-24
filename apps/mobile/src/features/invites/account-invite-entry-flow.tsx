@@ -89,7 +89,7 @@ import { AccountInviteSocialProviderRow } from './account-invite-social-provider
 import { AppText } from '@/components/app-text';
 import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
 
-const AUTH_STATE_TRANSITION_MS = 380;
+const AUTH_STATE_TRANSITION_MS = 260;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
 const AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE = 148;
 const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
@@ -174,9 +174,8 @@ export function AccountSignInEntry({
   const authRequestBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
   const authBusy =
     authRequestBusy || authSurfaceTransitioning || authResultState === 'success' || authSuccess;
-  const authVisualState: BrandVerificationState = authSurfaceTransitioning
-    ? 'loading'
-    : (authResultState ?? (authRequestBusy ? 'loading' : 'idle'));
+  const authVisualState: BrandVerificationState =
+    authResultState ?? (authRequestBusy ? 'loading' : 'idle');
   const isRecovery = authMode === 'recover';
   const showPasswordFields = isRecovery || showPasswordFallback;
   const recoveryCodeValid = isRecoveryCodeValid(recoveryCode);
@@ -1300,7 +1299,7 @@ export function AccountSignInEntry({
     ) : (
       <AuthEntryIdentity
         centerFaceSize="small"
-        state={authSurfaceTransitioning || previewQuery.isFetching ? 'loading' : 'idle'}
+        state={previewQuery.isFetching ? 'loading' : 'idle'}
         variant="brand"
       />
     );

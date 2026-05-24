@@ -13,6 +13,7 @@ export type SurfaceCardShape = 'rounded' | 'pill';
 
 const shouldMountNativeGlass = Platform.OS === 'ios';
 const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
+const shouldUseAndroidGlassFallback = Platform.OS === 'android';
 
 function SurfaceLiquidGlassLayer({
   activeTheme,
@@ -28,9 +29,12 @@ function SurfaceLiquidGlassLayer({
   const isFlat = treatment === 'flat' || treatment === 'flatSolid' || treatment === 'flatSoft';
   const isFlatSolid = treatment === 'flatSolid' || treatment === 'flatSoft';
   const isFlatSoft = treatment === 'flatSoft';
-  const shouldRenderFallbackEdge = isFlat || !hasNativeLiquidGlass;
+  const shouldRenderFallbackEdge =
+    !shouldUseAndroidGlassFallback && (isFlat || !hasNativeLiquidGlass);
   const shouldRenderFallbackDepth =
-    !hasNativeLiquidGlass && (treatment === 'standard' || treatment === 'flatSoft');
+    !shouldUseAndroidGlassFallback &&
+    !hasNativeLiquidGlass &&
+    (treatment === 'standard' || treatment === 'flatSoft');
 
   return (
     <View
@@ -63,13 +67,15 @@ function SurfaceLiquidGlassLayer({
                 },
               ]}
             />
-            <View
-              pointerEvents="none"
-              style={[styles.flatGlassDepth, { backgroundColor: activeTheme.glass.flatDepth }]}
-            />
+            {!shouldUseAndroidGlassFallback ? (
+              <View
+                pointerEvents="none"
+                style={[styles.flatGlassDepth, { backgroundColor: activeTheme.glass.flatDepth }]}
+              />
+            ) : null}
           </>
         )
-      ) : (
+      ) : !shouldUseAndroidGlassFallback ? (
         <View
           pointerEvents="none"
           style={[
@@ -84,7 +90,7 @@ function SurfaceLiquidGlassLayer({
             },
           ]}
         />
-      )}
+      ) : null}
       {shouldRenderFallbackDepth ? (
         <View
           pointerEvents="none"
@@ -123,6 +129,22 @@ function resolveGlassBackgroundColor(
   treatment: SurfaceCardGlassTreatment,
   variant: SurfaceCardVariant,
 ) {
+  if (shouldUseAndroidGlassFallback) {
+    if (variant === 'muted') {
+      return activeTheme.colors.surfaceMuted;
+    }
+
+    if (variant === 'accent') {
+      return activeTheme.colors.surfaceSoft;
+    }
+
+    if (variant === 'elevated' || treatment === 'flatSoft') {
+      return activeTheme.colors.elevated;
+    }
+
+    return activeTheme.colors.surface;
+  }
+
   if (treatment === 'flatSoft') {
     return activeTheme.glass.flatSoftBackground;
   }
@@ -159,6 +181,10 @@ function resolveGlassBorderColor(
   treatment: SurfaceCardGlassTreatment,
   variant: SurfaceCardVariant,
 ) {
+  if (shouldUseAndroidGlassFallback) {
+    return variant === 'elevated' ? activeTheme.colors.border : activeTheme.colors.hairline;
+  }
+
   if (treatment === 'flatSoft') {
     return activeTheme.glass.fallbackBorder;
   }
@@ -205,7 +231,8 @@ function resolveGlassPlatformStyle(activeTheme: AppTheme, treatment: SurfaceCard
         shadowRadius: activeTheme.glass.flatSoftShadowRadius,
       },
       default: {
-        elevation: 2,
+        elevation: 1,
+        shadowColor: activeTheme.glass.shadowColor,
       },
     }) as object | undefined;
   }
@@ -224,7 +251,8 @@ function resolveGlassPlatformStyle(activeTheme: AppTheme, treatment: SurfaceCard
         shadowRadius: activeTheme.glass.flatSoftShadowRadius,
       },
       default: {
-        elevation: 2,
+        elevation: 1,
+        shadowColor: activeTheme.glass.shadowColor,
       },
     }) as object | undefined;
   }
@@ -242,7 +270,8 @@ function resolveGlassPlatformStyle(activeTheme: AppTheme, treatment: SurfaceCard
       shadowRadius: hasNativeLiquidGlass ? 0 : activeTheme.glass.shadowRadius,
     },
     default: {
-      elevation: 3,
+      elevation: 2,
+      shadowColor: activeTheme.glass.shadowColor,
     },
   }) as object | undefined;
 }
@@ -269,6 +298,7 @@ export function SurfaceCard({
   const glassBackgroundColor = resolveGlassBackgroundColor(activeTheme, glassTreatment, variant);
   const glassBorderColor = resolveGlassBorderColor(activeTheme, glassTreatment, variant);
   const glassPlatformStyle = resolveGlassPlatformStyle(activeTheme, glassTreatment);
+  const shouldRenderAndroidUnderlayTint = shouldUseAndroidGlassFallback && Boolean(underlay);
 
   return (
     <View
@@ -299,6 +329,14 @@ export function SurfaceCard({
         treatment={glassTreatment}
         variant={variant}
       />
+      {shouldRenderAndroidUnderlayTint ? (
+        <View
+          pointerEvents="none"
+          style={[styles.androidUnderlayTint, shape === 'pill' ? styles.underlayPill : null]}
+        >
+          {underlay}
+        </View>
+      ) : null}
       {children}
     </View>
   );
@@ -322,6 +360,12 @@ const styles = StyleSheet.create({
   },
   underlayPill: {
     borderRadius: theme.radius.pill,
+  },
+  androidUnderlayTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.large,
+    opacity: 0.62,
+    overflow: 'hidden',
   },
   flat: {
     borderWidth: 1,

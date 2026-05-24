@@ -9,6 +9,7 @@ import PagerView, {
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
   readonly loop?: boolean;
+  readonly offscreenPageLimit?: number;
   readonly onChange: (value: T) => void;
   readonly onInteractionStateChange?: (isInteracting: boolean) => void;
   readonly onProgressChange?: (progress: SwipePagerProgress<T>) => void;
@@ -34,6 +35,7 @@ function clampIndex(index: number, maxIndex: number): number {
 export function SwipePager<T extends string>({
   accessibilityLabel,
   loop = false,
+  offscreenPageLimit,
   onChange,
   onInteractionStateChange,
   onProgressChange,
@@ -53,7 +55,9 @@ export function SwipePager<T extends string>({
   const pagerRef = useRef<PagerView>(null);
   const hasMountedPagerRef = useRef(false);
   const activeIndexRef = useRef(clampIndex(values.indexOf(value), values.length - 1));
-  const selectedPageIndexRef = useRef(shouldLoop ? activeIndexRef.current + 1 : activeIndexRef.current);
+  const selectedPageIndexRef = useRef(
+    shouldLoop ? activeIndexRef.current + 1 : activeIndexRef.current,
+  );
   const previewIndexRef = useRef(activeIndexRef.current);
   const isInteractingRef = useRef(false);
   const programmaticTargetPageIndexRef = useRef<number | null>(null);
@@ -253,7 +257,9 @@ export function SwipePager<T extends string>({
 
   function handlePageSelected(event: PagerViewOnPageSelectedEvent) {
     const currentValues = valuesRef.current;
-    const maxPageIndex = canLoop(currentValues) ? currentValues.length + 1 : currentValues.length - 1;
+    const maxPageIndex = canLoop(currentValues)
+      ? currentValues.length + 1
+      : currentValues.length - 1;
     const nextPageIndex = clampIndex(Math.round(event.nativeEvent.position), maxPageIndex);
     const nextValueIndex = valueIndexForPagerIndex(nextPageIndex, currentValues);
     const normalizedPageIndex = normalizePagerIndex(nextPageIndex, currentValues);
@@ -312,6 +318,7 @@ export function SwipePager<T extends string>({
         onPageScrollStateChanged={handlePageScrollStateChanged}
         onPageSelected={handlePageSelected}
         overScrollMode="never"
+        offscreenPageLimit={offscreenPageLimit}
         ref={pagerRef}
         scrollEnabled={scrollEnabled}
         style={styles.pager}

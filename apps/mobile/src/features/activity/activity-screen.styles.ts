@@ -65,7 +65,7 @@ export const activityScreenStyles = StyleSheet.create({
     alignItems: 'center',
     borderBottomColor: theme.colors.hairline,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     flexDirection: 'row',
     minWidth: '100%',
   },
@@ -75,10 +75,12 @@ export const activityScreenStyles = StyleSheet.create({
   },
   notificationTab: {
     alignItems: 'center',
+    borderRadius: theme.radius.small,
     flexDirection: 'row',
     gap: 6,
-    minHeight: 42,
+    minHeight: 46,
     paddingBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
     paddingTop: theme.spacing.xs,
   },
   notificationTabActive: {

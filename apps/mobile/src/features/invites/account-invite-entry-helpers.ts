@@ -9,9 +9,9 @@ export type RememberedReauthReason = 'biometric-failed' | 'session-expired';
 export const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
 export const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
 export const AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
-export const AUTH_CONTENT_EXIT_MS = 190;
-export const AUTH_MODE_ROUTE_DELAY_MS = 520;
-export const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 180;
+export const AUTH_CONTENT_EXIT_MS = 120;
+export const AUTH_MODE_ROUTE_DELAY_MS = 140;
+export const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 70;
 export const PASSWORD_RESET_SENT_MESSAGE =
   'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
 export const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Código verificado.';

@@ -42,7 +42,7 @@ const HOME_CHROME_PROFILE_LEADING_OFFSET =
 const HOME_CHROME_COMPACT_LOGO_SIZE = 78;
 const HOME_CHROME_EXPANDED_LOGO_SIZE = 60;
 const HOME_CHROME_EXPANDED_BRAND_WIDTH = 246;
-const HOME_CHROME_EXPANDED_ACTION_SIZE = 48;
+const HOME_CHROME_EXPANDED_ACTION_SIZE = 60;
 const HOME_CHROME_GLASS_COMPACT_SIZE = 92;
 const HOME_CHROME_GLASS_COMPACT_RADIUS = HOME_CHROME_GLASS_COMPACT_SIZE / 2;
 const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
@@ -394,6 +394,7 @@ function HomeCompactAvatarFrame({ progress }: { readonly progress: HomeChromePro
 
 function HomeActivityButton({ count }: { readonly count: number }) {
   const activeTheme = useAppTheme();
+  const router = useRouter();
   const hasAttention = count > 0;
   const pulse = useRef(new Animated.Value(0)).current;
   const badgeScale = pulse.interpolate({
@@ -432,50 +433,60 @@ function HomeActivityButton({ count }: { readonly count: number }) {
     };
   }, [hasAttention, pulse]);
 
+  const openActivity = useCallback(() => {
+    pushRoute(router, '/activity');
+  }, [router]);
+
   return (
-    <Link href="/activity" asChild>
-      <Pressable
-        accessibilityLabel={
-          hasAttention ? `${compactCountLabel(count)} notificaciones no vistas` : 'Actividad'
-        }
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.activityButton,
-          {
-            backgroundColor: hasAttention
-              ? activeTheme.colors.primarySoft
-              : activeTheme.colors.surface,
-            borderColor: hasAttention
-              ? activeTheme.colors.primaryGhost
-              : activeTheme.colors.hairline,
-          },
-          activeTheme.shadow.card,
-          pressed ? styles.pressed : null,
-        ]}
-      >
-        <Ionicons
-          color={hasAttention ? activeTheme.colors.primary : activeTheme.colors.text}
-          name={hasAttention ? 'notifications' : 'notifications-outline'}
-          size={24}
-        />
-        {hasAttention ? (
-          <Animated.View
-            style={[
-              styles.activityBadge,
-              {
-                backgroundColor: activeTheme.colors.danger,
-                borderColor: activeTheme.colors.surface,
-                transform: [{ scale: badgeScale }],
-              },
-            ]}
-          >
-            <AppText style={[styles.activityBadgeText, { color: activeTheme.colors.white }]}>
-              {compactCountLabel(count)}
-            </AppText>
-          </Animated.View>
-        ) : null}
-      </Pressable>
-    </Link>
+    <Pressable
+      accessibilityLabel={
+        hasAttention ? `${compactCountLabel(count)} notificaciones no vistas` : 'Actividad'
+      }
+      accessibilityRole="button"
+      hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
+      onPress={openActivity}
+      style={styles.activityHitArea}
+    >
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.activityButton,
+            {
+              backgroundColor: hasAttention
+                ? activeTheme.colors.primarySoft
+                : activeTheme.colors.surface,
+              borderColor: hasAttention
+                ? activeTheme.colors.primaryGhost
+                : activeTheme.colors.hairline,
+            },
+            activeTheme.shadow.card,
+            pressed ? styles.pressed : null,
+          ]}
+        >
+          <Ionicons
+            color={hasAttention ? activeTheme.colors.primary : activeTheme.colors.text}
+            name={hasAttention ? 'notifications' : 'notifications-outline'}
+            size={24}
+          />
+          {hasAttention ? (
+            <Animated.View
+              style={[
+                styles.activityBadge,
+                {
+                  backgroundColor: activeTheme.colors.danger,
+                  borderColor: activeTheme.colors.surface,
+                  transform: [{ scale: badgeScale }],
+                },
+              ]}
+            >
+              <AppText style={[styles.activityBadgeText, { color: activeTheme.colors.white }]}>
+                {compactCountLabel(count)}
+              </AppText>
+            </Animated.View>
+          ) : null}
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -823,6 +834,7 @@ export function HomeRegisterFab({
 
 const styles = StyleSheet.create({
   chromeRoot: {
+    elevation: 40,
     left: 0,
     pointerEvents: 'box-none',
     position: 'absolute',
@@ -849,6 +861,7 @@ const styles = StyleSheet.create({
     top: 5,
   },
   expandedBar: {
+    elevation: 41,
     left: 0,
     paddingHorizontal: theme.spacing.lg,
     position: 'absolute',
@@ -916,10 +929,16 @@ const styles = StyleSheet.create({
   },
   expandedAction: {
     alignItems: 'center',
-    height: 48,
+    height: HOME_CHROME_EXPANDED_ACTION_SIZE,
     justifyContent: 'center',
     marginRight: HOME_CHROME_PROFILE_LEADING_OFFSET,
-    width: 48,
+    width: HOME_CHROME_EXPANDED_ACTION_SIZE,
+  },
+  activityHitArea: {
+    alignItems: 'center',
+    height: HOME_CHROME_EXPANDED_ACTION_SIZE,
+    justifyContent: 'center',
+    width: HOME_CHROME_EXPANDED_ACTION_SIZE,
   },
   activityButton: {
     alignItems: 'center',

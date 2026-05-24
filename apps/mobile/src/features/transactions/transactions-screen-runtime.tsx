@@ -124,7 +124,7 @@ function HistoryListSeparator() {
 
 export function TransactionsScreen() {
   const activeTheme = useAppTheme();
-  const { top: topInset } = useSafeAreaInsets();
+  const { bottom: bottomInset, top: topInset } = useSafeAreaInsets();
   const router = useRouter();
   const searchParams = useLocalSearchParams<{
     category?: string | string[];
@@ -200,6 +200,7 @@ export function TransactionsScreen() {
   );
   const hasVisibleTransactions =
     visiblePendingTransactionItems.length > 0 || historyCases.length > 0;
+  const shouldUseVirtualHistory = historyCases.length > 0;
 
   useEffect(() => {
     setActiveFilter(initialFilter);
@@ -273,6 +274,90 @@ export function TransactionsScreen() {
     );
   }
 
+  const filterControls = (
+    <View style={styles.filterStack}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRail}
+      >
+        {PRIMARY_FILTER_OPTIONS.map((option) => (
+          <FilterPill
+            key={option.value}
+            label={option.label}
+            onPress={() => selectPrimaryFilter(option.value)}
+            selected={!circleFilterSelected && activePrimaryFilter === option.value}
+          />
+        ))}
+        <FilterPill
+          icon="happy-outline"
+          iconColor={transactionCategoryColor('cycle')}
+          label="Circles"
+          onPress={selectCircleFilter}
+          selected={circleFilterSelected}
+        />
+      </ScrollView>
+      {categoryFilter && !circleFilterSelected ? (
+        <View
+          style={[
+            styles.categoryFilterChip,
+            {
+              backgroundColor: activeTheme.colors.surfaceMuted,
+              borderColor: activeTheme.colors.hairline,
+            },
+          ]}
+        >
+          <Ionicons
+            color={transactionCategoryColor(categoryFilter)}
+            name={transactionCategoryIcon(categoryFilter) as keyof typeof Ionicons.glyphMap}
+            size={13}
+          />
+          <AppText style={[styles.categoryFilterText, { color: activeTheme.colors.textMuted }]}>
+            Categoría: {transactionCategoryLabel(categoryFilter)}
+          </AppText>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const emptyState = !hasVisibleTransactions ? (
+    <EmptyState
+      description={emptyFilterDescription(activeFilter)}
+      title={emptyFilterTitle(activeFilter)}
+    />
+  ) : null;
+
+  const pendingTransactionsSection =
+    visiblePendingTransactionItems.length > 0 ? (
+      <SectionBlock title="Pendientes">
+        <View style={styles.list}>
+          {visiblePendingTransactionItems.map((item) => (
+            <PendingTransactionCard
+              item={item}
+              key={item.id}
+              people={people}
+              unread={
+                notificationItemCanAlert(item) &&
+                !notificationViewedKeys.has(notificationViewKeyForItem(item))
+              }
+            />
+          ))}
+        </View>
+      </SectionBlock>
+    ) : null;
+
+  const historyListHeader = (
+    <View style={styles.virtualListHeader}>
+      {filterControls}
+      {pendingTransactionsSection}
+      <View style={styles.virtualHistoryHeader}>
+        <AppText style={[styles.virtualHistoryTitle, { color: activeTheme.colors.text }]}>
+          Historial
+        </AppText>
+      </View>
+    </View>
+  );
+
   if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <ScreenShell
@@ -322,9 +407,9 @@ export function TransactionsScreen() {
       }
       headerVariant="plain"
       largeTitle={false}
-      refresh={refresh}
+      refresh={shouldUseVirtualHistory ? undefined : refresh}
       safeAreaEdges={['left', 'right']}
-      scrollEnabled={false}
+      scrollEnabled={!shouldUseVirtualHistory}
       title="Movimientos"
       titleAlign="center"
     >
@@ -405,12 +490,22 @@ export function TransactionsScreen() {
         >
           <FlatList
             ItemSeparatorComponent={HistoryListSeparator}
-            ListFooterComponent={<View style={styles.historyListFooter} />}
+            ListFooterComponent={
+              <View
+                style={[
+                  styles.historyListFooter,
+                  { height: theme.spacing.md + Math.max(0, bottomInset) },
+                ]}
+              />
+            }
             contentContainerStyle={styles.virtualListContent}
             data={historyCases}
             keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
+            onRefresh={refresh.onRefresh}
+            progressViewOffset={topInset + theme.spacing.md}
             renderItem={renderHistoryCase}
+            refreshing={refresh.refreshing}
             showsVerticalScrollIndicator={false}
             style={styles.virtualList}
           />
