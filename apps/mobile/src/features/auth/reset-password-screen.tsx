@@ -90,16 +90,28 @@ export function ResetPasswordScreen() {
       : message === 'Contraseña actualizada.'
         ? 'success'
         : 'idle';
+  const resetPasswordActions = (
+    <>
+      {hasRecoverySession ? (
+        <IdentityFlowPrimaryAction
+          disabled={busy}
+          icon="checkmark"
+          label={busy ? 'Actualizando...' : 'Guardar nueva contraseña'}
+          loading={busy}
+          onPress={busy ? undefined : () => void handleSubmit()}
+        />
+      ) : null}
+      <IdentityFlowSecondaryAction
+        icon="mail-outline"
+        label="Pedir otro enlace"
+        onPress={() => returnToRoute(router, '/join?mode=recover')}
+      />
+    </>
+  );
 
   return (
     <IdentityFlowScreen
-      actions={
-        <IdentityFlowSecondaryAction
-          icon="mail-outline"
-          label="Pedir otro enlace"
-          onPress={() => returnToRoute(router, '/join?mode=recover')}
-        />
-      }
+      actions={resetPasswordActions}
       bodyStyle={styles.body}
       contentTransitionKey={
         hasRecoverySession ? 'reset-password:form' : 'reset-password:unavailable'
@@ -202,13 +214,6 @@ export function ResetPasswordScreen() {
               </IdentityFlowField>
             </View>
 
-            <IdentityFlowPrimaryAction
-              disabled={busy}
-              icon="checkmark"
-              label={busy ? 'Actualizando...' : 'Guardar nueva contraseña'}
-              loading={busy}
-              onPress={busy ? undefined : () => void handleSubmit()}
-            />
           </IdentityFlowForm>
         ) : null}
       </View>

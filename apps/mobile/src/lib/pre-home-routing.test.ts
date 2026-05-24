@@ -157,6 +157,19 @@ describe('resolvePreHomeRouteDecision', () => {
     });
   });
 
+  it('returns active complete Google link callbacks to the profile screen', () => {
+    expect(
+      resolve({
+        isOAuthCallbackRoute: true,
+        isSetupAccountRoute: true,
+        rawAuthCallback: 'google-link',
+      }),
+    ).toEqual({
+      action: 'replace',
+      href: '/profile',
+    });
+  });
+
   it('sends untrusted active users from join to security after auth handoff clears', () => {
     expect(
       resolve({

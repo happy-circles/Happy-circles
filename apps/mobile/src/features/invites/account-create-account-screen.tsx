@@ -6,6 +6,7 @@ import {
   IdentityFlowForm,
   IdentityFlowIdentity,
   IdentityFlowLogoCopy,
+  IdentityFlowPrimaryAction,
   IdentityFlowScreen,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
@@ -383,8 +384,30 @@ export function AccountCreateAccountScreen() {
     return <SessionLoadingScreen message="Preparando tu acceso" />;
   }
 
+  const createAccountActions = !shouldPreview ? (
+    <PrimaryAction href="/join" label="Volver a invitación" variant="secondary" />
+  ) : previewQuery.error || blockingMessage ? (
+    <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
+  ) : pendingVerificationEmail ? (
+    <IdentityFlowPrimaryAction
+      disabled={verificationBusy || resendBusy}
+      icon="checkmark"
+      label={verificationBusy ? 'Confirmando...' : 'Confirmar correo'}
+      loading={verificationBusy}
+      onPress={verificationBusy || resendBusy ? undefined : () => void handleVerifyEmailCode()}
+    />
+  ) : canCreateAccount && showEmailPasswordFallback ? (
+    <IdentityFlowPrimaryAction
+      disabled={authBusy}
+      label={busy ? 'Creando...' : 'Crear con correo'}
+      loading={busy}
+      onPress={authBusy ? undefined : () => void handleSubmit()}
+    />
+  ) : undefined;
+
   return (
     <IdentityFlowScreen
+      actions={createAccountActions}
       contentTransitionKey={contentTransitionKey}
       identity={<IdentityFlowIdentity centerFaceSize="small" state={tokenState} variant="status" />}
       identityPosition={
@@ -413,21 +436,18 @@ export function AccountCreateAccountScreen() {
             message="Abre tu enlace de invitación o pega el código completo desde la entrada."
             tone="neutral"
           />
-          <PrimaryAction href="/join" label="Volver a invitación" variant="secondary" />
         </View>
       ) : null}
 
       {shouldPreview && previewQuery.error ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={previewQuery.error.message} tone="warning" />
-          <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
         </View>
       ) : null}
 
       {blockingMessage ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={blockingMessage} tone="warning" />
-          <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
         </View>
       ) : null}
 
@@ -440,7 +460,6 @@ export function AccountCreateAccountScreen() {
             setMessage(null);
           }}
           onResendEmailCode={() => void handleResendEmailCode()}
-          onVerifyEmailCode={() => void handleVerifyEmailCode()}
           pendingVerificationEmail={pendingVerificationEmail}
           resendBusy={resendBusy}
           setVerificationCode={setVerificationCode}
@@ -466,15 +485,12 @@ export function AccountCreateAccountScreen() {
 
           {showEmailPasswordFallback ? (
             <AccountCreateAccountEmailForm
-              authBusy={authBusy}
-              busy={busy}
               countryIso={countryIso}
               countryMenuOpen={countryMenuOpen}
               countryMenuScrollY={countryMenuScrollY}
               email={email}
               emailStatus={emailStatus}
               markFieldTouched={markFieldTouched}
-              onSubmit={() => void handleSubmit()}
               password={password}
               passwordStatus={passwordStatus}
               phoneNationalNumber={phoneNationalNumber}

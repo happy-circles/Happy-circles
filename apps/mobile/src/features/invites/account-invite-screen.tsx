@@ -321,23 +321,84 @@ export function AccountInviteScreen() {
     returnToRoute(router, '/home');
   }
 
-  return (
-    <IdentityFlowScreen
-      actions={
+  const accountInvitePrimaryAction =
+    preview && session.status === 'signed_out' && !tokenUnavailable ? (
+      <>
+        <IdentityFlowPrimaryAction
+          label="Ingresar"
+          onPress={() =>
+            returnToRoute(
+              router,
+              deliveryToken
+                ? ({
+                    pathname: '/join',
+                    params: { mode: 'sign-in', token: deliveryToken },
+                  } as unknown as Href)
+                : ({
+                    pathname: '/join',
+                    params: { mode: 'sign-in' },
+                  } as unknown as Href),
+            )
+          }
+        />
         <IdentityFlowSecondaryAction
-          icon={session.accountAccessState === 'active' ? 'home-outline' : 'key-outline'}
-          label={session.accountAccessState === 'active' ? 'Ir al inicio' : 'Usar otra invitación'}
-          onPress={() => {
-            if (session.accountAccessState === 'active') {
-              void navigateHome();
-              return;
-            }
-
-            returnToRoute(router, '/join?mode=token');
-          }}
+          icon="person-add-outline"
+          label="Crear acceso"
+          onPress={() =>
+            returnToRoute(
+              router,
+              deliveryToken
+                ? ({
+                    pathname: '/join/[token]/create-account',
+                    params: { token: deliveryToken },
+                  } as Href)
+                : '/join',
+            )
+          }
           style={styles.secondaryActionFullWidth}
         />
-      }
+      </>
+    ) : preview && session.status !== 'signed_out' && canActivate ? (
+      needsSetup ? (
+        <IdentityFlowPrimaryAction
+          label={setupBlockerLabel}
+          onPress={() => returnToRoute(router, buildSetupAccountHref(nextSetupStep))}
+        />
+      ) : needsTrustedDevice ? (
+        <IdentityFlowPrimaryAction
+          label="Confiar este teléfono"
+          onPress={() => returnToRoute(router, buildSetupAccountHref('security'))}
+        />
+      ) : (
+        <IdentityFlowPrimaryAction
+          label={busyAction === 'activate' ? 'Activando...' : 'Activar mi cuenta'}
+          loading={busyAction === 'activate'}
+          onPress={busyAction ? undefined : () => void handleActivate()}
+        />
+      )
+    ) : null;
+  const accountInviteActions = (
+    <>
+      {accountInvitePrimaryAction}
+      <IdentityFlowSecondaryAction
+        icon={session.accountAccessState === 'active' ? 'home-outline' : 'key-outline'}
+        label={session.accountAccessState === 'active' ? 'Ir al inicio' : 'Usar otra invitación'}
+        onPress={() => {
+          if (session.accountAccessState === 'active') {
+            void navigateHome();
+            return;
+          }
+
+          returnToRoute(router, '/join?mode=token');
+        }}
+        style={styles.secondaryActionFullWidth}
+      />
+    </>
+  );
+
+  return (
+    <IdentityFlowScreen
+      actions={accountInviteActions}
       bodyStyle={styles.activationBody}
       contentTransitionKey={contentTransitionKey}
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
@@ -370,67 +431,6 @@ export function AccountInviteScreen() {
 
             <AppText style={styles.body}>{inviteReasonLabel(preview.reason)}</AppText>
 
-            {session.status === 'signed_out' && !tokenUnavailable ? (
-              <View style={styles.actionStack}>
-                <IdentityFlowPrimaryAction
-                  label="Ingresar"
-                  onPress={() =>
-                    returnToRoute(
-                      router,
-                      deliveryToken
-                        ? ({
-                            pathname: '/join',
-                            params: { mode: 'sign-in', token: deliveryToken },
-                          } as unknown as Href)
-                        : ({
-                            pathname: '/join',
-                            params: { mode: 'sign-in' },
-                          } as unknown as Href),
-                    )
-                  }
-                />
-                <IdentityFlowSecondaryAction
-                  icon="person-add-outline"
-                  label="Crear acceso"
-                  onPress={() =>
-                    returnToRoute(
-                      router,
-                      deliveryToken
-                        ? ({
-                            pathname: '/join/[token]/create-account',
-                            params: { token: deliveryToken },
-                          } as Href)
-                        : '/join',
-                    )
-                  }
-                  style={styles.secondaryActionFullWidth}
-                />
-              </View>
-            ) : null}
-
-            {session.status !== 'signed_out' && canActivate ? (
-              <View style={styles.actionStack}>
-                {needsSetup ? (
-                  <IdentityFlowPrimaryAction
-                    label={setupBlockerLabel}
-                    onPress={() => returnToRoute(router, buildSetupAccountHref(nextSetupStep))}
-                  />
-                ) : null}
-                {!needsSetup && needsTrustedDevice ? (
-                  <IdentityFlowPrimaryAction
-                    label="Confiar este teléfono"
-                    onPress={() => returnToRoute(router, buildSetupAccountHref('security'))}
-                  />
-                ) : null}
-                {!needsSetup && !needsTrustedDevice ? (
-                  <IdentityFlowPrimaryAction
-                    label={busyAction === 'activate' ? 'Activando...' : 'Activar mi cuenta'}
-                    loading={busyAction === 'activate'}
-                    onPress={busyAction ? undefined : () => void handleActivate()}
-                  />
-                ) : null}
-              </View>
-            ) : null}
             {session.status !== 'signed_out' &&
             canActivate &&
             (needsSetup || needsTrustedDevice) ? (

@@ -312,8 +312,47 @@ export function InviteLinkScreen() {
     returnToRoute(router, '/home');
   }
 
+  const inviteLinkActions = preview?.canClaim ? (
+    <View style={styles.actionRow}>
+      <InviteDecisionButton
+        disabled={Boolean(busyAction)}
+        icon={busyAction === 'claim' ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'}
+        label={busyAction === 'claim' ? 'Aceptando' : 'Aceptar'}
+        onPress={() => void handleClaim()}
+        tone="primary"
+      />
+      <InviteDecisionButton
+        disabled={Boolean(busyAction)}
+        icon="close-circle-outline"
+        label="No aceptar"
+        onPress={() => void handleDismissInvite()}
+        tone="danger"
+      />
+    </View>
+  ) : preview?.canApprove ? (
+    <View style={styles.actionRow}>
+      <InviteDecisionButton
+        disabled={Boolean(busyAction)}
+        icon={busyAction === 'approve' ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'}
+        label={busyAction === 'approve' ? 'Aceptando' : 'Aceptar'}
+        onPress={() => void handleReview('approve')}
+        tone="primary"
+      />
+      <InviteDecisionButton
+        disabled={Boolean(busyAction)}
+        icon={busyAction === 'reject' ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
+        label={busyAction === 'reject' ? 'Enviando' : 'No aceptar'}
+        onPress={() => void handleReview('reject')}
+        tone="danger"
+      />
+    </View>
+  ) : preview ? (
+    <PrimaryAction label="Volver al inicio" onPress={() => void navigateHome()} variant="secondary" />
+  ) : undefined;
+
   return (
     <IdentityFlowScreen
+      actions={inviteLinkActions}
       contentTransitionKey={contentTransitionKey}
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
       identityPosition="top"
@@ -336,61 +375,6 @@ export function InviteLinkScreen() {
             </View>
           </View>
 
-          {preview.canClaim ? (
-            <View style={styles.actionRow}>
-              <InviteDecisionButton
-                disabled={Boolean(busyAction)}
-                icon={
-                  busyAction === 'claim' ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'
-                }
-                label={busyAction === 'claim' ? 'Aceptando' : 'Aceptar'}
-                onPress={() => void handleClaim()}
-                tone="primary"
-              />
-              <InviteDecisionButton
-                disabled={Boolean(busyAction)}
-                icon="close-circle-outline"
-                label="No aceptar"
-                onPress={() => void handleDismissInvite()}
-                tone="danger"
-              />
-            </View>
-          ) : null}
-
-          {preview.canApprove ? (
-            <View style={styles.actionRow}>
-              <InviteDecisionButton
-                disabled={Boolean(busyAction)}
-                icon={
-                  busyAction === 'approve'
-                    ? 'ellipsis-horizontal-circle-outline'
-                    : 'checkmark-circle'
-                }
-                label={busyAction === 'approve' ? 'Aceptando' : 'Aceptar'}
-                onPress={() => void handleReview('approve')}
-                tone="primary"
-              />
-              <InviteDecisionButton
-                disabled={Boolean(busyAction)}
-                icon={
-                  busyAction === 'reject'
-                    ? 'ellipsis-horizontal-circle-outline'
-                    : 'close-circle-outline'
-                }
-                label={busyAction === 'reject' ? 'Enviando' : 'No aceptar'}
-                onPress={() => void handleReview('reject')}
-                tone="danger"
-              />
-            </View>
-          ) : null}
-
-          {!preview.canClaim && !preview.canApprove ? (
-            <PrimaryAction
-              label="Volver al inicio"
-              onPress={() => void navigateHome()}
-              variant="secondary"
-            />
-          ) : null}
         </SurfaceCard>
       ) : null}
     </IdentityFlowScreen>
@@ -423,11 +407,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   actionRow: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
+    width: '100%',
   },
   decisionButton: {
     alignItems: 'center',

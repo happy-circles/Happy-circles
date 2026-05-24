@@ -8,6 +8,19 @@ import { getNativeGoogleCredential } from './google-auth';
 
 type SupabaseClient = NonNullable<typeof supabase>;
 type NativeGoogleMode = 'link' | 'sign-in';
+export type NativeGoogleFailureCode =
+  | 'already_in_progress'
+  | 'cancelled'
+  | 'identity_conflict'
+  | 'link_identity_unavailable'
+  | 'manual_linking_disabled'
+  | 'native_configuration_missing'
+  | 'native_credential_failed'
+  | 'native_unavailable'
+  | 'play_services_unavailable'
+  | 'provider_disabled'
+  | 'supabase_token_rejected'
+  | 'unexpected';
 type NativeGoogleStage =
   | 'link_identity'
   | 'native_credential'
@@ -25,12 +38,73 @@ export interface NativeGoogleFailureReport {
 }
 
 export interface NativeGoogleResult {
+  readonly failureCode?: NativeGoogleFailureCode;
   readonly message: string;
+  readonly shouldFallbackToOAuth?: boolean;
   readonly userId: string | null;
 }
 
 function isNativeAuthCancellationMessage(message: string): boolean {
   return message.toLocaleLowerCase('en-US').includes('cancelad');
+}
+
+function classifyNativeCredentialFailure(message: string): {
+  readonly failureCode: NativeGoogleFailureCode;
+  readonly shouldFallbackToOAuth: boolean;
+} {
+  const normalized = message.trim().toLocaleLowerCase('en-US');
+
+  if (normalized.includes('cancelad')) {
+    return { failureCode: 'cancelled', shouldFallbackToOAuth: false };
+  }
+
+  if (normalized.includes('en curso')) {
+    return { failureCode: 'already_in_progress', shouldFallbackToOAuth: false };
+  }
+
+  if (normalized.includes('expo_public_google_web_client_id')) {
+    return { failureCode: 'native_configuration_missing', shouldFallbackToOAuth: true };
+  }
+
+  if (normalized.includes('play services')) {
+    return { failureCode: 'play_services_unavailable', shouldFallbackToOAuth: true };
+  }
+
+  if (normalized.includes('google nativo')) {
+    return { failureCode: 'native_unavailable', shouldFallbackToOAuth: true };
+  }
+
+  return { failureCode: 'native_credential_failed', shouldFallbackToOAuth: true };
+}
+
+function classifySupabaseGoogleFailure(message: string): {
+  readonly failureCode: NativeGoogleFailureCode;
+  readonly shouldFallbackToOAuth: boolean;
+} {
+  const normalized = message.trim().toLocaleLowerCase('en-US');
+
+  if (
+    normalized.includes('manual linking') ||
+    normalized.includes('identity linking') ||
+    normalized.includes('linking is not enabled')
+  ) {
+    return { failureCode: 'manual_linking_disabled', shouldFallbackToOAuth: false };
+  }
+
+  if (
+    normalized.includes('identity_already_exists') ||
+    normalized.includes('identity already exists') ||
+    normalized.includes('already linked') ||
+    normalized.includes('already been linked')
+  ) {
+    return { failureCode: 'identity_conflict', shouldFallbackToOAuth: false };
+  }
+
+  if (normalized.includes('provider') && normalized.includes('disabled')) {
+    return { failureCode: 'provider_disabled', shouldFallbackToOAuth: false };
+  }
+
+  return { failureCode: 'supabase_token_rejected', shouldFallbackToOAuth: true };
 }
 
 export async function performNativeGoogleAuth(input: {
@@ -46,17 +120,20 @@ export async function performNativeGoogleAuth(input: {
           ? 'Vinculación con Google cancelada.'
           : credentialResult.message;
 
+      const failure = classifyNativeCredentialFailure(message);
+
       if (!isNativeAuthCancellationMessage(message)) {
         input.reportFailure({
           message,
           mode: input.mode,
           provider: 'google',
-          reason: 'credential_result',
+          reason: failure.failureCode,
           stage: 'native_credential',
         });
       }
 
       return {
+        ...failure,
         message,
         userId: null,
       };
@@ -95,17 +172,19 @@ export async function performNativeGoogleAuth(input: {
       });
 
       if (error) {
+        const failure = classifySupabaseGoogleFailure(error.message);
         input.reportFailure({
           error,
           message: error.message,
           mode: input.mode,
           provider: 'google',
-          reason: 'supabase_error',
+          reason: failure.failureCode,
           stage: 'link_identity',
         });
 
         return {
-          message: formatSupabaseAuthErrorMessage(error.message),
+          ...failure,
+          message: formatSupabaseAuthErrorMessage(error.message, 'google'),
           userId: null,
         };
       }
@@ -117,17 +196,19 @@ export async function performNativeGoogleAuth(input: {
       });
 
       if (error) {
+        const failure = classifySupabaseGoogleFailure(error.message);
         input.reportFailure({
           error,
           message: error.message,
           mode: input.mode,
           provider: 'google',
-          reason: 'supabase_error',
+          reason: failure.failureCode,
           stage: 'sign_in_with_id_token',
         });
 
         return {
-          message: formatSupabaseAuthErrorMessage(error.message),
+          ...failure,
+          message: formatSupabaseAuthErrorMessage(error.message, 'google'),
           userId: null,
         };
       }
@@ -176,7 +257,9 @@ export async function performNativeGoogleAuth(input: {
     });
 
     return {
+      failureCode: 'unexpected',
       message: formatValidationMessage(error),
+      shouldFallbackToOAuth: true,
       userId: null,
     };
   }

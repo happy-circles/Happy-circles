@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  nativeAuth: vi.fn(),
   oauthAuth: vi.fn(),
   reportEvent: vi.fn(),
   reportFailure: vi.fn(),
-  shouldFallback: vi.fn(),
   traceAuthDebugEvent: vi.fn(),
-}));
-
-vi.mock('./google-native-auth', () => ({
-  performNativeGoogleAuth: mocks.nativeAuth,
 }));
 
 vi.mock('./google-oauth', () => ({
@@ -20,7 +14,6 @@ vi.mock('./google-oauth', () => ({
 vi.mock('./social-auth-reporting', () => ({
   reportSocialAuthEvent: mocks.reportEvent,
   reportSocialAuthFailure: mocks.reportFailure,
-  shouldFallbackToSupabaseGoogleOAuth: mocks.shouldFallback,
 }));
 
 vi.mock('./auth-debug', () => ({
@@ -39,11 +32,7 @@ interface SocialAuthFailure {
   readonly mode: 'link' | 'sign-in';
   readonly provider: 'google';
   readonly reason?: string;
-  readonly stage: 'native_credential' | 'oauth_start';
-}
-
-interface NativeAuthInput {
-  readonly reportFailure: (failure: SocialAuthFailure) => void;
+  readonly stage: 'browser_open' | 'oauth_callback' | 'oauth_start';
 }
 
 interface OAuthAuthInput {
@@ -77,49 +66,10 @@ describe('performGoogleAuthFlow', () => {
     });
 
     expect(result).toBe(oauthResult);
-    expect(mocks.nativeAuth).not.toHaveBeenCalled();
     expect(mocks.oauthAuth).toHaveBeenCalledTimes(1);
   });
 
-  it('returns the native result when Google native succeeds', async () => {
-    const nativeResult: AuthResult = { message: 'Sesion iniciada.', userId: 'user-1' };
-    mocks.nativeAuth.mockResolvedValue(nativeResult);
-
-    const result = await performGoogleAuthFlow({
-      applySessionFromUrl,
-      client,
-      mode: 'sign-in',
-      platform: 'ios',
-    });
-
-    expect(result).toBe(nativeResult);
-    expect(mocks.oauthAuth).not.toHaveBeenCalled();
-    expect(mocks.shouldFallback).not.toHaveBeenCalled();
-  });
-
-  it('does not fallback when native Google is cancelled', async () => {
-    const nativeResult: AuthResult = { message: 'Inicio con Google cancelado.', userId: null };
-    mocks.nativeAuth.mockResolvedValue(nativeResult);
-    mocks.shouldFallback.mockReturnValue(false);
-
-    const result = await performGoogleAuthFlow({
-      applySessionFromUrl,
-      client,
-      mode: 'sign-in',
-      platform: 'android',
-    });
-
-    expect(result).toBe(nativeResult);
-    expect(mocks.shouldFallback).toHaveBeenCalledWith('Inicio con Google cancelado.');
-    expect(mocks.oauthAuth).not.toHaveBeenCalled();
-  });
-
-  it('falls back to OAuth on iOS when native Google is unavailable', async () => {
-    mocks.nativeAuth.mockResolvedValue({
-      message: 'Google nativo requiere una version instalada de desarrollo.',
-      userId: null,
-    });
-    mocks.shouldFallback.mockReturnValue(true);
+  it('uses Supabase OAuth directly on native platforms', async () => {
     const oauthResult: AuthResult = { message: 'Sesion iniciada.', userId: 'user-1' };
     mocks.oauthAuth.mockResolvedValue(oauthResult);
 
@@ -132,12 +82,11 @@ describe('performGoogleAuthFlow', () => {
 
     expect(result).toBe(oauthResult);
     expect(mocks.oauthAuth).toHaveBeenCalledTimes(1);
-    expect(mocks.reportEvent).toHaveBeenCalledWith(
+    expect(mocks.traceAuthDebugEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'google',
-        reason: 'native_google_unavailable',
         source: 'oauth_auth',
-        stage: 'oauth_start',
+        stage: 'flow_start',
       }),
     );
   });
@@ -149,7 +98,7 @@ describe('performGoogleAuthFlow', () => {
       applySessionFromUrl,
       client,
       mode: 'link',
-      platform: 'web',
+      platform: 'ios',
     });
 
     const oauthInput = mocks.oauthAuth.mock.calls[0]?.[0] as OAuthAuthInput;
@@ -172,32 +121,6 @@ describe('performGoogleAuthFlow', () => {
     );
     expect(mocks.reportFailure).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'link', source: 'oauth_auth', stage: 'oauth_start' }),
-    );
-  });
-
-  it('keeps native failure reports on the native source by default', async () => {
-    mocks.nativeAuth.mockImplementation(async (input: NativeAuthInput) => {
-      input.reportFailure({
-        message: 'Native failed.',
-        mode: 'sign-in',
-        provider: 'google',
-        reason: 'credential_result',
-        stage: 'native_credential',
-      });
-
-      return { message: 'Inicio con Google cancelado.', userId: null };
-    });
-    mocks.shouldFallback.mockReturnValue(false);
-
-    await performGoogleAuthFlow({
-      applySessionFromUrl,
-      client,
-      mode: 'sign-in',
-      platform: 'ios',
-    });
-
-    expect(mocks.reportFailure).toHaveBeenCalledWith(
-      expect.not.objectContaining({ source: 'oauth_auth' }),
     );
   });
 });

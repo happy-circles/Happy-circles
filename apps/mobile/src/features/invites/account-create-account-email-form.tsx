@@ -6,7 +6,6 @@ import { AppText } from '@/components/app-text';
 import {
   IdentityFlowField,
   IdentityFlowPasswordInput,
-  IdentityFlowPrimaryAction,
   IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { triggerIdentitySelectionHaptic } from '@/lib/identity-flow-haptics';
@@ -36,15 +35,12 @@ const countryMenuScrollWebStyle =
   Platform.OS === 'web' ? ({ overscrollBehavior: 'contain' } as unknown as ViewStyle) : null;
 
 interface AccountCreateAccountEmailFormProps {
-  readonly authBusy: boolean;
-  readonly busy: boolean;
   readonly countryIso: string;
   readonly countryMenuOpen: boolean;
   readonly countryMenuScrollY: number;
   readonly email: string;
   readonly emailStatus: FieldStatus;
   readonly markFieldTouched: (field: FieldName) => void;
-  readonly onSubmit: () => void;
   readonly password: string;
   readonly passwordStatus: FieldStatus;
   readonly phoneNationalNumber: string;
@@ -58,15 +54,12 @@ interface AccountCreateAccountEmailFormProps {
 }
 
 export function AccountCreateAccountEmailForm({
-  authBusy,
-  busy,
   countryIso,
   countryMenuOpen,
   countryMenuScrollY,
   email,
   emailStatus,
   markFieldTouched,
-  onSubmit,
   password,
   passwordStatus,
   phoneNationalNumber,
@@ -222,12 +215,6 @@ export function AccountCreateAccountEmailForm({
         </View>
       </IdentityFlowField>
 
-      <IdentityFlowPrimaryAction
-        disabled={authBusy}
-        label={busy ? 'Creando...' : 'Crear con correo'}
-        loading={busy}
-        onPress={authBusy ? undefined : onSubmit}
-      />
     </View>
   );
 }

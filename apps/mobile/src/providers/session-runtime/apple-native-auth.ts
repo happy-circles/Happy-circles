@@ -111,7 +111,7 @@ export async function performNativeAppleAuth(input: {
         });
 
         return {
-          message: formatSupabaseAuthErrorMessage(error.message),
+          message: formatSupabaseAuthErrorMessage(error.message, 'apple'),
           userId: null,
         };
       }
@@ -133,7 +133,7 @@ export async function performNativeAppleAuth(input: {
         });
 
         return {
-          message: formatSupabaseAuthErrorMessage(error.message),
+          message: formatSupabaseAuthErrorMessage(error.message, 'apple'),
           userId: null,
         };
       }

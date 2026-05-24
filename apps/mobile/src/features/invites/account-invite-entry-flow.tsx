@@ -1280,6 +1280,15 @@ export function AccountSignInEntry({
       onPress={authBusy ? undefined : showSignInEntry}
     />
   );
+  const tokenPrimaryDisabled = authBusy || !shouldPreview || Boolean(blockingMessage);
+  const tokenPrimaryAction = (
+    <IdentityFlowPrimaryAction
+      disabled={tokenPrimaryDisabled}
+      label={previewQuery.isFetching ? 'Validando...' : 'Continuar'}
+      loading={previewQuery.isFetching}
+      onPress={tokenPrimaryDisabled ? undefined : () => void handleTokenContinue()}
+    />
+  );
   const tokenIdentity =
     authSurfaceTransitioning && transitionTargetSurface === 'auth' && account ? (
       <AuthEntryIdentity
@@ -1297,14 +1306,11 @@ export function AccountSignInEntry({
     );
   const tokenContent = (
     <AccountInviteEntryTokenForm
-      disabled={authBusy || !shouldPreview || Boolean(blockingMessage)}
-      loading={previewQuery.isFetching}
       onBlurToken={() => setTokenTouched(true)}
       onChangeToken={(value) => {
         setTokenMessage(null);
         setTokenInput(value);
       }}
-      onContinue={() => void handleTokenContinue()}
       status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
       tokenFieldError={tokenFieldError}
       tokenInput={tokenInput}
@@ -1319,7 +1325,13 @@ export function AccountSignInEntry({
     : showPasswordFields
       ? AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE
       : undefined;
-  const activeFooterAction = isTokenSurface ? tokenFooterAction : authFooterAction;
+  const activeFooterAction = (
+    <>
+      {isTokenSurface ? tokenPrimaryAction : null}
+      {!isTokenSurface && shouldRevealAuthPrimaryAction ? authPrimaryAction : null}
+      {isTokenSurface ? tokenFooterAction : authFooterAction}
+    </>
+  );
   const activeContentTransitionKey = isTokenSurface
     ? 'invite-entry:token-form'
     : shouldRevealAuthPrimaryAction
@@ -1507,7 +1519,6 @@ export function AccountSignInEntry({
                       ) : null}
                     </View>
 
-                    {authPrimaryAction}
                   </>
                 ) : null}
               </IdentityFlowForm>

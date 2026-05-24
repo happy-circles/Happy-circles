@@ -643,9 +643,26 @@ export function SetupAccountScreen() {
       : editPhoneMode
         ? 'Guardar celular'
         : 'Guardar y entrar';
+  const setupPrimaryAction =
+    !securityOnlyMode || session.isTrustedDevice ? (
+      <IdentityFlowPrimaryAction
+        disabled={primaryActionDisabled}
+        icon="checkmark"
+        label={primaryActionLabel}
+        loading={primaryActionLoading}
+        onPress={
+          primaryActionDisabled
+            ? undefined
+            : securityOnlyMode
+              ? () => void finishSecurityOnly()
+              : () => void handleSaveAndFinish()
+        }
+      />
+    ) : undefined;
 
   return (
     <IdentityFlowScreen
+      actions={setupPrimaryAction}
       identity={
         securityOnlyMode ? (
           <IdentityFlowIdentity
@@ -1054,21 +1071,6 @@ export function SetupAccountScreen() {
           </View>
         </View>
 
-        {!securityOnlyMode || session.isTrustedDevice ? (
-          <IdentityFlowPrimaryAction
-            disabled={primaryActionDisabled}
-            icon="checkmark"
-            label={primaryActionLabel}
-            loading={primaryActionLoading}
-            onPress={
-              primaryActionDisabled
-                ? undefined
-                : securityOnlyMode
-                  ? () => void finishSecurityOnly()
-                  : () => void handleSaveAndFinish()
-            }
-          />
-        ) : null}
       </View>
       <AvatarOptionsSheet
         canViewPhoto={canViewProfileAvatar}

@@ -4,7 +4,6 @@ import {
   IdentityFlowField,
   IdentityFlowForm,
   IdentityFlowLogoCopy,
-  IdentityFlowPrimaryAction,
   IdentityFlowSecondaryAction,
 } from '@/components/identity-flow';
 import { OtpCodeInput } from '@/components/otp-code-input';
@@ -14,7 +13,6 @@ interface AccountCreateAccountVerificationFormProps {
   readonly onContinueAfterEmailLink: () => void;
   readonly onEditEmail: () => void;
   readonly onResendEmailCode: () => void;
-  readonly onVerifyEmailCode: () => void;
   readonly pendingVerificationEmail: string;
   readonly resendBusy: boolean;
   readonly setVerificationCode: (value: string) => void;
@@ -27,7 +25,6 @@ export function AccountCreateAccountVerificationForm({
   onContinueAfterEmailLink,
   onEditEmail,
   onResendEmailCode,
-  onVerifyEmailCode,
   pendingVerificationEmail,
   resendBusy,
   setVerificationCode,
@@ -61,14 +58,6 @@ export function AccountCreateAccountVerificationForm({
           value={verificationCode}
         />
       </IdentityFlowField>
-
-      <IdentityFlowPrimaryAction
-        disabled={disabled}
-        icon="checkmark"
-        label={verificationBusy ? 'Confirmando...' : 'Confirmar correo'}
-        loading={verificationBusy}
-        onPress={disabled ? undefined : onVerifyEmailCode}
-      />
 
       <View style={styles.verificationActions}>
         <IdentityFlowSecondaryAction

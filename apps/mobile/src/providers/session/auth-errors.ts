@@ -46,7 +46,12 @@ export function readErrorMessage(error: unknown): string {
   return 'No se pudo completar la acción.';
 }
 
-export function formatSupabaseAuthErrorMessage(message: string): string {
+type SupabaseAuthErrorProvider = 'apple' | 'google';
+
+export function formatSupabaseAuthErrorMessage(
+  message: string,
+  provider?: SupabaseAuthErrorProvider,
+): string {
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
   if (
@@ -120,7 +125,15 @@ export function formatSupabaseAuthErrorMessage(message: string): string {
     normalized.includes('nonces mismatch') ||
     normalized.includes('passed nonce and nonce in id_token')
   ) {
-    return 'No pudimos validar Apple. Intenta de nuevo.';
+    if (provider === 'apple') {
+      return 'No pudimos validar Apple. Intenta de nuevo.';
+    }
+
+    if (provider === 'google') {
+      return 'No pudimos validar Google. Intenta de nuevo.';
+    }
+
+    return 'No pudimos validar este acceso. Intenta de nuevo.';
   }
 
   if (

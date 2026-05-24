@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
+import { Linking } from 'react-native';
 
 import { buildSocialOAuthRedirect } from '@/lib/auth-redirects';
 import type { supabase } from '@/lib/supabase';
@@ -15,6 +16,7 @@ type SupabaseClient = NonNullable<typeof supabase>;
 type GoogleOAuthMode = 'link' | 'sign-in';
 type GoogleOAuthStage = 'browser_open' | 'oauth_callback' | 'oauth_start' | 'unexpected';
 type GoogleOAuthEventResult = 'cancelled' | 'started' | 'succeeded';
+type ApplySessionFromUrl = (url: string | null) => Promise<boolean>;
 
 export interface GoogleOAuthFailureReport {
   readonly provider: 'google';
@@ -39,9 +41,50 @@ export interface GoogleOAuthResult {
   readonly userId: string | null;
 }
 
+export interface GoogleOAuthInput {
+  readonly applySessionFromUrl: ApplySessionFromUrl;
+  readonly client: SupabaseClient;
+  readonly mode: GoogleOAuthMode;
+  readonly reportEvent?: (event: GoogleOAuthEventReport) => void;
+  readonly reportFailure: (failure: GoogleOAuthFailureReport) => void;
+}
+
 void WebBrowser.maybeCompleteAuthSession();
 
+const OAUTH_CALLBACK_SETTLE_MS = 750;
 let googleOAuthSessionOpen = false;
+
+function createOAuthCallbackWatcher(applySessionFromUrl: ApplySessionFromUrl): {
+  readonly applyCallbackUrl: (url: string | null) => Promise<boolean>;
+  readonly cleanup: () => void;
+  readonly waitForCallback: () => Promise<boolean>;
+} {
+  let callbackPromise: Promise<boolean> | null = null;
+  const applyCallbackUrl = (url: string | null): Promise<boolean> => {
+    const nextAttempt = () => applySessionFromUrl(url).catch(() => false);
+    callbackPromise = callbackPromise
+      ? callbackPromise.then((applied) => (applied ? true : nextAttempt()))
+      : nextAttempt();
+    return callbackPromise;
+  };
+
+  const subscription = Linking.addEventListener('url', (event) => {
+    void applyCallbackUrl(event.url);
+  });
+
+  return {
+    applyCallbackUrl,
+    cleanup: () => subscription.remove(),
+    waitForCallback: async () => {
+      if (callbackPromise) {
+        return callbackPromise;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, OAUTH_CALLBACK_SETTLE_MS));
+      return callbackPromise ?? false;
+    },
+  };
+}
 
 async function dismissStaleAuthBrowser(): Promise<void> {
   try {
@@ -86,13 +129,72 @@ async function resolveUserIdentities(
   return user.identities ?? [];
 }
 
-export async function performSupabaseGoogleOAuth(input: {
-  readonly applySessionFromUrl: (url: string | null) => Promise<boolean>;
-  readonly client: SupabaseClient;
-  readonly mode: GoogleOAuthMode;
-  readonly reportEvent?: (event: GoogleOAuthEventReport) => void;
-  readonly reportFailure: (failure: GoogleOAuthFailureReport) => void;
-}): Promise<GoogleOAuthResult> {
+async function resolveGoogleOAuthResult(
+  input: GoogleOAuthInput,
+  callbackApplied: boolean,
+  reportMissingCallback: boolean,
+): Promise<GoogleOAuthResult | null> {
+  const { data: sessionData } = await input.client.auth.getSession();
+  if (input.mode === 'link') {
+    const identities = sessionData.session
+      ? await resolveUserIdentities(input.client, sessionData.session)
+      : [];
+    const googleLinked =
+      hasGoogleIdentity(sessionData.session) ||
+      identities.some((identity) => normalizeIdentityProvider(identity.provider) === 'google');
+
+    if (googleLinked) {
+      input.reportEvent?.({
+        message: 'Google linked.',
+        mode: input.mode,
+        provider: 'google',
+        reason: 'google_linked',
+        result: 'succeeded',
+        stage: 'oauth_callback',
+      });
+
+      return {
+        message: 'Google vinculado.',
+        userId: sessionData.session?.user.id ?? null,
+      };
+    }
+  } else if (sessionData.session) {
+    input.reportEvent?.({
+      message: 'Google sign in completed.',
+      mode: input.mode,
+      provider: 'google',
+      reason: 'session_created',
+      result: 'succeeded',
+      stage: 'oauth_callback',
+    });
+
+    return {
+      message: 'Sesión iniciada.',
+      userId: sessionData.session.user.id,
+    };
+  }
+
+  if (!reportMissingCallback) {
+    return null;
+  }
+
+  input.reportFailure({
+    message: 'No pudimos completar el callback de Google.',
+    mode: input.mode,
+    provider: 'google',
+    reason: callbackApplied ? 'missing_verified_session' : 'callback_not_applied',
+    stage: 'oauth_callback',
+  });
+
+  return {
+    message: 'No pudimos completar Google. Intentalo de nuevo.',
+    userId: null,
+  };
+}
+
+export async function performSupabaseGoogleOAuth(
+  input: GoogleOAuthInput,
+): Promise<GoogleOAuthResult> {
   try {
     if (googleOAuthSessionOpen) {
       input.reportFailure({
@@ -139,7 +241,7 @@ export async function performSupabaseGoogleOAuth(input: {
       });
 
       return {
-        message: formatSupabaseAuthErrorMessage(message),
+        message: formatSupabaseAuthErrorMessage(message, 'google'),
         userId: null,
       };
     }
@@ -164,109 +266,75 @@ export async function performSupabaseGoogleOAuth(input: {
 
     await dismissStaleAuthBrowser();
 
-    let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
+    const callbackWatcher = createOAuthCallbackWatcher(input.applySessionFromUrl);
     try {
-      googleOAuthSessionOpen = true;
-      result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    } catch (error) {
-      input.reportFailure({
-        error,
-        message: readErrorMessage(error),
-        mode: input.mode,
-        provider: 'google',
-        reason: 'browser_open_failed',
-        stage: 'browser_open',
-      });
-
-      return {
-        message: formatValidationMessage(error),
-        userId: null,
-      };
-    } finally {
-      googleOAuthSessionOpen = false;
-    }
-
-    if (result.type !== 'success') {
-      input.reportEvent?.({
-        message: `Google auth session returned ${result.type}.`,
-        mode: input.mode,
-        provider: 'google',
-        reason: result.type,
-        result: 'cancelled',
-        stage: 'browser_open',
-      });
-
-      return {
-        message:
-          input.mode === 'link'
-            ? 'Vinculacion con Google cancelada.'
-            : 'Inicio con Google cancelado.',
-        userId: null,
-      };
-    }
-
-    input.reportEvent?.({
-      message: 'Google OAuth callback received.',
-      mode: input.mode,
-      provider: 'google',
-      reason: 'callback_received',
-      result: 'started',
-      stage: 'oauth_callback',
-    });
-
-    const callbackApplied = await input.applySessionFromUrl(result.url);
-    const { data: sessionData } = await input.client.auth.getSession();
-    if (input.mode === 'link') {
-      const identities = sessionData.session
-        ? await resolveUserIdentities(input.client, sessionData.session)
-        : [];
-      const googleLinked =
-        hasGoogleIdentity(sessionData.session) ||
-        identities.some((identity) => normalizeIdentityProvider(identity.provider) === 'google');
-
-      if (googleLinked) {
-        input.reportEvent?.({
-          message: 'Google linked.',
+      let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
+      try {
+        googleOAuthSessionOpen = true;
+        result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      } catch (error) {
+        input.reportFailure({
+          error,
+          message: readErrorMessage(error),
           mode: input.mode,
           provider: 'google',
-          reason: 'google_linked',
-          result: 'succeeded',
-          stage: 'oauth_callback',
+          reason: 'browser_open_failed',
+          stage: 'browser_open',
         });
 
         return {
-          message: 'Google vinculado.',
-          userId: sessionData.session?.user.id ?? null,
+          message: formatValidationMessage(error),
+          userId: null,
+        };
+      } finally {
+        googleOAuthSessionOpen = false;
+      }
+
+      if (result.type !== 'success') {
+        input.reportEvent?.({
+          message: `Google auth session returned ${result.type}.`,
+          mode: input.mode,
+          provider: 'google',
+          reason: result.type,
+          result: 'cancelled',
+          stage: 'browser_open',
+        });
+
+        const callbackApplied = await callbackWatcher.waitForCallback();
+        const resolvedResult = await resolveGoogleOAuthResult(input, callbackApplied, false);
+        if (resolvedResult) {
+          return resolvedResult;
+        }
+
+        return {
+          message:
+            input.mode === 'link'
+              ? 'Vinculacion con Google cancelada.'
+              : 'Inicio con Google cancelado.',
+          userId: null,
         };
       }
-    } else if (sessionData.session) {
+
       input.reportEvent?.({
-        message: 'Google sign in completed.',
+        message: 'Google OAuth callback received.',
         mode: input.mode,
         provider: 'google',
-        reason: 'session_created',
-        result: 'succeeded',
+        reason: 'callback_received',
+        result: 'started',
         stage: 'oauth_callback',
       });
 
-      return {
-        message: 'Sesión iniciada.',
-        userId: sessionData.session.user.id,
-      };
+      const callbackApplied = await callbackWatcher.applyCallbackUrl(result.url);
+      const resolvedResult = await resolveGoogleOAuthResult(input, callbackApplied, true);
+      return (
+        resolvedResult ?? {
+          message: 'No pudimos completar Google. Intentalo de nuevo.',
+          userId: null,
+        }
+      );
+    } finally {
+      callbackWatcher.cleanup();
     }
-
-    input.reportFailure({
-      message: 'No pudimos completar el callback de Google.',
-      mode: input.mode,
-      provider: 'google',
-      reason: callbackApplied ? 'missing_verified_session' : 'callback_not_applied',
-      stage: 'oauth_callback',
-    });
-
-    return {
-      message: 'No pudimos completar Google. Intentalo de nuevo.',
-      userId: null,
-    };
   } catch (error) {
     input.reportFailure({
       error,

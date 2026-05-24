@@ -161,6 +161,8 @@ export function useSessionController(): SessionContextValue {
 
   const backgroundedAtRef = useRef<number | null>(null);
   const accountLoadIdRef = useRef(0);
+  const authCallbackAppliedUrlsRef = useRef(new Set<string>());
+  const authCallbackUrlsInFlightRef = useRef(new Map<string, Promise<boolean>>());
   const sessionRef = useRef<Session | null>(null);
   const statusRef = useRef<SessionStatus>('loading');
   const passwordRecoverySessionUserIdRef = useRef<string | null>(null);
@@ -229,18 +231,113 @@ export function useSessionController(): SessionContextValue {
         return false;
       }
 
-      const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
-      const authCode = extractAuthCallbackCode(url);
-      if (authCode) {
+      if (authCallbackAppliedUrlsRef.current.has(url)) {
+        traceAuthDebugEvent({
+          provider: 'supabase',
+          reason: 'callback_already_applied',
+          result: 'skipped',
+          source: 'session_callback',
+          stage: 'callback_duplicate',
+        });
+        return true;
+      }
+
+      const inFlightCallback = authCallbackUrlsInFlightRef.current.get(url);
+      if (inFlightCallback) {
+        traceAuthDebugEvent({
+          provider: 'supabase',
+          reason: 'callback_in_flight',
+          result: 'skipped',
+          source: 'session_callback',
+          stage: 'callback_duplicate',
+        });
+        return inFlightCallback;
+      }
+
+      const callbackPromise = (async () => {
+        const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
+        const authCode = extractAuthCallbackCode(url);
+        if (authCode) {
+          traceAuthDebugEvent({
+            metadata: { passwordRecovery: isPasswordRecoveryCallback },
+            mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
+            provider: 'supabase',
+            result: 'started',
+            source: 'session_callback',
+            stage: 'exchange_code_for_session',
+          });
+          const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+
+          if (error) {
+            traceAuthDebugEvent({
+              message: error.message,
+              mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
+              provider: 'supabase',
+              reason: 'supabase_error',
+              result: 'failed',
+              source: 'session_callback',
+              stage: 'exchange_code_for_session',
+            });
+            reportClientErrorSafe({
+              error,
+              errorCode: 'auth_callback_exchange_code',
+              errorMessage: error.message,
+              fatal: false,
+              kind: 'client_action',
+              metadata: {
+                operation: 'exchange_code_for_session',
+                reason: 'supabase_error',
+                result: 'failed',
+                source: 'auth_callback',
+              },
+            });
+            console.warn(
+              'Failed to exchange Supabase auth code from auth callback',
+              error instanceof Error ? error.message : String(error),
+            );
+            return false;
+          } else if (isPasswordRecoveryCallback && data.session) {
+            setPasswordRecoverySessionUserId(data.session.user.id);
+          }
+
+          traceAuthDebugEvent({
+            metadata: {
+              hasSession: Boolean(data.session),
+              passwordRecovery: isPasswordRecoveryCallback,
+            },
+            mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
+            provider: 'supabase',
+            result: 'succeeded',
+            source: 'session_callback',
+            stage: 'exchange_code_for_session',
+          });
+          return true;
+        }
+
+        const tokens = extractAuthCallbackTokens(url);
+        if (!tokens) {
+          traceAuthDebugEvent({
+            provider: 'supabase',
+            reason: 'missing_code_or_tokens',
+            result: 'skipped',
+            source: 'session_callback',
+            stage: 'callback_without_credentials',
+          });
+          return false;
+        }
+
         traceAuthDebugEvent({
           metadata: { passwordRecovery: isPasswordRecoveryCallback },
           mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
           provider: 'supabase',
           result: 'started',
           source: 'session_callback',
-          stage: 'exchange_code_for_session',
+          stage: 'set_session_from_tokens',
         });
-        const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+        const { data, error } = await supabase.auth.setSession({
+          access_token: tokens.accessToken,
+          refresh_token: tokens.refreshToken,
+        });
 
         if (error) {
           traceAuthDebugEvent({
@@ -250,23 +347,23 @@ export function useSessionController(): SessionContextValue {
             reason: 'supabase_error',
             result: 'failed',
             source: 'session_callback',
-            stage: 'exchange_code_for_session',
+            stage: 'set_session_from_tokens',
           });
           reportClientErrorSafe({
             error,
-            errorCode: 'auth_callback_exchange_code',
+            errorCode: 'auth_callback_set_session',
             errorMessage: error.message,
             fatal: false,
             kind: 'client_action',
             metadata: {
-              operation: 'exchange_code_for_session',
+              operation: 'set_session_from_callback',
               reason: 'supabase_error',
               result: 'failed',
               source: 'auth_callback',
             },
           });
           console.warn(
-            'Failed to exchange Supabase auth code from auth callback',
+            'Failed to restore Supabase session from auth callback',
             error instanceof Error ? error.message : String(error),
           );
           return false;
@@ -283,80 +380,25 @@ export function useSessionController(): SessionContextValue {
           provider: 'supabase',
           result: 'succeeded',
           source: 'session_callback',
-          stage: 'exchange_code_for_session',
-        });
-        return true;
-      }
-
-      const tokens = extractAuthCallbackTokens(url);
-      if (!tokens) {
-        traceAuthDebugEvent({
-          provider: 'supabase',
-          reason: 'missing_code_or_tokens',
-          result: 'skipped',
-          source: 'session_callback',
-          stage: 'callback_without_credentials',
-        });
-        return false;
-      }
-
-      traceAuthDebugEvent({
-        metadata: { passwordRecovery: isPasswordRecoveryCallback },
-        mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-        provider: 'supabase',
-        result: 'started',
-        source: 'session_callback',
-        stage: 'set_session_from_tokens',
-      });
-      const { data, error } = await supabase.auth.setSession({
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-      });
-
-      if (error) {
-        traceAuthDebugEvent({
-          message: error.message,
-          mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-          provider: 'supabase',
-          reason: 'supabase_error',
-          result: 'failed',
-          source: 'session_callback',
           stage: 'set_session_from_tokens',
         });
-        reportClientErrorSafe({
-          error,
-          errorCode: 'auth_callback_set_session',
-          errorMessage: error.message,
-          fatal: false,
-          kind: 'client_action',
-          metadata: {
-            operation: 'set_session_from_callback',
-            reason: 'supabase_error',
-            result: 'failed',
-            source: 'auth_callback',
-          },
-        });
-        console.warn(
-          'Failed to restore Supabase session from auth callback',
-          error instanceof Error ? error.message : String(error),
-        );
-        return false;
-      } else if (isPasswordRecoveryCallback && data.session) {
-        setPasswordRecoverySessionUserId(data.session.user.id);
-      }
+        return true;
+      })();
 
-      traceAuthDebugEvent({
-        metadata: {
-          hasSession: Boolean(data.session),
-          passwordRecovery: isPasswordRecoveryCallback,
-        },
-        mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-        provider: 'supabase',
-        result: 'succeeded',
-        source: 'session_callback',
-        stage: 'set_session_from_tokens',
-      });
-      return true;
+      authCallbackUrlsInFlightRef.current.set(url, callbackPromise);
+      try {
+        const callbackApplied = await callbackPromise;
+        if (callbackApplied) {
+          authCallbackAppliedUrlsRef.current.add(url);
+          const oldestUrl = authCallbackAppliedUrlsRef.current.values().next().value;
+          if (authCallbackAppliedUrlsRef.current.size > 8 && oldestUrl) {
+            authCallbackAppliedUrlsRef.current.delete(oldestUrl);
+          }
+        }
+        return callbackApplied;
+      } finally {
+        authCallbackUrlsInFlightRef.current.delete(url);
+      }
     },
     [setPasswordRecoverySessionUserId],
   );
@@ -1497,55 +1539,61 @@ export function useSessionController(): SessionContextValue {
     ],
   );
 
-  const linkGoogle = useCallback(async (input?: LinkSocialInput) => {
-    if (deviceTrustState !== 'trusted') {
-      return 'Solo puedes vincular Google desde un dispositivo confiable.';
-    }
-
-    const authResult = await stepUpAuth({ force: true, password: input?.password });
-    if (!authResult.success) {
-      return formatStepUpErrorMessage('vincular Google', biometricLabel, authResult.error);
-    }
-
-    const googleResult = await performGoogleAuth('link');
-    if (googleResult.message === 'Google vinculado.') {
-      try {
-        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-      } catch (error) {
-        console.warn(
-          'Failed to refresh account state after Google link',
-          error instanceof Error ? error.message : String(error),
-        );
+  const linkGoogle = useCallback(
+    async (input?: LinkSocialInput) => {
+      if (deviceTrustState !== 'trusted') {
+        return 'Solo puedes vincular Google desde un dispositivo confiable.';
       }
-    }
 
-    return googleResult.message;
-  }, [biometricLabel, deviceTrustState, performGoogleAuth, refreshAccountState, stepUpAuth]);
-
-  const linkApple = useCallback(async (input?: LinkSocialInput) => {
-    if (deviceTrustState !== 'trusted') {
-      return 'Solo puedes vincular Apple desde un dispositivo confiable.';
-    }
-
-    const authResult = await stepUpAuth({ force: true, password: input?.password });
-    if (!authResult.success) {
-      return formatStepUpErrorMessage('vincular Apple', biometricLabel, authResult.error);
-    }
-
-    const appleResult = await performAppleAuth('link');
-    if (appleResult.message === 'Apple vinculado.') {
-      try {
-        await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-      } catch (error) {
-        console.warn(
-          'Failed to refresh account state after Apple link',
-          error instanceof Error ? error.message : String(error),
-        );
+      const authResult = await stepUpAuth({ force: true, password: input?.password });
+      if (!authResult.success) {
+        return formatStepUpErrorMessage('vincular Google', biometricLabel, authResult.error);
       }
-    }
 
-    return appleResult.message;
-  }, [biometricLabel, deviceTrustState, performAppleAuth, refreshAccountState, stepUpAuth]);
+      const googleResult = await performGoogleAuth('link');
+      if (googleResult.message === 'Google vinculado.') {
+        try {
+          await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        } catch (error) {
+          console.warn(
+            'Failed to refresh account state after Google link',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
+      return googleResult.message;
+    },
+    [biometricLabel, deviceTrustState, performGoogleAuth, refreshAccountState, stepUpAuth],
+  );
+
+  const linkApple = useCallback(
+    async (input?: LinkSocialInput) => {
+      if (deviceTrustState !== 'trusted') {
+        return 'Solo puedes vincular Apple desde un dispositivo confiable.';
+      }
+
+      const authResult = await stepUpAuth({ force: true, password: input?.password });
+      if (!authResult.success) {
+        return formatStepUpErrorMessage('vincular Apple', biometricLabel, authResult.error);
+      }
+
+      const appleResult = await performAppleAuth('link');
+      if (appleResult.message === 'Apple vinculado.') {
+        try {
+          await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        } catch (error) {
+          console.warn(
+            'Failed to refresh account state after Apple link',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
+      return appleResult.message;
+    },
+    [biometricLabel, deviceTrustState, performAppleAuth, refreshAccountState, stepUpAuth],
+  );
 
   const attachEmailPassword = useCallback(
     async (input: AttachEmailPasswordInput) => {

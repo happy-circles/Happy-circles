@@ -1,6 +1,7 @@
 import { reportClientErrorSafe } from '@/lib/support-errors';
 import { readErrorMessage } from '../session/auth-errors';
 import { traceAuthDebugEvent } from './auth-debug';
+import type { NativeGoogleFailureCode } from './google-native-auth';
 
 type SocialAuthProvider = 'apple' | 'google';
 type SocialAuthMode = 'link' | 'sign-in';
@@ -15,6 +16,12 @@ type SocialAuthStage =
   | 'unexpected';
 type SocialAuthEventResult = 'cancelled' | 'started' | 'succeeded';
 type AuthFlowSource = 'native_auth' | 'oauth_auth';
+
+export interface GoogleOAuthFallbackDecisionInput {
+  readonly failureCode?: NativeGoogleFailureCode;
+  readonly message: string;
+  readonly shouldFallbackToOAuth?: boolean;
+}
 
 export function reportSocialAuthFailure(input: {
   readonly provider: SocialAuthProvider;
@@ -85,7 +92,26 @@ export function reportSocialAuthEvent(input: {
   });
 }
 
-export function shouldFallbackToSupabaseGoogleOAuth(message: string): boolean {
+export function shouldFallbackToSupabaseGoogleOAuth(
+  input: GoogleOAuthFallbackDecisionInput | string,
+): boolean {
+  if (typeof input !== 'string' && typeof input.shouldFallbackToOAuth === 'boolean') {
+    return input.shouldFallbackToOAuth;
+  }
+
+  const failureCode = typeof input === 'string' ? undefined : input.failureCode;
+  if (failureCode) {
+    return (
+      failureCode === 'native_configuration_missing' ||
+      failureCode === 'native_credential_failed' ||
+      failureCode === 'native_unavailable' ||
+      failureCode === 'play_services_unavailable' ||
+      failureCode === 'supabase_token_rejected' ||
+      failureCode === 'unexpected'
+    );
+  }
+
+  const message = typeof input === 'string' ? input : input.message;
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
   if (normalized.includes('cancelad') || normalized.includes('en curso')) {
@@ -97,6 +123,12 @@ export function shouldFallbackToSupabaseGoogleOAuth(message: string): boolean {
     normalized.includes('expo_public_google_web_client_id') ||
     normalized.includes('no se pudo iniciar google') ||
     normalized.includes('credenciales') ||
+    normalized.includes('credentials') ||
+    normalized.includes('id token') ||
+    normalized.includes('id_token') ||
+    normalized.includes('invalid login') ||
+    normalized.includes('invalid token') ||
+    normalized.includes('token is invalid') ||
     normalized.includes('play services')
   );
 }
