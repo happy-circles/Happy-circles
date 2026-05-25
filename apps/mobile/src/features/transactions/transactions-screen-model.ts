@@ -20,8 +20,8 @@ export const PRIMARY_FILTER_OPTIONS: readonly {
   { label: 'Todo', value: 'all' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
-  { label: 'Por cobrar', value: 'owed_to_me' },
-  { label: 'Por pagar', value: 'i_owe' },
+  { label: 'Te deben', value: 'owed_to_me' },
+  { label: 'Debes', value: 'i_owe' },
 ];
 
 function isBalanceRootItem(item: ActivityItemDto): boolean {
@@ -126,11 +126,11 @@ export function emptyFilterDescription(filter: TransactionRootFilter): string {
   }
 
   if (filter === 'owed_to_me') {
-    return 'No hay movimientos por cobrar en esta vista.';
+    return 'No hay movimientos donde te deban en esta vista.';
   }
 
   if (filter === 'i_owe') {
-    return 'No hay movimientos por pagar en esta vista.';
+    return 'No hay movimientos donde debas en esta vista.';
   }
 
   return 'No hay movimientos que expliquen esta raíz del balance.';

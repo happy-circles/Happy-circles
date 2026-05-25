@@ -586,14 +586,17 @@ export function SetupAccountScreen() {
     }
   }
 
-  async function handleTrustDevice(method: TrustedDeviceAuthMethod) {
+  async function handleTrustDevice(method?: TrustedDeviceAuthMethod) {
     triggerImpactHaptic();
 
-    const result = await runSecurityAction(`trust-device-${method}`, async () =>
+    const actionMethod = method ?? 'auto';
+    const result = await runSecurityAction(`trust-device-${actionMethod}`, async () =>
       session.trustCurrentDevice(
-        method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
-          ? { method, password: trustPassword }
-          : { method },
+        method === undefined
+          ? undefined
+          : method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
+            ? { method, password: trustPassword }
+            : { method },
       ),
     );
 
@@ -603,22 +606,30 @@ export function SetupAccountScreen() {
       setTrustMethodPickerOpen(false);
       setTrustPasswordFallbackOpen(false);
     }
+
+    if (result.startsWith('Escribe tu contrase')) {
+      triggerWarningHaptic();
+      setTrustMethodPickerOpen(true);
+      setTrustPasswordFallbackOpen(true);
+    }
   }
 
   function handleTrustEntryPress() {
     triggerSelectionHaptic();
 
-    if (session.canTrustCurrentDeviceWithoutPassword && hasPasswordTrustMethod) {
-      void handleTrustDevice('password');
-      return;
-    }
+    Alert.alert('Confiar este celular', '', [
+      {
+        onPress: triggerWarningHaptic,
+        style: 'cancel',
+        text: 'Rechazar',
+      },
+      {
+        onPress: () => void handleTrustDevice(),
+        text: 'Confiar',
+      },
+    ]);
 
-    if (trustMethods.length === 0) {
-      setMessage('Agrega Google, Apple o una contraseña para poder confiar este teléfono.');
-      return;
-    }
-
-    setTrustMethodPickerOpen(true);
+    return;
   }
 
   async function handleBiometricToggle(nextValue: boolean) {
@@ -690,9 +701,9 @@ export function SetupAccountScreen() {
             subtitle={
               session.isTrustedDevice
                 ? 'Ya puedes volver al flujo que estabas completando.'
-                : 'Para marcarlo como confiable, confirma que eres tú con un método de respaldo.'
+                : 'Confiar o rechazar.'
             }
-            title={session.isTrustedDevice ? 'Teléfono confiable' : 'Confiar este teléfono'}
+            title={session.isTrustedDevice ? 'Celular confiable' : 'Confiar este celular'}
           />
         ) : undefined
       }
@@ -906,19 +917,13 @@ export function SetupAccountScreen() {
               subtitle={
                 session.isTrustedDevice
                   ? 'Acciones sensibles habilitadas'
-                  : session.canTrustCurrentDeviceWithoutPassword
-                    ? 'Confirma con un toque'
-                    : 'Confirma con un método de respaldo'
+                  : 'Pendiente'
               }
-              title="Teléfono confiable"
+              title="Celular confiable"
               tone={session.isTrustedDevice ? 'success' : 'danger'}
             />
             {!session.isTrustedDevice ? (
               <View style={styles.securityAction}>
-                <AppText style={styles.helperText}>
-                  Para marcarlo como confiable, confirma que eres tú con un método de respaldo.
-                </AppText>
-
                 {!trustMethodPickerOpen ? (
                   <View style={styles.inlineActionRow}>
                     <PrimaryAction
@@ -928,7 +933,7 @@ export function SetupAccountScreen() {
                       label={
                         securityBusyKey?.startsWith('trust-device-')
                           ? 'Confirmando...'
-                          : 'Confiar este teléfono'
+                          : 'Confiar este celular'
                       }
                       onPress={securityBusyKey ? undefined : handleTrustEntryPress}
                     />

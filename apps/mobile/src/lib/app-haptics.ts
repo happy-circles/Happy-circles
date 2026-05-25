@@ -1,6 +1,19 @@
 import * as Haptics from 'expo-haptics';
+import { Platform, Vibration } from 'react-native';
 
 export type AppHapticFeedback = 'none' | 'selection' | 'impact' | 'success' | 'warning' | 'error';
+
+function triggerAndroidVibration(durationMs: number) {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+
+  try {
+    Vibration.vibrate(durationMs);
+  } catch {
+    // Some Android skins disable vibration access for foreground apps.
+  }
+}
 
 export function triggerAppSelectionHaptic() {
   void Haptics.selectionAsync().catch(() => undefined);
@@ -8,6 +21,16 @@ export function triggerAppSelectionHaptic() {
 
 export function triggerAppActionHaptic() {
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+}
+
+export function triggerAppRefreshReadyHaptic() {
+  void Haptics.selectionAsync().catch(() => undefined);
+  triggerAndroidVibration(8);
+}
+
+export function triggerAppRefreshStartHaptic() {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+  triggerAndroidVibration(14);
 }
 
 export function triggerAppEmphasisHaptic() {

@@ -246,13 +246,13 @@ export function CategoryDetailScreen({
 
           <View style={styles.metricGrid}>
             <SurfaceCard padding="md" style={styles.metricCard}>
-              <AppText style={styles.metricLabel}>Por cobrar</AppText>
+              <AppText style={styles.metricLabel}>Te deben</AppText>
               <AppText style={[styles.metricAmount, styles.positive]}>
                 {formatCop(categoryRow.owedToMeMinor)}
               </AppText>
             </SurfaceCard>
             <SurfaceCard padding="md" style={styles.metricCard}>
-              <AppText style={styles.metricLabel}>Por pagar</AppText>
+              <AppText style={styles.metricLabel}>Debes</AppText>
               <AppText style={[styles.metricAmount, styles.negative]}>
                 {formatCop(categoryRow.iOweMinor)}
               </AppText>

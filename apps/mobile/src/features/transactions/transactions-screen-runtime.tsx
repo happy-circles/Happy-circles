@@ -343,48 +343,51 @@ export function TransactionsScreen() {
       </SectionBlock>
     ) : null;
 
-  const screenHeader = (
-    <View style={[styles.transactionsTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
-      <View style={styles.containedContent}>
-        <View style={styles.transactionsHeader}>
-          <Pressable
-            onPress={() => {
-              router.replace('/home');
-            }}
-            style={({ pressed }) => [styles.backButton, pressed ? styles.backButtonPressed : null]}
-          >
-            <Ionicons color={activeTheme.colors.text} name="chevron-back" size={20} />
-          </Pressable>
-          <AppText style={[styles.transactionsHeaderTitle, { color: activeTheme.colors.text }]}>
-            Movimientos
-          </AppText>
-          <View style={styles.headerActionSpacer} />
+  const listHeader = (
+    <>
+      <View style={[styles.transactionsTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
+        <View style={styles.containedContent}>
+          <View style={styles.transactionsHeader}>
+            <Pressable
+              onPress={() => {
+                router.replace('/home');
+              }}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed ? styles.backButtonPressed : null,
+              ]}
+            >
+              <Ionicons color={activeTheme.colors.text} name="chevron-back" size={20} />
+            </Pressable>
+            <AppText style={[styles.transactionsHeaderTitle, { color: activeTheme.colors.text }]}>
+              Movimientos
+            </AppText>
+            <View style={styles.headerActionSpacer} />
+          </View>
         </View>
       </View>
-    </View>
-  );
 
-  const listHeader = (
-    <View style={[styles.containedContent, styles.transactionsControlsSection]}>
-      {filterControls}
+      <View style={[styles.containedContent, styles.transactionsControlsSection]}>
+        {filterControls}
 
-      {!hasVisibleTransactions ? (
-        <EmptyState
-          description={emptyFilterDescription(activeFilter)}
-          title={emptyFilterTitle(activeFilter)}
-        />
-      ) : null}
+        {!hasVisibleTransactions ? (
+          <EmptyState
+            description={emptyFilterDescription(activeFilter)}
+            title={emptyFilterTitle(activeFilter)}
+          />
+        ) : null}
 
-      {pendingTransactionsSection}
+        {pendingTransactionsSection}
 
-      {historyCases.length > 0 ? (
-        <View style={styles.virtualHistoryHeader}>
-          <AppText style={[styles.virtualHistoryTitle, { color: activeTheme.colors.text }]}>
-            Historial
-          </AppText>
-        </View>
-      ) : null}
-    </View>
+        {historyCases.length > 0 ? (
+          <View style={styles.virtualHistoryHeader}>
+            <AppText style={[styles.virtualHistoryTitle, { color: activeTheme.colors.text }]}>
+              Historial
+            </AppText>
+          </View>
+        ) : null}
+      </View>
+    </>
   );
 
   if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
@@ -431,7 +434,6 @@ export function TransactionsScreen() {
       scrollEnabled={false}
       title="Movimientos"
     >
-      {screenHeader}
       <BrandedRefreshVirtualizedListContainer refresh={refresh}>
         {({
           onScroll,

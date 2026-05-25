@@ -56,10 +56,12 @@ export type PeopleInsightPerson = {
   readonly userId: string;
 };
 
+type PeopleInsightDisplayPerson = Pick<PeopleInsightPerson, 'avatarUrl' | 'label' | 'userId'>;
+
 export const PEOPLE_INSIGHT_OPTIONS: readonly PeopleInsightOption[] = [
   { label: 'Balance', value: 'balance' },
-  { label: 'Por cobrar', value: 'owed_to_me' },
-  { label: 'Por pagar', value: 'i_owe' },
+  { label: 'Te deben', value: 'owed_to_me' },
+  { label: 'Debes', value: 'i_owe' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
   { label: 'Circles', value: 'circles' },
@@ -108,7 +110,7 @@ export function peopleInsightEmptyDescription(filter: PeopleInsightFilter): stri
   }
 
   if (filter === 'i_owe') {
-    return 'Cuando tengas saldo por pagar en una relación, esos movimientos aparecerán aquí.';
+    return 'Cuando debas en una relación, esos movimientos aparecerán aquí.';
   }
 
   if (filter === 'pending') {
@@ -285,13 +287,21 @@ function countLabel(count: number, singular: string, plural: string): string {
 function personDisplayData(
   peopleById: ReadonlyMap<string, PersonCardDto>,
   row: BalanceAnalyticsPersonRowDto,
-): Pick<PeopleInsightPerson, 'avatarUrl' | 'label' | 'userId'> {
+): PeopleInsightDisplayPerson {
   const person = peopleById.get(row.userId);
 
   return {
     avatarUrl: person?.avatarUrl ?? null,
     label: person?.displayName ?? row.label,
     userId: row.userId,
+  };
+}
+
+function personCardDisplayData(person: PersonCardDto): PeopleInsightDisplayPerson {
+  return {
+    avatarUrl: person.avatarUrl ?? null,
+    label: person.displayName,
+    userId: person.userId,
   };
 }
 
@@ -318,6 +328,7 @@ type CircleHistoryCounts = {
 };
 
 type PeopleInsightIndexes = {
+  readonly activeCircleDisplayPeopleById: ReadonlyMap<string, PeopleInsightDisplayPerson>;
   readonly activeCircleGroupKeysByPerson: ReadonlyMap<string, ReadonlySet<string>>;
   readonly analyticsPeopleById: ReadonlyMap<string, BalanceAnalyticsPersonRowDto>;
   readonly circleHistoryCountsByPerson: ReadonlyMap<string, CircleHistoryCounts>;
@@ -368,6 +379,31 @@ function activeCircleGroupKey(proposal: ActiveSettlementPreviewDto): string {
   return proposal.happyCircleCaseId
     ? `happy_circle_case:${proposal.happyCircleCaseId}`
     : `settlement:${proposal.proposalId}`;
+}
+
+function activeCircleConnectionPeople(
+  proposal: ActiveSettlementPreviewDto,
+): readonly PeopleInsightDisplayPerson[] {
+  const connections = [proposal.incomingConnection, proposal.outgoingConnection].filter(
+    (connection): connection is NonNullable<typeof connection> => Boolean(connection),
+  );
+  const peopleById = new Map<string, PeopleInsightDisplayPerson>();
+
+  for (const connection of connections) {
+    peopleById.set(connection.userId, {
+      avatarUrl: null,
+      label: connection.label,
+      userId: connection.userId,
+    });
+  }
+
+  return Array.from(peopleById.values());
+}
+
+function activeCirclePersonIds(proposal: ActiveSettlementPreviewDto): readonly string[] {
+  const connectionIds = activeCircleConnectionPeople(proposal).map((person) => person.userId);
+
+  return connectionIds.length > 0 ? connectionIds : proposal.participantUserIds;
 }
 
 function buildPeopleIdsByName(people: readonly PersonCardDto[]): Map<string, string[]> {
@@ -438,6 +474,7 @@ function buildPeopleInsightIndexes({
   const pendingScoresByPerson = new Map<string, ActivityScore>();
   const rejectedScoresByPerson = new Map<string, ActivityScore>();
   const activeCircleGroupKeysByPerson = new Map<string, Set<string>>();
+  const activeCircleDisplayPeopleById = new Map<string, PeopleInsightDisplayPerson>();
   const circleHistoryKindsByPerson = new Map<
     string,
     Map<string, Set<ReturnType<typeof cycleActivityKind>>>
@@ -466,8 +503,19 @@ function buildPeopleInsightIndexes({
   for (const proposal of activeCircleProposals) {
     const groupKey = activeCircleGroupKey(proposal);
 
-    for (const participantUserId of proposal.participantUserIds) {
-      if (!peopleById.has(participantUserId)) {
+    for (const person of activeCircleConnectionPeople(proposal)) {
+      const relationshipPerson = peopleById.get(person.userId);
+      activeCircleDisplayPeopleById.set(
+        person.userId,
+        relationshipPerson ? personCardDisplayData(relationshipPerson) : person,
+      );
+    }
+
+    for (const participantUserId of activeCirclePersonIds(proposal)) {
+      if (
+        !peopleById.has(participantUserId) &&
+        !activeCircleDisplayPeopleById.has(participantUserId)
+      ) {
         continue;
       }
 
@@ -501,6 +549,7 @@ function buildPeopleInsightIndexes({
   }
 
   return {
+    activeCircleDisplayPeopleById,
     activeCircleGroupKeysByPerson,
     analyticsPeopleById,
     circleHistoryCountsByPerson: new Map(
@@ -531,6 +580,60 @@ function buildPeopleInsightRowsForFilter(
   { filter, people }: Pick<PeopleInsightRowsInput, 'filter' | 'people'>,
   indexes: PeopleInsightIndexes,
 ): PeopleInsightPerson[] {
+  if (filter === 'circles') {
+    const circlePeopleById = new Map<string, PeopleInsightDisplayPerson>(
+      people.map((person) => [person.userId, personCardDisplayData(person)]),
+    );
+
+    for (const [personId, displayData] of indexes.activeCircleDisplayPeopleById.entries()) {
+      if (!circlePeopleById.has(personId)) {
+        circlePeopleById.set(personId, displayData);
+      }
+    }
+
+    const rankedPeople = Array.from(circlePeopleById.values()).flatMap(
+      (displayData): PeopleInsightPerson[] => {
+        const activeCircleGroupKeys: ReadonlySet<string> =
+          indexes.activeCircleGroupKeysByPerson.get(displayData.userId) ?? new Set<string>();
+        const activeCircleCount = activeCircleGroupKeys.size;
+        const circleHistoryCounts =
+          indexes.circleHistoryCountsByPerson.get(displayData.userId) ??
+          EMPTY_CIRCLE_HISTORY_COUNTS;
+        const circleCount =
+          activeCircleCount +
+          circleHistoryCounts.completedCount +
+          circleHistoryCounts.replacedCount +
+          circleHistoryCounts.notCompletedCount;
+        if (circleCount <= 0) {
+          return [];
+        }
+
+        return [
+          {
+            ...displayData,
+            metricLabel: circleMetricLabel({
+              activeCount: activeCircleCount,
+              completedCount: circleHistoryCounts.completedCount,
+              notCompletedCount: circleHistoryCounts.notCompletedCount,
+              replacedCount: circleHistoryCounts.replacedCount,
+            }),
+            score: circleCount * 100 + activeCircleCount,
+            tone: 'cycle',
+          },
+        ];
+      },
+    );
+
+    return rankedPeople.sort((left, right) => {
+      const scoreDiff = right.score - left.score;
+      if (scoreDiff !== 0) {
+        return scoreDiff;
+      }
+
+      return left.label.localeCompare(right.label, 'es-CO');
+    });
+  }
+
   const rankedPeople = people.flatMap((person): PeopleInsightPerson[] => {
     const row = indexes.analyticsPeopleById.get(person.userId);
     const displayData = row
@@ -624,36 +727,6 @@ function buildPeopleInsightRowsForFilter(
               : `${rejectedScore.count}`,
           score: rejectedScore.count * 100_000_000 + rejectedScore.amountMinor,
           tone: 'danger',
-        },
-      ];
-    }
-
-    if (filter === 'circles') {
-      const activeCircleGroupKeys: ReadonlySet<string> =
-        indexes.activeCircleGroupKeysByPerson.get(person.userId) ?? new Set<string>();
-      const activeCircleCount = activeCircleGroupKeys.size;
-      const circleHistoryCounts =
-        indexes.circleHistoryCountsByPerson.get(person.userId) ?? EMPTY_CIRCLE_HISTORY_COUNTS;
-      const circleCount =
-        activeCircleCount +
-        circleHistoryCounts.completedCount +
-        circleHistoryCounts.replacedCount +
-        circleHistoryCounts.notCompletedCount;
-      if (circleCount <= 0) {
-        return [];
-      }
-
-      return [
-        {
-          ...displayData,
-          metricLabel: circleMetricLabel({
-            activeCount: activeCircleCount,
-            completedCount: circleHistoryCounts.completedCount,
-            notCompletedCount: circleHistoryCounts.notCompletedCount,
-            replacedCount: circleHistoryCounts.replacedCount,
-          }),
-          score: circleCount * 100 + activeCircleCount,
-          tone: 'cycle',
         },
       ];
     }

@@ -852,6 +852,19 @@ export function useSessionController(): SessionContextValue {
     return () => clearTimeout(timer);
   }, [recentPasswordAuth]);
 
+  useEffect(() => {
+    if (!stepUpFreshUntil) {
+      return;
+    }
+
+    const timeoutMs = Math.max(0, stepUpFreshUntil - Date.now());
+    const timer = setTimeout(() => {
+      setStepUpFreshUntil((current) => (current === stepUpFreshUntil ? null : current));
+    }, timeoutMs);
+
+    return () => clearTimeout(timer);
+  }, [stepUpFreshUntil]);
+
   const performGoogleAuth = useCallback(
     async (
       mode: 'sign-in' | 'link',
@@ -924,6 +937,7 @@ export function useSessionController(): SessionContextValue {
 
       if (data.user?.id) {
         setRecentPasswordAuth(createRecentPasswordAuth(data.user.id));
+        setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
       }
 
       return 'Sesión iniciada.';
@@ -1007,6 +1021,7 @@ export function useSessionController(): SessionContextValue {
 
       if (data.session) {
         setRecentPasswordAuth(createRecentPasswordAuth(data.session.user.id));
+        setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
         return 'Cuenta creada. Ahora completa tu configuración.';
       }
 
@@ -1018,11 +1033,17 @@ export function useSessionController(): SessionContextValue {
 
   const signInWithGoogle = useCallback(async () => {
     const result = await performGoogleAuth('sign-in');
+    if (result.userId) {
+      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+    }
     return result.message;
   }, [performGoogleAuth]);
 
   const signInWithApple = useCallback(async () => {
     const result = await performAppleAuth('sign-in');
+    if (result.userId) {
+      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+    }
     return result.message;
   }, [performAppleAuth]);
 
@@ -1649,17 +1670,50 @@ export function useSessionController(): SessionContextValue {
         recentPasswordAuth,
         userId: expectedUserId,
       });
-      const method =
-        input?.method ??
-        (hasRecentPasswordAuth
-          ? 'password'
-          : linkedMethods.hasGoogle
-            ? 'google'
-            : linkedMethods.hasApple
-              ? 'apple'
-              : linkedMethods.hasEmailPassword
-                ? 'password'
-                : null);
+      const hasFreshStepUpAuth = Boolean(stepUpFreshUntil && stepUpFreshUntil > Date.now());
+      let trustValidated = !input?.method && (hasFreshStepUpAuth || hasRecentPasswordAuth);
+
+      if (!input?.method && !trustValidated) {
+        const support = await getBiometricSupport();
+        setBiometricAvailable(support.available);
+        setBiometricLabel(support.label);
+
+        if (support.available) {
+          let biometricResult = await authenticateWithBiometricsResult();
+
+          if (
+            !biometricResult.success &&
+            (biometricResult.error === 'app_cancel' || biometricResult.error === 'system_cancel')
+          ) {
+            await wait(250);
+            biometricResult = await authenticateWithBiometricsResult();
+          }
+
+          if (!biometricResult.success) {
+            return formatStepUpErrorMessage(
+              'confiar este celular',
+              support.label,
+              biometricResult.error,
+            );
+          }
+
+          setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+          trustValidated = true;
+        }
+      }
+
+      const method = trustValidated
+        ? null
+        : (input?.method ??
+          (hasRecentPasswordAuth
+            ? 'password'
+            : linkedMethods.hasGoogle
+              ? 'google'
+              : linkedMethods.hasApple
+                ? 'apple'
+                : linkedMethods.hasEmailPassword
+                  ? 'password'
+                  : null));
 
       if (method === 'password') {
         if (!linkedMethods.hasEmailPassword) {
@@ -1699,7 +1753,7 @@ export function useSessionController(): SessionContextValue {
         }
 
         const result = await performGoogleAuth('sign-in');
-        if (result.message !== 'Sesión iniciada.') {
+        if (!result.userId) {
           return result.message;
         }
 
@@ -1717,7 +1771,7 @@ export function useSessionController(): SessionContextValue {
         }
 
         const result = await performAppleAuth('sign-in');
-        if (result.message !== 'Sesión iniciada.') {
+        if (!result.userId) {
           return result.message;
         }
 
@@ -1729,7 +1783,7 @@ export function useSessionController(): SessionContextValue {
           setSessionStatus('signed_out');
           return 'Apple abrió otra cuenta. Cerramos la sesión por seguridad.';
         }
-      } else {
+      } else if (!trustValidated) {
         return 'Esta cuenta no tiene un método disponible para respaldar la confianza del teléfono.';
       }
 
@@ -1779,6 +1833,7 @@ export function useSessionController(): SessionContextValue {
       recentPasswordAuth,
       refreshAccountState,
       setSessionStatus,
+      stepUpFreshUntil,
     ],
   );
 
@@ -1828,12 +1883,19 @@ export function useSessionController(): SessionContextValue {
   const canTrustCurrentDeviceWithoutPassword = useMemo(
     () =>
       deviceTrustState !== 'trusted' &&
-      linkedMethods.hasEmailPassword &&
-      isRecentPasswordAuthValid({
-        recentPasswordAuth,
-        userId: session?.user.id,
-      }),
-    [deviceTrustState, linkedMethods.hasEmailPassword, recentPasswordAuth, session?.user.id],
+      (Boolean(stepUpFreshUntil && stepUpFreshUntil > Date.now()) ||
+        (linkedMethods.hasEmailPassword &&
+          isRecentPasswordAuthValid({
+            recentPasswordAuth,
+            userId: session?.user.id,
+          }))),
+    [
+      deviceTrustState,
+      linkedMethods.hasEmailPassword,
+      recentPasswordAuth,
+      session?.user.id,
+      stepUpFreshUntil,
+    ],
   );
 
   const setupState = useMemo<SetupState>(() => {

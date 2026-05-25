@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-const MINIMUM_REFRESH_MS = 500;
+import { triggerAppRefreshStartHaptic } from './app-haptics';
+
+const MINIMUM_REFRESH_MS = 700;
 const MAXIMUM_REFRESH_MS = 8_000;
+const REFRESHING_FALLBACK_MS = MAXIMUM_REFRESH_MS + MINIMUM_REFRESH_MS + 300;
 
 interface SnapshotRefreshTarget {
   readonly isLoading: boolean;
@@ -44,8 +47,18 @@ export function useSnapshotRefresh(
     }
 
     const startedAt = Date.now();
+    let fallbackTimeout: ReturnType<typeof setTimeout> | undefined;
+    const completeRefresh = () => {
+      refreshingRef.current = false;
+      if (mountedRef.current) {
+        setRefreshing(false);
+      }
+    };
+
     refreshingRef.current = true;
+    triggerAppRefreshStartHaptic();
     setRefreshing(true);
+    fallbackTimeout = setTimeout(completeRefresh, REFRESHING_FALLBACK_MS);
 
     try {
       if (!isLoading) {
@@ -58,12 +71,12 @@ export function useSnapshotRefresh(
     } catch {
       // React Query keeps the request error in query state; the refresh affordance should close.
     } finally {
+      if (fallbackTimeout) {
+        clearTimeout(fallbackTimeout);
+      }
       const elapsedMs = Date.now() - startedAt;
       await wait(Math.max(0, minimumVisibleMs - elapsedMs));
-      refreshingRef.current = false;
-      if (mountedRef.current) {
-        setRefreshing(false);
-      }
+      completeRefresh();
     }
   }, [isLoading, minimumVisibleMs, refetch]);
 

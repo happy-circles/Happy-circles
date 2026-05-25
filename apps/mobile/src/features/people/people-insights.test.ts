@@ -100,7 +100,7 @@ describe('people insights', () => {
     expect(normalizePeopleInsightFilter('rejected')).toBe('rejected');
     expect(normalizePeopleInsightFilter(['owed_to_me'])).toBe('owed_to_me');
     expect(normalizePeopleInsightFilter('unknown')).toBe('balance');
-    expect(peopleInsightLabel('i_owe')).toBe('Por pagar');
+    expect(peopleInsightLabel('i_owe')).toBe('Debes');
     expect(peopleInsightLabel('rejected')).toBe('Rechazadas');
     expect(peopleInsightLabel('movements')).toBe('Movimientos');
   });
@@ -338,6 +338,40 @@ describe('people insights', () => {
         people,
       })[0]?.userId,
     ).toBe('ben');
+  });
+
+  it('shows both direct Circle connections even when one is not an active person row', () => {
+    const people = [person({ displayName: 'Ana Perez', userId: 'ana' })];
+    const rows = buildPeopleInsightRanking({
+      activeCircleProposals: [
+        activeCircle({
+          happyCircleCaseId: 'case-active',
+          incomingConnection: {
+            amountMinor: 45_000,
+            label: 'Ana Perez',
+            userId: 'ana',
+          },
+          outgoingConnection: {
+            amountMinor: 45_000,
+            label: 'Carlos Diaz',
+            userId: 'carlos',
+          },
+          participantCount: 3,
+          participantUserIds: ['ana'],
+          proposalId: 'proposal-current',
+        }),
+      ],
+      analyticsPeople: [],
+      filter: 'circles',
+      historyItems: [],
+      pendingItems: [],
+      people,
+    });
+
+    expect(rows.map((row) => [row.userId, row.label, row.metricLabel])).toEqual([
+      ['ana', 'Ana Perez', '1 Circle'],
+      ['carlos', 'Carlos Diaz', '1 Circle'],
+    ]);
   });
 
   it('counts Circle history by case instead of stale versions or ledger rows', () => {

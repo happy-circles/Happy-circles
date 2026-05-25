@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, type Href } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Platform, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 import {
   HOME_REGISTER_FAB_CLEARANCE,
   dashboardStyles as styles,
@@ -34,7 +34,12 @@ import {
   HomeRegisterFab,
   useCollapsibleHomeChrome,
 } from '@/features/home/home-collapsible-chrome';
-import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
+import {
+  triggerAppActionHaptic,
+  triggerAppSelectionHaptic,
+  triggerAppSuccessHaptic,
+  triggerAppWarningHaptic,
+} from '@/lib/app-haptics';
 import { appConfig } from '@/lib/config';
 import { markHomeEntryReady } from '@/lib/home-entry-handoff';
 import { pushRoute } from '@/lib/navigation';
@@ -54,6 +59,8 @@ import { AppText } from '@/components/app-text';
 
 const TRANSACTION_PREVIEW_LIMIT = 15;
 const HOME_REFRESH_INDICATOR_CLEARANCE = theme.spacing.xl;
+const HOME_ANDROID_REFRESH_INDICATOR_CLEARANCE = theme.spacing.xxl + theme.spacing.xs;
+const HOME_ANDROID_REFRESH_TOP_EXTRA_SPACE = theme.spacing.xl;
 const HOME_REFRESH_MINIMUM_VISIBLE_MS = 700;
 
 function DashboardLoadingState({ message }: { readonly message: string }) {
@@ -75,7 +82,11 @@ export function DashboardScreen() {
   const homeChromeHeight = HOME_CHROME_EXPANDED_HEIGHT + topInset;
   const homeRefreshInsetTop = Platform.OS === 'ios' ? homeChromeHeight : 0;
   const homeChrome = useCollapsibleHomeChrome(homeRefreshInsetTop);
-  const homeRefreshProgressOffset = homeChromeHeight + HOME_REFRESH_INDICATOR_CLEARANCE;
+  const homeRefreshProgressOffset =
+    homeChromeHeight +
+    (Platform.OS === 'android'
+      ? HOME_ANDROID_REFRESH_INDICATOR_CLEARANCE
+      : HOME_REFRESH_INDICATOR_CLEARANCE);
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery, {
     minimumVisibleMs: HOME_REFRESH_MINIMUM_VISIBLE_MS,
@@ -92,6 +103,7 @@ export function DashboardScreen() {
   const happyCircleClosedCount = happyCircleScore?.closedCircleCount ?? 0;
   const [homeScrollEnabled, setHomeScrollEnabled] = useState(true);
   const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
+  const trustPromptShownUserIdRef = useRef<string | null>(null);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -172,7 +184,8 @@ export function DashboardScreen() {
         HOME_CHROME_EXPANDED_HEIGHT +
         Math.max(0, insets.top) +
         theme.spacing.lg -
-        homeRefreshInsetTop,
+        homeRefreshInsetTop +
+        (Platform.OS === 'android' ? HOME_ANDROID_REFRESH_TOP_EXTRA_SPACE : 0),
     }),
     [homeRefreshInsetTop, insets.bottom, insets.top],
   );
@@ -238,6 +251,54 @@ export function DashboardScreen() {
     triggerAppSelectionHaptic();
     pushRoute(router, '/circles' as Href);
   }
+
+  const trustCurrentDeviceFromHome = useCallback(async () => {
+    triggerAppActionHaptic();
+    const result = await session.trustCurrentDevice();
+    if (result === 'Este teléfono ahora es confiable.') {
+      triggerAppSuccessHaptic();
+      await snapshotQuery.refetch().catch(() => undefined);
+      return;
+    }
+
+    triggerAppWarningHaptic();
+    Alert.alert('No se pudo confiar', result);
+  }, [session, snapshotQuery]);
+
+  useEffect(() => {
+    if (
+      homeRenderBranch !== 'ready' ||
+      !isFocused ||
+      !session.userId ||
+      session.accountAccessState !== 'active' ||
+      session.profileCompletionState !== 'complete' ||
+      session.isTrustedDevice ||
+      trustPromptShownUserIdRef.current === session.userId
+    ) {
+      return;
+    }
+
+    trustPromptShownUserIdRef.current = session.userId;
+    Alert.alert('Confiar este celular', '', [
+      {
+        onPress: triggerAppWarningHaptic,
+        style: 'cancel',
+        text: 'Rechazar',
+      },
+      {
+        onPress: () => void trustCurrentDeviceFromHome(),
+        text: 'Confiar',
+      },
+    ]);
+  }, [
+    homeRenderBranch,
+    isFocused,
+    session.accountAccessState,
+    session.isTrustedDevice,
+    session.profileCompletionState,
+    session.userId,
+    trustCurrentDeviceFromHome,
+  ]);
 
   useFocusEffect(
     useCallback(() => {

@@ -62,7 +62,12 @@ function classifyNativeCredentialFailure(message: string): {
     return { failureCode: 'already_in_progress', shouldFallbackToOAuth: false };
   }
 
-  if (normalized.includes('expo_public_google_web_client_id')) {
+  if (
+    normalized.includes('expo_public_google_web_client_id') ||
+    normalized.includes('no está configurado') ||
+    normalized.includes('no esta configurado') ||
+    normalized.includes('developer_error')
+  ) {
     return { failureCode: 'native_configuration_missing', shouldFallbackToOAuth: true };
   }
 

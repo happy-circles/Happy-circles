@@ -421,7 +421,13 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
   const changePanelSegment = useCallback((segment: PersonSegmentKey) => {
     setVisualPanelSegment(segment);
-    setPanelSegment(segment);
+    setPanelSegment((current) => {
+      if (current !== segment) {
+        appHaptics.triggerAppSelectionHaptic();
+      }
+
+      return segment;
+    });
   }, []);
 
   useEffect(() => {
@@ -924,8 +930,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const balanceSummary = isSettledBalance
     ? 'Están al día'
     : person.direction === 'owes_me'
-      ? `Por cobrar ${formatCop(person.netAmountMinor)}`
-      : `Por pagar ${formatCop(person.netAmountMinor)}`;
+      ? `Te debe ${formatCop(person.netAmountMinor)}`
+      : `Debes ${formatCop(person.netAmountMinor)}`;
   const balanceSummaryColor = balanceVisual?.accentColor;
   const heroMeta = hasPendingItems
     ? isSettledBalance
@@ -1042,10 +1048,12 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
           <SwipePager
             accessibilityLabel="Paneles de la relación"
+            animateProgrammaticTransitions={false}
+            offscreenPageLimit={1}
             onChange={changePanelSegment}
-            onPreviewChange={setVisualPanelSegment}
             pageStyle={[styles.panelPage, screenBackgroundStyle]}
             renderPage={(segment) => renderPanelSegmentPage(segment)}
+            scrollEnabled={false}
             style={[styles.panelPager, screenBackgroundStyle]}
             value={panelSegment}
             values={PERSON_SEGMENT_KEYS}

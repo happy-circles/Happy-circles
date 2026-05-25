@@ -68,6 +68,15 @@ begin
     raise exception 'score events must not be client-writable';
   end if;
 
+  if not has_column_privilege(
+    'authenticated',
+    'public.happy_circle_score_events',
+    'treasure_claimed_at',
+    'UPDATE'
+  ) then
+    raise exception 'authenticated users need narrow claim timestamp update privilege';
+  end if;
+
   if has_function_privilege('authenticated', 'public.award_happy_circle_score(uuid)'::regprocedure, 'EXECUTE') then
     raise exception 'award_happy_circle_score must only be internal';
   end if;
@@ -78,6 +87,18 @@ begin
 
   if has_function_privilege('anon', 'public.claim_happy_circle_treasure(uuid)'::regprocedure, 'EXECUTE') then
     raise exception 'anonymous users must not claim treasure';
+  end if;
+
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'claim_happy_circle_treasure'
+      and pg_get_function_arguments(p.oid) = 'p_score_event_id uuid'
+      and p.prosecdef
+  ) then
+    raise exception 'claim_happy_circle_treasure must run as security invoker';
   end if;
 end
 $$;

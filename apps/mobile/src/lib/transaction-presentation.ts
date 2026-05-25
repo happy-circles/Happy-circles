@@ -212,11 +212,11 @@ export function transactionDirectionLabel(item: ActivityItemDto): string {
   }
 
   if (item.tone === 'positive') {
-    return 'Por cobrar';
+    return 'Te deben';
   }
 
   if (item.tone === 'negative') {
-    return 'Por pagar';
+    return 'Debes';
   }
 
   return 'Sin saldo';

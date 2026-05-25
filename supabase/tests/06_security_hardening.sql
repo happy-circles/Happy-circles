@@ -5,6 +5,7 @@ declare
   v_raw_token_column text;
   v_nullable_token_hash text;
   v_direct_rpc text;
+  v_rls_without_policy text;
 begin
   select string_agg(format('%I.%I', n.nspname, c.relname), ', ')
     into v_missing_security_invoker
@@ -99,6 +100,43 @@ begin
     'EXECUTE'
   ) then
     raise exception 'public preview RPC must be reachable only through its Edge Function';
+  end if;
+
+  if has_function_privilege(
+    'anon',
+    'public.auth_email_exists(text)'::regprocedure,
+    'EXECUTE'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.auth_email_exists(text)'::regprocedure,
+    'EXECUTE'
+  ) then
+    raise exception 'auth_email_exists must execute only through service_role';
+  end if;
+
+  if not has_function_privilege(
+    'service_role',
+    'public.auth_email_exists(text)'::regprocedure,
+    'EXECUTE'
+  ) then
+    raise exception 'auth_email_exists must remain available to service_role';
+  end if;
+
+  select string_agg(format('%I.%I', n.nspname, c.relname), ', ')
+    into v_rls_without_policy
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relkind in ('r', 'p')
+    and c.relrowsecurity
+    and not exists (
+      select 1
+      from pg_policy policy
+      where policy.polrelid = c.oid
+    );
+
+  if v_rls_without_policy is not null then
+    raise exception 'RLS-enabled public tables must have explicit policies: %', v_rls_without_policy;
   end if;
 end
 $$;

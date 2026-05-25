@@ -111,6 +111,15 @@ function formatGoogleSignInError(
     }
   }
 
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  if (errorMessage.toLocaleLowerCase('en-US').includes('developer_error')) {
+    return {
+      ok: false,
+      message:
+        'Google no está configurado para esta versión de la app. Revisa el package y SHA-1 del cliente OAuth Android.',
+    };
+  }
+
   return {
     ok: false,
     message: error instanceof Error ? error.message : 'No se pudo iniciar Google.',

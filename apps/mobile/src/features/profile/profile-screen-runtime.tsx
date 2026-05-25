@@ -404,12 +404,15 @@ export function ProfileScreen() {
     });
   }
 
-  async function handleTrustDevice(method: TrustedDeviceAuthMethod) {
-    const result = await runAction(`trust-device-${method}`, async () =>
+  async function handleTrustDevice(method?: TrustedDeviceAuthMethod) {
+    const actionMethod = method ?? 'auto';
+    const result = await runAction(`trust-device-${actionMethod}`, async () =>
       session.trustCurrentDevice(
-        method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
-          ? { method, password: trustPassword }
-          : { method },
+        method === undefined
+          ? undefined
+          : method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
+            ? { method, password: trustPassword }
+            : { method },
       ),
     );
 
@@ -418,6 +421,12 @@ export function ProfileScreen() {
       setTrustPassword('');
       setTrustMethodPickerOpen(false);
       setTrustPasswordFallbackOpen(false);
+    }
+
+    if (result.startsWith('Escribe tu contrase')) {
+      triggerWarningHaptic();
+      setTrustMethodPickerOpen(true);
+      setTrustPasswordFallbackOpen(true);
     }
   }
 
@@ -491,17 +500,21 @@ export function ProfileScreen() {
   function handleTrustEntryPress() {
     triggerSelectionHaptic();
 
-    if (session.canTrustCurrentDeviceWithoutPassword && hasPasswordTrustMethod) {
-      void handleTrustDevice('password');
-      return;
-    }
-
-    if (trustMethods.length === 0) {
-      showActionMessage('Agrega Google, Apple o una contraseña para poder confiar este teléfono.');
-      return;
-    }
-
-    setTrustMethodPickerOpen(true);
+    Alert.alert('Confiar este celular', '', [
+      {
+        onPress: triggerWarningHaptic,
+        style: 'cancel',
+        text: 'Rechazar',
+      },
+      {
+        onPress: () => {
+          triggerImpactHaptic();
+          void handleTrustDevice();
+        },
+        text: 'Confiar',
+      },
+    ]);
+    return;
   }
 
   async function openExternalUrl(url: string, failureMessage: string) {
@@ -1230,7 +1243,7 @@ export function ProfileScreen() {
         style={[styles.sectionBlock, highlightTarget === 'device' ? styles.focusPanel : null]}
       >
         <View style={styles.sectionHeader}>
-          <AppText style={styles.sectionTitle}>Teléfono confiable</AppText>
+          <AppText style={styles.sectionTitle}>Celular confiable</AppText>
         </View>
 
         <View style={styles.sectionList}>
@@ -1244,10 +1257,6 @@ export function ProfileScreen() {
 
           {!session.isTrustedDevice ? (
             <View style={styles.actionCluster}>
-              <AppText style={styles.sectionBody}>
-                Para marcarlo como confiable, confirma que eres tú con un método de respaldo.
-              </AppText>
-
               {!trustMethodPickerOpen ? (
                 <View style={styles.inlineActionRow}>
                   <PrimaryAction
@@ -1257,7 +1266,7 @@ export function ProfileScreen() {
                     label={
                       busyAction?.startsWith('trust-device-')
                         ? 'Confirmando...'
-                        : 'Confiar este teléfono'
+                        : 'Confiar este celular'
                     }
                     onPress={busyAction ? undefined : handleTrustEntryPress}
                   />

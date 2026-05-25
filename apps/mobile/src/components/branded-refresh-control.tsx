@@ -3,6 +3,7 @@ import {
   type ReactElement,
   type ReactNode,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -16,25 +17,33 @@ import type {
 } from 'react-native';
 import {
   ActivityIndicator,
+  PanResponder,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import type { PanResponderGestureState } from 'react-native';
 
 import { AppText } from '@/components/app-text';
+import { triggerAppRefreshReadyHaptic } from '@/lib/app-haptics';
 import { theme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
 
 const DEFAULT_REFRESH_PROGRESS_OFFSET = theme.spacing.xl + theme.spacing.md;
 const TRANSPARENT_REFRESH_COLOR = 'rgba(0, 0, 0, 0)';
-const ANDROID_PULL_TRIGGER_DISTANCE = 72;
-const ANDROID_PULL_MAX_DISTANCE = 104;
-const ANDROID_PULL_RESISTANCE = 0.52;
-const ANDROID_PULL_MIN_VISIBLE_DISTANCE = 4;
+const ANDROID_PULL_TRIGGER_DISTANCE = 42;
+const ANDROID_PULL_MAX_DISTANCE = 88;
+const ANDROID_PULL_RESISTANCE = 0.78;
+const ANDROID_PULL_MIN_VISIBLE_DISTANCE = 2;
 const ANDROID_PULL_INDICATOR_SIZE = 42;
-const ANDROID_PULL_VERTICAL_DOMINANCE = 1.35;
+const ANDROID_PULL_VERTICAL_DOMINANCE = 1.05;
+const ANDROID_PULL_FAST_TRIGGER_DISTANCE = 18;
+const ANDROID_PULL_FAST_TRIGGER_VELOCITY = 0.38;
+const ANDROID_PULL_CONTENT_MAX_OFFSET = 56;
+const ANDROID_PULL_CONTENT_REFRESHING_OFFSET = 44;
+const ANDROID_PULL_CONTENT_OFFSET_FACTOR = 0.55;
 
 export interface BrandedRefreshProps {
   readonly label?: string;
@@ -73,6 +82,89 @@ function startRefresh(refresh: BrandedRefreshProps | undefined) {
   void Promise.resolve(refresh.onRefresh()).catch(() => undefined);
 }
 
+function androidRefreshLabel(refresh: BrandedRefreshProps, progress: number) {
+  if (refresh.refreshing) {
+    return refresh.label ?? 'Sincronizando';
+  }
+
+  return progress >= 1 ? 'Suelta para sincronizar' : 'Desliza para sincronizar';
+}
+
+function isAndroidPullGesture(horizontalDistance: number, dragDistance: number) {
+  return (
+    dragDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE &&
+    dragDistance > horizontalDistance * ANDROID_PULL_VERTICAL_DOMINANCE
+  );
+}
+
+function isAndroidFastPullGestureByMetrics(
+  horizontalDistance: number,
+  dragDistance: number,
+  verticalVelocity: number,
+) {
+  return (
+    dragDistance >= ANDROID_PULL_FAST_TRIGGER_DISTANCE &&
+    verticalVelocity >= ANDROID_PULL_FAST_TRIGGER_VELOCITY &&
+    dragDistance > horizontalDistance * 0.75
+  );
+}
+
+function isAndroidFastPullGesture(gestureState: PanResponderGestureState) {
+  return isAndroidFastPullGestureByMetrics(
+    Math.abs(gestureState.dx),
+    gestureState.dy,
+    gestureState.vy,
+  );
+}
+
+function measureAndroidTouchVelocity(
+  lastMoveRef: { current: { readonly timestamp: number; readonly y: number } | null },
+  nextY: number,
+) {
+  const now = Date.now();
+  const lastMove = lastMoveRef.current;
+  lastMoveRef.current = { timestamp: now, y: nextY };
+
+  if (!lastMove) {
+    return 0;
+  }
+
+  return (nextY - lastMove.y) / Math.max(1, now - lastMove.timestamp);
+}
+
+function getAndroidPullDistance(dragDistance: number) {
+  const resistedDistance = Math.min(
+    ANDROID_PULL_MAX_DISTANCE,
+    dragDistance * ANDROID_PULL_RESISTANCE,
+  );
+
+  return resistedDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE ? resistedDistance : 0;
+}
+
+function getAndroidRefreshContentOffset(pullDistance: number, refreshing: boolean) {
+  if (refreshing) {
+    return ANDROID_PULL_CONTENT_REFRESHING_OFFSET;
+  }
+
+  return Math.min(
+    ANDROID_PULL_CONTENT_MAX_OFFSET,
+    Math.round(pullDistance * ANDROID_PULL_CONTENT_OFFSET_FACTOR),
+  );
+}
+
+function updateAndroidThresholdHaptic(
+  thresholdReachedRef: { current: boolean },
+  nextDistance: number,
+) {
+  const thresholdReached = nextDistance >= ANDROID_PULL_TRIGGER_DISTANCE;
+
+  if (thresholdReached && !thresholdReachedRef.current) {
+    triggerAppRefreshReadyHaptic();
+  }
+
+  thresholdReachedRef.current = thresholdReached;
+}
+
 export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRefreshProps }) {
   const activeTheme = useAppTheme();
 
@@ -82,24 +174,23 @@ export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRe
 
   const progressViewOffset = refresh.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET;
   const nativeIndicatorVisible = refresh.nativeIndicatorVisible !== false;
+  const indicatorColors = nativeIndicatorVisible
+    ? [activeTheme.colors.primary, activeTheme.colors.brandGreen, activeTheme.colors.brandCoral]
+    : [TRANSPARENT_REFRESH_COLOR];
+  const indicatorBackgroundColor = nativeIndicatorVisible
+    ? activeTheme.colors.surface
+    : TRANSPARENT_REFRESH_COLOR;
+  const indicatorTextColor = nativeIndicatorVisible
+    ? activeTheme.colors.textMuted
+    : TRANSPARENT_REFRESH_COLOR;
 
   return (
     <RefreshControl
       key={`refresh-control-${Math.round(progressViewOffset)}`}
-      colors={
-        nativeIndicatorVisible
-          ? [
-              activeTheme.colors.primary,
-              activeTheme.colors.brandGreen,
-              activeTheme.colors.brandCoral,
-            ]
-          : [TRANSPARENT_REFRESH_COLOR]
-      }
+      colors={indicatorColors}
       enabled
       onRefresh={handleRefresh}
-      progressBackgroundColor={
-        nativeIndicatorVisible ? activeTheme.colors.surface : TRANSPARENT_REFRESH_COLOR
-      }
+      progressBackgroundColor={indicatorBackgroundColor}
       progressViewOffset={progressViewOffset}
       refreshing={refresh.refreshing}
       tintColor={nativeIndicatorVisible ? activeTheme.colors.primary : TRANSPARENT_REFRESH_COLOR}
@@ -108,7 +199,7 @@ export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRe
           ? (refresh.label ?? 'Sincronizando')
           : undefined
       }
-      titleColor={nativeIndicatorVisible ? activeTheme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
+      titleColor={indicatorTextColor}
     />
   );
 }
@@ -119,8 +210,14 @@ export function BrandedRefreshVirtualizedListContainer({
 }: BrandedRefreshVirtualizedListContainerProps) {
   const activeTheme = useAppTheme();
   const [androidPullDistance, setAndroidPullDistance] = useState(0);
+  const androidFastPullCandidateRef = useRef(false);
+  const androidLastTouchMoveRef = useRef<{ readonly timestamp: number; readonly y: number } | null>(
+    null,
+  );
   const androidPullDistanceRef = useRef(0);
+  const androidRefreshActiveRef = useRef(false);
   const androidScrollYRef = useRef(0);
+  const androidThresholdReachedRef = useRef(false);
   const androidTouchStartXRef = useRef<number | null>(null);
   const androidTouchStartYRef = useRef<number | null>(null);
 
@@ -140,6 +237,11 @@ export function BrandedRefreshVirtualizedListContainer({
   }, []);
 
   const handleAndroidTouchStart = useCallback((event: GestureResponderEvent) => {
+    androidFastPullCandidateRef.current = false;
+    androidLastTouchMoveRef.current = {
+      timestamp: Date.now(),
+      y: event.nativeEvent.pageY,
+    };
     androidTouchStartXRef.current = event.nativeEvent.pageX;
     androidTouchStartYRef.current = event.nativeEvent.pageY;
   }, []);
@@ -159,45 +261,147 @@ export function BrandedRefreshVirtualizedListContainer({
 
       const horizontalDistance = Math.abs(event.nativeEvent.pageX - touchStartX);
       const dragDistance = event.nativeEvent.pageY - touchStartY;
-      const isVerticalPull =
-        dragDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE &&
-        dragDistance > horizontalDistance * ANDROID_PULL_VERTICAL_DOMINANCE;
+      const verticalVelocity = measureAndroidTouchVelocity(
+        androidLastTouchMoveRef,
+        event.nativeEvent.pageY,
+      );
+      const isPullGesture = isAndroidPullGesture(horizontalDistance, dragDistance);
+      const isFastPullGesture = isAndroidFastPullGestureByMetrics(
+        horizontalDistance,
+        dragDistance,
+        verticalVelocity,
+      );
 
-      if (androidScrollYRef.current > 1 || !isVerticalPull) {
+      if (androidScrollYRef.current > 1 || (!isPullGesture && !isFastPullGesture)) {
+        androidThresholdReachedRef.current = false;
         setAndroidPullDistanceValue(0);
         return;
       }
 
-      const resistedDistance = Math.min(
-        ANDROID_PULL_MAX_DISTANCE,
-        dragDistance * ANDROID_PULL_RESISTANCE,
-      );
+      androidFastPullCandidateRef.current =
+        androidFastPullCandidateRef.current || isFastPullGesture;
+      const nextDistance = getAndroidPullDistance(dragDistance);
 
-      setAndroidPullDistanceValue(
-        resistedDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE ? resistedDistance : 0,
-      );
+      updateAndroidThresholdHaptic(androidThresholdReachedRef, nextDistance);
+      setAndroidPullDistanceValue(nextDistance);
     },
     [refresh.refreshing, setAndroidPullDistanceValue],
   );
 
-  const finishAndroidPull = useCallback(() => {
-    const shouldRefresh =
-      !refresh.refreshing && androidPullDistanceRef.current >= ANDROID_PULL_TRIGGER_DISTANCE;
+  const handleAndroidPanMove = useCallback(
+    (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+      if (refresh.refreshing) {
+        return;
+      }
 
-    androidTouchStartXRef.current = null;
-    androidTouchStartYRef.current = null;
-    setAndroidPullDistanceValue(0);
+      const horizontalDistance = Math.abs(gestureState.dx);
+      const dragDistance = gestureState.dy;
+      const isPullGesture = isAndroidPullGesture(horizontalDistance, dragDistance);
+      const isFastPullGesture = isAndroidFastPullGesture(gestureState);
 
-    if (shouldRefresh) {
-      startRefresh(refresh);
-    }
-  }, [refresh, setAndroidPullDistanceValue]);
+      if (androidScrollYRef.current > 1 || (!isPullGesture && !isFastPullGesture)) {
+        androidThresholdReachedRef.current = false;
+        setAndroidPullDistanceValue(0);
+        return;
+      }
+
+      androidFastPullCandidateRef.current =
+        androidFastPullCandidateRef.current || isFastPullGesture;
+      const nextDistance = getAndroidPullDistance(dragDistance);
+
+      updateAndroidThresholdHaptic(androidThresholdReachedRef, nextDistance);
+      setAndroidPullDistanceValue(nextDistance);
+    },
+    [refresh.refreshing, setAndroidPullDistanceValue],
+  );
+
+  const finishAndroidPull = useCallback(
+    (gestureState?: PanResponderGestureState) => {
+      const shouldFastRefresh =
+        androidScrollYRef.current <= 1 &&
+        (androidFastPullCandidateRef.current ||
+          (gestureState != null && isAndroidFastPullGesture(gestureState)));
+      const shouldRefresh =
+        !refresh.refreshing &&
+        (androidPullDistanceRef.current >= ANDROID_PULL_TRIGGER_DISTANCE || shouldFastRefresh);
+
+      androidTouchStartXRef.current = null;
+      androidTouchStartYRef.current = null;
+      androidFastPullCandidateRef.current = false;
+      androidLastTouchMoveRef.current = null;
+      androidThresholdReachedRef.current = false;
+
+      if (shouldRefresh) {
+        setAndroidPullDistanceValue(ANDROID_PULL_TRIGGER_DISTANCE);
+        startRefresh(refresh);
+        return;
+      }
+
+      setAndroidPullDistanceValue(0);
+    },
+    [refresh, setAndroidPullDistanceValue],
+  );
+
+  const handleAndroidPanRelease = useCallback(
+    (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+      finishAndroidPull(gestureState);
+    },
+    [finishAndroidPull],
+  );
+
+  const handleAndroidTouchEnd = useCallback(() => {
+    finishAndroidPull();
+  }, [finishAndroidPull]);
 
   const handleAndroidTouchCancel = useCallback(() => {
     androidTouchStartXRef.current = null;
     androidTouchStartYRef.current = null;
+    androidFastPullCandidateRef.current = false;
+    androidLastTouchMoveRef.current = null;
+    androidThresholdReachedRef.current = false;
     setAndroidPullDistanceValue(0);
   }, [setAndroidPullDistanceValue]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    if (refresh.refreshing) {
+      androidRefreshActiveRef.current = true;
+      return;
+    }
+
+    if (androidRefreshActiveRef.current) {
+      androidRefreshActiveRef.current = false;
+      androidThresholdReachedRef.current = false;
+      setAndroidPullDistanceValue(0);
+    }
+  }, [refresh.refreshing, setAndroidPullDistanceValue]);
+
+  const androidPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_event, gestureState) =>
+          Platform.OS === 'android' &&
+          !refresh.refreshing &&
+          androidScrollYRef.current <= 1 &&
+          (isAndroidPullGesture(Math.abs(gestureState.dx), gestureState.dy) ||
+            isAndroidFastPullGesture(gestureState)),
+        onMoveShouldSetPanResponder: (_event, gestureState) =>
+          Platform.OS === 'android' &&
+          !refresh.refreshing &&
+          androidScrollYRef.current <= 1 &&
+          (isAndroidPullGesture(Math.abs(gestureState.dx), gestureState.dy) ||
+            isAndroidFastPullGesture(gestureState)),
+        onPanResponderMove: handleAndroidPanMove,
+        onPanResponderRelease: handleAndroidPanRelease,
+        onPanResponderTerminate: handleAndroidTouchCancel,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [handleAndroidPanMove, handleAndroidPanRelease, handleAndroidTouchCancel, refresh.refreshing],
+  );
 
   if (Platform.OS !== 'android') {
     return <>{children({ refreshControl: <BrandedRefreshControl refresh={refresh} /> })}</>;
@@ -207,6 +411,10 @@ export function BrandedRefreshVirtualizedListContainer({
     ? 1
     : Math.min(androidPullDistance / ANDROID_PULL_TRIGGER_DISTANCE, 1);
   const shouldShowAndroidIndicator = androidPullDistance > 0 || refresh.refreshing;
+  const androidContentOffset = getAndroidRefreshContentOffset(
+    androidPullDistance,
+    refresh.refreshing,
+  );
   const androidIndicatorTop = Math.max(
     theme.spacing.sm,
     (refresh.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET) -
@@ -214,15 +422,26 @@ export function BrandedRefreshVirtualizedListContainer({
   );
 
   return (
-    <View collapsable={false} style={styles.virtualizedRefreshWrap}>
-      {children({
-        onScroll: handleAndroidScroll,
-        onTouchCancel: handleAndroidTouchCancel,
-        onTouchEnd: finishAndroidPull,
-        onTouchMove: handleAndroidTouchMove,
-        onTouchStart: handleAndroidTouchStart,
-        scrollEventThrottle: 16,
-      })}
+    <View
+      {...androidPanResponder.panHandlers}
+      collapsable={false}
+      style={styles.virtualizedRefreshWrap}
+    >
+      <View
+        style={[
+          styles.androidRefreshContent,
+          androidContentOffset > 0 ? { transform: [{ translateY: androidContentOffset }] } : null,
+        ]}
+      >
+        {children({
+          onScroll: handleAndroidScroll,
+          onTouchCancel: handleAndroidTouchCancel,
+          onTouchEnd: handleAndroidTouchEnd,
+          onTouchMove: handleAndroidTouchMove,
+          onTouchStart: handleAndroidTouchStart,
+          scrollEventThrottle: 16,
+        })}
+      </View>
       {shouldShowAndroidIndicator ? (
         <View
           pointerEvents="none"
@@ -242,7 +461,7 @@ export function BrandedRefreshVirtualizedListContainer({
         >
           <ActivityIndicator animating color={activeTheme.colors.primary} size="small" />
           <AppText style={[styles.androidRefreshLabel, { color: activeTheme.colors.textMuted }]}>
-            {refresh.refreshing ? 'Sincronizando' : (refresh.label ?? 'Suelta para actualizar')}
+            {androidRefreshLabel(refresh, androidIndicatorProgress)}
           </AppText>
         </View>
       ) : null}
@@ -277,8 +496,15 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
     const activeTheme = useAppTheme();
     const refreshEnabled = Boolean(refresh);
     const [androidPullDistance, setAndroidPullDistance] = useState(0);
+    const androidFastPullCandidateRef = useRef(false);
+    const androidLastTouchMoveRef = useRef<{
+      readonly timestamp: number;
+      readonly y: number;
+    } | null>(null);
     const androidPullDistanceRef = useRef(0);
+    const androidRefreshActiveRef = useRef(false);
     const androidScrollYRef = useRef(0);
+    const androidThresholdReachedRef = useRef(false);
     const androidTouchStartXRef = useRef<number | null>(null);
     const androidTouchStartYRef = useRef<number | null>(null);
 
@@ -304,7 +530,6 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
           : contentOffset,
       [contentOffset, iosNativeIndicatorTopInset],
     );
-    // Android/Fabric can collapse ScrollView content when native RefreshControl is attached.
     const nativeRefreshControl =
       refresh && Platform.OS === 'ios' ? <BrandedRefreshControl refresh={refresh} /> : undefined;
 
@@ -329,6 +554,11 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
 
     const handleAndroidTouchStart = useCallback(
       (event: GestureResponderEvent) => {
+        androidFastPullCandidateRef.current = false;
+        androidLastTouchMoveRef.current = {
+          timestamp: Date.now(),
+          y: event.nativeEvent.pageY,
+        };
         androidTouchStartXRef.current = event.nativeEvent.pageX;
         androidTouchStartYRef.current = event.nativeEvent.pageY;
         onTouchStart?.(event);
@@ -353,41 +583,94 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
 
         const horizontalDistance = Math.abs(event.nativeEvent.pageX - touchStartX);
         const dragDistance = event.nativeEvent.pageY - touchStartY;
-        const isVerticalPull =
-          dragDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE &&
-          dragDistance > horizontalDistance * ANDROID_PULL_VERTICAL_DOMINANCE;
+        const verticalVelocity = measureAndroidTouchVelocity(
+          androidLastTouchMoveRef,
+          event.nativeEvent.pageY,
+        );
+        const isPullGesture = isAndroidPullGesture(horizontalDistance, dragDistance);
+        const isFastPullGesture = isAndroidFastPullGestureByMetrics(
+          horizontalDistance,
+          dragDistance,
+          verticalVelocity,
+        );
 
-        if (androidScrollYRef.current > 1 || !isVerticalPull) {
+        if (androidScrollYRef.current > 1 || (!isPullGesture && !isFastPullGesture)) {
+          androidThresholdReachedRef.current = false;
           setAndroidPullDistanceValue(0);
           return;
         }
 
-        const resistedDistance = Math.min(
-          ANDROID_PULL_MAX_DISTANCE,
-          dragDistance * ANDROID_PULL_RESISTANCE,
-        );
+        androidFastPullCandidateRef.current =
+          androidFastPullCandidateRef.current || isFastPullGesture;
+        const nextDistance = getAndroidPullDistance(dragDistance);
 
-        setAndroidPullDistanceValue(
-          resistedDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE ? resistedDistance : 0,
-        );
+        updateAndroidThresholdHaptic(androidThresholdReachedRef, nextDistance);
+        setAndroidPullDistanceValue(nextDistance);
       },
       [onTouchMove, refresh, setAndroidPullDistanceValue],
     );
 
-    const finishAndroidPull = useCallback(() => {
-      const shouldRefresh =
-        Boolean(refresh) &&
-        !refresh?.refreshing &&
-        androidPullDistanceRef.current >= ANDROID_PULL_TRIGGER_DISTANCE;
+    const handleAndroidPanMove = useCallback(
+      (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+        if (!refresh || refresh.refreshing) {
+          return;
+        }
 
-      androidTouchStartXRef.current = null;
-      androidTouchStartYRef.current = null;
-      setAndroidPullDistanceValue(0);
+        const horizontalDistance = Math.abs(gestureState.dx);
+        const dragDistance = gestureState.dy;
+        const isPullGesture = isAndroidPullGesture(horizontalDistance, dragDistance);
+        const isFastPullGesture = isAndroidFastPullGesture(gestureState);
 
-      if (shouldRefresh) {
-        startRefresh(refresh);
-      }
-    }, [refresh, setAndroidPullDistanceValue]);
+        if (androidScrollYRef.current > 1 || (!isPullGesture && !isFastPullGesture)) {
+          androidThresholdReachedRef.current = false;
+          setAndroidPullDistanceValue(0);
+          return;
+        }
+
+        androidFastPullCandidateRef.current =
+          androidFastPullCandidateRef.current || isFastPullGesture;
+        const nextDistance = getAndroidPullDistance(dragDistance);
+
+        updateAndroidThresholdHaptic(androidThresholdReachedRef, nextDistance);
+        setAndroidPullDistanceValue(nextDistance);
+      },
+      [refresh, setAndroidPullDistanceValue],
+    );
+
+    const finishAndroidPull = useCallback(
+      (gestureState?: PanResponderGestureState) => {
+        const shouldFastRefresh =
+          androidScrollYRef.current <= 1 &&
+          (androidFastPullCandidateRef.current ||
+            (gestureState != null && isAndroidFastPullGesture(gestureState)));
+        const shouldRefresh =
+          Boolean(refresh) &&
+          !refresh?.refreshing &&
+          (androidPullDistanceRef.current >= ANDROID_PULL_TRIGGER_DISTANCE || shouldFastRefresh);
+
+        androidTouchStartXRef.current = null;
+        androidTouchStartYRef.current = null;
+        androidFastPullCandidateRef.current = false;
+        androidLastTouchMoveRef.current = null;
+        androidThresholdReachedRef.current = false;
+
+        if (shouldRefresh) {
+          setAndroidPullDistanceValue(ANDROID_PULL_TRIGGER_DISTANCE);
+          startRefresh(refresh);
+          return;
+        }
+
+        setAndroidPullDistanceValue(0);
+      },
+      [refresh, setAndroidPullDistanceValue],
+    );
+
+    const handleAndroidPanRelease = useCallback(
+      (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+        finishAndroidPull(gestureState);
+      },
+      [finishAndroidPull],
+    );
 
     const handleAndroidTouchEnd = useCallback(
       (event: GestureResponderEvent) => {
@@ -402,17 +685,72 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
         onTouchCancel?.(event);
         androidTouchStartXRef.current = null;
         androidTouchStartYRef.current = null;
+        androidFastPullCandidateRef.current = false;
+        androidLastTouchMoveRef.current = null;
+        androidThresholdReachedRef.current = false;
         setAndroidPullDistanceValue(0);
       },
       [onTouchCancel, setAndroidPullDistanceValue],
     );
 
+    useEffect(() => {
+      if (Platform.OS !== 'android' || !refresh) {
+        return;
+      }
+
+      if (refresh.refreshing) {
+        androidRefreshActiveRef.current = true;
+        return;
+      }
+
+      if (androidRefreshActiveRef.current) {
+        androidRefreshActiveRef.current = false;
+        androidThresholdReachedRef.current = false;
+        setAndroidPullDistanceValue(0);
+      }
+    }, [refresh, refresh?.refreshing, setAndroidPullDistanceValue]);
+
+    const androidPanResponder = useMemo(
+      () =>
+        PanResponder.create({
+          onMoveShouldSetPanResponderCapture: (_event, gestureState) =>
+            Platform.OS === 'android' &&
+            Boolean(refresh) &&
+            !refresh?.refreshing &&
+            androidScrollYRef.current <= 1 &&
+            (isAndroidPullGesture(Math.abs(gestureState.dx), gestureState.dy) ||
+              isAndroidFastPullGesture(gestureState)),
+          onMoveShouldSetPanResponder: (_event, gestureState) =>
+            Platform.OS === 'android' &&
+            Boolean(refresh) &&
+            !refresh?.refreshing &&
+            androidScrollYRef.current <= 1 &&
+            (isAndroidPullGesture(Math.abs(gestureState.dx), gestureState.dy) ||
+              isAndroidFastPullGesture(gestureState)),
+          onPanResponderMove: handleAndroidPanMove,
+          onPanResponderRelease: handleAndroidPanRelease,
+          onPanResponderTerminate: handleAndroidTouchCancel,
+          onPanResponderTerminationRequest: () => false,
+          onShouldBlockNativeResponder: () => true,
+        }),
+      [
+        handleAndroidPanMove,
+        handleAndroidPanRelease,
+        handleAndroidTouchCancel,
+        refresh,
+        refresh?.refreshing,
+      ],
+    );
     if (Platform.OS === 'android') {
       const androidIndicatorProgress = refresh?.refreshing
         ? 1
         : Math.min(androidPullDistance / ANDROID_PULL_TRIGGER_DISTANCE, 1);
       const shouldShowAndroidIndicator =
         refreshEnabled && (androidPullDistance > 0 || refresh?.refreshing);
+      const androidContentOffset = getAndroidRefreshContentOffset(
+        androidPullDistance,
+        Boolean(refresh?.refreshing),
+      );
       const androidIndicatorTop = Math.max(
         theme.spacing.sm,
         (refresh?.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET) -
@@ -421,6 +759,7 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
 
       return (
         <View
+          {...androidPanResponder.panHandlers}
           collapsable={false}
           style={[styles.scrollWrap, fillViewport ? styles.scrollWrapFill : null, style]}
         >
@@ -441,7 +780,13 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
               scrollEventThrottle ?? (refreshEnabled || onScroll ? 16 : undefined)
             }
             showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
-            style={[styles.androidScrollView, fillViewport ? styles.innerScrollFill : null]}
+            style={[
+              styles.androidScrollView,
+              fillViewport ? styles.innerScrollFill : null,
+              androidContentOffset > 0
+                ? { transform: [{ translateY: androidContentOffset }] }
+                : null,
+            ]}
           >
             {children}
           </ScrollView>
@@ -466,9 +811,7 @@ export const BrandedRefreshScrollView = forwardRef<ScrollView, BrandedRefreshScr
               <AppText
                 style={[styles.androidRefreshLabel, { color: activeTheme.colors.textMuted }]}
               >
-                {refresh?.refreshing
-                  ? 'Sincronizando'
-                  : (refresh?.label ?? 'Suelta para actualizar')}
+                {refresh ? androidRefreshLabel(refresh, androidIndicatorProgress) : null}
               </AppText>
             </View>
           ) : null}
@@ -525,6 +868,10 @@ const styles = StyleSheet.create({
   },
   androidScrollView: {
     flexShrink: 1,
+  },
+  androidRefreshContent: {
+    flex: 1,
+    minHeight: 0,
   },
   virtualizedRefreshWrap: {
     flex: 1,

@@ -46,8 +46,8 @@ import {
 
 const CATEGORY_INSIGHT_OPTIONS = [
   { label: 'Balance', value: 'balance' },
-  { label: 'Por cobrar', value: 'owed_to_me' },
-  { label: 'Por pagar', value: 'i_owe' },
+  { label: 'Te deben', value: 'owed_to_me' },
+  { label: 'Debes', value: 'i_owe' },
   { label: 'Pendientes', value: 'pending' },
   { label: 'Rechazadas', value: 'rejected' },
   { label: 'Circles', value: 'circles' },
@@ -238,7 +238,7 @@ function categoryInsightEmptyDescription(filter: CategoryInsightFilter): string 
   }
 
   if (filter === 'i_owe') {
-    return 'Cuando una categoría acumule saldo por pagar, aparecerá aquí.';
+    return 'Cuando una categoría acumule saldo que debes, aparecerá aquí.';
   }
 
   if (filter === 'pending') {

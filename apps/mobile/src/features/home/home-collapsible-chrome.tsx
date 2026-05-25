@@ -46,10 +46,9 @@ const HOME_CHROME_EXPANDED_ACTION_SIZE = 60;
 const HOME_CHROME_GLASS_COMPACT_SIZE = 92;
 const HOME_CHROME_GLASS_COMPACT_RADIUS = HOME_CHROME_GLASS_COMPACT_SIZE / 2;
 const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
-const HOME_CHROME_FAB_COMPACT_SIZE = HOME_CHROME_GLASS_EXPANDED_HEIGHT;
-const HOME_CHROME_FAB_EXPANDED_WIDTH = 136;
+const HOME_CHROME_FAB_COMPACT_SIZE = 58;
+const HOME_CHROME_FAB_EXPANDED_WIDTH = 148;
 const HOME_CHROME_FAB_RADIUS = HOME_CHROME_FAB_COMPACT_SIZE / 2;
-const HOME_CHROME_ANDROID_WIDE_FAB_TRAILING_OFFSET = 76;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 
 export const HOME_CHROME_EXPANDED_HEIGHT = 86;
@@ -627,7 +626,10 @@ export function HomeCollapsibleChrome({
           },
         ]}
       >
-        <View style={[styles.expandedContent, { gap: expandedContentGap }]}>
+        <View
+          pointerEvents="box-none"
+          style={[styles.expandedContent, { gap: expandedContentGap }]}
+        >
           <View style={styles.profileCluster}>
             <Link href="/profile" asChild>
               <Pressable
@@ -649,6 +651,7 @@ export function HomeCollapsibleChrome({
             </Link>
           </View>
           <Animated.View
+            pointerEvents="none"
             style={[
               styles.expandedBrand,
               {
@@ -702,16 +705,11 @@ export function HomeRegisterFab({
   const activeTheme = useAppTheme();
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
-  const liquidGlassPlatformStyle = resolveHomeLiquidGlassPlatformStyle(activeTheme);
   const contentWidth = Math.min(
     HOME_CHROME_CONTENT_MAX_WIDTH,
     Math.max(0, windowWidth - theme.spacing.lg * 2),
   );
   const contentRight = Math.max(theme.spacing.lg, (windowWidth - contentWidth) / 2);
-  const floatingRight =
-    Platform.OS === 'android' && contentWidth >= 348
-      ? contentRight + HOME_CHROME_ANDROID_WIDE_FAB_TRAILING_OFFSET
-      : contentRight;
   const width = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [HOME_CHROME_FAB_EXPANDED_WIDTH, HOME_CHROME_FAB_COMPACT_SIZE],
@@ -722,11 +720,11 @@ export function HomeRegisterFab({
   });
   const labelWidth = progress.interpolate({
     inputRange: [0, 0.16, 1],
-    outputRange: [64, 0, 0],
+    outputRange: [72, 0, 0],
   });
   const labelMarginLeft = progress.interpolate({
     inputRange: [0, 0.16, 1],
-    outputRange: [6, 0, 0],
+    outputRange: [8, 0, 0],
   });
 
   return (
@@ -735,9 +733,9 @@ export function HomeRegisterFab({
       style={[
         styles.fabWrap,
         {
-          bottom: 28 + bottomInset,
+          bottom: 24 + bottomInset,
           height: HOME_CHROME_FAB_COMPACT_SIZE,
-          right: floatingRight,
+          right: contentRight,
           width,
         },
       ]}
@@ -748,75 +746,17 @@ export function HomeRegisterFab({
         onPress={() => pushRoute(router, '/register')}
         style={({ pressed }) => [
           styles.fab,
-          liquidGlassPlatformStyle,
+          activeTheme.shadow.card,
           {
-            backgroundColor: hasNativeLiquidGlass
-              ? activeTheme.glass.homeNativeFabBackground
-              : activeTheme.glass.homeFabBackground,
-            borderColor: activeTheme.glass.homeFabBorder,
+            backgroundColor: activeTheme.colors.elevated,
+            borderColor: activeTheme.colors.border,
           },
           pressed ? styles.pressed : null,
         ]}
       >
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabInnerGlow,
-            {
-              backgroundColor: activeTheme.glass.homeFabInnerGlow,
-            },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabInnerWarmGlow,
-            {
-              backgroundColor: activeTheme.glass.homeFabInnerWarmGlow,
-            },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabInnerTopGlow,
-            {
-              backgroundColor: activeTheme.glass.homeFabInnerTopGlow,
-            },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabTopSpecular,
-            {
-              backgroundColor: activeTheme.glass.homeFabSpecular,
-            },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabWarmSpecular,
-            {
-              backgroundColor: activeTheme.glass.homeFabWarmSpecular,
-            },
-          ]}
-        />
-        <View
-          pointerEvents="none"
-          style={[
-            styles.fabHighlightEdge,
-            {
-              borderBottomColor: activeTheme.glass.homeFabWarmEdge,
-              borderLeftColor: activeTheme.glass.homeFabHighlightEdge,
-              borderRightColor: activeTheme.glass.homeFabWarmEdge,
-              borderTopColor: activeTheme.glass.homeFabHighlightEdge,
-            },
-          ]}
-        />
-        <LiquidGlassSurface showGlow={false} tintColor={activeTheme.glass.homeFabGlassTint} />
-        <Ionicons color={activeTheme.colors.text} name="add" size={28} />
+        <View style={[styles.fabIconHalo, { backgroundColor: activeTheme.colors.primaryGhost }]}>
+          <Ionicons color={activeTheme.colors.primary} name="add" size={24} />
+        </View>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -828,7 +768,10 @@ export function HomeRegisterFab({
             },
           ]}
         >
-          <AppText numberOfLines={1} style={[styles.fabLabel, { color: activeTheme.colors.text }]}>
+          <AppText
+            numberOfLines={1}
+            style={[styles.fabLabel, { color: activeTheme.colors.primaryStrong }]}
+          >
             Registro
           </AppText>
         </Animated.View>
@@ -984,8 +927,8 @@ const styles = StyleSheet.create({
   },
   fab: {
     alignItems: 'center',
-    borderWidth: 1.25,
     borderRadius: HOME_CHROME_FAB_RADIUS,
+    borderWidth: 1,
     flexDirection: 'row',
     height: HOME_CHROME_FAB_COMPACT_SIZE,
     justifyContent: 'center',
@@ -998,63 +941,18 @@ const styles = StyleSheet.create({
     width: '100%',
     zIndex: 1,
   },
-  fabInnerGlow: {
-    borderRadius: HOME_CHROME_FAB_RADIUS,
-    bottom: 2,
-    left: 3,
-    position: 'absolute',
-    right: 3,
-    top: 2,
-  },
-  fabInnerWarmGlow: {
-    borderRadius: HOME_CHROME_FAB_RADIUS,
-    bottom: 8,
-    height: 24,
-    position: 'absolute',
-    right: 10,
-    width: 56,
-  },
-  fabInnerTopGlow: {
-    borderRadius: HOME_CHROME_FAB_RADIUS,
-    height: 18,
-    left: 10,
-    position: 'absolute',
-    right: 10,
-    top: 5,
-  },
-  fabTopSpecular: {
+  fabIconHalo: {
+    alignItems: 'center',
     borderRadius: theme.radius.pill,
-    height: 6,
-    left: 18,
-    position: 'absolute',
-    top: 9,
-    width: 42,
-  },
-  fabWarmSpecular: {
-    borderRadius: theme.radius.pill,
-    bottom: 10,
-    height: 5,
-    position: 'absolute',
-    right: 17,
-    width: 28,
-  },
-  fabHighlightEdge: {
-    borderBottomWidth: 1,
-    borderLeftWidth: 1.5,
-    borderRadius: HOME_CHROME_FAB_RADIUS,
-    borderRightWidth: 1,
-    borderTopWidth: 2,
-    bottom: 10,
-    left: 11,
-    position: 'absolute',
-    right: 11,
-    top: 10,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
   },
   fabLabelWrap: {
     overflow: 'hidden',
   },
   fabLabel: {
-    fontSize: theme.typography.footnote,
+    fontSize: 14,
     fontWeight: '800',
     lineHeight: 17,
   },
