@@ -8,6 +8,8 @@ import PagerView, {
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
+  readonly animateProgrammaticTransitions?: boolean;
+  readonly commitPreviewChanges?: boolean;
   readonly loop?: boolean;
   readonly offscreenPageLimit?: number;
   readonly onChange: (value: T) => void;
@@ -34,6 +36,8 @@ function clampIndex(index: number, maxIndex: number): number {
 
 export function SwipePager<T extends string>({
   accessibilityLabel,
+  animateProgrammaticTransitions = true,
+  commitPreviewChanges = false,
   loop = false,
   offscreenPageLimit,
   onChange,
@@ -126,12 +130,17 @@ export function SwipePager<T extends string>({
       activeIndexRef.current = activeIndex;
       selectedPageIndexRef.current = normalizedTargetPageIndex;
       updatePreviewIndex(targetPageIndex);
-      pagerRef.current?.setPage(targetPageIndex);
+      if (animateProgrammaticTransitions) {
+        pagerRef.current?.setPage(targetPageIndex);
+      } else {
+        jumpToPagerIndex(targetPageIndex);
+        programmaticTargetPageIndexRef.current = null;
+      }
       return;
     }
 
     activeIndexRef.current = activeIndex;
-  }, [activeIndex, activePageIndex, shouldLoop, values.length]);
+  }, [activeIndex, activePageIndex, animateProgrammaticTransitions, shouldLoop, values.length]);
 
   function canLoop(currentValues = valuesRef.current): boolean {
     return loopRef.current && currentValues.length > 1;
@@ -218,6 +227,19 @@ export function SwipePager<T extends string>({
     }
   }
 
+  function commitPreviewedValue(currentValues = valuesRef.current) {
+    const nextValueIndex = previewIndexRef.current;
+    const nextValue = currentValues[nextValueIndex];
+
+    if (!nextValue || nextValueIndex === activeIndexRef.current) {
+      return;
+    }
+
+    activeIndexRef.current = nextValueIndex;
+    selectedPageIndexRef.current = canLoop(currentValues) ? nextValueIndex + 1 : nextValueIndex;
+    onChangeRef.current(nextValue);
+  }
+
   function emitProgress(scrollPosition: number, currentValues = valuesRef.current) {
     const currentPageIndex = selectedPageIndexRef.current;
     const rawDistance = scrollPosition - currentPageIndex;
@@ -247,11 +269,16 @@ export function SwipePager<T extends string>({
 
     const scrollPosition = event.nativeEvent.position + event.nativeEvent.offset;
     const nextPreviewPageIndex = Math.round(scrollPosition);
+    const nextPreviewValueIndex = valueIndexForPagerIndex(nextPreviewPageIndex);
 
     emitProgress(scrollPosition);
 
-    if (valueIndexForPagerIndex(nextPreviewPageIndex) !== previewIndexRef.current) {
+    if (nextPreviewValueIndex !== previewIndexRef.current) {
       updatePreviewIndex(nextPreviewPageIndex);
+    }
+
+    if (commitPreviewChanges && nextPreviewValueIndex !== activeIndexRef.current) {
+      commitPreviewedValue();
     }
   }
 
@@ -289,13 +316,13 @@ export function SwipePager<T extends string>({
   function handlePageScrollStateChanged(event: PageScrollStateChangedNativeEvent) {
     const pageScrollState = event.nativeEvent.pageScrollState;
 
-    if (pageScrollState === 'dragging') {
-      programmaticTargetPageIndexRef.current = null;
-    }
-
     if (pageScrollState === 'idle' && programmaticTargetPageIndexRef.current !== null) {
       updatePreviewIndex(programmaticTargetPageIndexRef.current);
       programmaticTargetPageIndexRef.current = null;
+    }
+
+    if (pageScrollState === 'idle' && commitPreviewChanges) {
+      commitPreviewedValue();
     }
 
     const isInteracting = pageScrollState !== 'idle';

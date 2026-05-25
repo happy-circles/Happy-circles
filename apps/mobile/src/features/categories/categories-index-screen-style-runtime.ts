@@ -130,13 +130,13 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     paddingTop: 0,
   },
   podiumSlotDimmed: {
-    opacity: 0.36,
+    transform: [{ scale: 0.98 }],
   },
   podiumSlotFocused: {
     opacity: 1,
   },
   podiumSlotSelected: {
-    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   podiumIconWrap: {
     alignItems: 'center',

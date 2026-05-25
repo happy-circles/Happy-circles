@@ -3,6 +3,8 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
+  readonly animateProgrammaticTransitions?: boolean;
+  readonly commitPreviewChanges?: boolean;
   readonly loop?: boolean;
   readonly onChange: (value: T) => void;
   readonly onInteractionStateChange?: (isInteracting: boolean) => void;

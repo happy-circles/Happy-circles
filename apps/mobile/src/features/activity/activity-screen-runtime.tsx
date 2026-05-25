@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -15,7 +15,7 @@ import { CardPressable } from '@/components/card-shell';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
-import { SwipePager } from '@/components/swipe-pager';
+import { SwipePager, type SwipePagerProgress } from '@/components/swipe-pager';
 import {
   inviteRequestPersonHrefAfterSuccessfulAction,
   inviteRequestEmptyDescription,
@@ -133,6 +133,8 @@ const NOTIFICATION_CATEGORY_KEYS: readonly NotificationCategoryKey[] = [
   'friends',
   'reminders',
 ];
+const NOTIFICATION_TAB_PREVIEW_THRESHOLD = 0.03;
+const NOTIFICATION_PROGRAMMATIC_TAB_SETTLE_MS = 180;
 const SETUP_REMINDER_BADGE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   'local-apple-auth-reminder': 'logo-apple',
   'local-biometrics-reminder': 'finger-print',
@@ -620,6 +622,9 @@ export function ActivityScreen() {
   );
   const [visualActiveCategory, setVisualActiveCategory] =
     useState<NotificationCategoryKey>(activeCategory);
+  const visualActiveCategoryRef = useRef<NotificationCategoryKey>(activeCategory);
+  const programmaticCategoryTargetRef = useRef<NotificationCategoryKey | null>(null);
+  const programmaticCategoryClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -672,7 +677,7 @@ export function ActivityScreen() {
   }, [notificationSummary]);
 
   useEffect(() => {
-    setVisualActiveCategory(activeCategory);
+    setVisualNotificationCategory(activeCategory);
   }, [activeCategory]);
 
   useEffect(() => {
@@ -689,6 +694,15 @@ export function ActivityScreen() {
   useEffect(() => {
     setOptimisticNotificationViewedKeys(new Set());
   }, [session.userId]);
+
+  useEffect(
+    () => () => {
+      if (programmaticCategoryClearTimeoutRef.current) {
+        clearTimeout(programmaticCategoryClearTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   function markNotificationItemViewed(item: ActivityItemDto) {
     if (
@@ -721,10 +735,71 @@ export function ActivityScreen() {
     backOrReturnTo(router, '/home');
   }
 
-  function changeActiveCategory(category: NotificationCategoryKey) {
+  function setActiveNotificationCategory(category: NotificationCategoryKey) {
+    if (category === activeCategory && category === visualActiveCategoryRef.current) {
+      return;
+    }
+
     triggerAppSelectionHaptic();
-    setVisualActiveCategory(category);
+    setVisualNotificationCategory(category);
     setActiveCategory(category);
+  }
+
+  function setVisualNotificationCategory(category: NotificationCategoryKey) {
+    if (visualActiveCategoryRef.current === category) {
+      return;
+    }
+
+    visualActiveCategoryRef.current = category;
+    setVisualActiveCategory(category);
+  }
+
+  function clearProgrammaticCategoryTarget() {
+    if (programmaticCategoryClearTimeoutRef.current) {
+      clearTimeout(programmaticCategoryClearTimeoutRef.current);
+      programmaticCategoryClearTimeoutRef.current = null;
+    }
+
+    programmaticCategoryTargetRef.current = null;
+  }
+
+  function selectCategoryFromTab(category: NotificationCategoryKey) {
+    clearProgrammaticCategoryTarget();
+    programmaticCategoryTargetRef.current = category;
+    setActiveNotificationCategory(category);
+    programmaticCategoryClearTimeoutRef.current = setTimeout(() => {
+      if (programmaticCategoryTargetRef.current === category) {
+        programmaticCategoryTargetRef.current = null;
+      }
+
+      programmaticCategoryClearTimeoutRef.current = null;
+    }, NOTIFICATION_PROGRAMMATIC_TAB_SETTLE_MS);
+  }
+
+  function changeActiveCategoryFromPager(category: NotificationCategoryKey) {
+    clearProgrammaticCategoryTarget();
+    setActiveNotificationCategory(category);
+  }
+
+  function handleNotificationPagerInteractionStateChange(isInteracting: boolean) {
+    if (isInteracting) {
+      clearProgrammaticCategoryTarget();
+    }
+  }
+
+  function previewActiveCategoryFromPagerProgress(
+    progress: SwipePagerProgress<NotificationCategoryKey>,
+  ) {
+    const programmaticTarget = programmaticCategoryTargetRef.current;
+
+    if (programmaticTarget) {
+      setVisualNotificationCategory(programmaticTarget);
+      return;
+    }
+
+    setVisualNotificationCategory(
+      progress.progress >= NOTIFICATION_TAB_PREVIEW_THRESHOLD ? progress.to : progress.from,
+    );
   }
 
   function openNotificationTarget(target: NotificationTarget, item: ActivityItemDto) {
@@ -1170,7 +1245,7 @@ export function ActivityScreen() {
                   count={categoryCounts[category.key]}
                   key={category.key}
                   meta={category}
-                  onPress={() => changeActiveCategory(category.key)}
+                  onPress={() => selectCategoryFromTab(category.key)}
                   selected={visualActiveCategory === category.key}
                 />
               ))}
@@ -1178,9 +1253,13 @@ export function ActivityScreen() {
 
             <SwipePager
               accessibilityLabel="Categorias de notificaciones"
+              animateProgrammaticTransitions={false}
+              commitPreviewChanges
               offscreenPageLimit={1}
-              onChange={changeActiveCategory}
-              onPreviewChange={setVisualActiveCategory}
+              onChange={changeActiveCategoryFromPager}
+              onInteractionStateChange={handleNotificationPagerInteractionStateChange}
+              onPreviewChange={setVisualNotificationCategory}
+              onProgressChange={previewActiveCategoryFromPagerProgress}
               pageStyle={[styles.notificationPage, { backgroundColor: activeTheme.colors.surface }]}
               renderPage={(categoryKey) => renderNotificationPage(categoryKey)}
               style={styles.sheetScrollWrap}

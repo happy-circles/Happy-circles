@@ -49,6 +49,7 @@ const HOME_CHROME_GLASS_EXPANDED_HEIGHT = 68;
 const HOME_CHROME_FAB_COMPACT_SIZE = HOME_CHROME_GLASS_EXPANDED_HEIGHT;
 const HOME_CHROME_FAB_EXPANDED_WIDTH = 136;
 const HOME_CHROME_FAB_RADIUS = HOME_CHROME_FAB_COMPACT_SIZE / 2;
+const HOME_CHROME_ANDROID_WIDE_FAB_TRAILING_OFFSET = 76;
 const HOME_CHROME_TOP_GAP = theme.spacing.xs;
 
 export const HOME_CHROME_EXPANDED_HEIGHT = 86;
@@ -443,7 +444,7 @@ function HomeActivityButton({ count }: { readonly count: number }) {
         hasAttention ? `${compactCountLabel(count)} notificaciones no vistas` : 'Actividad'
       }
       accessibilityRole="button"
-      hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
+      hitSlop={{ bottom: 24, left: 24, right: 24, top: 24 }}
       onPress={openActivity}
       style={styles.activityHitArea}
     >
@@ -668,7 +669,7 @@ export function HomeCollapsibleChrome({
             </Animated.View>
           </Animated.View>
           <Animated.View
-            pointerEvents={isCompact ? 'none' : 'auto'}
+            pointerEvents="box-none"
             style={[
               styles.expandedAction,
               {
@@ -707,6 +708,10 @@ export function HomeRegisterFab({
     Math.max(0, windowWidth - theme.spacing.lg * 2),
   );
   const contentRight = Math.max(theme.spacing.lg, (windowWidth - contentWidth) / 2);
+  const floatingRight =
+    Platform.OS === 'android' && contentWidth >= 348
+      ? contentRight + HOME_CHROME_ANDROID_WIDE_FAB_TRAILING_OFFSET
+      : contentRight;
   const width = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [HOME_CHROME_FAB_EXPANDED_WIDTH, HOME_CHROME_FAB_COMPACT_SIZE],
@@ -732,7 +737,7 @@ export function HomeRegisterFab({
         {
           bottom: 28 + bottomInset,
           height: HOME_CHROME_FAB_COMPACT_SIZE,
-          right: contentRight,
+          right: floatingRight,
           width,
         },
       ]}

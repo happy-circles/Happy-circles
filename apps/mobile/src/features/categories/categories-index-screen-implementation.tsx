@@ -8,7 +8,7 @@ import type { TransactionCategory } from '@happy-circles/shared';
 
 import { AppText } from '@/components/app-text';
 import { AppTextInput } from '@/components/app-text-input';
-import { BrandedRefreshControl } from '@/components/branded-refresh-control';
+import { BrandedRefreshVirtualizedListContainer } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
@@ -938,104 +938,128 @@ export function CategoriesIndexScreen({
       scrollEnabled={false}
       title="Categorías"
     >
-      <SectionList
-        ItemSeparatorComponent={CategoryListSeparator}
-        ListFooterComponent={<View style={styles.categoriesListFooter} />}
-        ListHeaderComponent={
-          <>
-            <View style={[styles.categoriesTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
-              <View style={styles.containedContent}>
-                <View style={styles.categoriesHeader}>
-                  <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
-                </View>
-              </View>
+      <BrandedRefreshVirtualizedListContainer refresh={refresh}>
+        {({
+          onScroll,
+          onTouchCancel,
+          onTouchEnd,
+          onTouchMove,
+          onTouchStart,
+          refreshControl,
+          scrollEventThrottle,
+        }) => (
+          <SectionList
+            ItemSeparatorComponent={CategoryListSeparator}
+            ListFooterComponent={<View style={styles.categoriesListFooter} />}
+            ListHeaderComponent={
+              <>
+                <View
+                  style={[styles.categoriesTopChrome, { paddingTop: topInset + theme.spacing.md }]}
+                >
+                  <View style={styles.containedContent}>
+                    <View style={styles.categoriesHeader}>
+                      <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
+                    </View>
+                  </View>
 
-              <View style={styles.topVisualBand}>
-                <CategoryInsightSwitcher
-                  activeFilter={activeFilter}
-                  onChange={changeCategoryFilter}
-                  renderPage={(pageFilter) => (
-                    <CategoriesPodiumCard
-                      activeFilter={pageFilter}
-                      onSelectCategory={(category) => {
-                        triggerAppSelectionHaptic();
-                        setSelectedCategory((currentCategory) =>
-                          currentCategory === category ? null : category,
-                        );
-                      }}
-                      ranking={rankingsByFilter[pageFilter]}
-                      selectedCategory={selectedCategory}
-                      selectedInsight={selectedInsightByFilter[pageFilter]}
+                  <View style={styles.topVisualBand}>
+                    <CategoryInsightSwitcher
+                      activeFilter={activeFilter}
+                      onChange={changeCategoryFilter}
+                      renderPage={(pageFilter) => (
+                        <CategoriesPodiumCard
+                          activeFilter={pageFilter}
+                          onSelectCategory={(category) => {
+                            triggerAppSelectionHaptic();
+                            setSelectedCategory((currentCategory) =>
+                              currentCategory === category ? null : category,
+                            );
+                          }}
+                          ranking={rankingsByFilter[pageFilter]}
+                          selectedCategory={selectedCategory}
+                          selectedInsight={selectedInsightByFilter[pageFilter]}
+                        />
+                      )}
                     />
-                  )}
-                />
-              </View>
-            </View>
+                  </View>
+                </View>
 
-            <View style={[styles.containedContent, styles.categoriesControlsSection]}>
-              <View
-                style={[
-                  styles.searchWrap,
-                  {
-                    backgroundColor: activeTheme.colors.surfaceMuted,
-                    borderColor: activeTheme.colors.border,
-                  },
-                ]}
-              >
-                <Ionicons color={activeTheme.colors.textMuted} name="search-outline" size={18} />
-                <AppTextInput
-                  autoCapitalize="sentences"
-                  clearButtonMode="while-editing"
-                  chrome="plain"
-                  density="compact"
-                  onChangeText={setQuery}
-                  placeholder={selectedCategory ? 'Buscar movimiento' : 'Buscar categoría'}
-                  placeholderTextColor={activeTheme.colors.muted}
-                  style={styles.searchInput}
-                  value={query}
-                />
-              </View>
+                <View style={[styles.containedContent, styles.categoriesControlsSection]}>
+                  <View
+                    style={[
+                      styles.searchWrap,
+                      {
+                        backgroundColor: activeTheme.colors.surfaceMuted,
+                        borderColor: activeTheme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      color={activeTheme.colors.textMuted}
+                      name="search-outline"
+                      size={18}
+                    />
+                    <AppTextInput
+                      autoCapitalize="sentences"
+                      clearButtonMode="while-editing"
+                      chrome="plain"
+                      density="compact"
+                      onChangeText={setQuery}
+                      placeholder={selectedCategory ? 'Buscar movimiento' : 'Buscar categoría'}
+                      placeholderTextColor={activeTheme.colors.muted}
+                      style={styles.searchInput}
+                      value={query}
+                    />
+                  </View>
 
-              {selectedCategory && !hasSelectedCategoryActivity ? (
-                <EmptyState
-                  description={selectedCategoryEmptyDescription(activeFilter, hasQuery)}
-                  title={selectedCategoryEmptyTitle(activeFilter, hasQuery)}
-                />
-              ) : !selectedCategory && categoryRows.length === 0 ? (
-                <EmptyState
-                  description={categoryInsightEmptyDescription(activeFilter)}
-                  title={categoryInsightEmptyTitle(activeFilter)}
-                />
-              ) : !selectedCategory && visibleCategoryRows.length === 0 ? (
-                <EmptyState
-                  description="Prueba con otro texto o borra la búsqueda para ver tus categorías."
-                  title="No encontramos categorías"
-                />
-              ) : null}
-            </View>
+                  {selectedCategory && !hasSelectedCategoryActivity ? (
+                    <EmptyState
+                      description={selectedCategoryEmptyDescription(activeFilter, hasQuery)}
+                      title={selectedCategoryEmptyTitle(activeFilter, hasQuery)}
+                    />
+                  ) : !selectedCategory && categoryRows.length === 0 ? (
+                    <EmptyState
+                      description={categoryInsightEmptyDescription(activeFilter)}
+                      title={categoryInsightEmptyTitle(activeFilter)}
+                    />
+                  ) : !selectedCategory && visibleCategoryRows.length === 0 ? (
+                    <EmptyState
+                      description="Prueba con otro texto o borra la búsqueda para ver tus categorías."
+                      title="No encontramos categorías"
+                    />
+                  ) : null}
+                </View>
 
-            {hasCategoryListRows ? <View style={styles.categoriesListHeaderGap} /> : null}
-          </>
-        }
-        contentContainerStyle={styles.categoriesListContent}
-        keyExtractor={(item) =>
-          item.type === 'category'
-            ? `category:${item.insight.row.key}`
-            : `${item.type}:${item.item.id}`
-        }
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<BrandedRefreshControl refresh={refresh} />}
-        renderItem={renderCategoryListItem}
-        renderSectionHeader={renderCategorySectionHeader}
-        sections={categoryListSections}
-        showsVerticalScrollIndicator={false}
-        stickySectionHeadersEnabled={false}
-        style={[
-          styles.virtualizedCategoriesList,
-          { backgroundColor: activeTheme.colors.background },
-        ]}
-      />
+                {hasCategoryListRows ? <View style={styles.categoriesListHeaderGap} /> : null}
+              </>
+            }
+            contentContainerStyle={styles.categoriesListContent}
+            keyExtractor={(item) =>
+              item.type === 'category'
+                ? `category:${item.insight.row.key}`
+                : `${item.type}:${item.item.id}`
+            }
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            onScroll={onScroll}
+            onTouchCancel={onTouchCancel}
+            onTouchEnd={onTouchEnd}
+            onTouchMove={onTouchMove}
+            onTouchStart={onTouchStart}
+            refreshControl={refreshControl}
+            renderItem={renderCategoryListItem}
+            renderSectionHeader={renderCategorySectionHeader}
+            scrollEventThrottle={scrollEventThrottle}
+            sections={categoryListSections}
+            showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
+            style={[
+              styles.virtualizedCategoriesList,
+              { backgroundColor: activeTheme.colors.background },
+            ]}
+          />
+        )}
+      </BrandedRefreshVirtualizedListContainer>
     </ScreenShell>
   );
 }

@@ -1,8 +1,17 @@
-import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {
   GestureResponderEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  RefreshControlProps,
   ScrollViewProps,
 } from 'react-native';
 import {
@@ -39,6 +48,21 @@ export interface BrandedRefreshProps {
 export interface BrandedRefreshScrollViewProps extends Omit<ScrollViewProps, 'refreshControl'> {
   readonly fillViewport?: boolean;
   readonly refresh?: BrandedRefreshProps;
+}
+
+export interface BrandedRefreshVirtualizedListProps {
+  readonly onScroll?: ScrollViewProps['onScroll'];
+  readonly onTouchCancel?: ScrollViewProps['onTouchCancel'];
+  readonly onTouchEnd?: ScrollViewProps['onTouchEnd'];
+  readonly onTouchMove?: ScrollViewProps['onTouchMove'];
+  readonly onTouchStart?: ScrollViewProps['onTouchStart'];
+  readonly refreshControl?: ReactElement<RefreshControlProps>;
+  readonly scrollEventThrottle?: ScrollViewProps['scrollEventThrottle'];
+}
+
+export interface BrandedRefreshVirtualizedListContainerProps {
+  readonly children: (props: BrandedRefreshVirtualizedListProps) => ReactNode;
+  readonly refresh: BrandedRefreshProps;
 }
 
 function startRefresh(refresh: BrandedRefreshProps | undefined) {
@@ -86,6 +110,143 @@ export function BrandedRefreshControl({ refresh }: { readonly refresh: BrandedRe
       }
       titleColor={nativeIndicatorVisible ? activeTheme.colors.textMuted : TRANSPARENT_REFRESH_COLOR}
     />
+  );
+}
+
+export function BrandedRefreshVirtualizedListContainer({
+  children,
+  refresh,
+}: BrandedRefreshVirtualizedListContainerProps) {
+  const activeTheme = useAppTheme();
+  const [androidPullDistance, setAndroidPullDistance] = useState(0);
+  const androidPullDistanceRef = useRef(0);
+  const androidScrollYRef = useRef(0);
+  const androidTouchStartXRef = useRef<number | null>(null);
+  const androidTouchStartYRef = useRef<number | null>(null);
+
+  const setAndroidPullDistanceValue = useCallback((nextDistance: number) => {
+    const roundedDistance = Math.max(0, Math.round(nextDistance));
+
+    if (roundedDistance === androidPullDistanceRef.current) {
+      return;
+    }
+
+    androidPullDistanceRef.current = roundedDistance;
+    setAndroidPullDistance(roundedDistance);
+  }, []);
+
+  const handleAndroidScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    androidScrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
+  }, []);
+
+  const handleAndroidTouchStart = useCallback((event: GestureResponderEvent) => {
+    androidTouchStartXRef.current = event.nativeEvent.pageX;
+    androidTouchStartYRef.current = event.nativeEvent.pageY;
+  }, []);
+
+  const handleAndroidTouchMove = useCallback(
+    (event: GestureResponderEvent) => {
+      if (refresh.refreshing) {
+        return;
+      }
+
+      const touchStartX = androidTouchStartXRef.current;
+      const touchStartY = androidTouchStartYRef.current;
+
+      if (touchStartX == null || touchStartY == null) {
+        return;
+      }
+
+      const horizontalDistance = Math.abs(event.nativeEvent.pageX - touchStartX);
+      const dragDistance = event.nativeEvent.pageY - touchStartY;
+      const isVerticalPull =
+        dragDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE &&
+        dragDistance > horizontalDistance * ANDROID_PULL_VERTICAL_DOMINANCE;
+
+      if (androidScrollYRef.current > 1 || !isVerticalPull) {
+        setAndroidPullDistanceValue(0);
+        return;
+      }
+
+      const resistedDistance = Math.min(
+        ANDROID_PULL_MAX_DISTANCE,
+        dragDistance * ANDROID_PULL_RESISTANCE,
+      );
+
+      setAndroidPullDistanceValue(
+        resistedDistance > ANDROID_PULL_MIN_VISIBLE_DISTANCE ? resistedDistance : 0,
+      );
+    },
+    [refresh.refreshing, setAndroidPullDistanceValue],
+  );
+
+  const finishAndroidPull = useCallback(() => {
+    const shouldRefresh =
+      !refresh.refreshing && androidPullDistanceRef.current >= ANDROID_PULL_TRIGGER_DISTANCE;
+
+    androidTouchStartXRef.current = null;
+    androidTouchStartYRef.current = null;
+    setAndroidPullDistanceValue(0);
+
+    if (shouldRefresh) {
+      startRefresh(refresh);
+    }
+  }, [refresh, setAndroidPullDistanceValue]);
+
+  const handleAndroidTouchCancel = useCallback(() => {
+    androidTouchStartXRef.current = null;
+    androidTouchStartYRef.current = null;
+    setAndroidPullDistanceValue(0);
+  }, [setAndroidPullDistanceValue]);
+
+  if (Platform.OS !== 'android') {
+    return <>{children({ refreshControl: <BrandedRefreshControl refresh={refresh} /> })}</>;
+  }
+
+  const androidIndicatorProgress = refresh.refreshing
+    ? 1
+    : Math.min(androidPullDistance / ANDROID_PULL_TRIGGER_DISTANCE, 1);
+  const shouldShowAndroidIndicator = androidPullDistance > 0 || refresh.refreshing;
+  const androidIndicatorTop = Math.max(
+    theme.spacing.sm,
+    (refresh.progressViewOffset ?? DEFAULT_REFRESH_PROGRESS_OFFSET) -
+      ANDROID_PULL_INDICATOR_SIZE / 2,
+  );
+
+  return (
+    <View collapsable={false} style={styles.virtualizedRefreshWrap}>
+      {children({
+        onScroll: handleAndroidScroll,
+        onTouchCancel: handleAndroidTouchCancel,
+        onTouchEnd: finishAndroidPull,
+        onTouchMove: handleAndroidTouchMove,
+        onTouchStart: handleAndroidTouchStart,
+        scrollEventThrottle: 16,
+      })}
+      {shouldShowAndroidIndicator ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.androidRefreshIndicator,
+            {
+              backgroundColor: activeTheme.colors.floatingSurface,
+              borderColor: activeTheme.colors.hairline,
+              opacity: Math.max(0.42, androidIndicatorProgress),
+              top: androidIndicatorTop,
+              transform: [
+                { translateY: refresh.refreshing ? 0 : -10 + androidIndicatorProgress * 10 },
+                { scale: 0.92 + androidIndicatorProgress * 0.08 },
+              ],
+            },
+          ]}
+        >
+          <ActivityIndicator animating color={activeTheme.colors.primary} size="small" />
+          <AppText style={[styles.androidRefreshLabel, { color: activeTheme.colors.textMuted }]}>
+            {refresh.refreshing ? 'Sincronizando' : (refresh.label ?? 'Suelta para actualizar')}
+          </AppText>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -364,6 +525,12 @@ const styles = StyleSheet.create({
   },
   androidScrollView: {
     flexShrink: 1,
+  },
+  virtualizedRefreshWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'visible',
+    position: 'relative',
   },
   androidRefreshIndicator: {
     alignItems: 'center',

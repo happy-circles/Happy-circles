@@ -9,7 +9,7 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
 import { AppTextInput } from '@/components/app-text-input';
-import { BrandedRefreshControl } from '@/components/branded-refresh-control';
+import { BrandedRefreshVirtualizedListContainer } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
@@ -1189,143 +1189,172 @@ export function PeopleIndexScreen() {
       scrollEnabled={false}
       title="Personas"
     >
-      <FlatList
-        ItemSeparatorComponent={PeopleListSeparator}
-        ListFooterComponent={<View style={styles.peopleListFooter} />}
-        ListHeaderComponent={
-          <>
-            <View style={[styles.peopleTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
-              <View style={styles.containedContent}>
-                <View style={styles.peopleHeader}>
-                  <AppText style={styles.peopleHeaderTitle}>Personas</AppText>
-                  <Pressable
-                    onPress={() => setAddPersonSheetVisible(true)}
-                    style={({ pressed }) => [
-                      styles.addButton,
+      <BrandedRefreshVirtualizedListContainer refresh={refresh}>
+        {({
+          onScroll,
+          onTouchCancel,
+          onTouchEnd,
+          onTouchMove,
+          onTouchStart,
+          refreshControl,
+          scrollEventThrottle,
+        }) => (
+          <FlatList
+            ItemSeparatorComponent={PeopleListSeparator}
+            ListFooterComponent={<View style={styles.peopleListFooter} />}
+            ListHeaderComponent={
+              <>
+                <View style={[styles.peopleTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
+                  <View style={styles.containedContent}>
+                    <View style={styles.peopleHeader}>
+                      <AppText style={styles.peopleHeaderTitle}>Personas</AppText>
+                      <Pressable
+                        onPress={() => setAddPersonSheetVisible(true)}
+                        style={({ pressed }) => [
+                          styles.addButton,
+                          {
+                            backgroundColor: activeTheme.colors.primarySoft,
+                            borderColor: activeTheme.colors.border,
+                          },
+                          pressed ? styles.pressed : null,
+                        ]}
+                      >
+                        <Ionicons
+                          color={activeTheme.colors.text}
+                          name="person-add-outline"
+                          size={18}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.topVisualBand}>
+                    <PeopleInsightSwitcher
+                      activeFilter={activeFilter}
+                      onChange={changePeopleFilter}
+                      renderPage={(pageFilter) => (
+                        <PeopleInsightPodiumCard
+                          activeFilter={pageFilter}
+                          onSelectPerson={(personId) => {
+                            setSelectedPersonId((currentPersonId) =>
+                              currentPersonId === personId ? null : personId,
+                            );
+                          }}
+                          ranking={rankingsByFilter[pageFilter]}
+                          selectedPerson={selectedPersonByFilter[pageFilter]}
+                          selectedPersonId={selectedPersonByFilter[pageFilter]?.userId ?? null}
+                        />
+                      )}
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.containedContent, styles.peopleControlsSection]}>
+                  <View
+                    style={[
+                      styles.searchWrap,
                       {
-                        backgroundColor: activeTheme.colors.primarySoft,
+                        backgroundColor: activeTheme.colors.surfaceMuted,
                         borderColor: activeTheme.colors.border,
                       },
-                      pressed ? styles.pressed : null,
                     ]}
                   >
-                    <Ionicons color={activeTheme.colors.text} name="person-add-outline" size={18} />
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.topVisualBand}>
-                <PeopleInsightSwitcher
-                  activeFilter={activeFilter}
-                  onChange={changePeopleFilter}
-                  renderPage={(pageFilter) => (
-                    <PeopleInsightPodiumCard
-                      activeFilter={pageFilter}
-                      onSelectPerson={(personId) => {
-                        setSelectedPersonId((currentPersonId) =>
-                          currentPersonId === personId ? null : personId,
-                        );
-                      }}
-                      ranking={rankingsByFilter[pageFilter]}
-                      selectedPerson={selectedPersonByFilter[pageFilter]}
-                      selectedPersonId={selectedPersonByFilter[pageFilter]?.userId ?? null}
+                    <Ionicons
+                      color={activeTheme.colors.textMuted}
+                      name="search-outline"
+                      size={18}
                     />
-                  )}
-                />
-              </View>
-            </View>
+                    <AppTextInput
+                      autoCapitalize="sentences"
+                      clearButtonMode="while-editing"
+                      chrome="plain"
+                      density="compact"
+                      onChangeText={setQuery}
+                      placeholder={hasSelectedPerson ? 'Buscar movimiento' : 'Buscar persona'}
+                      placeholderTextColor={activeTheme.colors.muted}
+                      style={styles.searchInput}
+                      value={query}
+                    />
+                  </View>
 
-            <View style={[styles.containedContent, styles.peopleControlsSection]}>
-              <View
-                style={[
-                  styles.searchWrap,
-                  {
-                    backgroundColor: activeTheme.colors.surfaceMuted,
-                    borderColor: activeTheme.colors.border,
-                  },
-                ]}
-              >
-                <Ionicons color={activeTheme.colors.textMuted} name="search-outline" size={18} />
-                <AppTextInput
-                  autoCapitalize="sentences"
-                  clearButtonMode="while-editing"
-                  chrome="plain"
-                  density="compact"
-                  onChangeText={setQuery}
-                  placeholder={hasSelectedPerson ? 'Buscar movimiento' : 'Buscar persona'}
-                  placeholderTextColor={activeTheme.colors.muted}
-                  style={styles.searchInput}
-                  value={query}
-                />
-              </View>
+                  <PeopleInviteRequestsEntry
+                    onPress={() => openInviteRequests()}
+                    receivedCount={inviteRequests.receivedItems.length}
+                    sentCount={inviteRequests.sentItems.length}
+                  />
 
-              <PeopleInviteRequestsEntry
-                onPress={() => openInviteRequests()}
-                receivedCount={inviteRequests.receivedItems.length}
-                sentCount={inviteRequests.sentItems.length}
-              />
-
-              {!hasAnyRelationshipContext ? (
-                <EmptyState
-                  description={noActiveRelationshipsEmptyState.description}
-                  title={noActiveRelationshipsEmptyState.title}
-                />
-              ) : hasSelectedPerson && selectedPerson ? (
-                <>
-                  {!hasVisibleActivity ? (
+                  {!hasAnyRelationshipContext ? (
+                    <EmptyState
+                      description={noActiveRelationshipsEmptyState.description}
+                      title={noActiveRelationshipsEmptyState.title}
+                    />
+                  ) : hasSelectedPerson && selectedPerson ? (
+                    <>
+                      {!hasVisibleActivity ? (
+                        <EmptyState
+                          description={
+                            query.trim().length > 0
+                              ? 'Prueba con otro texto o borra la búsqueda para ver su historial.'
+                              : peopleInsightEmptyDescription(activeFilter)
+                          }
+                          title={
+                            query.trim().length > 0
+                              ? 'No encontramos movimientos'
+                              : peopleInsightEmptyTitle(activeFilter)
+                          }
+                        />
+                      ) : null}
+                    </>
+                  ) : visiblePersonRows.length === 0 ? (
                     <EmptyState
                       description={
                         query.trim().length > 0
-                          ? 'Prueba con otro texto o borra la búsqueda para ver su historial.'
+                          ? 'Prueba con otro nombre o borra la búsqueda para ver tus personas.'
                           : peopleInsightEmptyDescription(activeFilter)
                       }
                       title={
                         query.trim().length > 0
-                          ? 'No encontramos movimientos'
+                          ? 'No encontramos personas'
                           : peopleInsightEmptyTitle(activeFilter)
                       }
                     />
                   ) : null}
-                </>
-              ) : visiblePersonRows.length === 0 ? (
-                <EmptyState
-                  description={
-                    query.trim().length > 0
-                      ? 'Prueba con otro nombre o borra la búsqueda para ver tus personas.'
-                      : peopleInsightEmptyDescription(activeFilter)
-                  }
-                  title={
-                    query.trim().length > 0
-                      ? 'No encontramos personas'
-                      : peopleInsightEmptyTitle(activeFilter)
-                  }
-                />
-              ) : null}
-            </View>
+                </View>
 
-            {peopleListRows.length > 0 ? <View style={styles.peopleListHeaderGap} /> : null}
-          </>
-        }
-        contentContainerStyle={styles.peopleScreenContent}
-        data={peopleListRows}
-        keyExtractor={(item) => {
-          if (item.type === 'person') {
-            return `person:${item.person.userId}`;
-          }
+                {peopleListRows.length > 0 ? <View style={styles.peopleListHeaderGap} /> : null}
+              </>
+            }
+            contentContainerStyle={styles.peopleScreenContent}
+            data={peopleListRows}
+            keyExtractor={(item) => {
+              if (item.type === 'person') {
+                return `person:${item.person.userId}`;
+              }
 
-          if (item.type === 'sectionHeader') {
-            return item.key;
-          }
+              if (item.type === 'sectionHeader') {
+                return item.key;
+              }
 
-          return `${item.type}:${item.item.id}`;
-        }}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<BrandedRefreshControl refresh={refresh} />}
-        renderItem={renderPeopleListRow}
-        showsVerticalScrollIndicator={false}
-        style={[styles.virtualizedPeopleList, { backgroundColor: activeTheme.colors.background }]}
-      />
+              return `${item.type}:${item.item.id}`;
+            }}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            onScroll={onScroll}
+            onTouchCancel={onTouchCancel}
+            onTouchEnd={onTouchEnd}
+            onTouchMove={onTouchMove}
+            onTouchStart={onTouchStart}
+            refreshControl={refreshControl}
+            renderItem={renderPeopleListRow}
+            scrollEventThrottle={scrollEventThrottle}
+            showsVerticalScrollIndicator={false}
+            style={[
+              styles.virtualizedPeopleList,
+              { backgroundColor: activeTheme.colors.background },
+            ]}
+          />
+        )}
+      </BrandedRefreshVirtualizedListContainer>
 
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
@@ -1481,13 +1510,13 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   podiumSlotDimmed: {
-    opacity: 0.36,
+    transform: [{ scale: 0.98 }],
   },
   podiumSlotFocused: {
     opacity: 1,
   },
   podiumSlotSelected: {
-    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   podiumAvatarWrap: {
     alignItems: 'center',
