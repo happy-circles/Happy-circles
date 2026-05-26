@@ -354,7 +354,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                 </AppText>
               </View>
               <AppText style={[styles.rewardClaimTitle, { color: activeTheme.colors.text }]}>
-                Reclama los Happy puntos de este Circle
+                Reclama los Happy circles de este Circle
               </AppText>
               <AppText style={[styles.rewardClaimBody, { color: activeTheme.colors.textMuted }]}>
                 La animacion queda ligada a este detalle, para que sepas exactamente de donde viene.

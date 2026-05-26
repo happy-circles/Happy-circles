@@ -13,6 +13,7 @@ coverage
 supabase/.temp
 apps/mobile/.expo
 apps/mobile/.codex-*
+apps/mobile/android/.kotlin/
 apps/mobile/dist
 apps/mobile/web-build
 apps/landing/.codex-*

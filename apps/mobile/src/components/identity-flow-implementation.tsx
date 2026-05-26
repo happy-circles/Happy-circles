@@ -170,7 +170,15 @@ export function IdentityFlowScreen({
   const keyboardRevealBaseScrollYRef = useRef<number | null>(null);
   const keyboardRevealTargetScrollYRef = useRef<number | null>(null);
   const scrollYRef = useRef(0);
-  const resolvedFooter = footer;
+  const resolvedFooter =
+    actions && footer ? (
+      <>
+        {actions}
+        {footer}
+      </>
+    ) : (
+      (actions ?? footer)
+    );
   const [actionDockHeight, setActionDockHeight] = useState(0);
   const lockedBodyHeightRef = useRef(0);
   const usedFallbackBodyHeightRef = useRef(false);
@@ -183,7 +191,9 @@ export function IdentityFlowScreen({
     IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP +
     actionDockBottomPadding;
   const actionDockScrollClearance =
-    actionDockHeight > 0 ? actionDockHeight : actionDockFallbackHeight;
+    actionDockHeight > 0
+      ? actionDockHeight + IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP + actionDockBottomPadding
+      : actionDockFallbackHeight;
   const actionDockContentClearance = actionDockScrollClearance + theme.spacing.lg;
   const resolvedKeyboardActionClearance =
     keyboardActionClearance ??
@@ -228,18 +238,33 @@ export function IdentityFlowScreen({
   });
   const transitionedFooter = resolvedFooter ? (
     <Animated.View
+      onLayout={(event) => {
+        const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+        setActionDockHeight((currentHeight) =>
+          Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
+        );
+      }}
       style={[
         styles.transitionedFooter,
         { opacity: contentOpacity, transform: [{ translateY: contentEnterTranslateY }] },
       ]}
     >
-      {resolvedFooter}
+      <View style={styles.actionDockInner}>{resolvedFooter}</View>
     </Animated.View>
   ) : undefined;
   const keyboardFooterStyle =
     resolvedFooter && shouldUseManualKeyboardLift
-      ? ({ transform: [{ translateY: keyboardTranslateY }] } as unknown as ViewStyle)
-      : undefined;
+      ? ([
+          styles.actionFooter,
+          { paddingBottom: actionDockBottomPadding },
+          { transform: [{ translateY: keyboardTranslateY }] } as unknown as ViewStyle,
+        ] as StyleProp<ViewStyle>)
+      : resolvedFooter
+        ? ([
+            styles.actionFooter,
+            { paddingBottom: actionDockBottomPadding },
+          ] as StyleProp<ViewStyle>)
+        : undefined;
 
   const animateKeyboard = useCallback(
     (toValue: number, event?: KeyboardEvent) => {
@@ -625,15 +650,7 @@ export function IdentityFlowScreen({
     <IdentityFlowKeyboardAvoidanceContext.Provider value={scheduleKeyboardAdjustment}>
       <View style={[styles.keyboardShell, { backgroundColor: screenBackgroundColor }]}>
         <ScreenShell
-          contentContainerStyle={[
-            styles.content,
-            contentStyle,
-            actions
-              ? {
-                  paddingBottom: actionDockContentClearance,
-                }
-              : null,
-          ]}
+          contentContainerStyle={[styles.content, contentStyle]}
           contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
           footer={transitionedFooter}
           footerContainerStyle={keyboardFooterStyle}
@@ -734,29 +751,6 @@ export function IdentityFlowScreen({
             </View>
           </Animated.View>
         </ScreenShell>
-        {actions ? (
-          <Animated.View
-            onLayout={(event) => {
-              const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-              setActionDockHeight((currentHeight) =>
-                Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
-              );
-            }}
-            pointerEvents="box-none"
-            style={[
-              styles.actionDock,
-              {
-                opacity: contentOpacity,
-                paddingBottom: actionDockBottomPadding,
-              },
-              shouldUseManualKeyboardLift
-                ? { transform: [{ translateY: keyboardTranslateY }] }
-                : null,
-            ]}
-          >
-            <View style={styles.actionDockInner}>{actions}</View>
-          </Animated.View>
-        ) : null}
       </View>
     </IdentityFlowKeyboardAvoidanceContext.Provider>
   );
@@ -1222,15 +1216,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     width: '100%',
   },
-  actionDock: {
-    alignItems: 'center',
-    bottom: 0,
-    left: 0,
+  actionFooter: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP,
-    position: 'absolute',
-    right: 0,
-    zIndex: 20,
   },
   actionDockInner: {
     gap: theme.spacing.sm,

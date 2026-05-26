@@ -205,7 +205,7 @@ function HappyTreasureOverlay({
   const [displayedTotal, setDisplayedTotal] = useState(startingTotalFaces);
   const safeScoreDelta = Math.max(1, Math.round(scoreDelta));
   const finalTotalFaces = startingTotalFaces + safeScoreDelta;
-  const subtitle = message ?? `Ganaste +${safeScoreDelta} Happy puntos`;
+  const subtitle = message ?? `Ganaste +${safeScoreDelta} Happy circles`;
 
   useEffect(() => {
     setDisplayedTotal(startingTotalFaces);
@@ -366,7 +366,7 @@ function HappyTreasureOverlay({
     >
       <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
-          accessibilityLabel={`${title}. ${subtitle}. Total ${compactNumber(finalTotalFaces)} Happy puntos.`}
+          accessibilityLabel={`${title}. ${subtitle}. Total ${compactNumber(finalTotalFaces)} Happy circles.`}
           accessibilityRole="summary"
           accessibilityViewIsModal
           accessible

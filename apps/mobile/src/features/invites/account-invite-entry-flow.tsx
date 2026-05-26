@@ -1316,19 +1316,23 @@ export function AccountSignInEntry({
     />
   );
   const isTokenSurface = entrySurface === 'token';
+  const footerSurface =
+    authSurfaceTransitioning && transitionTargetSurface ? transitionTargetSurface : entrySurface;
+  const isTokenFooterSurface = footerSurface === 'token';
   const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;
   const activeIdentityPosition = isTokenSurface ? 'top' : authIdentityPosition;
   const shouldRevealAuthPrimaryAction = !isTokenSurface && showPasswordFields;
-  const activeKeyboardActionClearance = isTokenSurface
+  const shouldRevealAuthFooterPrimaryAction = !isTokenFooterSurface && showPasswordFields;
+  const activeKeyboardActionClearance = isTokenFooterSurface
     ? AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE
     : showPasswordFields
       ? AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE
       : undefined;
   const activeFooterAction = (
     <>
-      {isTokenSurface ? tokenPrimaryAction : null}
-      {!isTokenSurface && shouldRevealAuthPrimaryAction ? authPrimaryAction : null}
-      {isTokenSurface ? tokenFooterAction : authFooterAction}
+      {isTokenFooterSurface ? tokenPrimaryAction : null}
+      {!isTokenFooterSurface && shouldRevealAuthFooterPrimaryAction ? authPrimaryAction : null}
+      {isTokenFooterSurface ? tokenFooterAction : authFooterAction}
     </>
   );
   const activeContentTransitionKey = isTokenSurface
@@ -1517,7 +1521,6 @@ export function AccountSignInEntry({
                         </View>
                       ) : null}
                     </View>
-
                   </>
                 ) : null}
               </IdentityFlowForm>
