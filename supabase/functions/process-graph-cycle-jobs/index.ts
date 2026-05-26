@@ -4,6 +4,10 @@ import {
   type PairNetEdge,
 } from '../_shared/cycle.ts';
 import { createServiceRoleClient, handlePublicRpc, jsonResponse } from '../_shared/http.ts';
+import {
+  notifySettlementProposalPending,
+  readPayloadString,
+} from '../_shared/push-notifications.ts';
 
 const graphCycleWorkerSecret = Deno.env.get('GRAPH_CYCLE_WORKER_SECRET') ?? '';
 
@@ -193,6 +197,12 @@ Deno.serve((request) => {
           if (proposalError) {
             throw proposalError;
           }
+
+          await notifySettlementProposalPending(
+            client,
+            job.actorUserId,
+            readPayloadString(proposal, 'proposalId'),
+          );
 
           const result = {
             status: 'proposal_created',

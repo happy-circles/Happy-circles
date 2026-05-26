@@ -7,6 +7,9 @@ type MutableRef<T> = {
 
 type StateSetter<T> = (value: T | ((current: T) => T)) => void;
 
+const CONTACT_RESOLUTION_FAILURE_MESSAGE =
+  'No pudimos revisar algunos numeros de tu agenda. Puedes seguir agregando los contactos que aparecen.';
+
 export async function pumpAddPersonResolutionQueue({
   inFlightResolutionSetRef,
   mergeAndPersistTargetResolutions,
@@ -79,9 +82,7 @@ export async function pumpAddPersonResolutionQueue({
           visibleResolutionPhonesRef.current.has(phoneE164),
         );
         if (affectsVisibleContact && scanRunIdRef.current === activeRunId) {
-          setMessage(
-            error instanceof Error ? error.message : 'No se pudo revisar esta parte de tu agenda.',
-          );
+          setMessage(formatContactResolutionError(error));
         }
       } finally {
         if (scanRunIdRef.current === activeRunId) {
@@ -108,4 +109,28 @@ export async function pumpAddPersonResolutionQueue({
       });
     }
   }
+}
+
+function formatContactResolutionError(error: unknown): string {
+  if (isValidationError(error)) {
+    return CONTACT_RESOLUTION_FAILURE_MESSAGE;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return 'No se pudo revisar esta parte de tu agenda.';
+}
+
+function isValidationError(error: unknown): boolean {
+  if (error instanceof Error && error.name === 'ZodError') {
+    return true;
+  }
+
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    Array.isArray((error as { readonly issues?: unknown }).issues)
+  );
 }

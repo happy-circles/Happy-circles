@@ -78,6 +78,12 @@ verify_jwt = false
 [functions.report-client-error]
 verify_jwt = false
 
+[functions.register-push-token]
+verify_jwt = true
+
+[functions.send-push-notifications]
+verify_jwt = false
+
 [functions.send-welcome-email]
 verify_jwt = true
 

@@ -1,5 +1,9 @@
 import { triggerGraphCycleWorker } from '../_shared/cycle-worker.ts';
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
+import {
+  notifySettlementProposalPending,
+  readPayloadString,
+} from '../_shared/push-notifications.ts';
 
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId) => {
@@ -14,6 +18,12 @@ Deno.serve((request) =>
     if (error) {
       throw error;
     }
+
+    await notifySettlementProposalPending(
+      client,
+      actorUserId,
+      readPayloadString(data, 'proposalId'),
+    );
 
     if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
       const status = (data as Record<string, unknown>).status;

@@ -1,4 +1,5 @@
 import { createServiceRoleClient, handleRpc, requireString } from '../_shared/http.ts';
+import { notifyFriendshipInviteReview, readPayloadString } from '../_shared/push-notifications.ts';
 
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId) => {
@@ -12,6 +13,8 @@ Deno.serve((request) =>
     if (error) {
       throw error;
     }
+
+    await notifyFriendshipInviteReview(client, actorUserId, readPayloadString(data, 'inviteId'));
 
     return data;
   }),

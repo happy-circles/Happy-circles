@@ -67,6 +67,7 @@ import { SurfaceCard } from '@/components/surface-card';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
 import {
+  addNotificationReceivedListener,
   addNotificationResponseListener,
   cancelScheduledPendingReminders,
   cancelScheduledReminders,
@@ -77,6 +78,7 @@ import {
   setLocalNotificationBadgeCount,
   type NotificationRoute,
 } from '@/lib/notifications';
+import { disableCurrentPushDevice, registerCurrentPushDevice } from '@/lib/push-registration';
 import { notificationViewedKeysWithLocalCache, useAppSnapshot } from '@/lib/live-data';
 import { returnToRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
@@ -255,6 +257,7 @@ function NotificationBridge() {
   const handledNotificationIdsRef = useRef<Set<string>>(new Set());
   const lastNotificationSyncSignatureRef = useRef<string | null>(null);
   const notificationSyncVersionRef = useRef(0);
+  const snapshotRefetchRef = useRef(snapshotQuery.refetch);
   const pendingSection = snapshotQuery.data?.activitySections.find(
     (section) => section.key === 'pending',
   );
@@ -306,10 +309,19 @@ function NotificationBridge() {
   ]);
 
   useEffect(() => {
+    snapshotRefetchRef.current = snapshotQuery.refetch;
+  }, [snapshotQuery.refetch]);
+
+  useEffect(() => {
     void configureNotifications();
 
     let isMounted = true;
-    let currentSubscription: { remove(): void } | null = null;
+    let receivedSubscription: { remove(): void } | null = null;
+    let responseSubscription: { remove(): void } | null = null;
+
+    function refetchSnapshotFromNotification() {
+      void snapshotRefetchRef.current().catch(() => undefined);
+    }
 
     function openNotificationRoute(route: NotificationRoute | null) {
       if (!route || handledNotificationIdsRef.current.has(route.id)) {
@@ -317,6 +329,7 @@ function NotificationBridge() {
       }
 
       handledNotificationIdsRef.current.add(route.id);
+      refetchSnapshotFromNotification();
       returnToRoute(router, route.href as Href);
     }
 
@@ -326,17 +339,65 @@ function NotificationBridge() {
       }
     });
 
+    void addNotificationReceivedListener(() => {
+      refetchSnapshotFromNotification();
+    }).then((subscription) => {
+      receivedSubscription = subscription;
+    });
+
     void addNotificationResponseListener((response) => {
+      refetchSnapshotFromNotification();
       openNotificationRoute(notificationRouteFromResponse(response));
     }).then((subscription) => {
-      currentSubscription = subscription;
+      responseSubscription = subscription;
     });
 
     return () => {
       isMounted = false;
-      currentSubscription?.remove();
+      receivedSubscription?.remove();
+      responseSubscription?.remove();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (session.status === 'loading' || !session.userId || !session.currentDeviceId) {
+      return undefined;
+    }
+
+    if (
+      session.notificationsEnabled &&
+      session.setupState.notificationsPermissionStatus === 'granted'
+    ) {
+      void registerCurrentPushDevice(session.userId, session.currentDeviceId).catch((error) => {
+        console.warn(
+          'Failed to register push device',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+      return undefined;
+    }
+
+    if (
+      !session.notificationsEnabled ||
+      session.setupState.notificationsPermissionStatus === 'denied' ||
+      session.setupState.notificationsPermissionStatus === 'unavailable'
+    ) {
+      void disableCurrentPushDevice(session.userId, session.currentDeviceId).catch((error) => {
+        console.warn(
+          'Failed to disable push device',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    }
+
+    return undefined;
+  }, [
+    session.currentDeviceId,
+    session.notificationsEnabled,
+    session.setupState.notificationsPermissionStatus,
+    session.status,
+    session.userId,
+  ]);
 
   useEffect(() => {
     if (

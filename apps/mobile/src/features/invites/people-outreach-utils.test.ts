@@ -27,6 +27,7 @@ vi.mock('expo-contacts', () => ({
 }));
 
 import {
+  buildManualPhoneE164,
   buildContactPhoneOptions,
   CONTACTS_PAGE_SIZE,
   readContactsPageFromDevice,
@@ -45,12 +46,18 @@ describe('contact phone normalization', () => {
         { id: 'local-co', label: 'mobile', number: '300 123 4567' },
         { id: 'us', label: 'work', number: '+1 (415) 555-2671' },
         { id: 'short', label: 'other', number: '123' },
+        { id: 'too-long', label: 'other', number: '+57 300 123 4567 9999999999999' },
         { id: 'duplicate', label: 'mobile', number: '+57 300 123 4567' },
       ],
     } as never);
 
     expect(options.map((option) => option.phoneE164)).toEqual(['+573001234567', '+14155552671']);
     expect(options.map((option) => option.label)).toEqual(['mobile', 'work']);
+  });
+
+  it('drops manually entered phone numbers that exceed the backend contract', () => {
+    expect(buildManualPhoneE164('+57 300 123 4567 9999999999999')).toBeNull();
+    expect(buildManualPhoneE164('300 123 4567')).toBe('+573001234567');
   });
 });
 

@@ -1,4 +1,5 @@
 import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
+import { notifyFinancialRequestPending, readPayloadString } from '../_shared/push-notifications.ts';
 
 const TRANSACTION_CATEGORIES = new Set([
   'food_drinks',
@@ -52,6 +53,8 @@ Deno.serve((request) =>
     if (error) {
       throw error;
     }
+
+    await notifyFinancialRequestPending(client, actorUserId, readPayloadString(data, 'requestId'));
 
     return data;
   }),

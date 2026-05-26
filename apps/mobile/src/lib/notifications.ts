@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import type * as ExpoNotifications from 'expo-notifications';
-import type { EventSubscription, NotificationResponse } from 'expo-notifications';
+import type { EventSubscription, Notification, NotificationResponse } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { theme } from '@/lib/theme';
@@ -88,6 +88,20 @@ function mapNotificationPermissionStatus(
   return 'undetermined';
 }
 
+function getExpoProjectId(): string | null {
+  const easConfig = Constants.easConfig as { readonly projectId?: string } | null;
+  const expoConfig = Constants.expoConfig as {
+    readonly extra?: {
+      readonly eas?: {
+        readonly projectId?: string;
+      };
+    };
+  } | null;
+  const projectId = easConfig?.projectId ?? expoConfig?.extra?.eas?.projectId ?? null;
+
+  return typeof projectId === 'string' && projectId.trim().length > 0 ? projectId.trim() : null;
+}
+
 export async function configureNotifications(): Promise<void> {
   if (configured) {
     return;
@@ -152,6 +166,41 @@ export async function requestLocalNotificationPermissionStatus(): Promise<Notifi
 
 export async function requestLocalNotificationPermission(): Promise<boolean> {
   return (await requestLocalNotificationPermissionStatus()) === 'granted';
+}
+
+export async function getLocalExpoPushToken(): Promise<string | null> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return null;
+  }
+
+  await configureNotifications();
+
+  const permissionStatus = mapNotificationPermissionStatus(
+    await Notifications.getPermissionsAsync(),
+    Notifications,
+  );
+  if (permissionStatus !== 'granted') {
+    return null;
+  }
+
+  const projectId = getExpoProjectId();
+  if (!projectId) {
+    return null;
+  }
+
+  try {
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    return typeof token.data === 'string' && token.data.trim().length > 0
+      ? token.data.trim()
+      : null;
+  } catch (error) {
+    console.warn(
+      'Failed to read Expo push token',
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
 }
 
 export async function cancelScheduledReminders(): Promise<void> {
@@ -284,6 +333,14 @@ export function addNotificationResponseListener(
 ): Promise<EventSubscription | null> {
   return loadNotificationsModule().then((Notifications) =>
     Notifications ? Notifications.addNotificationResponseReceivedListener(listener) : null,
+  );
+}
+
+export function addNotificationReceivedListener(
+  listener: (notification: Notification) => void,
+): Promise<EventSubscription | null> {
+  return loadNotificationsModule().then((Notifications) =>
+    Notifications ? Notifications.addNotificationReceivedListener(listener) : null,
   );
 }
 

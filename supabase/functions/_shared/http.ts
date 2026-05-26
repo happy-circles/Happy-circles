@@ -8,10 +8,12 @@ const FUNCTION_BODY_LIMITS: Record<string, number> = {
   'analytics-ingest': 128 * 1024,
   'get-app-snapshot': 4 * 1024,
   'process-graph-cycle-jobs': 16 * 1024,
+  'register-push-token': 8 * 1024,
+  'send-push-notifications': 16 * 1024,
 };
 const CORS_HEADERS = {
   'access-control-allow-headers':
-    'authorization, x-client-info, apikey, content-type, x-request-id, x-idempotency-key',
+    'authorization, x-client-info, apikey, content-type, x-request-id, x-idempotency-key, x-worker-secret',
   'access-control-allow-methods': 'POST, OPTIONS',
   'access-control-allow-origin': '*',
   'access-control-max-age': '86400',

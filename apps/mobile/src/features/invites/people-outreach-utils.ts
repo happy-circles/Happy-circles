@@ -58,6 +58,9 @@ export type ContactsPageResult = {
   readonly hasNextPage: boolean;
 };
 
+const PHONE_E164_MIN_LENGTH = 8;
+const PHONE_E164_MAX_LENGTH = 24;
+
 export function buildAppInviteLink(deliveryToken: string): string {
   return `${appConfig.appWebOrigin.replace(/\/$/, '')}/join/${deliveryToken}`;
 }
@@ -157,15 +160,17 @@ export function buildManualPhoneE164(rawValue: string): string | null {
 
   if (trimmed.startsWith('+')) {
     const digits = normalizePhoneDigits(trimmed);
-    return digits.length >= 8 ? `+${digits}` : null;
+    const phoneE164 = `+${digits}`;
+    return isValidContactPhoneE164(phoneE164) ? phoneE164 : null;
   }
 
   const digits = normalizePhoneDigits(trimmed);
-  if (digits.length < 8) {
+  if (digits.length < PHONE_E164_MIN_LENGTH) {
     return null;
   }
 
-  return buildPhoneE164(DEFAULT_COUNTRY.callingCode, digits);
+  const phoneE164 = buildPhoneE164(DEFAULT_COUNTRY.callingCode, digits);
+  return isValidContactPhoneE164(phoneE164) ? phoneE164 : null;
 }
 
 export function extractInviteToken(scannedValue: string): string | null {
@@ -226,7 +231,7 @@ export function buildContactPhoneOptions(
       ? `+${digits}`
       : buildPhoneE164(country.callingCode, nationalNumber);
 
-    if (normalizePhoneDigits(phoneE164).length < 8 || seenPhones.has(phoneE164)) {
+    if (!isValidContactPhoneE164(phoneE164) || seenPhones.has(phoneE164)) {
       return [];
     }
 
@@ -244,6 +249,17 @@ export function buildContactPhoneOptions(
       },
     ];
   });
+}
+
+function isValidContactPhoneE164(value: string): boolean {
+  const normalized = value.trim();
+  const digits = normalizePhoneDigits(normalized);
+
+  return (
+    normalized.startsWith('+') &&
+    normalized.length <= PHONE_E164_MAX_LENGTH &&
+    digits.length >= PHONE_E164_MIN_LENGTH
+  );
 }
 
 function buildContactCandidate(
