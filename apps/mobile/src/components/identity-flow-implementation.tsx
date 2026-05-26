@@ -14,6 +14,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -160,7 +161,6 @@ export function IdentityFlowScreen({
     IDENTITY_FLOW_TOP_OFFSET,
     screenTitleTop + IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT + theme.spacing.lg,
   );
-  const keyboardTranslateY = useRef(new Animated.Value(0)).current;
   const fallbackScrollViewRef = useRef<ScrollView | null>(null);
   const activeScrollViewRef = scrollViewRef ?? fallbackScrollViewRef;
   const keyboardEventRef = useRef<KeyboardEvent | null>(null);
@@ -252,45 +252,22 @@ export function IdentityFlowScreen({
       <View style={styles.actionDockInner}>{resolvedFooter}</View>
     </Animated.View>
   ) : undefined;
-  const keyboardFooterStyle =
-    resolvedFooter && shouldUseManualKeyboardLift
-      ? ([
-          styles.actionFooter,
-          { paddingBottom: actionDockBottomPadding },
-          { transform: [{ translateY: keyboardTranslateY }] } as unknown as ViewStyle,
-        ] as StyleProp<ViewStyle>)
-      : resolvedFooter
-        ? ([
-            styles.actionFooter,
-            { paddingBottom: actionDockBottomPadding },
-          ] as StyleProp<ViewStyle>)
-        : undefined;
+  const keyboardFooterStyle = resolvedFooter
+    ? ([
+        styles.actionFooter,
+        { paddingBottom: actionDockBottomPadding },
+      ] as StyleProp<ViewStyle>)
+    : undefined;
 
-  const animateKeyboard = useCallback(
-    (toValue: number, event?: KeyboardEvent) => {
-      Animated.timing(keyboardTranslateY, {
-        duration: Math.max(event?.duration ?? 180, 120),
-        easing: Easing.out(Easing.cubic),
-        toValue,
-        useNativeDriver: true,
-      }).start();
-    },
-    [keyboardTranslateY],
-  );
-
-  const resetKeyboardTranslation = useCallback(
-    (event?: KeyboardEvent) => {
-      keyboardAdjustmentGenerationRef.current += 1;
-      if (keyboardAdjustmentFrameRef.current !== null) {
-        cancelAnimationFrame(keyboardAdjustmentFrameRef.current);
-        keyboardAdjustmentFrameRef.current = null;
-      }
-      keyboardEventRef.current = null;
-      keyboardFrameRef.current = null;
-      animateKeyboard(0, event);
-    },
-    [animateKeyboard],
-  );
+  const resetKeyboardTranslation = useCallback(() => {
+    keyboardAdjustmentGenerationRef.current += 1;
+    if (keyboardAdjustmentFrameRef.current !== null) {
+      cancelAnimationFrame(keyboardAdjustmentFrameRef.current);
+      keyboardAdjustmentFrameRef.current = null;
+    }
+    keyboardEventRef.current = null;
+    keyboardFrameRef.current = null;
+  }, []);
 
   const forceResetKeyboardTranslation = useCallback(() => {
     keyboardAdjustmentGenerationRef.current += 1;
@@ -300,10 +277,7 @@ export function IdentityFlowScreen({
     }
     keyboardEventRef.current = null;
     keyboardFrameRef.current = null;
-    keyboardTranslateY.stopAnimation(() => {
-      keyboardTranslateY.setValue(0);
-    });
-  }, [keyboardTranslateY]);
+  }, []);
 
   const resetKeyboardRevealScroll = useCallback(
     ({ animated = true }: { readonly animated?: boolean } = {}) => {
@@ -443,8 +417,6 @@ export function IdentityFlowScreen({
       const keyboardHeight = Math.max(0, windowHeight - keyboardTop);
       keyboardFrameRef.current = keyboardHeight > 0 ? { top: keyboardTop } : null;
 
-      animateKeyboard(-keyboardHeight, event);
-
       if (keyboardHeight > 0) {
         scheduleKeyboardAdjustment();
       } else {
@@ -452,7 +424,6 @@ export function IdentityFlowScreen({
       }
     },
     [
-      animateKeyboard,
       keyboardVerticalOffset,
       resetKeyboardRevealScroll,
       scheduleKeyboardAdjustment,
@@ -472,12 +443,9 @@ export function IdentityFlowScreen({
         keyboardEventRef.current = null;
         keyboardFrameRef.current = null;
         resetKeyboardRevealScroll({ animated: false });
-        keyboardTranslateY.stopAnimation(() => {
-          keyboardTranslateY.setValue(0);
-          requestAnimationFrame(() => resolve());
-        });
+        requestAnimationFrame(() => resolve());
       }),
-    [keyboardTranslateY, resetKeyboardRevealScroll],
+    [resetKeyboardRevealScroll],
   );
 
   const handleScroll = useCallback(
@@ -582,9 +550,7 @@ export function IdentityFlowScreen({
       keyboardEventRef.current = event;
       scheduleKeyboardAdjustment();
     });
-    const hideSubscription = Keyboard.addListener('keyboardWillHide', (event) => {
-      resetKeyboardTranslation(event);
-    });
+    const hideSubscription = Keyboard.addListener('keyboardWillHide', resetKeyboardTranslation);
     const didHideSubscription =
       Platform.OS === 'ios'
         ? Keyboard.addListener('keyboardDidHide', () => {
@@ -605,14 +571,10 @@ export function IdentityFlowScreen({
       keyboardEventRef.current = null;
       keyboardFrameRef.current = null;
       resetKeyboardRevealScroll({ animated: false });
-      keyboardTranslateY.stopAnimation(() => {
-        keyboardTranslateY.setValue(0);
-      });
     };
   }, [
     applyKeyboardFrame,
     forceResetKeyboardTranslation,
-    keyboardTranslateY,
     resetKeyboardTranslation,
     resetKeyboardRevealScroll,
     scheduleKeyboardAdjustment,
@@ -648,7 +610,12 @@ export function IdentityFlowScreen({
 
   return (
     <IdentityFlowKeyboardAvoidanceContext.Provider value={scheduleKeyboardAdjustment}>
-      <View style={[styles.keyboardShell, { backgroundColor: screenBackgroundColor }]}>
+      <KeyboardAvoidingView
+        behavior="padding"
+        enabled={shouldUseManualKeyboardLift}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+        style={[styles.keyboardShell, { backgroundColor: screenBackgroundColor }]}
+      >
         <ScreenShell
           contentContainerStyle={[styles.content, contentStyle]}
           contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
@@ -751,7 +718,7 @@ export function IdentityFlowScreen({
             </View>
           </Animated.View>
         </ScreenShell>
-      </View>
+      </KeyboardAvoidingView>
     </IdentityFlowKeyboardAvoidanceContext.Provider>
   );
 }
