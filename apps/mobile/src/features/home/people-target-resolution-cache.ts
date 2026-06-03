@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 
 import {
   CONTACT_RESOLUTION_CACHE_TTL_MS,
+  contactResolutionCacheTtlMs,
   isReusableCachedContactResolution,
 } from '@/features/home/contacts-sheet-helpers';
 import type { PeopleTargetResolution } from '@/lib/live-data';
@@ -60,10 +61,14 @@ export async function createPeopleTargetResolutionCacheKey(input: {
 
 export function isPeopleTargetResolutionCacheEntryFresh(input: {
   readonly resolvedAt: number;
+  readonly status?: PeopleTargetResolution['status'];
   readonly now?: number;
 }): boolean {
   const now = input.now ?? Date.now();
-  return now - input.resolvedAt <= CONTACT_RESOLUTION_CACHE_TTL_MS;
+  const ttlMs = input.status
+    ? contactResolutionCacheTtlMs(input.status)
+    : CONTACT_RESOLUTION_CACHE_TTL_MS;
+  return now - input.resolvedAt <= ttlMs;
 }
 
 export function stripPhoneFromPeopleTargetResolution(
@@ -153,13 +158,17 @@ export async function loadPeopleTargetResolutionCache(
     );
 
     for (const row of rows) {
-      if (!isPeopleTargetResolutionCacheEntryFresh({ resolvedAt: row.resolved_at })) {
-        continue;
-      }
-
       const phoneE164 = phoneByHash.get(row.phone_hash);
       const storedResolution = parseStoredResolution(row.resolution_json);
       if (!phoneE164 || !storedResolution) {
+        continue;
+      }
+      if (
+        !isPeopleTargetResolutionCacheEntryFresh({
+          resolvedAt: row.resolved_at,
+          status: storedResolution.status,
+        })
+      ) {
         continue;
       }
 

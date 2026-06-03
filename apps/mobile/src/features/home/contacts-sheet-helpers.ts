@@ -7,6 +7,8 @@ import type {
 
 export const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
 export const CONTACT_RESOLUTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 15 * 60 * 1000;
 export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
 export const CONTACT_DISPLAY_LIMIT = 36;
 export const CONTACT_SEARCH_DISPLAY_LIMIT = 60;
@@ -126,7 +128,21 @@ export function shouldShowInApp(resolution: PeopleTargetResolution | null): bool
 export function isReusableCachedContactResolution(
   resolution: PeopleTargetResolution | null | undefined,
 ): resolution is PeopleTargetResolution {
-  return resolution?.status === 'active_user' || resolution?.status === 'already_related';
+  return Boolean(resolution);
+}
+
+export function contactResolutionCacheTtlMs(
+  status: PeopleTargetResolution['status'],
+): number {
+  if (status === 'no_account') {
+    return CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS;
+  }
+
+  if (status === 'pending_activation' || status === 'pending_friendship') {
+    return CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS;
+  }
+
+  return CONTACT_RESOLUTION_CACHE_TTL_MS;
 }
 
 export function filterReusableContactResolutionCache(

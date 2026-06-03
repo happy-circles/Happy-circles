@@ -76,8 +76,6 @@ const IDENTITY_FLOW_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const IDENTITY_FLOW_AVATAR_EDIT_PENCIL_SIZE = 32;
 const IDENTITY_FLOW_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
 const IDENTITY_FLOW_FIELD_ERROR_HEIGHT = 24;
-const IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP = 24;
-const IDENTITY_FLOW_ACTION_DOCK_PADDING_BOTTOM = 24;
 const IDENTITY_FLOW_ACTIONS_MIN_HEIGHT = 56;
 export const IDENTITY_FLOW_LARGE_FACE_VIEW_BOX = '222 222 236 236';
 const IDENTITY_FLOW_MESSAGE_SLOT_HEIGHT = 72;
@@ -154,7 +152,6 @@ export function IdentityFlowScreen({
   const insets = useSafeAreaInsets();
   const shouldUseManualKeyboardLift = Platform.OS === 'ios';
   const bottomInset = Math.max(0, insets.bottom);
-  const actionDockBottomPadding = Math.max(IDENTITY_FLOW_ACTION_DOCK_PADDING_BOTTOM, bottomInset);
   const screenBackgroundColor = activeTheme.colors.background;
   const screenTitleTop = Math.max(0, insets.top) + theme.spacing.xxs;
   const titleClearedTopOffset = Math.max(
@@ -179,26 +176,20 @@ export function IdentityFlowScreen({
     ) : (
       (actions ?? footer)
     );
-  const [actionDockHeight, setActionDockHeight] = useState(0);
+  const [actionStackHeight, setActionStackHeight] = useState(0);
   const lockedBodyHeightRef = useRef(0);
   const usedFallbackBodyHeightRef = useRef(false);
   const [bodyHeight, setBodyHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [hasMeasuredBody, setHasMeasuredBody] = useState(false);
   const layoutReady = hasMeasuredBody && bodyHeight > 0;
-  const actionDockFallbackHeight =
-    IDENTITY_FLOW_ACTIONS_MIN_HEIGHT +
-    IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP +
-    actionDockBottomPadding;
-  const actionDockScrollClearance =
-    actionDockHeight > 0
-      ? actionDockHeight + IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP + actionDockBottomPadding
-      : actionDockFallbackHeight;
-  const actionDockContentClearance = actionDockScrollClearance + theme.spacing.lg;
+  const actionStackKeyboardClearance =
+    (actionStackHeight > 0 ? actionStackHeight : IDENTITY_FLOW_ACTIONS_MIN_HEIGHT) +
+    IDENTITY_FLOW_KEYBOARD_FIELD_GAP;
   const resolvedKeyboardActionClearance =
     keyboardActionClearance ??
-    (actions
-      ? Math.max(IDENTITY_FLOW_KEYBOARD_FIELD_GAP, actionDockContentClearance)
+    (resolvedFooter
+      ? Math.max(IDENTITY_FLOW_KEYBOARD_FIELD_GAP, actionStackKeyboardClearance)
       : IDENTITY_FLOW_KEYBOARD_FIELD_GAP);
   const layoutMetrics = resolveIdentityFlowLayout({
     bodyHeight,
@@ -236,28 +227,23 @@ export function IdentityFlowScreen({
     inputRange: [0, 1],
     outputRange: [IDENTITY_FLOW_CONTENT_HIDDEN_OPACITY, 1],
   });
-  const transitionedFooter = resolvedFooter ? (
+  const transitionedActionStack = resolvedFooter ? (
     <Animated.View
       onLayout={(event) => {
         const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-        setActionDockHeight((currentHeight) =>
+        setActionStackHeight((currentHeight) =>
           Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
         );
       }}
       style={[
-        styles.transitionedFooter,
+        styles.transitionedActionStack,
         { opacity: contentOpacity, transform: [{ translateY: contentEnterTranslateY }] },
       ]}
     >
-      <View style={styles.actionDockInner}>{resolvedFooter}</View>
+      <View style={styles.actionStack}>{resolvedFooter}</View>
     </Animated.View>
   ) : undefined;
-  const keyboardFooterStyle = resolvedFooter
-    ? ([
-        styles.actionFooter,
-        { paddingBottom: actionDockBottomPadding },
-      ] as StyleProp<ViewStyle>)
-    : undefined;
+  const contentBottomPadding = theme.spacing.xl + bottomInset;
 
   const resetKeyboardTranslation = useCallback(() => {
     keyboardAdjustmentGenerationRef.current += 1;
@@ -423,12 +409,7 @@ export function IdentityFlowScreen({
         resetKeyboardRevealScroll({ animated: true });
       }
     },
-    [
-      keyboardVerticalOffset,
-      resetKeyboardRevealScroll,
-      scheduleKeyboardAdjustment,
-      windowHeight,
-    ],
+    [keyboardVerticalOffset, resetKeyboardRevealScroll, scheduleKeyboardAdjustment, windowHeight],
   );
 
   const resetKeyboardForHandoff = useCallback(
@@ -617,11 +598,12 @@ export function IdentityFlowScreen({
         style={[styles.keyboardShell, { backgroundColor: screenBackgroundColor }]}
       >
         <ScreenShell
-          contentContainerStyle={[styles.content, contentStyle]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: contentBottomPadding },
+            contentStyle,
+          ]}
           contentWidthStyle={[styles.contentWidth, contentWidthStyle]}
-          footer={transitionedFooter}
-          footerContainerStyle={keyboardFooterStyle}
-          footerDivider={false}
           headerVariant="plain"
           headerVisible={false}
           largeTitle={false}
@@ -712,6 +694,7 @@ export function IdentityFlowScreen({
                       <View style={styles.messageSlot}>{message}</View>
                     ) : null}
                     <View style={styles.contentSlot}>{children}</View>
+                    {transitionedActionStack}
                   </View>
                 </Animated.View>
               </Animated.View>
@@ -1176,18 +1159,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     width: '100%',
   },
-  transitionedFooter: {
+  transitionedActionStack: {
     width: '100%',
   },
   contentSlot: {
     gap: theme.spacing.sm,
     width: '100%',
   },
-  actionFooter: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: IDENTITY_FLOW_ACTION_DOCK_PADDING_TOP,
-  },
-  actionDockInner: {
+  actionStack: {
+    alignSelf: 'center',
     gap: theme.spacing.sm,
     maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
     width: '100%',

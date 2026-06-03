@@ -7,6 +7,7 @@ import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-c
 import { queryClient } from '@/lib/query-client';
 import { AppSnapshotCacheProvider } from '@/lib/live-data/app-snapshot-cache-provider';
 import { installGlobalErrorReporting } from '@/lib/support-errors';
+import { AddPersonContactPreloadBridge } from '@/features/home/add-person-contact-preload-bridge';
 import { HappyRewardProvider } from './happy-reward-provider';
 import { ThemeProvider, useAppTheme } from './theme-provider';
 
@@ -61,7 +62,10 @@ function AppProvidersContent({ children }: PropsWithChildren) {
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <AppSnapshotCacheProvider>
-            <HappyRewardProvider>{children}</HappyRewardProvider>
+            <HappyRewardProvider>
+              <AddPersonContactPreloadBridge />
+              {children}
+            </HappyRewardProvider>
           </AppSnapshotCacheProvider>
         </SessionProvider>
       </QueryClientProvider>

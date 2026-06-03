@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { Platform } from 'react-native';
 
 import { pumpAddPersonResolutionQueue } from '@/features/home/add-person-contact-resolution-queue';
-import {
-  clearWarmContactScanCache,
-  readWarmContactScanCache,
-  updateWarmContactScanTargetCache,
-  writeWarmContactScanCache,
-  type WarmContactScanCache,
-} from '@/features/home/add-person-contact-scan-cache';
+import { updateWarmContactScanTargetCache } from '@/features/home/add-person-contact-scan-cache';
+import { runAddPersonContactScan } from '@/features/home/add-person-contact-scan-runner';
 import { useAddPersonContactPermissionActions } from '@/features/home/add-person-contact-permissions';
 import { useAddPersonOutreachActions } from '@/features/home/add-person-outreach-actions';
 import { useAddPersonQrActions } from '@/features/home/add-person-qr-actions';
@@ -22,12 +16,10 @@ import {
 } from '@/features/home/contacts-sheet-helpers';
 import {
   loadPeopleTargetResolutionCache,
-  pruneExpiredPeopleTargetResolutionCache,
   savePeopleTargetResolutionsToCache,
 } from '@/features/home/people-target-resolution-cache';
 import {
   canReadContactsPermissionStatus,
-  getContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
 import {
@@ -37,11 +29,7 @@ import {
   useResolvePeopleTargetsMutation,
 } from '@/lib/live-data';
 import { useSession } from '@/providers/session-provider';
-import {
-  CONTACTS_PAGE_SIZE,
-  type ContactCandidate,
-  readContactsPageFromDevice,
-} from '@/features/invites/people-outreach-utils';
+import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
 
 export function useAddPersonContactsSheetController({
   initialSearchValue,
@@ -224,184 +212,65 @@ export function useAddPersonContactsSheetController({
     [pumpResolutionQueue],
   );
 
-  async function loadCachedTargetResolutionsForPhones(
-    runId: number,
-    phoneE164List: readonly string[],
-  ) {
-    if (!session.userId || phoneE164List.length === 0) {
-      return;
-    }
-
-    try {
-      const cachedResolutions = await loadPeopleTargetResolutionCache(
-        session.userId,
-        phoneE164List,
-      );
-      if (scanRunIdRef.current !== runId) {
+  const loadCachedTargetResolutionsForPhones = useCallback(
+    async (runId: number, phoneE164List: readonly string[]) => {
+      if (!session.userId || phoneE164List.length === 0) {
         return;
       }
 
-      mergeTargetResolutions(Object.values(cachedResolutions));
-    } catch {
-      // Persistent cache is an optimization. Contact loading should continue without it.
-    }
-  }
-
-  function resetContactScan(runId: number, warmCache: WarmContactScanCache | null = null) {
-    scanRunIdRef.current = runId;
-    pendingResolutionQueueRef.current = [];
-    pendingResolutionSetRef.current.clear();
-    inFlightResolutionSetRef.current.clear();
-    visibleResolutionPhonesRef.current.clear();
-    const nextContacts = warmCache?.contacts ?? [];
-    const nextTargetCache = warmCache?.targetCache ?? {};
-
-    contactsRef.current = nextContacts;
-    targetCacheRef.current = nextTargetCache;
-    setContacts(nextContacts);
-    setTargetCache(nextTargetCache);
-    setContactsLoadedCount(nextContacts.length);
-    setContactsLoading(false);
-    setContactsScanComplete(Boolean(warmCache));
-
-    if (warmCache) {
-      setContactsPermissionStatus(warmCache.contactsPermissionStatus);
-    }
-  }
-
-  const loadContacts = useCallback(async () => {
-    const runId = scanRunIdRef.current + 1;
-    const warmCache = readWarmContactScanCache(session.userId);
-    const hasWarmContacts = Boolean(
-      warmCache &&
-      canReadContactsPermissionStatus(warmCache.contactsPermissionStatus) &&
-      warmCache.contacts.length > 0,
-    );
-
-    resetContactScan(runId, warmCache);
-
-    if (Platform.OS === 'web') {
-      setContactsPermissionStatus('unavailable');
-      contactsRef.current = [];
-      setContacts([]);
-      setContactsScanComplete(true);
-      return;
-    }
-
-    if (!hasWarmContacts) {
-      setBusyKey('load-contacts');
-      setContactsLoading(true);
-    }
-
-    try {
-      const nextStatus = await getContactsPermissionStatus();
-      if (scanRunIdRef.current !== runId) {
-        return;
-      }
-
-      setContactsPermissionStatus(nextStatus);
-
-      if (!canReadContactsPermissionStatus(nextStatus)) {
-        contactsRef.current = [];
-        targetCacheRef.current = {};
-        clearWarmContactScanCache(session.userId);
-        setContacts([]);
-        setTargetCache({});
-        setContactsLoadedCount(0);
-        setContactsScanComplete(true);
-        return;
-      }
-
-      void pruneExpiredPeopleTargetResolutionCache(session.userId).catch(() => undefined);
-
-      let pageOffset = 0;
-      let hasNextPage = true;
-      let loadedCount = 0;
-      let isFirstPage = true;
-      const refreshedContacts: ContactCandidate[] = [];
-      const refreshedContactIds = new Set<string>();
-
-      while (hasNextPage && scanRunIdRef.current === runId) {
-        const page = await readContactsPageFromDevice({
-          pageOffset,
-          pageSize: CONTACTS_PAGE_SIZE,
-        });
+      try {
+        const cachedResolutions = await loadPeopleTargetResolutionCache(
+          session.userId,
+          phoneE164List,
+        );
         if (scanRunIdRef.current !== runId) {
           return;
         }
 
-        if (page.contacts.length > 0) {
-          if (hasWarmContacts) {
-            for (const contact of page.contacts) {
-              if (!refreshedContactIds.has(contact.contactId)) {
-                refreshedContactIds.add(contact.contactId);
-                refreshedContacts.push(contact);
-              }
-            }
-          } else {
-            setContacts((current) => {
-              const existingContactIds = new Set(current.map((contact) => contact.contactId));
-              const nextContacts = [...current];
-              for (const contact of page.contacts) {
-                if (!existingContactIds.has(contact.contactId)) {
-                  existingContactIds.add(contact.contactId);
-                  nextContacts.push(contact);
-                }
-              }
+        mergeTargetResolutions(Object.values(cachedResolutions));
+      } catch {
+        // Persistent cache is an optimization. Contact loading should continue without it.
+      }
+    },
+    [mergeTargetResolutions, session.userId],
+  );
 
-              contactsRef.current = nextContacts;
-              return nextContacts;
-            });
+  const hydrateAndEnqueueResolutionPhones = useCallback(
+    (runId: number, phoneE164List: readonly string[], priority: 'visible' | 'background') => {
+      if (phoneE164List.length === 0) {
+        return;
+      }
 
-            loadedCount += page.contacts.length;
-            setContactsLoadedCount(loadedCount);
-          }
-
-          const pagePhones = uniqueContactPhoneE164List(page.contacts);
-          await loadCachedTargetResolutionsForPhones(runId, pagePhones);
-          if (scanRunIdRef.current !== runId) {
-            return;
-          }
-
-          enqueueResolutionPhones(pagePhones, 'background');
+      void loadCachedTargetResolutionsForPhones(runId, phoneE164List).finally(() => {
+        if (scanRunIdRef.current === runId) {
+          enqueueResolutionPhones(phoneE164List, priority);
         }
+      });
+    },
+    [enqueueResolutionPhones, loadCachedTargetResolutionsForPhones],
+  );
 
-        if (isFirstPage) {
-          setBusyKey((current) => (current === 'load-contacts' ? null : current));
-          isFirstPage = false;
-        }
-
-        pageOffset = page.nextPageOffset;
-        hasNextPage = page.hasNextPage;
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-
-      if (scanRunIdRef.current === runId) {
-        if (hasWarmContacts) {
-          contactsRef.current = refreshedContacts;
-          setContacts(refreshedContacts);
-          setContactsLoadedCount(refreshedContacts.length);
-        }
-
-        setContactsScanComplete(true);
-        writeWarmContactScanCache({
-          contacts: contactsRef.current,
-          contactsPermissionStatus: nextStatus,
-          targetCache: targetCacheRef.current,
-          userId: session.userId ?? null,
-        });
-      }
-    } catch (error) {
-      if (scanRunIdRef.current === runId) {
-        setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
-      }
-    } finally {
-      if (scanRunIdRef.current === runId) {
-        setContactsLoading(false);
-        setBusyKey((current) => (current === 'load-contacts' ? null : current));
-      }
-    }
-  }, [enqueueResolutionPhones, mergeTargetResolutions, session.userId]);
+  const loadContacts = useCallback(async () => {
+    await runAddPersonContactScan({
+      contactsRef,
+      hydrateAndEnqueueResolutionPhones,
+      inFlightResolutionSetRef,
+      pendingResolutionQueueRef,
+      pendingResolutionSetRef,
+      scanRunIdRef,
+      setBusyKey,
+      setContacts,
+      setContactsLoadedCount,
+      setContactsLoading,
+      setContactsPermissionStatus,
+      setContactsScanComplete,
+      setMessage,
+      setTargetCache,
+      targetCacheRef,
+      userId: session.userId,
+      visibleResolutionPhonesRef,
+    });
+  }, [hydrateAndEnqueueResolutionPhones, session.userId]);
 
   const { handleExpandLimitedContactsAccess, requestContactsAccess } =
     useAddPersonContactPermissionActions({
@@ -446,8 +315,8 @@ export function useAddPersonContactsSheetController({
 
     const visiblePhones = uniqueContactPhoneE164List(contactResolutionWindow);
     visibleResolutionPhonesRef.current = new Set(visiblePhones);
-    enqueueResolutionPhones(visiblePhones, 'visible');
-  }, [canReadContacts, contactResolutionWindow, enqueueResolutionPhones, visible]);
+    hydrateAndEnqueueResolutionPhones(scanRunIdRef.current, visiblePhones, 'visible');
+  }, [canReadContacts, contactResolutionWindow, hydrateAndEnqueueResolutionPhones, visible]);
 
   async function ensurePhoneStatuses(phoneE164List: readonly string[]) {
     const cachedResolutions = await loadPeopleTargetResolutionCache(session.userId, phoneE164List);

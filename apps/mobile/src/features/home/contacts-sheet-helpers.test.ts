@@ -103,7 +103,7 @@ describe('contact resolution queue helpers', () => {
     ).toEqual(['+573002']);
   });
 
-  it('only reuses stable contact resolutions from cross-session caches', () => {
+  it('reuses contact resolutions from warm caches', () => {
     const cachedActive = resolution('+573001', 'active_user');
     const cachedRelated = resolution('+573002', 'already_related');
     const cachedPendingActivation = resolution('+573003', 'pending_activation');
@@ -112,9 +112,9 @@ describe('contact resolution queue helpers', () => {
 
     expect(isReusableCachedContactResolution(cachedActive)).toBe(true);
     expect(isReusableCachedContactResolution(cachedRelated)).toBe(true);
-    expect(isReusableCachedContactResolution(cachedPendingActivation)).toBe(false);
-    expect(isReusableCachedContactResolution(cachedPendingFriendship)).toBe(false);
-    expect(isReusableCachedContactResolution(cachedNoAccount)).toBe(false);
+    expect(isReusableCachedContactResolution(cachedPendingActivation)).toBe(true);
+    expect(isReusableCachedContactResolution(cachedPendingFriendship)).toBe(true);
+    expect(isReusableCachedContactResolution(cachedNoAccount)).toBe(true);
 
     expect(
       filterReusableContactResolutionCache({
@@ -127,6 +127,9 @@ describe('contact resolution queue helpers', () => {
     ).toEqual({
       [cachedActive.phoneE164]: cachedActive,
       [cachedRelated.phoneE164]: cachedRelated,
+      [cachedPendingActivation.phoneE164]: cachedPendingActivation,
+      [cachedPendingFriendship.phoneE164]: cachedPendingFriendship,
+      [cachedNoAccount.phoneE164]: cachedNoAccount,
     });
   });
 });
@@ -194,19 +197,49 @@ describe('people target resolution cache helpers', () => {
     ).toEqual(original);
   });
 
-  it('uses a 24 hour freshness window', () => {
+  it('uses status-specific freshness windows', () => {
     const now = Date.parse('2026-05-06T12:00:00.000Z');
 
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
         resolvedAt: now - 23 * 60 * 60 * 1000,
+        status: 'active_user',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
         resolvedAt: now - 25 * 60 * 60 * 1000,
+        status: 'already_related',
+      }),
+    ).toBe(false);
+    expect(
+      isPeopleTargetResolutionCacheEntryFresh({
+        now,
+        resolvedAt: now - 5 * 60 * 60 * 1000,
+        status: 'no_account',
+      }),
+    ).toBe(true);
+    expect(
+      isPeopleTargetResolutionCacheEntryFresh({
+        now,
+        resolvedAt: now - 7 * 60 * 60 * 1000,
+        status: 'no_account',
+      }),
+    ).toBe(false);
+    expect(
+      isPeopleTargetResolutionCacheEntryFresh({
+        now,
+        resolvedAt: now - 10 * 60 * 1000,
+        status: 'pending_friendship',
+      }),
+    ).toBe(true);
+    expect(
+      isPeopleTargetResolutionCacheEntryFresh({
+        now,
+        resolvedAt: now - 20 * 60 * 1000,
+        status: 'pending_activation',
       }),
     ).toBe(false);
   });

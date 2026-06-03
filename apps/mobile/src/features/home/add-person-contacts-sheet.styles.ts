@@ -168,7 +168,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   },
   sheetContent: {
     gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xs,
+    paddingBottom: theme.spacing.xl,
   },
   contactSection: {
     gap: theme.spacing.sm,
@@ -264,6 +264,22 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
+  },
+  manualInviteCard: {
+    alignSelf: 'stretch',
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+    padding: theme.spacing.sm,
+  },
+  manualInviteCopy: {
+    gap: 2,
+  },
+  manualInviteTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.callout,
+    fontWeight: '800',
   },
   scannerWrap: {
     borderRadius: theme.radius.medium,

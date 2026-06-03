@@ -136,7 +136,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.happycircles.app',
-    softwareKeyboardLayoutMode: 'pan',
+    softwareKeyboardLayoutMode: 'resize',
     versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',

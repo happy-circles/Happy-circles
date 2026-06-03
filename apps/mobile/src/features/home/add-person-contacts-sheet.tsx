@@ -24,6 +24,10 @@ import { ContactRow } from '@/features/home/add-person-contact-row';
 import { useAppTheme } from '@/providers/theme-provider';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
 import { AppText } from '@/components/app-text';
+import {
+  buildManualPhoneE164,
+  formatPhonePreview,
+} from '@/features/invites/people-outreach-utils';
 
 export function AddPersonContactsSheet({
   currentUserAvatarUrl,
@@ -81,6 +85,11 @@ export function AddPersonContactsSheet({
     visible,
   });
   const stickySearchIndex = transactionContext ? 2 : 1;
+  const manualInvitePhoneE164 = buildManualPhoneE164(searchValue);
+  const manualInviteAlias = manualInvitePhoneE164
+    ? resolveManualInviteAlias(searchValue, manualInvitePhoneE164)
+    : null;
+  const manualInviteBusy = Boolean(manualInvitePhoneE164 && busyKey === manualInvitePhoneE164);
   const compactActionsRevealY = useRef(new Animated.Value(0)).current;
   const compactActionsRevealStyle = useMemo(
     () => ({
@@ -116,11 +125,24 @@ export function AddPersonContactsSheet({
     );
   }
 
+  function handleManualInvitePress() {
+    if (!manualInvitePhoneE164 || !manualInviteAlias || busyKey) {
+      return;
+    }
+
+    void handleCreateOutreach({
+      alias: manualInviteAlias,
+      phoneE164: manualInvitePhoneE164,
+      phoneLabel: 'Manual',
+      sourceContext: 'home_add_contact_manual',
+    });
+  }
+
   return (
     <>
       <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.sheetScrim, { backgroundColor: activeTheme.colors.overlay }]}
         >
           <Pressable onPress={onClose} style={styles.sheetBackdrop} />
@@ -197,10 +219,38 @@ export function AddPersonContactsSheet({
                         {searchValue.trim().length > 0 ? 'Sin resultados' : 'Sin contactos utiles'}
                       </AppText>
                       <AppText style={styles.emptyText}>
-                        {searchValue.trim().length > 0
-                          ? 'Prueba con otro nombre o celular.'
-                          : 'No encontramos contactos con numero en la agenda disponible.'}
+                        {manualInvitePhoneE164
+                          ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
+                          : searchValue.trim().length > 0
+                            ? 'Prueba con otro nombre o celular.'
+                            : 'No encontramos contactos con numero en la agenda disponible.'}
                       </AppText>
+                      {manualInvitePhoneE164 ? (
+                        <View
+                          style={[
+                            styles.manualInviteCard,
+                            {
+                              backgroundColor: activeTheme.colors.surfaceMuted,
+                              borderColor: activeTheme.colors.border,
+                            },
+                          ]}
+                        >
+                          <View style={styles.manualInviteCopy}>
+                            <AppText style={styles.manualInviteTitle}>Invitacion directa</AppText>
+                            <AppText style={styles.emptyText}>
+                              {formatPhonePreview(manualInvitePhoneE164)}
+                            </AppText>
+                          </View>
+                          <PrimaryAction
+                            compact
+                            disabled={Boolean(busyKey)}
+                            icon="paper-plane-outline"
+                            label={manualInviteBusy ? 'Preparando...' : 'Enviar invitacion'}
+                            loading={manualInviteBusy}
+                            onPress={handleManualInvitePress}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
                 </>
@@ -430,4 +480,13 @@ export function AddPersonContactsSheet({
       </Modal>
     </>
   );
+}
+
+function resolveManualInviteAlias(searchValue: string, phoneE164: string): string {
+  const namePart = searchValue
+    .replace(/[+\d().\-\s]/g, ' ')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
+
+  return namePart.length > 0 ? namePart : formatPhonePreview(phoneE164);
 }
