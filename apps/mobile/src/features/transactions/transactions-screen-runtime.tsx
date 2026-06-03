@@ -13,7 +13,7 @@ import { SectionBlock } from '@/components/section-block';
 import { pushRoute } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
-  buildHistoryCases,
+  buildMovementHistoryCases,
   friendlyHistoryStepLabel,
   historyAmountIsVoided,
   historyCardTitle,
@@ -189,7 +189,7 @@ export function TransactionsScreen() {
   const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const historyCases = useMemo(
     () =>
-      buildHistoryCases(
+      buildMovementHistoryCases(
         historyTransactionItems.map((item) => activityHistoryCaseItem(item)),
       ).filter(
         (itemCase) =>
@@ -224,7 +224,7 @@ export function TransactionsScreen() {
   function renderHistoryCase({ item }: { readonly item: (typeof historyCases)[number] }) {
     const latest = item.latest;
     const caseAmountLabel = historyCaseAmountLabel(latest);
-    const caseTone = (item.isCycleSnippet ? 'cycle' : historyImpactTone(latest)) as HistoryCaseTone;
+    const caseTone = historyImpactTone(latest) as HistoryCaseTone;
     const caseTitle = friendlyHistoryStepLabel(latest);
     const caseDescription = historyCardTitle(item);
     const caseEyebrow = historyCaseEyebrow(item);

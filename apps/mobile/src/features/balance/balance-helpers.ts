@@ -150,6 +150,18 @@ export function categoryImpactAmount(row: BalanceAnalyticsCategoryRowDto): numbe
   return row.netMinor;
 }
 
+export function categoryFlowAmount(row: BalanceAnalyticsCategoryRowDto): number {
+  return Math.abs(row.iOweMinor) + Math.abs(row.owedToMeMinor);
+}
+
+export function categoryHasCurrentFlow(row: BalanceAnalyticsCategoryRowDto): boolean {
+  return categoryFlowAmount(row) > 0;
+}
+
+export function categoryFocusDisplayAmount(row: BalanceAnalyticsCategoryRowDto): number {
+  return row.netMinor !== 0 ? row.netMinor : categoryFlowAmount(row);
+}
+
 export function personLensAmount(
   row: BalanceAnalyticsPersonRowDto,
   lens: BalanceAnalyticsLens,

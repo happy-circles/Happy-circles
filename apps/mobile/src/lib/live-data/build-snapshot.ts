@@ -145,6 +145,7 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
   const settlementsById = buildSettlementDetailsById({
     proposals: input.settlementProposals,
     participantsByProposalId: settlementParticipantsByProposalId,
+    happyCircleScoreEvents: input.happyCircleScoreEvents,
     names: context.nameByUserId,
     currentUserId: input.currentUserId,
     visibleCounterpartyUserIds: context.visibleCounterpartyUserIds,

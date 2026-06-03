@@ -30,6 +30,9 @@ import {
   amountTone,
   balanceTone,
   firstName,
+  categoryFlowAmount,
+  categoryFocusDisplayAmount,
+  categoryHasCurrentFlow,
   formatCompactCop,
   formatHomeBalanceCop,
   personLensAmount,
@@ -296,6 +299,12 @@ function CategoryProgressBubble({
   const color = transactionCategoryColor(row.category);
   const incomingMinor = Math.abs(row.owedToMeMinor);
   const outgoingMinor = Math.abs(row.iOweMinor);
+  const flowAmountMinor = categoryFlowAmount(row);
+  const displayAmountMinor = categoryFocusDisplayAmount(row);
+  const displayLabel =
+    row.netMinor === 0 && flowAmountMinor > 0
+      ? formatCompactCop(displayAmountMinor)
+      : signedFormatCompactCop(displayAmountMinor);
   const incomingWins = incomingMinor >= outgoingMinor;
   const outerAmountMinor = incomingWins ? incomingMinor : outgoingMinor;
   const innerAmountMinor = incomingWins ? outgoingMinor : incomingMinor;
@@ -307,6 +316,7 @@ function CategoryProgressBubble({
       : row.netMinor < 0
         ? theme.colors.warning
         : theme.colors.primary;
+  const displayColor = row.netMinor === 0 && flowAmountMinor > 0 ? color : netColor;
   const strokeWidth = 3.4 + (size - 50) / 18;
   const innerStrokeWidth = Math.max(3, strokeWidth - 1.6);
   const outerRadius = size / 2 - strokeWidth / 2;
@@ -387,9 +397,9 @@ function CategoryProgressBubble({
             adjustsFontSizeToFit
             minimumFontScale={0.72}
             numberOfLines={1}
-            style={[styles.categoryProgressInnerValue, { color: netColor }]}
+            style={[styles.categoryProgressInnerValue, { color: displayColor }]}
           >
-            {signedFormatCompactCop(row.netMinor)}
+            {displayLabel}
           </AppText>
         </View>
       </View>
@@ -401,7 +411,7 @@ function categoryParticleSize(
   row: BalanceAnalyticsCategoryRowDto,
   maxCategoryFlowMinor: number,
 ): number {
-  const categoryFlowMinor = Math.abs(row.iOweMinor) + Math.abs(row.owedToMeMinor);
+  const categoryFlowMinor = categoryFlowAmount(row);
   const resultWeight = Math.sqrt(categoryFlowMinor / Math.max(maxCategoryFlowMinor, 1));
 
   return 50 + resultWeight * 42;
@@ -962,18 +972,18 @@ export function CategoriesFocusCard({
   readonly onCategoryPress?: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
 }) {
   const visibleCategories = useMemo(
-    () => categories.filter((row) => row.category !== 'cycle').slice(0, CATEGORY_PARTICLE_LIMIT),
+    () =>
+      categories
+        .filter((row) => row.category !== 'cycle' && categoryHasCurrentFlow(row))
+        .slice(0, CATEGORY_PARTICLE_LIMIT),
     [categories],
   );
   const totalFlowMinor = Math.max(
-    visibleCategories.reduce(
-      (total, row) => total + Math.abs(row.iOweMinor) + Math.abs(row.owedToMeMinor),
-      0,
-    ),
+    visibleCategories.reduce((total, row) => total + categoryFlowAmount(row), 0),
     1,
   );
   const maxCategoryFlowMinor = Math.max(
-    ...visibleCategories.map((row) => Math.abs(row.iOweMinor) + Math.abs(row.owedToMeMinor)),
+    ...visibleCategories.map((row) => categoryFlowAmount(row)),
     1,
   );
   const particles = useMemo(

@@ -12,9 +12,11 @@ import type {
 } from './history-case-types';
 import { historyCaseKey, historyStepPriority } from './history-case-helpers';
 import {
+  circleHistoryGroupKey,
   isCircleActivityItem,
   isCircleExecutedProposal,
   isCircleLifecycleOnly,
+  isCircleLedgerPosted,
 } from './cycle-activity';
 
 export type {
@@ -50,14 +52,19 @@ export function compareHistoryItems<T extends ComparableHistoryItem>(left: T, ri
   return right.id.localeCompare(left.id);
 }
 
+export interface BuildHistoryCasesOptions {
+  readonly circleGrouping?: 'case' | 'movement';
+}
+
 export function buildHistoryCases<T extends HistoryCaseItem>(
   items: readonly T[],
+  options: BuildHistoryCasesOptions = {},
 ): HistoryCase<T>[] {
-  const sortedItems = [...items].sort(compareHistoryItems);
+  const sortedItems = movementHistoryItems(items, options).sort(compareHistoryItems);
 
   const groups = new Map<string, T[]>();
   for (const item of sortedItems) {
-    const key = historyCaseKey(item);
+    const key = historyCaseKeyForGrouping(item, options);
     const existing = groups.get(key);
     if (existing) {
       existing.push(item);
@@ -97,6 +104,66 @@ export function buildHistoryCases<T extends HistoryCaseItem>(
       ];
     })
     .sort((left, right) => compareHistoryItems(left.latest, right.latest));
+}
+
+export function buildMovementHistoryCases<T extends HistoryCaseItem>(
+  items: readonly T[],
+): HistoryCase<T>[] {
+  return buildHistoryCases(items, { circleGrouping: 'movement' });
+}
+
+function movementHistoryItems<T extends HistoryCaseItem>(
+  items: readonly T[],
+  options: BuildHistoryCasesOptions,
+): T[] {
+  if (options.circleGrouping !== 'movement') {
+    return [...items];
+  }
+
+  const postedCircleGroupKeys = new Set(
+    items.filter(isCircleLedgerPosted).flatMap((item) => circleActivityGroupingKeys(item)),
+  );
+
+  if (postedCircleGroupKeys.size === 0) {
+    return [...items];
+  }
+
+  return items.filter((item) => {
+    if (!isCircleActivityItem(item)) {
+      return true;
+    }
+
+    if (isCircleLedgerPosted(item)) {
+      return true;
+    }
+
+    return !circleActivityGroupingKeys(item).some((key) => postedCircleGroupKeys.has(key));
+  });
+}
+
+function circleActivityGroupingKeys(item: HistoryCaseItem): string[] {
+  const keys = new Set([circleHistoryGroupKey(item)]);
+
+  if (item.happyCircleCaseId) {
+    keys.add(`happy_circle_case:${item.happyCircleCaseId}`);
+  }
+
+  if (item.originSettlementProposalId) {
+    keys.add(`settlement:${item.originSettlementProposalId}`);
+  }
+
+  return Array.from(keys);
+}
+
+function historyCaseKeyForGrouping(
+  item: HistoryCaseItem,
+  options: BuildHistoryCasesOptions,
+): string {
+  if (options.circleGrouping === 'movement' && isCircleLedgerPosted(item)) {
+    return `cycle_movement:${item.id}`;
+  }
+
+  return historyCaseKey(item);
 }
 
 function selectCycleLatestItem<T extends HistoryCaseItem>(items: readonly T[]): T {
@@ -145,21 +212,32 @@ function executedCycleStepRank(item: HistoryCaseItem): number {
   return 3;
 }
 
-export function buildLatestHistoryCaseItems<T extends HistoryCaseItem>(items: readonly T[]): T[] {
-  return buildHistoryCases(items).map((itemCase) => {
-    const firstHref = itemCase.steps.find((step) => step.href)?.href;
-    const firstCounterpartyLabel = itemCase.steps.find(
-      (step) => step.counterpartyLabel,
-    )?.counterpartyLabel;
-    const firstFlowLabel = itemCase.steps.find((step) => step.flowLabel)?.flowLabel;
+export function buildLatestHistoryCaseItems<T extends HistoryCaseItem>(
+  items: readonly T[],
+  options: BuildHistoryCasesOptions = {},
+): T[] {
+  return buildHistoryCases(items, options).map(latestItemFromHistoryCase);
+}
 
-    return {
-      ...itemCase.latest,
-      href: itemCase.latest.href ?? firstHref,
-      counterpartyLabel: itemCase.latest.counterpartyLabel ?? firstCounterpartyLabel,
-      flowLabel: itemCase.latest.flowLabel ?? firstFlowLabel,
-    };
-  });
+export function buildLatestMovementHistoryCaseItems<T extends HistoryCaseItem>(
+  items: readonly T[],
+): T[] {
+  return buildLatestHistoryCaseItems(items, { circleGrouping: 'movement' });
+}
+
+function latestItemFromHistoryCase<T extends HistoryCaseItem>(itemCase: HistoryCase<T>): T {
+  const firstHref = itemCase.steps.find((step) => step.href)?.href;
+  const firstCounterpartyLabel = itemCase.steps.find(
+    (step) => step.counterpartyLabel,
+  )?.counterpartyLabel;
+  const firstFlowLabel = itemCase.steps.find((step) => step.flowLabel)?.flowLabel;
+
+  return {
+    ...itemCase.latest,
+    href: itemCase.latest.href ?? firstHref,
+    counterpartyLabel: itemCase.latest.counterpartyLabel ?? firstCounterpartyLabel,
+    flowLabel: itemCase.latest.flowLabel ?? firstFlowLabel,
+  };
 }
 
 export function toHistoryFeedItem(

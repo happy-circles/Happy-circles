@@ -23,6 +23,13 @@ export interface SettlementDetailMovementDto {
   readonly amountMinor: number;
 }
 
+export interface SettlementDetailTreasureAwardDto {
+  readonly id: string;
+  readonly awardedAt: string;
+  readonly claimedAt: string | null;
+  readonly scoreDelta: number;
+}
+
 export interface SettlementDetailDto {
   readonly id: string;
   readonly happyCircleCaseId: string | null;
@@ -52,5 +59,6 @@ export interface SettlementDetailDto {
   readonly movements: readonly string[];
   readonly impactLines: readonly string[];
   readonly explainers: readonly string[];
+  readonly treasureAward: SettlementDetailTreasureAwardDto | null;
   readonly timeline: readonly SettlementVersionTimelineItemDto[];
 }

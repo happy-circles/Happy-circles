@@ -56,7 +56,7 @@ import {
 } from '@/features/home/dashboard-helpers';
 import { InviteRequestsSheet } from '@/features/home/dashboard-invite-requests-sheet';
 import { PendingTransactionCard } from '@/features/transactions/transactions-pending-card';
-import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
+import { buildLatestMovementHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
 import {
   parseInviteRequestsTabParam,
   usePeopleInviteRequestsController,
@@ -977,7 +977,7 @@ export function PeopleIndexScreen() {
     [insightSections.history, people, query, selectedActivityPersonId],
   );
   const visibleHistoryCaseItems = useMemo(
-    () => buildLatestHistoryCaseItems(visibleHistoryItems.filter(isHistoryCaseItem)),
+    () => buildLatestMovementHistoryCaseItems(visibleHistoryItems.filter(isHistoryCaseItem)),
     [visibleHistoryItems],
   );
   const hasSelectedPerson = selectedActivityPersonId !== null;

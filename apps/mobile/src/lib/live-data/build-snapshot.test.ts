@@ -709,6 +709,15 @@ describe('buildLiveSnapshot', () => {
             participant_user_id: FRIEND_ID,
           }),
         ],
+        happyCircleScoreEvents: [
+          happyCircleScoreEvent({
+            id: 'score-event-settlement-1',
+            settlement_proposal_id: 'settlement-1',
+            score_delta: 2,
+            participant_count: 2,
+            treasure_claimed_at: '2026-05-05T12:02:00.000Z',
+          }),
+        ],
       }),
     );
 
@@ -731,6 +740,11 @@ describe('buildLiveSnapshot', () => {
       savedMovementsCount: 1,
       status: 'approved',
       totalAmountMinor: 2500,
+      treasureAward: {
+        id: 'score-event-settlement-1',
+        claimedAt: '2026-05-05T12:02:00.000Z',
+        scoreDelta: 2,
+      },
       participants: ['Tú', 'Ben'],
     });
     expect(snapshot.activitySections[0]?.items[0]).toMatchObject({

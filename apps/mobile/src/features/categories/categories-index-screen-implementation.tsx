@@ -15,7 +15,7 @@ import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
 import { ScreenShell } from '@/components/screen-shell';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
-import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
+import { buildLatestMovementHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme, type AppTheme } from '@/lib/theme';
 import {
@@ -812,7 +812,7 @@ export function CategoriesIndexScreen({
     [insightSections.history, query, selectedCategory],
   );
   const visibleHistoryCaseItems = useMemo(
-    () => buildLatestHistoryCaseItems(selectedHistoryItems.filter(isHistoryCaseItem)),
+    () => buildLatestMovementHistoryCaseItems(selectedHistoryItems.filter(isHistoryCaseItem)),
     [selectedHistoryItems],
   );
   const hasSelectedCategoryActivity =

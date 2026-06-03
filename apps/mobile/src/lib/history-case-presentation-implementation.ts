@@ -254,7 +254,9 @@ export function historyCaseEyebrow<T extends HistoryCaseItem>(
   itemCase: HistoryCase<T>,
 ): string | null {
   if (itemCase.isCycleSnippet) {
-    return null;
+    return cycleActivityKind(itemCase.latest) === 'ledger_posted'
+      ? cycleLedgerStepLabel(itemCase.latest)
+      : null;
   }
 
   if (isInviteTrajectoryItem(itemCase.latest)) {

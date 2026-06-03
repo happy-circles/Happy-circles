@@ -1,6 +1,6 @@
 import type { ActivityItemDto } from '@happy-circles/application';
 
-import { buildHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
+import { buildMovementHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
 import {
   notificationItemCanAlert,
   notificationViewKeyForItem,
@@ -38,7 +38,7 @@ export function buildDashboardTransactionPreview({
       item.kind === 'settlement_proposal' && item.happyCircleCaseId ? [item.happyCircleCaseId] : [],
     ),
   );
-  const recentHistoryItems = buildHistoryCases(
+  const recentHistoryItems = buildMovementHistoryCases(
     historyItems.filter(isConsolidatedTransactionItem).filter(isHistoryCaseItem),
   )
     .filter(

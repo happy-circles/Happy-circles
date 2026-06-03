@@ -290,4 +290,51 @@ describe('dashboard transaction preview', () => {
 
     expect(preview.visibleItems.map(({ item }) => item.id)).toEqual(['settlement-v2']);
   });
+
+  it('keeps both direct closed Circle ledger movements in the preview', () => {
+    const outgoingMovement = activityItem({
+      amountMinor: 25_000,
+      category: 'cycle',
+      flowLabel: 'Tu -> Sofia',
+      happenedAt: '2026-05-05T12:00:00.000Z',
+      id: 'ledger-outgoing',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'posted',
+      tone: 'negative',
+    });
+    const incomingMovement = activityItem({
+      amountMinor: 25_000,
+      category: 'cycle',
+      flowLabel: 'Mateo -> Tu',
+      happenedAt: '2026-05-05T12:01:00.000Z',
+      id: 'ledger-incoming',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'posted',
+      tone: 'positive',
+    });
+    const executedProposal = activityItem({
+      amountMinor: 50_000,
+      category: 'cycle',
+      happenedAt: '2026-05-05T12:02:00.000Z',
+      id: 'settlement-1:executed',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'executed',
+      tone: 'neutral',
+    });
+
+    const preview = buildDashboardTransactionPreview({
+      historyItems: [outgoingMovement, incomingMovement, executedProposal],
+      limit: 4,
+      notificationViewedKeys: new Set(),
+      pendingItems: [],
+    });
+
+    expect(preview.visibleItems.map(({ item }) => item.id)).toEqual([
+      'ledger-incoming',
+      'ledger-outgoing',
+    ]);
+  });
 });

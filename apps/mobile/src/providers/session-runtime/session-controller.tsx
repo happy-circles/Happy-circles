@@ -116,6 +116,7 @@ import type {
   RegistrationInput,
   RememberedAccountSnapshot,
   SessionContextValue,
+  SessionLoadingStage,
   SessionStatus,
   SetupPermissionStatus,
   SetupState,
@@ -129,6 +130,7 @@ export function useSessionController(): SessionContextValue {
   const authMode: AuthMode = 'supabase';
 
   const [status, setStatusState] = useState<SessionStatus>('loading');
+  const [loadingStage, setLoadingStage] = useState<SessionLoadingStage>('starting');
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfileRow | null>(null);
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
@@ -426,6 +428,7 @@ export function useSessionController(): SessionContextValue {
       const shouldSetSessionStatusLoading = options.setSessionStatusLoading ?? true;
 
       if (!shouldPreserveLockedStatus && shouldSetSessionStatusLoading) {
+        setLoadingStage('account');
         setSessionStatus('loading');
       }
 
@@ -435,6 +438,7 @@ export function useSessionController(): SessionContextValue {
       );
       setAuthProvider(normalizeIdentityProvider(nextSession.user.app_metadata?.provider ?? null));
 
+      setLoadingStage('device');
       const deviceId = await getOrCreateDeviceId();
       const timestamp = new Date().toISOString();
       const devicePatch = {
@@ -507,6 +511,7 @@ export function useSessionController(): SessionContextValue {
         return retryUpdateResult.data as TrustedDeviceRow;
       }
 
+      setLoadingStage('profile');
       const [profileResult, identities, currentDevice, pendingInviteIntent, authUserResult] =
         await Promise.all([
           client
@@ -578,6 +583,7 @@ export function useSessionController(): SessionContextValue {
         void prefetchAppSnapshot(nextSession.user.id).catch(() => undefined);
       }
 
+      setLoadingStage('device');
       const devicesResult = await client
         .from('trusted_devices')
         .select('*')
@@ -659,6 +665,8 @@ export function useSessionController(): SessionContextValue {
     let active = true;
 
     async function hydrate() {
+      setLoadingStage('starting');
+
       const [
         biometricValue,
         notificationValue,
@@ -702,6 +710,7 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
+      setLoadingStage('auth');
       const { data } = await supabase.auth.getSession();
       if (!active) {
         return;
@@ -1983,6 +1992,7 @@ export function useSessionController(): SessionContextValue {
     () => ({
       authMode,
       status,
+      loadingStage,
       userId: session?.user.id ?? null,
       email: session?.user.email ?? null,
       isEmailConfirmed,
@@ -2060,6 +2070,7 @@ export function useSessionController(): SessionContextValue {
       linkApple,
       linkGoogle,
       linkedMethods,
+      loadingStage,
       lock,
       notificationsEnabled,
       notificationsPermissionStatus,

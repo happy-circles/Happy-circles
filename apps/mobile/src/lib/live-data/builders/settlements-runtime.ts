@@ -1,5 +1,6 @@
 import type {
   ActionableItem,
+  HappyCircleScoreEventRow,
   InboxItemRow,
   SettlementDetailDto,
   SettlementParticipantRow,
@@ -229,6 +230,7 @@ export function buildSettlementDetail(
   participantsByProposalId: Map<string, SettlementParticipantRow[]> = new Map([
     [proposal.id, [...participants]],
   ]),
+  treasureAwardEvent: HappyCircleScoreEventRow | null = null,
 ): SettlementDetailDto {
   const parsedMovements = parseSettlementMovements(proposal.movements_json);
   const parsedOriginalMovements = parseSettlementMovements(proposal.graph_snapshot);
@@ -374,6 +376,14 @@ export function buildSettlementDetail(
     movements,
     impactLines,
     explainers,
+    treasureAward: treasureAwardEvent
+      ? {
+          id: treasureAwardEvent.id,
+          awardedAt: treasureAwardEvent.awarded_at,
+          claimedAt: treasureAwardEvent.treasure_claimed_at,
+          scoreDelta: treasureAwardEvent.score_delta,
+        }
+      : null,
     timeline: buildSettlementVersionTimeline({
       proposal,
       allProposals,

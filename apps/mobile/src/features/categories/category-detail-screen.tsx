@@ -20,7 +20,7 @@ import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { formatCop } from '@/lib/data';
-import { buildLatestHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
+import { buildLatestMovementHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
 import { useAppSnapshot } from '@/lib/live-data';
 import { theme } from '@/lib/theme';
 import {
@@ -202,7 +202,7 @@ export function CategoryDetailScreen({
     .filter(isConsolidatedTransactionItem)
     .filter(isHistoryCaseItem)
     .filter((item) => matchesCategory(item, category));
-  const visibleHistoryItems = buildLatestHistoryCaseItems(historyItems);
+  const visibleHistoryItems = buildLatestMovementHistoryCaseItems(historyItems);
   const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
   const color = transactionCategoryColor(category);
   const backgroundColor = transactionCategoryBackgroundColor(category);

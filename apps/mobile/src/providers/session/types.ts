@@ -11,6 +11,7 @@ export type SessionStatus =
   | 'signed_in_untrusted'
   | 'signed_in_unlocked'
   | 'signed_in_locked';
+export type SessionLoadingStage = 'starting' | 'auth' | 'account' | 'profile' | 'device';
 export type AuthMode = 'supabase';
 export type AccountAccessState = 'loading' | 'needs_invite' | 'needs_activation' | 'active';
 export type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
@@ -128,6 +129,7 @@ export interface SetupState {
 export interface SessionContextValue {
   readonly authMode: AuthMode;
   readonly status: SessionStatus;
+  readonly loadingStage: SessionLoadingStage;
   readonly userId: string | null;
   readonly email: string | null;
   readonly isEmailConfirmed: boolean;

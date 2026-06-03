@@ -17,7 +17,10 @@ vi.mock('react-native', () => ({
 }));
 
 import {
+  categoryFlowAmount,
   categoryFocusMeta,
+  categoryFocusDisplayAmount,
+  categoryHasCurrentFlow,
   categoryImpactAmount,
   categoryLensAmount,
   comparisonCopy,
@@ -99,6 +102,28 @@ describe('balance helpers', () => {
     expect(categoryLensAmount(categoryRow, 'balance')).toBe(40_000);
     expect(categoryLensAmount(categoryRow, 'i_owe')).toBe(-20_000);
     expect(categoryLensAmount(categoryRow, 'owed_to_me')).toBe(60_000);
+  });
+
+  it('derives visible category flow for the home category card', () => {
+    const previousOnlyCategory = category({ previousNetMinor: 80_000 });
+    const balancedFlowCategory = category({
+      iOweMinor: 40_000,
+      netMinor: 0,
+      owedToMeMinor: 40_000,
+    });
+    const netCategory = category({
+      iOweMinor: 25_000,
+      netMinor: -25_000,
+      owedToMeMinor: 0,
+    });
+
+    expect(categoryFlowAmount(previousOnlyCategory)).toBe(0);
+    expect(categoryHasCurrentFlow(previousOnlyCategory)).toBe(false);
+    expect(categoryFocusDisplayAmount(previousOnlyCategory)).toBe(0);
+    expect(categoryFlowAmount(balancedFlowCategory)).toBe(80_000);
+    expect(categoryHasCurrentFlow(balancedFlowCategory)).toBe(true);
+    expect(categoryFocusDisplayAmount(balancedFlowCategory)).toBe(80_000);
+    expect(categoryFocusDisplayAmount(netCategory)).toBe(-25_000);
   });
 
   it('derives ranking metadata without screen state', () => {

@@ -63,6 +63,11 @@ interface BannerState {
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 }
 
+interface RecentlyClaimedRewardState {
+  readonly proposalId: string;
+  readonly scoreDelta: number;
+}
+
 function readResultStatus(value: unknown): string | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return null;
@@ -93,6 +98,8 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [busyAction, setBusyAction] = useState<'approve' | 'reject' | null>(null);
   const [rewardClaiming, setRewardClaiming] = useState(false);
+  const [recentlyClaimedReward, setRecentlyClaimedReward] =
+    useState<RecentlyClaimedRewardState | null>(null);
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
   const { claimReward, getRewardForSettlement } = useHappyReward();
@@ -305,6 +312,12 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
     status: settlement.status,
   });
   const claimableReward = getRewardForSettlement(proposalId);
+  const claimedRewardScoreDelta = settlement.treasureAward?.claimedAt
+    ? settlement.treasureAward.scoreDelta
+    : recentlyClaimedReward?.proposalId === proposalId
+      ? recentlyClaimedReward.scoreDelta
+      : null;
+  const visibleClaimableReward = claimedRewardScoreDelta === null ? claimableReward : null;
 
   return (
     <ScreenShell
@@ -334,7 +347,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           </AppText>
         </View>
 
-        {claimableReward ? (
+        {visibleClaimableReward ? (
           <View
             style={[
               styles.rewardClaimPanel,
@@ -363,12 +376,20 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
             <PrimaryAction
               color={activeTheme.colors.treasure}
               icon="happy"
-              label={rewardClaiming ? 'Reclamando...' : `Reclamar +${claimableReward.scoreDelta}`}
+              label={
+                rewardClaiming ? 'Reclamando...' : `Reclamar +${visibleClaimableReward.scoreDelta}`
+              }
               loading={rewardClaiming}
               onPress={() => {
                 triggerAppActionHaptic();
                 setRewardClaiming(true);
-                void claimReward(claimableReward)
+                void claimReward(visibleClaimableReward)
+                  .then(() => {
+                    setRecentlyClaimedReward({
+                      proposalId,
+                      scoreDelta: visibleClaimableReward.scoreDelta,
+                    });
+                  })
                   .catch((error) => {
                     triggerAppErrorHaptic();
                     showSnackbar(
@@ -381,6 +402,33 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
                   });
               }}
             />
+          </View>
+        ) : claimedRewardScoreDelta !== null ? (
+          <View
+            style={[
+              styles.rewardClaimPanel,
+              {
+                backgroundColor: activeTheme.colors.treasureSoft,
+                borderColor: `${activeTheme.colors.treasure}66`,
+              },
+            ]}
+          >
+            <View style={styles.rewardClaimCopy}>
+              <View style={styles.rewardClaimHeader}>
+                <Ionicons color={activeTheme.colors.treasure} name="checkmark-circle" size={18} />
+                <AppText
+                  style={[styles.rewardClaimEyebrow, { color: activeTheme.colors.treasure }]}
+                >
+                  Tesoro reclamado
+                </AppText>
+              </View>
+              <AppText style={[styles.rewardClaimTitle, { color: activeTheme.colors.text }]}>
+                Reclamaste +{claimedRewardScoreDelta} Happy circles
+              </AppText>
+              <AppText style={[styles.rewardClaimBody, { color: activeTheme.colors.textMuted }]}>
+                Ya suman en tu contador. Este premio queda ligado a este detalle.
+              </AppText>
+            </View>
           </View>
         ) : null}
 

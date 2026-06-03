@@ -13,6 +13,8 @@ import {
   buildActivityHistoryItems,
   buildHistoryCases,
   buildLatestHistoryCaseItems,
+  buildLatestMovementHistoryCaseItems,
+  buildMovementHistoryCases,
   toHistoryFeedItem,
   type HistoryCaseItem,
 } from './history-cases-runtime';
@@ -73,6 +75,87 @@ describe('history case grouping', () => {
     expect(
       buildLatestHistoryCaseItems([firstMovement, secondMovement]).map((step) => step.id),
     ).toEqual(['ledger-b']);
+  });
+
+  it('keeps closed Circle ledger movements separate in movement feeds', () => {
+    const firstMovement = item({
+      amountMinor: 25_000,
+      category: 'cycle',
+      flowLabel: 'Tu -> Sofia',
+      happenedAt: '2026-05-05T12:00:00.000Z',
+      id: 'ledger-a',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'posted',
+      tone: 'negative',
+    });
+    const secondMovement = item({
+      amountMinor: 25_000,
+      category: 'cycle',
+      flowLabel: 'Mateo -> Tu',
+      happenedAt: '2026-05-05T12:00:01.000Z',
+      id: 'ledger-b',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'posted',
+      tone: 'positive',
+    });
+    const executedProposal = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      happenedAt: '2026-05-05T12:00:02.000Z',
+      id: 'settlement-1:executed',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-1',
+      status: 'executed',
+    });
+
+    const cases = buildMovementHistoryCases([firstMovement, secondMovement, executedProposal]);
+
+    expect(cases.map((itemCase) => itemCase.id)).toEqual([
+      'cycle_movement:ledger-b',
+      'cycle_movement:ledger-a',
+    ]);
+    expect(cases.map((itemCase) => itemCase.latest.id)).toEqual(['ledger-b', 'ledger-a']);
+    expect(
+      buildLatestMovementHistoryCaseItems([firstMovement, secondMovement, executedProposal]).map(
+        (step) => step.id,
+      ),
+    ).toEqual(['ledger-b', 'ledger-a']);
+  });
+
+  it('keeps lifecycle-only Circle history available in movement feeds', () => {
+    const staleProposal = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      happenedAt: '2026-05-05T12:00:00.000Z',
+      happyCircleCaseId: 'case-1',
+      id: 'settlement-v1:stale',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-v1',
+      replacedByProposalId: 'settlement-v2',
+      status: 'stale',
+    });
+    const rejectedProposal = item({
+      amountMinor: 50_000,
+      category: 'cycle',
+      happenedAt: '2026-05-05T12:01:00.000Z',
+      happyCircleCaseId: 'case-1',
+      id: 'settlement-v2:rejected',
+      kind: 'settlement',
+      originSettlementProposalId: 'settlement-v2',
+      replacesProposalId: 'settlement-v1',
+      status: 'rejected',
+    });
+
+    const cases = buildMovementHistoryCases([staleProposal, rejectedProposal]);
+
+    expect(cases).toHaveLength(1);
+    expect(cases[0]?.id).toBe('happy_circle_case:case-1');
+    expect(cases[0]?.steps.map((step) => step.id)).toEqual([
+      'settlement-v1:stale',
+      'settlement-v2:rejected',
+    ]);
   });
 
   it('collapses replaced happy circle versions under the same case', () => {

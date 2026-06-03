@@ -12,6 +12,7 @@ import {
   historyAmountIsVoided,
   historyCaseImpactLabel,
   historyCaseAmountLabel,
+  historyCaseEyebrow,
   historyCaseStatusTone,
   historyCaseStatusLabel,
   historyImpactLabel,
@@ -156,6 +157,26 @@ describe('history case presentation', () => {
         steps: [ledgerStep],
       }),
     ).toBe('Movimiento aplicado');
+  });
+
+  it('labels standalone Circle ledger cases with the direct relationship movement', () => {
+    const ledgerStep = item({
+      category: 'cycle',
+      flowLabel: 'Tu -> Sofia',
+      kind: 'settlement',
+      status: 'posted',
+      title: 'Happy Circle completado: Tu -> Sofia',
+    });
+
+    expect(
+      historyCaseEyebrow({
+        earliest: ledgerStep,
+        id: 'cycle_movement:ledger-1',
+        isCycleSnippet: true,
+        latest: ledgerStep,
+        steps: [ledgerStep],
+      }),
+    ).toBe('Pagaste a Sofia');
   });
 
   it('does not title a ledger-only Circle row as completed', () => {
