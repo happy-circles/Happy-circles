@@ -493,7 +493,6 @@ function HomeActivityButton({ count }: { readonly count: number }) {
 export function HomeCollapsibleChrome({
   avatarLabel,
   avatarUrl,
-  isCompact,
   notificationCount,
   progress,
   topInset,

@@ -13,11 +13,7 @@ import {
   registrationSchema,
 } from '@happy-circles/shared';
 
-import {
-  getCurrentAppVersion,
-  getCurrentDeviceName,
-  getOrCreateDeviceId,
-} from '@/lib/device-trust';
+import { getCurrentDeviceName } from '@/lib/device-trust';
 import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
 import {
   getBiometricSupport,
@@ -34,7 +30,6 @@ import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { appConfig } from '@/lib/config';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
-import { prefetchAppSnapshot } from '@/lib/live-data/app-snapshot-prefetch';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
 import {
   getLocalNotificationPermissionStatus,
@@ -57,17 +52,13 @@ import { performNativeAppleAuth } from './apple-native-auth';
 import { traceAuthDebugEvent } from './auth-debug';
 import { performGoogleAuthFlow } from './google-auth-flow';
 import { reportSocialAuthFailure } from './social-auth-reporting';
+import { loadSessionAccountState } from './session-account-loader';
 import {
   hashInviteTokenForRegistration,
   normalizeStepUpAuthInput,
-  resolveUserIdentities,
   revokeDuplicateActiveDeviceRows,
 } from './session-controller-helpers';
 import {
-  deriveAccountAccessState,
-  deriveDeviceTrustState,
-  deriveProfileCompletionState,
-  isAuthUserEmailConfirmed,
   isSessionEmailConfirmed,
   resolveStatusAfterAccountLoad,
 } from '../session/account-state';
@@ -85,7 +76,6 @@ import {
   REMEMBERED_ACCOUNT_KEY,
   STEP_UP_WINDOW_MS,
 } from '../session/constants';
-import { deriveLinkedMethods, normalizeIdentityProvider } from '../session/linked-methods';
 import {
   persistRememberedAccountSnapshot,
   readRememberedAccountSnapshot,
@@ -436,164 +426,12 @@ export function useSessionController(): SessionContextValue {
       setDeviceTrustState((current) =>
         options.preserveTrustedDeviceDuringLoad && current === 'trusted' ? 'trusted' : 'loading',
       );
-      setAuthProvider(normalizeIdentityProvider(nextSession.user.app_metadata?.provider ?? null));
-
-      setLoadingStage('device');
-      const deviceId = await getOrCreateDeviceId();
-      const timestamp = new Date().toISOString();
-      const devicePatch = {
-        platform: Platform.OS,
-        device_name: getCurrentDeviceName(),
-        app_version: getCurrentAppVersion(),
-        last_seen_at: timestamp,
-      };
-      const devicePayload = {
-        user_id: nextSession.user.id,
-        device_id: deviceId,
-        ...devicePatch,
-      };
-
-      async function persistCurrentDevice(): Promise<TrustedDeviceRow> {
-        const existingResult = await client
-          .from('trusted_devices')
-          .select('*')
-          .eq('user_id', nextSession.user.id)
-          .eq('device_id', deviceId)
-          .maybeSingle();
-
-        if (existingResult.error) {
-          throw new Error(existingResult.error.message);
-        }
-
-        const existingDevice = existingResult.data as TrustedDeviceRow | null;
-
-        if (existingDevice) {
-          const updateResult = await client
-            .from('trusted_devices')
-            .update(devicePatch as never)
-            .eq('id', existingDevice.id)
-            .select('*')
-            .single();
-
-          if (updateResult.error) {
-            throw new Error(updateResult.error.message);
-          }
-
-          return updateResult.data as TrustedDeviceRow;
-        }
-
-        const insertResult = await client
-          .from('trusted_devices')
-          .insert(devicePayload as never)
-          .select('*')
-          .single();
-
-        if (!insertResult.error) {
-          return insertResult.data as TrustedDeviceRow;
-        }
-
-        if (!insertResult.error.message.includes('duplicate key')) {
-          throw new Error(insertResult.error.message);
-        }
-
-        const retryUpdateResult = await client
-          .from('trusted_devices')
-          .update(devicePatch as never)
-          .eq('user_id', nextSession.user.id)
-          .eq('device_id', deviceId)
-          .select('*')
-          .single();
-
-        if (retryUpdateResult.error) {
-          throw new Error(retryUpdateResult.error.message);
-        }
-
-        return retryUpdateResult.data as TrustedDeviceRow;
-      }
-
-      setLoadingStage('profile');
-      const [profileResult, identities, currentDevice, pendingInviteIntent, authUserResult] =
-        await Promise.all([
-          client
-            .from('user_profiles')
-            .select(
-              'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at, deleted_at, deletion_requested_at, onboarding_completed_at, welcome_email_last_error, welcome_email_queued_at, welcome_email_sent_at',
-            )
-            .eq('id', nextSession.user.id)
-            .single(),
-          resolveUserIdentities(client, nextSession),
-          persistCurrentDevice(),
-          readPendingInviteIntent(),
-          client.auth.getUser(),
-        ]);
-
-      if (profileResult.error) {
-        throw new Error(profileResult.error.message);
-      }
-
-      if (authUserResult.error) {
-        throw new Error(authUserResult.error.message);
-      }
-
-      const nextProfile = profileResult.data;
-      const nextEmailConfirmed = isAuthUserEmailConfirmed(
-        authUserResult.data.user ?? nextSession.user,
-      );
-      const nextAccountAccessState =
-        deriveAccountAccessState(nextProfile) === 'needs_invite' &&
-        pendingInviteIntent?.type === 'account_invite'
-          ? 'needs_activation'
-          : deriveAccountAccessState(nextProfile);
-      const nextLinkedMethods = deriveLinkedMethods({
-        session: nextSession,
-        profile: nextProfile,
-        identities,
+      const loadedAccountState = await loadSessionAccountState({
+        client,
+        isCurrentLoad: () => loadId === accountLoadIdRef.current,
+        nextSession,
+        setLoadingStage,
       });
-      const nextDeviceTrustState = deriveDeviceTrustState(currentDevice);
-      const nextProfileCompletionState = deriveProfileCompletionState(
-        nextProfile,
-        nextEmailConfirmed,
-      );
-
-      if (currentDevice.trust_state === 'trusted') {
-        try {
-          await revokeDuplicateActiveDeviceRows({
-            client,
-            currentDeviceId: deviceId,
-            deviceName: currentDevice.device_name,
-            platform: currentDevice.platform,
-            timestamp,
-            userId: nextSession.user.id,
-          });
-        } catch (error) {
-          console.warn(
-            'Failed to revoke duplicate trusted devices during account load',
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-      }
-
-      if (
-        loadId === accountLoadIdRef.current &&
-        nextAccountAccessState === 'active' &&
-        nextEmailConfirmed &&
-        nextProfileCompletionState === 'complete' &&
-        nextDeviceTrustState === 'trusted'
-      ) {
-        void prefetchAppSnapshot(nextSession.user.id).catch(() => undefined);
-      }
-
-      setLoadingStage('device');
-      const devicesResult = await client
-        .from('trusted_devices')
-        .select('*')
-        .eq('user_id', nextSession.user.id)
-        .neq('trust_state', 'revoked')
-        .order('created_at', { ascending: false });
-
-      if (devicesResult.error) {
-        throw new Error(devicesResult.error.message);
-      }
 
       if (loadId !== accountLoadIdRef.current) {
         return;
@@ -601,22 +439,25 @@ export function useSessionController(): SessionContextValue {
 
       sessionRef.current = nextSession;
       setSession(nextSession);
-      setProfile(nextProfile);
-      setIsEmailConfirmed(nextEmailConfirmed);
-      setAccountAccessState(nextAccountAccessState);
-      setLinkedMethods(nextLinkedMethods);
-      setProfileCompletionState(nextProfileCompletionState);
-      setDeviceTrustState(nextDeviceTrustState);
-      setTrustedDevices(devicesResult.data ?? []);
-      setCurrentDeviceId(deviceId);
-      void persistRememberedAccountSnapshot(nextProfile).then((snapshot) => {
+      setProfile(loadedAccountState.profile);
+      setIsEmailConfirmed(loadedAccountState.emailConfirmed);
+      setAccountAccessState(loadedAccountState.accountAccessState);
+      setLinkedMethods(loadedAccountState.linkedMethods);
+      setProfileCompletionState(loadedAccountState.profileCompletionState);
+      setDeviceTrustState(loadedAccountState.deviceTrustState);
+      setTrustedDevices(loadedAccountState.trustedDevices);
+      setCurrentDeviceId(loadedAccountState.currentDeviceId);
+      setAuthProvider(loadedAccountState.authProvider);
+      void persistRememberedAccountSnapshot(loadedAccountState.profile).then((snapshot) => {
         if (loadId === accountLoadIdRef.current) {
           setRememberedAccount(
             snapshot
               ? {
                   ...snapshot,
                   accountAccessState:
-                    nextAccountAccessState === 'loading' ? 'needs_invite' : nextAccountAccessState,
+                    loadedAccountState.accountAccessState === 'loading'
+                      ? 'needs_invite'
+                      : loadedAccountState.accountAccessState,
                 }
               : null,
           );
@@ -626,7 +467,7 @@ export function useSessionController(): SessionContextValue {
         resolveStatusAfterAccountLoad({
           hasSession: true,
           biometricsEnabled: options.biometricPreference ?? biometricsEnabled,
-          deviceTrustState: nextDeviceTrustState,
+          deviceTrustState: loadedAccountState.deviceTrustState,
           initialLock: options.initialLock,
           preserveLocked: options.preserveLocked && statusRef.current === 'signed_in_locked',
         }),

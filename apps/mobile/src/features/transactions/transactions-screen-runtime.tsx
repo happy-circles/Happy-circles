@@ -10,7 +10,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { pushRoute } from '@/lib/navigation';
+import { pushRoute, returnToRoute } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
   buildMovementHistoryCases,
@@ -349,9 +349,7 @@ export function TransactionsScreen() {
         <View style={styles.containedContent}>
           <View style={styles.transactionsHeader}>
             <Pressable
-              onPress={() => {
-                router.replace('/home');
-              }}
+              onPress={() => returnToRoute(router, '/home')}
               style={({ pressed }) => [
                 styles.backButton,
                 pressed ? styles.backButtonPressed : null,

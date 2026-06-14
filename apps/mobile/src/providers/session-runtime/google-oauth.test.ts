@@ -20,10 +20,12 @@ vi.mock('expo-web-browser', () => ({
 
 vi.mock('react-native', () => ({
   Linking: {
-    addEventListener: vi.fn((_eventName, listener) => {
+    addEventListener: vi.fn(
+      (_eventName: string, listener: (event: { readonly url: string }) => void) => {
       mocks.linkingListeners.push(listener);
       return { remove: mocks.linkingRemove };
-    }),
+      },
+    ),
   },
   Platform: mocks.platform,
 }));

@@ -47,7 +47,6 @@ export function useSnapshotRefresh(
     }
 
     const startedAt = Date.now();
-    let fallbackTimeout: ReturnType<typeof setTimeout> | undefined;
     const completeRefresh = () => {
       refreshingRef.current = false;
       if (mountedRef.current) {
@@ -58,7 +57,7 @@ export function useSnapshotRefresh(
     refreshingRef.current = true;
     triggerAppRefreshStartHaptic();
     setRefreshing(true);
-    fallbackTimeout = setTimeout(completeRefresh, REFRESHING_FALLBACK_MS);
+    const fallbackTimeout = setTimeout(completeRefresh, REFRESHING_FALLBACK_MS);
 
     try {
       if (!isLoading) {

@@ -5,12 +5,9 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   ActionSheetIOS,
   Alert,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Switch,
   View,
 } from 'react-native';
@@ -20,9 +17,7 @@ import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
 import { AppText } from '@/components/app-text';
-import { AppTextInput, type AppTextInputRef } from '@/components/app-text-input';
-import { HappyFacesCounter } from '@/components/happy-faces-counter';
-import { IDENTITY_FLOW_CONTENT_MAX_WIDTH, IdentityFlowIdentity } from '@/components/identity-flow';
+import type { AppTextInputRef } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
 import { PasswordTextInput } from '@/components/password-text-input';
 import { PrimaryAction } from '@/components/primary-action';
@@ -30,10 +25,10 @@ import { ScreenShell } from '@/components/screen-shell';
 import { prepareAvatarImageForUpload } from '@/lib/avatar-image';
 import { presentLimitedContactsAccessPicker } from '@/lib/contacts-permissions';
 import {
-  triggerAppActionHaptic,
-  triggerAppSelectionHaptic,
-  triggerAppSuccessHaptic,
-  triggerAppWarningHaptic,
+  triggerAppActionHaptic as triggerImpactHaptic,
+  triggerAppSelectionHaptic as triggerSelectionHaptic,
+  triggerAppSuccessHaptic as triggerSuccessHaptic,
+  triggerAppWarningHaptic as triggerWarningHaptic,
 } from '@/lib/app-haptics';
 import { useActionFeedbackOverlay } from '@/lib/action-feedback';
 import {
@@ -64,27 +59,17 @@ import {
   resolveContactsPermissionActionLabel,
   resolveContactsPermissionTone,
 } from './profile-helpers';
+import { ProfileAccountHeader } from './profile-account-header';
 import { useProfileFocusController } from './profile-focus-controller';
+import { ProfileLegalDangerSection } from './profile-legal-danger-section';
 import { ProfileStatusRow } from './profile-status-row';
+import {
+  ProfileSocialStepUpModal,
+  type SocialStepUpTarget,
+} from './profile-social-step-up-modal';
+import { ProfileSetupReminderSection } from './profile-setup-reminder-section';
 import { ThemePreferenceSection } from './theme-preference-section';
-
-const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
-const TERMS_URL = 'https://app.happy-circles.com/terms';
-const SUPPORT_URL = 'https://app.happy-circles.com/support';
-type SocialStepUpTarget = 'apple' | 'google';
-
-function triggerSelectionHaptic() {
-  triggerAppSelectionHaptic();
-}
-function triggerImpactHaptic() {
-  triggerAppActionHaptic();
-}
-function triggerSuccessHaptic() {
-  triggerAppSuccessHaptic();
-}
-function triggerWarningHaptic() {
-  triggerAppWarningHaptic();
-}
+import { styles } from './profile-screen-runtime.styles';
 
 export function ProfileScreen() {
   const params = useLocalSearchParams<{ focus?: string; section?: string }>();
@@ -848,119 +833,35 @@ export function ProfileScreen() {
       title="Happy Circles"
       titleAlign="center"
     >
-      <View style={styles.accountHeader}>
-        <View style={styles.profileScoreRow}>
-          <HappyFacesCounter
-            compact
-            closedCircleCount={happyCircleClosedCount}
-            onPress={openHappyFaces}
-            totalFaces={happyCircleFaces}
-            variant="reward"
-          />
-        </View>
-        <IdentityFlowIdentity
-          avatarLabel={accountLabel}
-          avatarUrl={profileAvatarUrl}
-          disabled={avatarMutation.isPending}
-          editable
-          onPress={openAvatarOptions}
-          variant="avatar"
-        />
-        <View style={styles.accountCopy}>
-          {displayNameEditing ? (
-            <View style={styles.accountNameEditor}>
-              <AppTextInput
-                accessibilityLabel="Nombre"
-                autoCapitalize="words"
-                density="compact"
-                editable={busyAction !== 'display-name'}
-                onChangeText={setDisplayNameDraft}
-                onSubmitEditing={() => void saveDisplayName()}
-                placeholder="Nombre y apellido"
-                ref={displayNameInputRef}
-                returnKeyType="done"
-                selectTextOnFocus
-                style={styles.accountNameInput}
-                value={displayNameDraft}
-              />
-              <View style={styles.accountNameActions}>
-                <Pressable
-                  accessibilityLabel="Guardar nombre"
-                  accessibilityRole="button"
-                  disabled={busyAction !== null}
-                  hitSlop={8}
-                  onPress={() => void saveDisplayName()}
-                  style={({ pressed }) => [
-                    styles.accountNameIconButton,
-                    accountNameIconButtonThemeStyle,
-                    pressed && busyAction === null ? styles.rowPressed : null,
-                    busyAction !== null ? styles.disabledButton : null,
-                  ]}
-                >
-                  <Ionicons color={activeTheme.colors.primary} name="checkmark" size={18} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Cancelar edicion de nombre"
-                  accessibilityRole="button"
-                  disabled={busyAction === 'display-name'}
-                  hitSlop={8}
-                  onPress={cancelDisplayNameEdit}
-                  style={({ pressed }) => [
-                    styles.accountNameIconButton,
-                    accountNameIconButtonThemeStyle,
-                    pressed && busyAction !== 'display-name' ? styles.rowPressed : null,
-                    busyAction === 'display-name' ? styles.disabledButton : null,
-                  ]}
-                >
-                  <Ionicons color={activeTheme.colors.textMuted} name="close" size={18} />
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.accountNameRow}>
-              <AppText numberOfLines={2} style={styles.accountValue}>
-                {accountLabel}
-              </AppText>
-              <Pressable
-                accessibilityLabel="Editar nombre"
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={startDisplayNameEdit}
-                style={({ pressed }) => [
-                  styles.accountNameIconButton,
-                  accountNameIconButtonThemeStyle,
-                  pressed ? styles.rowPressed : null,
-                ]}
-              >
-                <Ionicons color={activeTheme.colors.textMuted} name="pencil" size={16} />
-              </Pressable>
-            </View>
-          )}
-          <AppText style={styles.accountMeta}>{accountEmail}</AppText>
-        </View>
-      </View>
+      <ProfileAccountHeader
+        accountEmail={accountEmail}
+        accountLabel={accountLabel}
+        accountNameIconButtonThemeStyle={accountNameIconButtonThemeStyle}
+        activeTheme={activeTheme}
+        avatarBusy={avatarMutation.isPending}
+        busyAction={busyAction}
+        displayNameDraft={displayNameDraft}
+        displayNameEditing={displayNameEditing}
+        displayNameInputRef={displayNameInputRef}
+        happyCircleClosedCount={happyCircleClosedCount}
+        happyCircleFaces={happyCircleFaces}
+        onAvatarPress={openAvatarOptions}
+        onCancelDisplayNameEdit={cancelDisplayNameEdit}
+        onChangeDisplayNameDraft={setDisplayNameDraft}
+        onOpenHappyFaces={openHappyFaces}
+        onSaveDisplayName={() => void saveDisplayName()}
+        onStartDisplayNameEdit={startDisplayNameEdit}
+        profileAvatarUrl={profileAvatarUrl}
+      />
 
       {message ? <MessageBanner message={message} /> : null}
 
       {!session.setupState.requiredComplete ? (
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeader}>
-            <AppText style={styles.sectionTitle}>Setup pendiente</AppText>
-          </View>
-          <Link href={completeProfileHref} asChild>
-            <Pressable
-              style={({ pressed }) => [
-                styles.inlineButton,
-                inlineButtonThemeStyle,
-                pressed ? styles.rowPressed : null,
-              ]}
-            >
-              <AppText style={[styles.inlineButtonText, inlineButtonTextThemeStyle]}>
-                Completar configuración
-              </AppText>
-            </Pressable>
-          </Link>
-        </View>
+        <ProfileSetupReminderSection
+          completeProfileHref={completeProfileHref}
+          inlineButtonTextThemeStyle={inlineButtonTextThemeStyle}
+          inlineButtonThemeStyle={inlineButtonThemeStyle}
+        />
       ) : null}
 
       <View
@@ -1419,201 +1320,28 @@ export function ProfileScreen() {
 
       <ThemePreferenceSection />
 
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionHeader}>
-          <AppText style={styles.sectionTitle}>Legal y soporte</AppText>
-        </View>
+      <ProfileLegalDangerSection
+        busyAction={busyAction}
+        inlineDangerButtonTextThemeStyle={inlineDangerButtonTextThemeStyle}
+        inlineDangerButtonThemeStyle={inlineDangerButtonThemeStyle}
+        onConfirmAccountDeletion={confirmAccountDeletion}
+        onOpenExternalUrl={(url, failureMessage) => void openExternalUrl(url, failureMessage)}
+      />
 
-        <View style={styles.sectionList}>
-          <Pressable
-            accessibilityRole="link"
-            onPress={() =>
-              void openExternalUrl(
-                PRIVACY_POLICY_URL,
-                'No pudimos abrir la política de privacidad.',
-              )
-            }
-            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
-          >
-            <ProfileStatusRow
-              icon="shield-checkmark"
-              subtitle="Uso de datos, retención y derechos"
-              title="Privacidad"
-              tone="primary"
-              trailing={
-                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
-              }
-            />
-          </Pressable>
-
-          <View style={styles.separator} />
-
-          <Pressable
-            accessibilityRole="link"
-            onPress={() =>
-              void openExternalUrl(TERMS_URL, 'No pudimos abrir los términos de servicio.')
-            }
-            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
-          >
-            <ProfileStatusRow
-              icon="document-text"
-              subtitle="Reglas de uso y responsabilidades"
-              title="Términos"
-              tone="muted"
-              trailing={
-                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
-              }
-            />
-          </Pressable>
-
-          <View style={styles.separator} />
-
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => void openExternalUrl(SUPPORT_URL, 'No pudimos abrir soporte.')}
-            style={({ pressed }) => [pressed ? styles.rowPressed : null]}
-          >
-            <ProfileStatusRow
-              icon="help-circle"
-              subtitle="soporte@happy-circles.com"
-              title="Soporte"
-              tone="muted"
-              trailing={
-                <Ionicons color={theme.colors.textMuted} name="chevron-forward" size={18} />
-              }
-            />
-          </Pressable>
-        </View>
-      </View>
-
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionHeader}>
-          <AppText style={styles.sectionTitle}>Eliminar cuenta</AppText>
-        </View>
-
-        <View style={styles.accountDeletionRow}>
-          <AppText style={[styles.sectionBody, styles.accountDeletionBody]}>
-            Esta acción es irreversible.
-          </AppText>
-
-          <Pressable
-            accessibilityRole="button"
-            disabled={busyAction === 'request-account-deletion'}
-            onPress={confirmAccountDeletion}
-            style={({ pressed }) => [
-              styles.inlineButtonDanger,
-              inlineDangerButtonThemeStyle,
-              pressed ? styles.rowPressed : null,
-              busyAction === 'request-account-deletion' ? styles.disabledButton : null,
-            ]}
-          >
-            <AppText style={[styles.inlineButtonDangerText, inlineDangerButtonTextThemeStyle]}>
-              {busyAction === 'request-account-deletion' ? 'Eliminando...' : 'Eliminar cuenta'}
-            </AppText>
-          </Pressable>
-        </View>
-      </View>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={closeSocialStepUpPrompt}
-        statusBarTranslucent
-        transparent
-        visible={socialStepUpTarget !== null}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.stepUpModalRoot}
-        >
-          <Pressable
-            accessibilityLabel="Descartar validación"
-            onPress={closeSocialStepUpPrompt}
-            style={styles.stepUpModalBackdrop}
-          />
-          <View
-            accessibilityRole="alert"
-            accessibilityViewIsModal
-            style={[styles.stepUpDialog, { backgroundColor: activeTheme.colors.surface }]}
-          >
-            <View style={styles.stepUpDialogHeader}>
-              <View
-                style={[
-                  styles.stepUpDialogIcon,
-                  { backgroundColor: activeTheme.colors.primarySoft },
-                ]}
-              >
-                <Ionicons color={activeTheme.colors.primary} name="lock-closed" size={22} />
-              </View>
-              <View style={styles.stepUpDialogCopy}>
-                <AppText style={[styles.stepUpDialogTitle, { color: activeTheme.colors.text }]}>
-                  Confirmar con contraseña
-                </AppText>
-                <AppText style={[styles.stepUpDialogBody, { color: activeTheme.colors.textMuted }]}>
-                  Este dispositivo no puede usar {session.biometricLabel}. Valida tu identidad para
-                  añadir {socialStepUpProviderLabel} Auth.
-                </AppText>
-              </View>
-            </View>
-
-            <PasswordTextInput
-              autoCapitalize="none"
-              onChangeText={handleSocialStepUpPasswordChange}
-              onSubmitEditing={() =>
-                socialStepUpTarget
-                  ? void handleLinkSocial(socialStepUpTarget, socialStepUpPassword)
-                  : undefined
-              }
-              placeholder="Contraseña"
-              placeholderTextColor={theme.colors.muted}
-              ref={socialStepUpInputRef}
-              returnKeyType="done"
-              style={styles.input}
-              value={socialStepUpPassword}
-            />
-
-            {socialStepUpError ? (
-              <AppText style={[styles.stepUpDialogError, { color: activeTheme.colors.danger }]}>
-                {socialStepUpError}
-              </AppText>
-            ) : null}
-
-            <View style={styles.stepUpDialogActions}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={busyAction !== null}
-                onPress={closeSocialStepUpPrompt}
-                style={({ pressed }) => [
-                  styles.stepUpDismissButton,
-                  { borderColor: activeTheme.colors.border },
-                  pressed && busyAction === null ? styles.rowPressed : null,
-                  busyAction !== null ? styles.disabledButton : null,
-                ]}
-              >
-                <AppText
-                  style={[styles.stepUpDismissButtonText, { color: activeTheme.colors.text }]}
-                >
-                  Descartar
-                </AppText>
-              </Pressable>
-              <PrimaryAction
-                compact
-                disabled={busyAction !== null || socialStepUpTarget === null}
-                fullWidth={false}
-                label={
-                  busyAction === socialStepUpBusyAction
-                    ? 'Validando...'
-                    : `Añadir ${socialStepUpProviderLabel} Auth`
-                }
-                onPress={() =>
-                  socialStepUpTarget
-                    ? void handleLinkSocial(socialStepUpTarget, socialStepUpPassword)
-                    : undefined
-                }
-              />
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      <ProfileSocialStepUpModal
+        activeTheme={activeTheme}
+        biometricLabel={session.biometricLabel}
+        busyAction={busyAction}
+        inputRef={socialStepUpInputRef}
+        onClose={closeSocialStepUpPrompt}
+        onPasswordChange={handleSocialStepUpPasswordChange}
+        onSubmit={(target, passwordValue) => void handleLinkSocial(target, passwordValue)}
+        password={socialStepUpPassword}
+        socialStepUpBusyAction={socialStepUpBusyAction}
+        socialStepUpError={socialStepUpError}
+        socialStepUpProviderLabel={socialStepUpProviderLabel}
+        socialStepUpTarget={socialStepUpTarget}
+      />
 
       <AvatarOptionsSheet
         canViewPhoto={canViewProfileAvatar}
@@ -1634,247 +1362,3 @@ export function ProfileScreen() {
     </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  centeredContent: {},
-  contentWidth: {
-    gap: theme.spacing.sm,
-    maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
-  },
-  headerActionPlaceholder: {
-    width: 40,
-  },
-  headerSignOutButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.dangerSoft,
-    borderColor: theme.colors.dangerSoft,
-    borderWidth: 1,
-    borderRadius: theme.radius.pill,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  accountHeader: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingBottom: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
-    position: 'relative',
-    width: '100%',
-  },
-  profileScoreRow: {
-    alignItems: 'flex-start',
-    left: theme.spacing.xs,
-    position: 'absolute',
-    top: theme.spacing.xs,
-    width: '100%',
-    zIndex: 2,
-  },
-  accountCopy: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    maxWidth: 340,
-    width: '100%',
-  },
-  accountNameRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    justifyContent: 'center',
-    maxWidth: '100%',
-  },
-  accountNameEditor: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    maxWidth: '100%',
-    width: '100%',
-  },
-  accountNameInput: {
-    flex: 1,
-    fontWeight: '700',
-    minWidth: 0,
-    textAlign: 'center',
-  },
-  accountNameActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  accountNameIconButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  accountValue: {
-    color: theme.colors.text,
-    flexShrink: 1,
-    fontSize: theme.typography.title2,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  accountMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.callout,
-    fontWeight: '600',
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  sectionBlock: {
-    borderTopColor: theme.colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: theme.spacing.md,
-  },
-  focusPanel: {
-    backgroundColor: theme.colors.primaryGhost,
-    borderRadius: theme.radius.small,
-  },
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-  },
-  sectionList: {
-    gap: theme.spacing.sm,
-  },
-  sectionBody: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.footnote,
-    lineHeight: 19,
-  },
-  accountDeletionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
-  },
-  accountDeletionBody: {
-    flex: 1,
-  },
-  rowPressed: {
-    opacity: 0.72,
-  },
-  separator: {
-    backgroundColor: theme.colors.hairline,
-    height: StyleSheet.hairlineWidth,
-    width: '100%',
-  },
-  actionCluster: {
-    gap: theme.spacing.sm,
-    paddingLeft: 52,
-  },
-  stepUpModalRoot: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.overlay,
-    flex: 1,
-    justifyContent: 'center',
-    padding: theme.spacing.lg,
-  },
-  stepUpModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  stepUpDialog: {
-    borderRadius: theme.radius.medium,
-    gap: theme.spacing.md,
-    maxWidth: 420,
-    padding: theme.spacing.lg,
-    width: '100%',
-    ...theme.shadow.floating,
-  },
-  stepUpDialogHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  stepUpDialogIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  stepUpDialogCopy: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  stepUpDialogTitle: {
-    fontSize: theme.typography.body,
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  stepUpDialogBody: {
-    fontSize: theme.typography.footnote,
-    lineHeight: 19,
-  },
-  stepUpDialogError: {
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-    lineHeight: 19,
-  },
-  stepUpDialogActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'flex-end',
-  },
-  stepUpDismissButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.medium,
-    borderWidth: 1,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.md,
-  },
-  stepUpDismissButtonText: {
-    fontSize: theme.typography.callout,
-    fontWeight: '800',
-  },
-  inlineActionRow: {
-    alignItems: 'flex-start',
-    gap: theme.spacing.xs,
-  },
-  input: {
-    minHeight: 48,
-  },
-  inlineButton: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
-  },
-  inlineButtonText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  inlineButtonDanger: {
-    backgroundColor: theme.colors.dangerSoft,
-    borderColor: theme.colors.dangerSoft,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
-  },
-  inlineButtonDangerText: {
-    color: theme.colors.danger,
-    fontSize: theme.typography.footnote,
-    fontWeight: '700',
-  },
-  disabledButton: {
-    opacity: 0.62,
-  },
-});

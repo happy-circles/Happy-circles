@@ -18,17 +18,12 @@ import {
   type BrandVerificationState,
 } from '@/components/brand-verification-lockup';
 import {
-  IdentityFlowField,
-  IdentityFlowForm,
   IdentityFlowLogoCopy,
-  IdentityFlowPasswordInput,
   IdentityFlowPrimaryAction,
   IdentityFlowScreen,
   IdentityFlowSecondaryAction,
-  IdentityFlowTextInput,
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
-import { OtpCodeInput } from '@/components/otp-code-input';
 import {
   beginAuthRouteTransitionHold,
   clearAuthRouteTransitionHold,
@@ -60,6 +55,7 @@ import {
 } from './account-invite-utils';
 import { AccountInviteEntryTokenForm } from './account-invite-entry-token-form';
 import { AuthEntryIdentity } from './account-invite-entry-identity';
+import { AccountInviteEntryAuthForm } from './account-invite-entry-auth-form';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
   AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
@@ -82,8 +78,6 @@ import {
   type SignInEntryMode,
   type SocialProvider,
 } from './account-invite-entry-helpers';
-import { AccountInviteSocialProviderRow } from './account-invite-social-provider-row';
-import { AppText } from '@/components/app-text';
 import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
 
 const AUTH_STATE_TRANSITION_MS = 260;
@@ -1376,153 +1370,41 @@ export function AccountSignInEntry({
       ) : (
         <View style={styles.rememberedMain}>
           {authOptionsMounted ? (
-            <Animated.View style={[styles.socialActions, authOptionsAnimatedStyle]}>
-              <IdentityFlowForm style={showPasswordFields ? styles.emailAuthForm : undefined}>
-                {!isRecovery ? (
-                  <View style={styles.authSecondaryBlock}>
-                    <AccountInviteSocialProviderRow
-                      appleSignInAvailable={session.appleSignInAvailable}
-                      authBusy={authBusy}
-                      onApplePress={() =>
-                        runAfterKeyboardDismiss(() => handleSocialSignIn('apple'))
-                      }
-                      onGooglePress={() =>
-                        runAfterKeyboardDismiss(() => handleSocialSignIn('google'))
-                      }
-                      socialBusyProvider={socialBusyProvider}
-                    />
-                  </View>
-                ) : null}
-
-                {!isRecovery ? (
-                  <IdentityFlowSecondaryAction
-                    disabled={authBusy}
-                    icon={showPasswordFallback ? 'chevron-up' : 'mail'}
-                    label={
-                      showPasswordFallback ? 'Correo y contraseña' : 'Usar correo y contraseña'
-                    }
-                    onPress={() => {
-                      triggerIdentitySelectionHaptic();
-                      togglePasswordFallback();
-                    }}
-                    style={styles.emailAccordionToggle}
-                  />
-                ) : null}
-
-                {showPasswordFields ? (
-                  <>
-                    <View style={styles.emailCredentialFields}>
-                      <IdentityFlowField
-                        error={authErrors.email ?? null}
-                        icon="mail"
-                        label="Correo"
-                        status={
-                          authErrors.email
-                            ? 'danger'
-                            : ((locksRememberedEmail ? account?.email : email) ?? '').trim()
-                                  .length > 0
-                              ? 'success'
-                              : 'idle'
-                        }
-                      >
-                        <IdentityFlowTextInput
-                          autoCapitalize="none"
-                          autoComplete="email"
-                          editable={!locksRememberedEmail}
-                          keyboardType="email-address"
-                          onBlur={validateEmailField}
-                          onChangeText={handleEmailChange}
-                          placeholder="tu@correo.com"
-                          placeholderTextColor={activeTheme.colors.muted}
-                          value={email}
-                        />
-                      </IdentityFlowField>
-
-                      {isRecovery && recoveryLinkSent ? (
-                        <View style={styles.recoveryCodeBlock}>
-                          <AppText style={styles.recoveryCodeHelp}>
-                            Abre el enlace o pega el código de 8 dígitos del correo.
-                          </AppText>
-                          <OtpCodeInput
-                            disabled={authBusy}
-                            hasError={recoveryCode.length > 0 && !recoveryCodeValid}
-                            onChangeText={handleRecoveryCodeChange}
-                            value={recoveryCode}
-                          />
-                          <Pressable
-                            accessibilityRole="button"
-                            disabled={authBusy || recoveryResendSeconds > 0}
-                            onPress={
-                              authBusy || recoveryResendSeconds > 0
-                                ? undefined
-                                : () => void handlePasswordRecovery()
-                            }
-                            style={({ pressed }) => [
-                              styles.recoveryResendButton,
-                              pressed && !authBusy && recoveryResendSeconds === 0
-                                ? styles.pressed
-                                : null,
-                              authBusy || recoveryResendSeconds > 0 ? styles.actionDisabled : null,
-                            ]}
-                          >
-                            <AppText style={styles.recoveryResendText}>
-                              {recoveryResendSeconds > 0
-                                ? `Reenviar enlace en ${recoveryResendSeconds}s`
-                                : 'Reenviar enlace'}
-                            </AppText>
-                          </Pressable>
-                        </View>
-                      ) : null}
-
-                      {!isRecovery ? (
-                        <View style={styles.passwordFieldGroup}>
-                          <IdentityFlowField
-                            error={authErrors.password ?? null}
-                            icon="lock-closed"
-                            label="Contraseña"
-                            status={
-                              authErrors.password
-                                ? 'danger'
-                                : password.length > 0
-                                  ? 'success'
-                                  : 'idle'
-                            }
-                          >
-                            <IdentityFlowPasswordInput
-                              autoCapitalize="none"
-                              autoComplete="password"
-                              onBlur={validatePasswordField}
-                              onChangeText={handlePasswordChange}
-                              placeholder="Tu contraseña"
-                              placeholderTextColor={activeTheme.colors.muted}
-                              value={password}
-                            />
-                          </IdentityFlowField>
-
-                          {showAuthOptions ? (
-                            <Pressable
-                              disabled={authBusy}
-                              onPress={authBusy ? undefined : showRecoverMode}
-                              style={({ pressed }) => [
-                                styles.forgotPasswordInline,
-                                !authErrors.password ? styles.forgotPasswordInlineLifted : null,
-                                pressed && !authBusy ? styles.pressed : null,
-                                authBusy ? styles.actionDisabled : null,
-                              ]}
-                            >
-                              <AppText style={styles.forgotPasswordInlineText}>
-                                Olvidé mi contraseña
-                              </AppText>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </View>
-                    {authPrimaryAction}
-                  </>
-                ) : null}
-              </IdentityFlowForm>
-            </Animated.View>
+            <AccountInviteEntryAuthForm
+              accountEmail={account?.email}
+              appleSignInAvailable={session.appleSignInAvailable}
+              authBusy={authBusy}
+              authErrors={authErrors}
+              email={email}
+              isRecovery={isRecovery}
+              locksRememberedEmail={locksRememberedEmail}
+              onEmailBlur={validateEmailField}
+              onEmailChange={handleEmailChange}
+              onForgotPasswordPress={showRecoverMode}
+              onPasswordBlur={validatePasswordField}
+              onPasswordChange={handlePasswordChange}
+              onPasswordFallbackToggle={() => {
+                triggerIdentitySelectionHaptic();
+                togglePasswordFallback();
+              }}
+              onPasswordRecovery={() => void handlePasswordRecovery()}
+              onRecoveryCodeChange={handleRecoveryCodeChange}
+              onSocialPress={(provider) =>
+                runAfterKeyboardDismiss(() => handleSocialSignIn(provider))
+              }
+              password={password}
+              placeholderTextColor={activeTheme.colors.muted}
+              primaryAction={authPrimaryAction}
+              recoveryCode={recoveryCode}
+              recoveryCodeValid={recoveryCodeValid}
+              recoveryLinkSent={recoveryLinkSent}
+              recoveryResendSeconds={recoveryResendSeconds}
+              showAuthOptions={showAuthOptions}
+              showPasswordFallback={showPasswordFallback}
+              showPasswordFields={showPasswordFields}
+              socialBusyProvider={socialBusyProvider}
+              style={authOptionsAnimatedStyle}
+            />
           ) : null}
         </View>
       )}
