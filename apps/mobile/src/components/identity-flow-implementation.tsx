@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -23,6 +24,7 @@ import {
 } from 'react-native';
 import type {
   KeyboardEvent,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -77,6 +79,7 @@ const IDENTITY_FLOW_AVATAR_EDIT_PENCIL_SIZE = 32;
 const IDENTITY_FLOW_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
 const IDENTITY_FLOW_FIELD_ERROR_HEIGHT = 24;
 const IDENTITY_FLOW_ACTIONS_MIN_HEIGHT = 56;
+const IDENTITY_FLOW_ACTIONS_MIN_GAP = theme.spacing.lg;
 export const IDENTITY_FLOW_LARGE_FACE_VIEW_BOX = '222 222 236 236';
 const IDENTITY_FLOW_MESSAGE_SLOT_HEIGHT = 72;
 const IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT = 28;
@@ -86,6 +89,8 @@ const IDENTITY_FLOW_CONTENT_ENTER_DISTANCE = 8;
 const IDENTITY_FLOW_CONTENT_HIDDEN_OPACITY = 0.18;
 const IDENTITY_FLOW_CONTENT_ENTER_MS = 240;
 const IDENTITY_FLOW_CONTENT_EXIT_MS = 140;
+const IDENTITY_FLOW_CONTENT_MORPH_MS = 260;
+const IDENTITY_FLOW_FITTED_SCROLL_SETTLE_FRAMES = 18;
 const IDENTITY_FLOW_KEYBOARD_FIELD_GAP = theme.spacing.md;
 const IDENTITY_FLOW_KEYBOARD_SCROLL_RESET_THRESHOLD = 8;
 
@@ -103,6 +108,13 @@ type KeyboardFrameSnapshot = {
   readonly top: number;
 };
 
+type IdentityFlowContentSnapshot = {
+  readonly children: ReactNode;
+  readonly message?: ReactNode;
+  readonly shouldReserveMessageSlot: boolean;
+  readonly transitionKey?: string;
+};
+
 const IdentityFlowKeyboardAvoidanceContext = createContext<(() => void) | null>(null);
 
 interface IdentityFlowScreenProps extends Pick<
@@ -116,12 +128,14 @@ interface IdentityFlowScreenProps extends Pick<
   readonly contentStyle?: StyleProp<ViewStyle>;
   readonly contentVisible?: boolean;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
+  readonly fitContentToScreen?: boolean;
   readonly identity?: ReactNode;
   readonly identityCenterLayout?: IdentityFlowCenterLayout;
   readonly identityPosition?: IdentityFlowIdentityPosition;
   readonly keyboardActionClearance?: number;
   readonly keyboardVerticalOffset?: number;
   readonly message?: ReactNode;
+  readonly preserveActionsDuringContentTransition?: boolean;
   readonly transitionScrollPolicy?: IdentityFlowTransitionScrollPolicy;
 }
 
@@ -133,6 +147,7 @@ export function IdentityFlowScreen({
   contentStyle,
   contentVisible = true,
   contentWidthStyle,
+  fitContentToScreen = false,
   footer,
   identity,
   identityCenterLayout = 'balanced',
@@ -141,6 +156,7 @@ export function IdentityFlowScreen({
   keyboardVerticalOffset = Platform.OS === 'ios' ? 24 : 0,
   message,
   overlay,
+  preserveActionsDuringContentTransition = false,
   refresh,
   safeAreaEdges = ['left', 'right'],
   scrollEnabled = true,
@@ -149,14 +165,37 @@ export function IdentityFlowScreen({
 }: IdentityFlowScreenProps) {
   const activeTheme = useAppTheme();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const [measuredViewportHeight, setMeasuredViewportHeight] = useState(0);
+  const browserViewportHeight = (() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return 0;
+    }
+
+    const viewportHeights = [
+      window.innerHeight,
+      window.document?.documentElement?.clientHeight,
+      window.visualViewport?.height,
+    ].filter(
+      (height): height is number =>
+        typeof height === 'number' && Number.isFinite(height) && height > 0,
+    );
+
+    return viewportHeights.length > 0 ? Math.min(...viewportHeights) : 0;
+  })();
+  const viewportHeightLimit = browserViewportHeight || windowHeight;
+  const viewportHeight =
+    measuredViewportHeight > 0
+      ? Math.min(measuredViewportHeight, viewportHeightLimit)
+      : viewportHeightLimit;
   const insets = useSafeAreaInsets();
   const shouldUseManualKeyboardLift = Platform.OS === 'ios';
   const bottomInset = Math.max(0, insets.bottom);
   const screenBackgroundColor = activeTheme.colors.background;
   const screenTitleTop = Math.max(0, insets.top) + theme.spacing.xxs;
+  const screenTitleClearance = fitContentToScreen ? theme.spacing.xs : theme.spacing.lg;
   const titleClearedTopOffset = Math.max(
     IDENTITY_FLOW_TOP_OFFSET,
-    screenTitleTop + IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT + theme.spacing.lg,
+    screenTitleTop + IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT + screenTitleClearance,
   );
   const fallbackScrollViewRef = useRef<ScrollView | null>(null);
   const activeScrollViewRef = scrollViewRef ?? fallbackScrollViewRef;
@@ -182,19 +221,33 @@ export function IdentityFlowScreen({
   const [bodyHeight, setBodyHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [hasMeasuredBody, setHasMeasuredBody] = useState(false);
-  const layoutReady = hasMeasuredBody && bodyHeight > 0;
+  const visualBodyHeight = Math.max(
+    0,
+    viewportHeight - Math.max(0, insets.top) - bottomInset - theme.spacing.xl,
+  );
+  const layoutBodyHeight =
+    bodyHeight > 0 && visualBodyHeight > 0 ? Math.min(bodyHeight, visualBodyHeight) : bodyHeight;
+  const layoutReady = hasMeasuredBody && layoutBodyHeight > 0;
+  const actionStackMeasuredHeight =
+    actionStackHeight > 0 ? actionStackHeight : IDENTITY_FLOW_ACTIONS_MIN_HEIGHT;
+  const actionStackLayoutHeight = resolvedFooter
+    ? actionStackMeasuredHeight + IDENTITY_FLOW_ACTIONS_MIN_GAP * 2
+    : 0;
+  const fittedContentClearance = fitContentToScreen ? theme.spacing.md : 0;
+  const measuredFlowHeight = fitContentToScreen
+    ? contentHeight + actionStackLayoutHeight + fittedContentClearance
+    : 0;
   const actionStackKeyboardClearance =
-    (actionStackHeight > 0 ? actionStackHeight : IDENTITY_FLOW_ACTIONS_MIN_HEIGHT) +
-    IDENTITY_FLOW_KEYBOARD_FIELD_GAP;
+    actionStackMeasuredHeight + IDENTITY_FLOW_KEYBOARD_FIELD_GAP;
   const resolvedKeyboardActionClearance =
     keyboardActionClearance ??
     (resolvedFooter
       ? Math.max(IDENTITY_FLOW_KEYBOARD_FIELD_GAP, actionStackKeyboardClearance)
       : IDENTITY_FLOW_KEYBOARD_FIELD_GAP);
   const layoutMetrics = resolveIdentityFlowLayout({
-    bodyHeight,
+    bodyHeight: layoutBodyHeight,
     centerLayout: identityCenterLayout,
-    contentHeight,
+    contentHeight: measuredFlowHeight,
     hasMessage: message !== undefined,
     identityPosition,
     layoutReady,
@@ -204,20 +257,29 @@ export function IdentityFlowScreen({
   });
   const isCenterIdentity = layoutMetrics.isCenterIdentity;
   const shouldReserveMessageSlot = layoutMetrics.shouldReserveMessageSlot;
+  const currentContentSnapshot: IdentityFlowContentSnapshot = {
+    children,
+    message,
+    shouldReserveMessageSlot,
+    transitionKey: contentTransitionKey,
+  };
   const identityMotion = useRef(new Animated.Value(isCenterIdentity ? 0 : 1)).current;
   const contentMotion = useRef(new Animated.Value(contentVisible ? 1 : 0)).current;
+  const contentSwapMotion = useRef(new Animated.Value(1)).current;
   const previousContentTransitionKeyRef = useRef(contentTransitionKey);
+  const currentContentSnapshotRef = useRef(currentContentSnapshot);
+  currentContentSnapshotRef.current = currentContentSnapshot;
+  const activeContentSnapshotRef = useRef<IdentityFlowContentSnapshot>(currentContentSnapshot);
+  const [previousContentSnapshot, setPreviousContentSnapshot] =
+    useState<IdentityFlowContentSnapshot | null>(null);
   const topIdentityY = layoutMetrics.topIdentityY;
   const centerIdentityY = layoutMetrics.centerIdentityY;
   const topContentY = layoutMetrics.topContentY;
   const centerContentY = layoutMetrics.centerContentY;
+  const contentLayoutY = isCenterIdentity ? centerContentY : topContentY;
   const identityTranslateY = identityMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [centerIdentityY, topIdentityY],
-  });
-  const contentTranslateY = identityMotion.interpolate({
-    inputRange: [0, 1],
-    outputRange: [centerContentY - topContentY, 0],
   });
   const contentEnterTranslateY = contentMotion.interpolate({
     inputRange: [0, 1],
@@ -227,6 +289,35 @@ export function IdentityFlowScreen({
     inputRange: [0, 1],
     outputRange: [IDENTITY_FLOW_CONTENT_HIDDEN_OPACITY, 1],
   });
+  const currentContentSwapStyle = previousContentSnapshot
+    ? {
+        opacity: contentSwapMotion,
+        transform: [
+          {
+            translateY: contentSwapMotion.interpolate({
+              inputRange: [0, 1],
+              outputRange: [3, 0],
+            }),
+          },
+        ],
+      }
+    : undefined;
+  const previousContentSwapStyle = previousContentSnapshot
+    ? {
+        opacity: contentSwapMotion.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 0],
+        }),
+        transform: [
+          {
+            translateY: contentSwapMotion.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -3],
+            }),
+          },
+        ],
+      }
+    : undefined;
   const transitionedActionStack = resolvedFooter ? (
     <Animated.View
       onLayout={(event) => {
@@ -237,13 +328,48 @@ export function IdentityFlowScreen({
       }}
       style={[
         styles.transitionedActionStack,
-        { opacity: contentOpacity, transform: [{ translateY: contentEnterTranslateY }] },
+        {
+          opacity: layoutReady ? (preserveActionsDuringContentTransition ? 1 : contentOpacity) : 0,
+          transform: preserveActionsDuringContentTransition
+            ? undefined
+            : [{ translateY: contentEnterTranslateY }],
+        },
       ]}
     >
       <View style={styles.actionStack}>{resolvedFooter}</View>
     </Animated.View>
   ) : undefined;
-  const contentBottomPadding = theme.spacing.xl + bottomInset;
+  const fittedScrollClearance = fitContentToScreen ? theme.spacing.xs : 0;
+  const contentBottomPadding = theme.spacing.xl + bottomInset + fittedScrollClearance;
+  const shouldRenderInlineActionStack = Boolean(transitionedActionStack);
+  const actionFlowSpacerHeight = shouldRenderInlineActionStack
+    ? Math.max(
+        IDENTITY_FLOW_ACTIONS_MIN_GAP,
+        layoutBodyHeight -
+          contentLayoutY -
+          contentHeight -
+          actionStackMeasuredHeight -
+          IDENTITY_FLOW_ACTIONS_MIN_GAP,
+      )
+    : 0;
+  const actionStackAnchorTop = shouldRenderInlineActionStack
+    ? layoutBodyHeight - actionStackMeasuredHeight - IDENTITY_FLOW_ACTIONS_MIN_GAP
+    : 0;
+  const pinnedActionScrollY =
+    fitContentToScreen && shouldRenderInlineActionStack
+      ? Math.max(
+          0,
+          contentLayoutY +
+            contentHeight +
+            actionFlowSpacerHeight -
+            actionStackAnchorTop +
+            theme.spacing.xs,
+        )
+      : 0;
+  const contentVisualOffsetY =
+    Platform.OS === 'web' && fitContentToScreen
+      ? Math.max(0, pinnedActionScrollY - theme.spacing.xs)
+      : 0;
 
   const resetKeyboardTranslation = useCallback(() => {
     keyboardAdjustmentGenerationRef.current += 1;
@@ -284,10 +410,10 @@ export function IdentityFlowScreen({
       }
 
       scrollYRef.current = baseScrollY;
-      updateIdentityFlowScrollMetrics({ scrollY: baseScrollY, viewportHeight: windowHeight });
+      updateIdentityFlowScrollMetrics({ scrollY: baseScrollY, viewportHeight });
       activeScrollViewRef.current?.scrollTo({ animated, y: baseScrollY });
     },
-    [activeScrollViewRef, windowHeight],
+    [activeScrollViewRef, viewportHeight],
   );
 
   const scrollFocusedInputIntoKeyboardView = useCallback(
@@ -352,7 +478,7 @@ export function IdentityFlowScreen({
             scrollYRef.current = targetScrollY;
             updateIdentityFlowScrollMetrics({
               scrollY: targetScrollY,
-              viewportHeight: windowHeight,
+            viewportHeight,
             });
             scrollView.scrollTo({ animated: true, y: targetScrollY });
           },
@@ -437,7 +563,20 @@ export function IdentityFlowScreen({
       });
       scrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
     },
-    [windowHeight],
+    [viewportHeight],
+  );
+
+  const scrollIdentityFlowToEnd = useCallback(
+    ({ animated = true }: { readonly animated?: boolean } = {}) => {
+      const scrollView = activeScrollViewRef.current;
+
+      if (!scrollView) {
+        return;
+      }
+
+      scrollView.scrollToEnd({ animated });
+    },
+    [activeScrollViewRef],
   );
 
   useEffect(() => {
@@ -449,7 +588,7 @@ export function IdentityFlowScreen({
   }, [windowHeight, windowWidth]);
 
   useEffect(() => {
-    if (hasMeasuredBody || windowHeight <= 0) {
+    if (hasMeasuredBody || viewportHeight <= 0) {
       return undefined;
     }
 
@@ -460,7 +599,7 @@ export function IdentityFlowScreen({
 
       const fallbackBodyHeight = Math.max(
         1,
-        windowHeight - Math.max(0, insets.top) - Math.max(0, insets.bottom),
+        viewportHeight - Math.max(0, insets.top) - Math.max(0, insets.bottom),
       );
       usedFallbackBodyHeightRef.current = true;
       lockedBodyHeightRef.current = fallbackBodyHeight;
@@ -469,14 +608,18 @@ export function IdentityFlowScreen({
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [hasMeasuredBody, insets.bottom, insets.top, windowHeight]);
+  }, [hasMeasuredBody, insets.bottom, insets.top, viewportHeight]);
 
   useEffect(() => {
-    updateIdentityFlowScrollMetrics({ viewportHeight: windowHeight });
-  }, [windowHeight]);
+    updateIdentityFlowScrollMetrics({ viewportHeight });
+  }, [viewportHeight]);
 
   useEffect(() => {
-    if (!scrollEnabled || !contentTransitionKey || transitionScrollPolicy === 'preserve') {
+    if (
+      !scrollEnabled ||
+      !contentTransitionKey ||
+      (!fitContentToScreen && transitionScrollPolicy === 'preserve')
+    ) {
       return;
     }
 
@@ -484,6 +627,36 @@ export function IdentityFlowScreen({
 
     requestAnimationFrame(() => {
       if (cancelled) {
+        return;
+      }
+
+      if (fitContentToScreen) {
+        if (Platform.OS === 'web') {
+          return;
+        }
+
+        let fittedScrollFrame = 0;
+        const scrollToFittedEnd = () => {
+          if (cancelled) {
+            return;
+          }
+
+          const nextScrollY = Math.ceil(pinnedActionScrollY);
+          if (nextScrollY > 1 && Math.abs(scrollYRef.current - nextScrollY) > 1) {
+            scrollYRef.current = nextScrollY;
+            updateIdentityFlowScrollMetrics({ scrollY: nextScrollY, viewportHeight });
+            activeScrollViewRef.current?.scrollTo({ animated: true, y: nextScrollY });
+          }
+
+          scrollIdentityFlowToEnd({ animated: fittedScrollFrame === 0 });
+          fittedScrollFrame += 1;
+
+          if (fittedScrollFrame < IDENTITY_FLOW_FITTED_SCROLL_SETTLE_FRAMES) {
+            requestAnimationFrame(scrollToFittedEnd);
+          }
+        };
+
+        requestAnimationFrame(scrollToFittedEnd);
         return;
       }
 
@@ -506,13 +679,44 @@ export function IdentityFlowScreen({
     activeScrollViewRef,
     contentHeight,
     contentTransitionKey,
+    fitContentToScreen,
+    pinnedActionScrollY,
+    scrollIdentityFlowToEnd,
     scrollEnabled,
     transitionScrollPolicy,
+    viewportHeight,
+  ]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !fitContentToScreen || !scrollEnabled || !contentTransitionKey) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const delays = [120];
+    const timers = delays.map((delay, index) =>
+      setTimeout(() => {
+        if (!cancelled) {
+          scrollIdentityFlowToEnd({ animated: index === 0 });
+        }
+      }, delay),
+    );
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [
+    contentHeight,
+    contentTransitionKey,
+    fitContentToScreen,
+    scrollEnabled,
+    scrollIdentityFlowToEnd,
   ]);
 
   useEffect(
-    () => registerIdentityFlowScrollView(activeScrollViewRef, { viewportHeight: windowHeight }),
-    [activeScrollViewRef, windowHeight],
+    () => registerIdentityFlowScrollView(activeScrollViewRef, { viewportHeight }),
+    [activeScrollViewRef, viewportHeight],
   );
 
   useEffect(
@@ -571,6 +775,53 @@ export function IdentityFlowScreen({
     }).start();
   }, [identityMotion, isCenterIdentity]);
 
+  useLayoutEffect(() => {
+    const previousSnapshot = activeContentSnapshotRef.current;
+    const nextSnapshot = currentContentSnapshotRef.current;
+    const contentKeyChanged = previousSnapshot.transitionKey !== nextSnapshot.transitionKey;
+
+    activeContentSnapshotRef.current = nextSnapshot;
+
+    if (!contentVisible) {
+      contentSwapMotion.stopAnimation();
+      setPreviousContentSnapshot(null);
+      contentSwapMotion.setValue(1);
+      return undefined;
+    }
+
+    if (!contentKeyChanged) {
+      return undefined;
+    }
+
+    contentSwapMotion.stopAnimation();
+
+    setPreviousContentSnapshot(previousSnapshot);
+    contentSwapMotion.setValue(0);
+
+    const animation = Animated.timing(contentSwapMotion, {
+      duration: IDENTITY_FLOW_CONTENT_MORPH_MS,
+      easing: BRAND_VERIFICATION_EASING,
+      toValue: 1,
+      useNativeDriver: true,
+    });
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setPreviousContentSnapshot(null);
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [contentSwapMotion, contentTransitionKey, contentVisible]);
+
+  useLayoutEffect(() => {
+    if (activeContentSnapshotRef.current.transitionKey === contentTransitionKey) {
+      activeContentSnapshotRef.current = currentContentSnapshotRef.current;
+    }
+  });
+
   useEffect(() => {
     const contentKeyChanged = previousContentTransitionKeyRef.current !== contentTransitionKey;
     previousContentTransitionKeyRef.current = contentTransitionKey;
@@ -589,12 +840,40 @@ export function IdentityFlowScreen({
     }).start();
   }, [contentMotion, contentTransitionKey, contentVisible]);
 
+  function renderTransitionContent(snapshot: IdentityFlowContentSnapshot) {
+    return (
+      <>
+        {snapshot.shouldReserveMessageSlot ? (
+          <View style={styles.messageSlot}>{snapshot.message}</View>
+        ) : null}
+        <View style={styles.contentSlot}>{snapshot.children}</View>
+      </>
+    );
+  }
+
+  function handleContentLayout(event: LayoutChangeEvent) {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    setContentHeight((currentHeight) =>
+      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
+    );
+  }
+
   return (
     <IdentityFlowKeyboardAvoidanceContext.Provider value={scheduleKeyboardAdjustment}>
       <KeyboardAvoidingView
         behavior="padding"
         enabled={shouldUseManualKeyboardLift}
         keyboardVerticalOffset={keyboardVerticalOffset}
+        onLayout={(event) => {
+          const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+          if (nextHeight <= 0) {
+            return;
+          }
+
+          setMeasuredViewportHeight((currentHeight) =>
+            Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
+          );
+        }}
         style={[styles.keyboardShell, { backgroundColor: screenBackgroundColor }]}
       >
         <ScreenShell
@@ -667,8 +946,7 @@ export function IdentityFlowScreen({
                   styles.belowIdentity,
                   {
                     opacity: layoutReady ? 1 : 0,
-                    paddingTop: topContentY,
-                    transform: [{ translateY: contentTranslateY }],
+                    paddingTop: Math.max(0, contentLayoutY - contentVisualOffsetY),
                   },
                 ]}
               >
@@ -681,20 +959,31 @@ export function IdentityFlowScreen({
                     },
                   ]}
                 >
-                  <View
-                    onLayout={(event) => {
-                      const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-                      setContentHeight((currentHeight) =>
-                        Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight,
-                      );
-                    }}
-                    style={styles.transitionedContentMeasure}
-                  >
-                    {shouldReserveMessageSlot ? (
-                      <View style={styles.messageSlot}>{message}</View>
+                  <View style={styles.transitionedContentFrame}>
+                    <View style={styles.transitionedContentMeasure}>
+                      {previousContentSnapshot ? (
+                        <Animated.View
+                          pointerEvents="none"
+                          style={[
+                            styles.contentSwapLayer,
+                            styles.contentSwapLayerOverlay,
+                            previousContentSwapStyle,
+                          ]}
+                        >
+                          {renderTransitionContent(previousContentSnapshot)}
+                        </Animated.View>
+                      ) : null}
+                      <Animated.View
+                        onLayout={handleContentLayout}
+                        style={[styles.contentSwapLayer, currentContentSwapStyle]}
+                      >
+                        {renderTransitionContent(currentContentSnapshot)}
+                      </Animated.View>
+                    </View>
+                    {shouldRenderInlineActionStack ? (
+                      <View style={[styles.actionFlowSpacer, { height: actionFlowSpacerHeight }]} />
                     ) : null}
-                    <View style={styles.contentSlot}>{children}</View>
-                    {transitionedActionStack}
+                    {shouldRenderInlineActionStack ? transitionedActionStack : null}
                   </View>
                 </Animated.View>
               </Animated.View>
@@ -1070,6 +1359,71 @@ export function IdentityFlowSecondaryAction({
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const activeTheme = useAppTheme();
+  const actionContentMotion = useRef(new Animated.Value(1)).current;
+  const actionContentRef = useRef({ icon, label });
+  const [renderedActionContent, setRenderedActionContent] = useState(actionContentRef.current);
+  const [previousActionContent, setPreviousActionContent] = useState<{
+    readonly icon: keyof typeof Ionicons.glyphMap;
+    readonly label: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const previousContent = actionContentRef.current;
+
+    if (previousContent.icon === icon && previousContent.label === label) {
+      return undefined;
+    }
+
+    const nextContent = { icon, label };
+    actionContentRef.current = nextContent;
+    setPreviousActionContent(previousContent);
+    setRenderedActionContent(nextContent);
+    actionContentMotion.stopAnimation();
+    actionContentMotion.setValue(0);
+
+    const animation = Animated.timing(actionContentMotion, {
+      duration: IDENTITY_FLOW_CONTENT_ENTER_MS,
+      easing: BRAND_VERIFICATION_EASING,
+      toValue: 1,
+      useNativeDriver: true,
+    });
+
+    animation.start(({ finished }) => {
+      if (finished) {
+        setPreviousActionContent(null);
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [actionContentMotion, icon, label]);
+
+  const currentActionContentStyle = {
+    opacity: actionContentMotion,
+    transform: [
+      {
+        translateY: actionContentMotion.interpolate({
+          inputRange: [0, 1],
+          outputRange: [4, 0],
+        }),
+      },
+    ],
+  };
+  const previousActionContentStyle = {
+    opacity: actionContentMotion.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0],
+    }),
+    transform: [
+      {
+        translateY: actionContentMotion.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -4],
+        }),
+      },
+    ],
+  };
 
   function handlePress() {
     if (!onPress) {
@@ -1078,6 +1432,28 @@ export function IdentityFlowSecondaryAction({
 
     Keyboard.dismiss();
     setTimeout(onPress, IDENTITY_FLOW_ACTION_AFTER_KEYBOARD_DISMISS_MS);
+  }
+
+  function renderActionContent(
+    content: { readonly icon: keyof typeof Ionicons.glyphMap; readonly label: string },
+    animatedStyle: StyleProp<ViewStyle>,
+    overlay = false,
+  ) {
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.secondaryActionContent,
+          overlay ? styles.secondaryActionContentOverlay : null,
+          animatedStyle,
+        ]}
+      >
+        <Ionicons color={activeTheme.colors.textMuted} name={content.icon} size={18} />
+        <AppText style={[styles.secondaryActionText, { color: activeTheme.colors.textMuted }]}>
+          {content.label}
+        </AppText>
+      </Animated.View>
+    );
   }
 
   return (
@@ -1098,10 +1474,12 @@ export function IdentityFlowSecondaryAction({
         disabled ? styles.disabled : null,
       ]}
     >
-      <Ionicons color={activeTheme.colors.textMuted} name={icon} size={18} />
-      <AppText style={[styles.secondaryActionText, { color: activeTheme.colors.textMuted }]}>
-        {label}
-      </AppText>
+      <View style={styles.secondaryActionContentFrame}>
+        {previousActionContent
+          ? renderActionContent(previousActionContent, previousActionContentStyle, true)
+          : null}
+        {renderActionContent(renderedActionContent, currentActionContentStyle)}
+      </View>
     </Pressable>
   );
 }
@@ -1155,11 +1533,29 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     width: '100%',
   },
+  transitionedContentFrame: {
+    width: '100%',
+  },
   transitionedContentMeasure: {
+    gap: theme.spacing.sm,
+    position: 'relative',
+    width: '100%',
+  },
+  contentSwapLayer: {
     gap: theme.spacing.sm,
     width: '100%',
   },
+  contentSwapLayerOverlay: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 1,
+  },
   transitionedActionStack: {
+    width: '100%',
+  },
+  actionFlowSpacer: {
     width: '100%',
   },
   contentSlot: {
@@ -1330,6 +1726,26 @@ const styles = StyleSheet.create({
     minWidth: 196,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
+  },
+  secondaryActionContentFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 20,
+    minWidth: 150,
+    position: 'relative',
+  },
+  secondaryActionContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+  },
+  secondaryActionContentOverlay: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   secondaryActionText: {
     color: theme.colors.textMuted,

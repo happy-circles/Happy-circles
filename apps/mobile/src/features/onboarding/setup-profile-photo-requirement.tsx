@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export function SetupProfilePhotoRequirement({
   disabled,
@@ -13,28 +14,39 @@ export function SetupProfilePhotoRequirement({
   readonly hasSavedPhoto: boolean;
   readonly onPress: () => void;
 }) {
+  const activeTheme = useAppTheme();
+
   return (
     <View
       style={[
         styles.photoRequirement,
-        hasSavedPhoto ? styles.photoRequirementReady : styles.photoRequirementMissing,
+        {
+          backgroundColor: hasSavedPhoto
+            ? activeTheme.colors.successSoft
+            : activeTheme.colors.surfaceSoft,
+          borderColor: hasSavedPhoto ? activeTheme.colors.successSoft : activeTheme.colors.border,
+        },
       ]}
     >
       <View
         style={[
           styles.photoRequirementIcon,
-          hasSavedPhoto ? styles.photoRequirementIconReady : styles.photoRequirementIconMissing,
+          {
+            backgroundColor: activeTheme.colors.elevated,
+          },
         ]}
       >
         <Ionicons
-          color={hasSavedPhoto ? theme.colors.success : theme.colors.textMuted}
+          color={hasSavedPhoto ? activeTheme.colors.success : activeTheme.colors.textMuted}
           name={hasSavedPhoto ? 'checkmark' : 'camera'}
           size={18}
         />
       </View>
       <View style={styles.photoRequirementCopy}>
-        <AppText style={styles.photoRequirementTitle}>Foto de perfil</AppText>
-        <AppText style={styles.photoRequirementSubtitle}>
+        <AppText style={[styles.photoRequirementTitle, { color: activeTheme.colors.text }]}>
+          Foto de perfil
+        </AppText>
+        <AppText style={[styles.photoRequirementSubtitle, { color: activeTheme.colors.textMuted }]}>
           {hasSavedPhoto
             ? 'Lista para que tus círculos te reconozcan.'
             : 'Opcional; puedes agregarla ahora o despues.'}
@@ -46,11 +58,20 @@ export function SetupProfilePhotoRequirement({
         onPress={onPress}
         style={({ pressed }) => [
           styles.photoRequirementAction,
+          {
+            backgroundColor: activeTheme.colors.elevated,
+            borderColor: activeTheme.colors.border,
+          },
           pressed && !disabled ? styles.pressed : null,
           disabled ? styles.disabledAction : null,
         ]}
       >
-        <AppText style={styles.photoRequirementActionText}>
+        <AppText
+          style={[
+            styles.photoRequirementActionText,
+            { color: disabled ? activeTheme.colors.textMuted : activeTheme.colors.primaryStrong },
+          ]}
+        >
           {hasSavedPhoto ? 'Cambiar' : 'Agregar'}
         </AppText>
       </Pressable>
@@ -68,14 +89,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  photoRequirementMissing: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-  },
-  photoRequirementReady: {
-    backgroundColor: theme.colors.successSoft,
-    borderColor: theme.colors.successSoft,
-  },
   photoRequirementIcon: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
@@ -83,31 +96,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
-  photoRequirementIconMissing: {
-    backgroundColor: theme.colors.surface,
-  },
-  photoRequirementIconReady: {
-    backgroundColor: theme.colors.surface,
-  },
   photoRequirementCopy: {
     flex: 1,
     gap: 2,
   },
   photoRequirementTitle: {
-    color: theme.colors.text,
     fontSize: theme.typography.footnote,
     fontWeight: '800',
   },
   photoRequirementSubtitle: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '600',
     lineHeight: 16,
   },
   photoRequirementAction: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
     borderRadius: theme.radius.small,
     borderWidth: 1,
     justifyContent: 'center',
@@ -116,7 +119,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
   photoRequirementActionText: {
-    color: theme.colors.text,
     fontSize: theme.typography.caption,
     fontWeight: '800',
   },

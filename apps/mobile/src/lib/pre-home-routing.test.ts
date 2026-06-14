@@ -56,6 +56,23 @@ describe('resolvePreHomeRouteDecision', () => {
     });
   });
 
+  it('keeps qa preview routes in place before auth redirects run', () => {
+    expect(
+      resolve({
+        isQaPreviewRoute: true,
+        isSetupAccountRoute: true,
+        status: 'signed_out',
+      }),
+    ).toEqual({ action: 'stay' });
+
+    expect(
+      resolve({
+        isJoinRoute: true,
+        isQaPreviewRoute: true,
+      }),
+    ).toEqual({ action: 'stay' });
+  });
+
   it('routes incomplete authenticated users to the next setup step', () => {
     expect(
       resolve({

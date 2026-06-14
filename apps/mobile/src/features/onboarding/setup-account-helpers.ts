@@ -1,5 +1,9 @@
 export type SecurityTone = 'danger' | 'muted' | 'success';
 
+export const SETUP_ACCOUNT_PREVIEW_TOKEN = 'onboarding-dev';
+
+export type SetupAccountPreviewCase = 'complete' | 'email' | 'fresh' | 'security';
+
 export type SetupProfileErrors = {
   readonly fullName?: string;
   readonly phoneNationalNumber?: string;
@@ -7,6 +11,11 @@ export type SetupProfileErrors = {
 };
 
 export type SetupAccountMode = 'full_setup' | 'security_only';
+
+export interface SetupAccountPreviewParams {
+  readonly case: SetupAccountPreviewCase;
+  readonly enabled: boolean;
+}
 
 export {
   resolveTrustedDeviceAuthMethods,
@@ -29,6 +38,32 @@ export function resolveSetupAccountRouteParams(input: {
       (Array.isArray(input.editPhone) ? input.editPhone[0] : input.editPhone) === 'true',
     requestedStep: Array.isArray(input.step) ? input.step[0] : input.step,
     returnTo: Array.isArray(input.returnTo) ? input.returnTo[0] : input.returnTo,
+  };
+}
+
+function readRouteParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isSetupAccountPreviewCase(value: string | undefined): value is SetupAccountPreviewCase {
+  return value === 'complete' || value === 'email' || value === 'fresh' || value === 'security';
+}
+
+export function resolveSetupAccountPreviewParams(
+  input: {
+    readonly case?: string | string[];
+    readonly preview?: string | string[];
+    readonly token?: string | string[];
+  },
+  isDev: boolean,
+): SetupAccountPreviewParams {
+  const requestedCase = readRouteParam(input.case);
+  const preview = readRouteParam(input.preview);
+  const token = readRouteParam(input.token);
+
+  return {
+    case: isSetupAccountPreviewCase(requestedCase) ? requestedCase : 'fresh',
+    enabled: isDev && preview === 'true' && token === SETUP_ACCOUNT_PREVIEW_TOKEN,
   };
 }
 

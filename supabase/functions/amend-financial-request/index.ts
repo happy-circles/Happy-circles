@@ -43,7 +43,11 @@ Deno.serve((request) =>
       throw error;
     }
 
-    await notifyFinancialRequestPending(client, actorUserId, readPayloadString(data, 'requestId'));
+    await notifyFinancialRequestPending(
+      client,
+      actorUserId,
+      readPayloadString(data, 'amendedRequestId'),
+    );
 
     return data;
   }),

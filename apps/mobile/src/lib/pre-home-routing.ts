@@ -89,6 +89,10 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
     return stay();
   }
 
+  if (input.isQaPreviewRoute) {
+    return stay();
+  }
+
   const isPublicSignedOutRoute =
     input.isPublicInviteRoute || input.isResetPasswordRoute || input.isOAuthCallbackRoute;
 

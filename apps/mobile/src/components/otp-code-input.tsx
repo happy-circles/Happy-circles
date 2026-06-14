@@ -10,6 +10,7 @@ import {
 
 import { AppText } from '@/components/app-text';
 import { theme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 interface OtpCodeInputProps {
   readonly disabled?: boolean;
@@ -28,6 +29,7 @@ export function OtpCodeInput({
   style,
   value,
 }: OtpCodeInputProps) {
+  const activeTheme = useAppTheme();
   const inputRef = useRef<TextInput | null>(null);
   const [focused, setFocused] = useState(false);
   const digits = Array.from({ length }, (_, index) => value[index] ?? '');
@@ -67,11 +69,21 @@ export function OtpCodeInput({
               key={index}
               style={[
                 styles.box,
-                active ? styles.boxActive : null,
-                hasError ? styles.boxError : null,
+                {
+                  backgroundColor: activeTheme.colors.surfaceSoft,
+                  borderColor: hasError
+                    ? activeTheme.colors.danger
+                    : active
+                      ? activeTheme.colors.primary
+                      : activeTheme.colors.border,
+                  borderWidth: active ? 2 : 1,
+                },
               ]}
             >
-              <AppText scaleRole="control" style={styles.digit}>
+              <AppText
+                scaleRole="control"
+                style={[styles.digit, { color: activeTheme.colors.text }]}
+              >
                 {digit}
               </AppText>
             </View>
@@ -98,31 +110,21 @@ const styles = StyleSheet.create({
   boxRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
     justifyContent: 'center',
     width: '100%',
   },
   box: {
     alignItems: 'center',
-    aspectRatio: 1,
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.small,
+    borderRadius: theme.radius.tiny,
     borderWidth: 1,
     flex: 1,
+    height: 42,
     justifyContent: 'center',
-    maxWidth: 40,
-    minWidth: 22,
-  },
-  boxActive: {
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-  },
-  boxError: {
-    borderColor: theme.colors.danger,
+    maxWidth: 34,
+    minWidth: 24,
   },
   digit: {
-    color: theme.colors.text,
     fontSize: 18,
     fontWeight: '800',
     lineHeight: 22,

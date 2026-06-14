@@ -171,4 +171,16 @@ describe('app smoke checks', () => {
     expect(activityScreen).not.toContain('useRejectSettlementMutation');
     expect(activityScreen).not.toContain('useExecuteSettlementMutation');
   });
+
+  it('keeps amended financial requests wired to push notifications', () => {
+    const amendFinancialRequest = readRepoFile(
+      'supabase',
+      'functions',
+      'amend-financial-request',
+      'index.ts',
+    );
+
+    expect(amendFinancialRequest).toContain("readPayloadString(data, 'amendedRequestId')");
+    expect(amendFinancialRequest).not.toContain("readPayloadString(data, 'requestId')");
+  });
 });

@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "11268892205",
+    "project_id": "happy-cricles-auth",
+    "storage_bucket": "happy-cricles-auth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:11268892205:android:6d04b7d95255c259073aa4",
+        "android_client_info": {
+          "package_name": "com.happycircles.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "11268892205-ni80vp3d45li277n6php2p3q9ijo5oqa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5pRbzNBNnj8MwpB5bvf-xpJDNHmrP-HE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "11268892205-ni80vp3d45li277n6php2p3q9ijo5oqa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "11268892205-f9abat8490i5ttbtsgt4qidacd26q6j9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.happycircles.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

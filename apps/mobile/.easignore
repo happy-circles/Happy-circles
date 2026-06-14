@@ -12,3 +12,7 @@ coverage
 .env
 .env.*
 !.env.example
+credentials.json
+*.p8
+*service-account*.json
+*ServiceAccount*.json

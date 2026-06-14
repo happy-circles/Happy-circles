@@ -30,6 +30,7 @@ export function AccountInviteEntryTokenForm({
           error={tokenFieldError}
           icon="key"
           label="Código de invitación"
+          reserveError={Boolean(tokenFieldError)}
           status={status}
         >
           <IdentityFlowTextInput

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 import type { ExpoConfig } from 'expo/config';
 
@@ -27,6 +28,8 @@ const supabaseAnonKey = firstNonEmpty(
 const googleWebClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
 const googleIosClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
 const googleAndroidClientId = firstNonEmpty(env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID);
+const googleServicesFile = './google-services.json';
+const androidGoogleServicesFile = existsSync(googleServicesFile) ? googleServicesFile : null;
 const appWebHost = (() => {
   try {
     return new URL(appWebOrigin).host;
@@ -136,6 +139,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.happycircles.app',
+    ...(androidGoogleServicesFile ? { googleServicesFile: androidGoogleServicesFile } : {}),
     softwareKeyboardLayoutMode: 'resize',
     versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1,
     adaptiveIcon: {

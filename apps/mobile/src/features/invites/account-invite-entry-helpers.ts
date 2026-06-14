@@ -9,9 +9,9 @@ export type RememberedReauthReason = 'biometric-failed' | 'session-expired';
 export const AUTH_SUCCESS_NAVIGATION_DELAY_MS = 120;
 export const AUTH_ROUTE_TRANSITION_HOLD_MS = 15000;
 export const AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS = 90;
-export const AUTH_CONTENT_EXIT_MS = 120;
-export const AUTH_MODE_ROUTE_DELAY_MS = 140;
-export const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 70;
+export const AUTH_CONTENT_EXIT_MS = 100;
+export const AUTH_MODE_ROUTE_DELAY_MS = 90;
+export const AUTH_SAME_POSITION_REVEAL_DELAY_MS = 40;
 export const PASSWORD_RESET_SENT_MESSAGE =
   'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
 export const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Código verificado.';
@@ -78,15 +78,11 @@ export function resolveTokenLogoSubtitle(input: {
   readonly inviterDisplayName?: string | null;
   readonly isFetching: boolean;
 }): string {
-  if (input.inviterDisplayName && !input.blockingMessage) {
-    return `${input.inviterDisplayName} te invitó.`;
-  }
-
   if (input.isFetching) {
-    return 'Validando tu invitación.';
+    return 'Validando invitación.';
   }
 
-  return 'Pega tu código de invitación para continuar.';
+  return 'Pega tu código para continuar.';
 }
 
 export function resolveAuthLogoCopy(input: {
@@ -95,6 +91,7 @@ export function resolveAuthLogoCopy(input: {
   readonly isRecovery: boolean;
   readonly recoveryLinkSent: boolean;
   readonly showAuthOptions: boolean;
+  readonly showPasswordFields: boolean;
 }): {
   readonly subtitle: string;
   readonly title: string;
@@ -121,8 +118,10 @@ export function resolveAuthLogoCopy(input: {
   return {
     subtitle: input.isOtherAccountMode
       ? 'Usa otra cuenta para continuar.'
-      : 'Elige tu método de ingreso.',
-    title: 'Ingresa a Happy Circles',
+      : input.showPasswordFields
+        ? 'Ingresa tus datos.'
+        : 'Elige cómo entrar.',
+    title: 'Inicia sesión',
   };
 }
 
@@ -160,7 +159,7 @@ export function resolveSecondaryAuthAction(input: {
   return {
     icon: 'key-outline',
     intent: 'exit_to_invite',
-    label: 'Volver a invitación',
+    label: 'Usar invitación',
   };
 }
 

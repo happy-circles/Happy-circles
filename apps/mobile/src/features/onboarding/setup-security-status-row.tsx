@@ -3,30 +3,31 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
-import { theme } from '@/lib/theme';
+import { theme, type AppTheme } from '@/lib/theme';
+import { useAppTheme } from '@/providers/theme-provider';
 
 import type { SecurityTone } from './setup-account-helpers';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
-function resolveSecurityTone(tone: SecurityTone) {
+function resolveSecurityTone(tone: SecurityTone, activeTheme: AppTheme) {
   if (tone === 'success') {
     return {
-      backgroundColor: theme.colors.successSoft,
-      color: theme.colors.success,
+      backgroundColor: activeTheme.colors.successSoft,
+      color: activeTheme.colors.success,
     };
   }
 
   if (tone === 'danger') {
     return {
-      backgroundColor: theme.colors.dangerSoft,
-      color: theme.colors.danger,
+      backgroundColor: activeTheme.colors.dangerSoft,
+      color: activeTheme.colors.danger,
     };
   }
 
   return {
-    backgroundColor: theme.colors.surfaceSoft,
-    color: theme.colors.textMuted,
+    backgroundColor: activeTheme.colors.surfaceSoft,
+    color: activeTheme.colors.textMuted,
   };
 }
 
@@ -45,7 +46,8 @@ export function SecurityStatusRow({
   readonly tone: SecurityTone;
   readonly trailing?: ReactNode;
 }) {
-  const visual = resolveSecurityTone(tone);
+  const activeTheme = useAppTheme();
+  const visual = resolveSecurityTone(tone, activeTheme);
 
   return (
     <View style={styles.securityRow}>
@@ -53,8 +55,14 @@ export function SecurityStatusRow({
         <Ionicons color={visual.color} name={icon} size={20} />
       </View>
       <View style={styles.textWrap}>
-        <AppText style={styles.readOnlyTitle}>{title}</AppText>
-        {subtitle ? <AppText style={styles.readOnlySubtitle}>{subtitle}</AppText> : null}
+        <AppText style={[styles.readOnlyTitle, { color: activeTheme.colors.text }]}>
+          {title}
+        </AppText>
+        {subtitle ? (
+          <AppText style={[styles.readOnlySubtitle, { color: activeTheme.colors.textMuted }]}>
+            {subtitle}
+          </AppText>
+        ) : null}
       </View>
       {trailing ?? (
         <AppText style={[styles.securityStatus, { color: visual.color }]}>{status}</AppText>
@@ -83,12 +91,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   readOnlyTitle: {
-    color: theme.colors.text,
     fontSize: theme.typography.body,
     fontWeight: '700',
   },
   readOnlySubtitle: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,
     lineHeight: 18,
   },

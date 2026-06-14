@@ -24,7 +24,7 @@ export function resolveIdentityFlowLayout(input: {
     input.identityPosition === 'auto' ? 'center' : input.identityPosition;
   const isCenterIdentity = resolvedIdentityPosition === 'center';
   const topIdentityY = input.topOffset;
-  const centerRestRatio = input.centerLayout === 'compact' ? 0.32 : 0.44;
+  const centerRestRatio = input.centerLayout === 'compact' ? 0.32 : 0.4;
   const preferredCenterIdentityY = input.bodyHeight / 2 - input.stageSize / 2;
   const readableCenterIdentityY = input.bodyHeight * centerRestRatio - input.stageSize / 2;
   const contentHeight = Math.max(0, input.contentHeight ?? 0);

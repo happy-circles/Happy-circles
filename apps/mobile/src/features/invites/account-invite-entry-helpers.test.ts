@@ -80,6 +80,7 @@ describe('account invite entry helpers', () => {
         isRecovery: true,
         recoveryLinkSent: true,
         showAuthOptions: true,
+        showPasswordFields: false,
       }),
     ).toEqual({
       subtitle: 'Si existe la cuenta, el enlace va en camino.',
@@ -108,7 +109,7 @@ describe('account invite entry helpers', () => {
         inviterDisplayName: 'Ana',
         isFetching: false,
       }),
-    ).toBe('Ana te invitó.');
+    ).toBe('Pega tu código para continuar.');
     expect(
       resolveSecondaryAuthAction({
         hasRememberedAccount: true,

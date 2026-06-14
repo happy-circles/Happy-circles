@@ -16,8 +16,8 @@ describe('identity flow helpers', () => {
         verticalGap: 24,
       }),
     ).toEqual({
-      centerContentY: 476,
-      centerIdentityY: 252,
+      centerContentY: 444,
+      centerIdentityY: 220,
       isCenterIdentity: true,
       resolvedIdentityPosition: 'center',
       shouldReserveMessageSlot: true,
@@ -62,8 +62,8 @@ describe('identity flow helpers', () => {
         verticalGap: 8,
       }),
     ).toEqual({
-      centerContentY: 376,
-      centerIdentityY: 160,
+      centerContentY: 352,
+      centerIdentityY: 136,
       isCenterIdentity: false,
       resolvedIdentityPosition: 'top',
       shouldReserveMessageSlot: true,

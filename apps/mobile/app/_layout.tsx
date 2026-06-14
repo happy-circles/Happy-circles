@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Stack,
-  useLocalSearchParams,
+  useGlobalSearchParams,
   useRootNavigationState,
   useRouter,
   useSegments,
@@ -64,6 +64,7 @@ import { subscribeSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { PrimaryAction } from '@/components/primary-action';
 import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
 import { SurfaceCard } from '@/components/surface-card';
+import { resolveSetupAccountPreviewParams } from '@/features/onboarding/setup-account-helpers';
 import { appConfig } from '@/lib/config';
 import { getCurrentAppVersion } from '@/lib/device-trust';
 import {
@@ -80,6 +81,7 @@ import {
 } from '@/lib/notifications';
 import { disableCurrentPushDevice, registerCurrentPushDevice } from '@/lib/push-registration';
 import { notificationViewedKeysWithLocalCache, useAppSnapshot } from '@/lib/live-data';
+import { useSnapshotRealtimeBridge } from '@/lib/live-data/snapshot-realtime';
 import { returnToRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
 import { resolvePreHomeRouteDecision } from '@/lib/pre-home-routing';
@@ -311,6 +313,11 @@ function NotificationBridge() {
   useEffect(() => {
     snapshotRefetchRef.current = snapshotQuery.refetch;
   }, [snapshotQuery.refetch]);
+
+  useSnapshotRealtimeBridge(
+    session.userId,
+    session.status !== 'loading' && Boolean(session.userId),
+  );
 
   useEffect(() => {
     void configureNotifications();
@@ -2042,9 +2049,11 @@ function SetupEntryHandoffOverlay({
 function SessionRouteGuard() {
   const { accountAccessState, profileCompletionState, setupState, status } = useSession();
   const rootNavigationState = useRootNavigationState();
-  const params = useLocalSearchParams<{
+  const params = useGlobalSearchParams<{
     auth_callback?: string | string[];
+    case?: string | string[];
     preview?: string | string[];
+    token?: string | string[];
   }>();
   const router = useRouter();
   const segments = useSegments();
@@ -2072,7 +2081,18 @@ function SessionRouteGuard() {
       const isOAuthCallbackRoute = isSetupAccountRoute && isGoogleAuthCallback;
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
       const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
-      const isQaPreviewRoute = __DEV__ && rawPreview === 'true';
+      const setupPreview = resolveSetupAccountPreviewParams(
+        {
+          case: params.case,
+          preview: params.preview,
+          token: params.token,
+        },
+        __DEV__,
+      );
+      const isQaPreviewRoute =
+        __DEV__ &&
+        rawPreview === 'true' &&
+        (isPublicInviteRoute || (isSetupAccountRoute && setupPreview.enabled));
       const isAuthRouteTransitionHeld =
         isJoinRoute && !hasJoinToken && isAuthRouteTransitionHoldActive();
 
@@ -2120,7 +2140,9 @@ function SessionRouteGuard() {
   }, [
     accountAccessState,
     params.auth_callback,
+    params.case,
     params.preview,
+    params.token,
     profileCompletionState,
     rootNavigationState?.key,
     router,

@@ -42,6 +42,10 @@ export const accountInviteEntryStyles = StyleSheet.create({
     gap: theme.spacing.xs,
     width: '100%',
   },
+  tokenContent: {
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
   emailAuthForm: {
     gap: theme.spacing.md,
   },

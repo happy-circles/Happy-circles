@@ -63,10 +63,7 @@ import { AuthEntryIdentity } from './account-invite-entry-identity';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
   AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
-  AUTH_CONTENT_EXIT_MS,
-  AUTH_MODE_ROUTE_DELAY_MS,
   AUTH_ROUTE_TRANSITION_HOLD_MS,
-  AUTH_SAME_POSITION_REVEAL_DELAY_MS,
   AUTH_SUCCESS_NAVIGATION_DELAY_MS,
   PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE,
   PASSWORD_RESET_RESEND_SECONDS,
@@ -91,6 +88,8 @@ import { useLaunchIntroVisible } from '@/components/launch-intro-presence';
 
 const AUTH_STATE_TRANSITION_MS = 260;
 const AUTH_STATE_EASING = BRAND_VERIFICATION_EASING;
+const AUTH_SURFACE_TRANSITION_SETTLE_MS = AUTH_STATE_TRANSITION_MS + 40;
+const AUTH_STAGE_TRAVEL_SETTLE_MS = AUTH_STATE_TRANSITION_MS + 120;
 const AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE = 148;
 const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
@@ -504,22 +503,17 @@ export function AccountSignInEntry({
     clearSurfaceTransitionTimers();
     setTransitionTargetSurface(targetSurface);
     setAuthSurfaceTransitioning(true);
-    setAuthContentVisible(false);
+    setAuthContentVisible(true);
+    applyNextSurface();
 
-    surfaceSwapTimerRef.current = setTimeout(() => {
-      surfaceSwapTimerRef.current = null;
-      applyNextSurface();
-
-      surfaceRevealTimerRef.current = setTimeout(
-        () => {
-          surfaceRevealTimerRef.current = null;
-          setAuthContentVisible(true);
-          setAuthSurfaceTransitioning(false);
-          setTransitionTargetSurface(null);
-        },
-        waitForStageTravel ? AUTH_MODE_ROUTE_DELAY_MS : AUTH_SAME_POSITION_REVEAL_DELAY_MS,
-      );
-    }, AUTH_CONTENT_EXIT_MS);
+    surfaceRevealTimerRef.current = setTimeout(
+      () => {
+        surfaceRevealTimerRef.current = null;
+        setAuthSurfaceTransitioning(false);
+        setTransitionTargetSurface(null);
+      },
+      waitForStageTravel ? AUTH_STAGE_TRAVEL_SETTLE_MS : AUTH_SURFACE_TRANSITION_SETTLE_MS,
+    );
   }
 
   function syncJoinSurfaceParams(nextSurface: JoinEntrySurface) {
@@ -1250,10 +1244,11 @@ export function AccountSignInEntry({
     isRecovery,
     recoveryLinkSent,
     showAuthOptions,
+    showPasswordFields,
   });
   const canTapSavedAccountCopy = Boolean(!showAuthOptions && account && !isRecovery);
   const authLogoCopy = <IdentityFlowLogoCopy subtitle={authLogo.subtitle} title={authLogo.title} />;
-  const authIdentityPosition = showAuthOptions && showPasswordFields ? 'top' : 'center';
+  const authIdentityPosition = isRecovery ? 'top' : 'center';
   const authContentTransitionKey =
     !showAuthOptions && account && !isRecovery
       ? 'auth:saved-account'
@@ -1275,7 +1270,7 @@ export function AccountSignInEntry({
     <IdentityFlowSecondaryAction
       disabled={authBusy}
       icon="person-circle-outline"
-      label="Ya tengo cuenta"
+      label="Tengo cuenta"
       onPress={authBusy ? undefined : showSignInEntry}
     />
   );
@@ -1304,25 +1299,27 @@ export function AccountSignInEntry({
       />
     );
   const tokenContent = (
-    <AccountInviteEntryTokenForm
-      onBlurToken={() => setTokenTouched(true)}
-      onChangeToken={(value) => {
-        setTokenMessage(null);
-        setTokenInput(value);
-      }}
-      status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
-      tokenFieldError={tokenFieldError}
-      tokenInput={tokenInput}
-    />
+    <View style={styles.tokenContent}>
+      <AccountInviteEntryTokenForm
+        onBlurToken={() => setTokenTouched(true)}
+        onChangeToken={(value) => {
+          setTokenMessage(null);
+          setTokenInput(value);
+        }}
+        status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
+        tokenFieldError={tokenFieldError}
+        tokenInput={tokenInput}
+      />
+      {tokenPrimaryAction}
+    </View>
   );
   const isTokenSurface = entrySurface === 'token';
   const footerSurface =
     authSurfaceTransitioning && transitionTargetSurface ? transitionTargetSurface : entrySurface;
   const isTokenFooterSurface = footerSurface === 'token';
   const activeIdentity = isTokenSurface ? tokenIdentity : authIdentity;
-  const activeIdentityPosition = isTokenSurface ? 'top' : authIdentityPosition;
+  const activeIdentityPosition = isTokenSurface ? 'center' : authIdentityPosition;
   const shouldRevealAuthPrimaryAction = !isTokenSurface && showPasswordFields;
-  const shouldRevealAuthFooterPrimaryAction = !isTokenFooterSurface && showPasswordFields;
   const activeKeyboardActionClearance = isTokenFooterSurface
     ? AUTH_TOKEN_KEYBOARD_ACTION_CLEARANCE
     : showPasswordFields
@@ -1330,8 +1327,6 @@ export function AccountSignInEntry({
       : undefined;
   const activeFooterAction = (
     <>
-      {isTokenFooterSurface ? tokenPrimaryAction : null}
-      {!isTokenFooterSurface && shouldRevealAuthFooterPrimaryAction ? authPrimaryAction : null}
       {isTokenFooterSurface ? tokenFooterAction : authFooterAction}
     </>
   );
@@ -1341,7 +1336,7 @@ export function AccountSignInEntry({
       ? `${authContentTransitionKey}:credentials`
       : authContentTransitionKey;
   const activeMessage = isTokenSurface ? (
-    <IdentityFlowLogoCopy subtitle={tokenLogoSubtitle} title="Bienvenido a Happy Circles" />
+    <IdentityFlowLogoCopy subtitle={tokenLogoSubtitle} title="Tu invitación" />
   ) : showAuthOptions && message ? (
     <MessageBanner message={message} tone={authResultState === 'error' ? 'danger' : 'neutral'} />
   ) : canTapSavedAccountCopy ? (
@@ -1366,13 +1361,15 @@ export function AccountSignInEntry({
       bodyStyle={styles.rememberedBody}
       contentTransitionKey={activeContentTransitionKey}
       contentVisible={authContentVisible}
+      fitContentToScreen={shouldRevealAuthPrimaryAction}
       identity={activeIdentity}
       identityCenterLayout="balanced"
       identityPosition={activeIdentityPosition}
       keyboardActionClearance={activeKeyboardActionClearance}
       message={activeMessage}
+      preserveActionsDuringContentTransition
       scrollEnabled
-      transitionScrollPolicy={shouldRevealAuthPrimaryAction ? 'reveal-end' : 'preserve'}
+      transitionScrollPolicy={shouldRevealAuthPrimaryAction ? 'preserve' : 'reset-top'}
     >
       {isTokenSurface ? (
         tokenContent
@@ -1521,6 +1518,7 @@ export function AccountSignInEntry({
                         </View>
                       ) : null}
                     </View>
+                    {authPrimaryAction}
                   </>
                 ) : null}
               </IdentityFlowForm>

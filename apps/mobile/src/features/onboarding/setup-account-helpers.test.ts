@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SETUP_ACCOUNT_PREVIEW_TOKEN,
+  resolveSetupAccountPreviewParams,
   resolveSetupAccountMode,
   resolveSetupAccountRouteParams,
   resolveTrustedDeviceAuthMethods,
@@ -93,6 +95,48 @@ describe('setup account helpers', () => {
       editPhoneMode: false,
       requestedStep: 'profile',
       returnTo: '/home',
+    });
+  });
+
+  it('requires the development preview token before enabling setup preview', () => {
+    expect(
+      resolveSetupAccountPreviewParams(
+        {
+          case: 'security',
+          preview: 'true',
+          token: SETUP_ACCOUNT_PREVIEW_TOKEN,
+        },
+        true,
+      ),
+    ).toEqual({
+      case: 'security',
+      enabled: true,
+    });
+
+    expect(
+      resolveSetupAccountPreviewParams(
+        {
+          preview: 'true',
+          token: 'wrong-token',
+        },
+        true,
+      ),
+    ).toEqual({
+      case: 'fresh',
+      enabled: false,
+    });
+
+    expect(
+      resolveSetupAccountPreviewParams(
+        {
+          preview: 'true',
+          token: SETUP_ACCOUNT_PREVIEW_TOKEN,
+        },
+        false,
+      ),
+    ).toEqual({
+      case: 'fresh',
+      enabled: false,
     });
   });
 
