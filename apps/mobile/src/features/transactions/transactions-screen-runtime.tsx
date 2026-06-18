@@ -13,7 +13,6 @@ import { SectionBlock } from '@/components/section-block';
 import { pushRoute, returnToRoute } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import {
-  buildMovementHistoryCases,
   friendlyHistoryStepLabel,
   historyAmountIsVoided,
   historyCardTitle,
@@ -54,13 +53,17 @@ import {
   isConsolidatedTransactionItem,
   isPendingTransactionItem,
 } from '@/lib/transaction-presentation';
+import {
+  buildTransactionMovementHistoryCases,
+  historyCaseVisibleWithPendingHappyCircle,
+  pendingHappyCircleCaseIds,
+} from '@/lib/transaction-history-cases';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { PendingTransactionCard } from './transactions-pending-card';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
   PRIMARY_FILTER_OPTIONS,
-  activityHistoryCaseItem,
   emptyFilterDescription,
   emptyFilterTitle,
   initialsBackgroundColor,
@@ -166,14 +169,7 @@ export function TransactionsScreen() {
     [activeFilter, categoryFilter, pendingTransactionItems],
   );
   const visiblePendingHappyCircleCaseIds = useMemo(
-    () =>
-      new Set(
-        visiblePendingTransactionItems.flatMap((item) =>
-          item.kind === 'settlement_proposal' && item.happyCircleCaseId
-            ? [item.happyCircleCaseId]
-            : [],
-        ),
-      ),
+    () => pendingHappyCircleCaseIds(visiblePendingTransactionItems),
     [visiblePendingTransactionItems],
   );
   const historyTransactionItems = useMemo(
@@ -189,13 +185,8 @@ export function TransactionsScreen() {
   const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const historyCases = useMemo(
     () =>
-      buildMovementHistoryCases(
-        historyTransactionItems.map((item) => activityHistoryCaseItem(item)),
-      ).filter(
-        (itemCase) =>
-          itemCase.latest.status !== 'stale' ||
-          !itemCase.latest.happyCircleCaseId ||
-          !visiblePendingHappyCircleCaseIds.has(itemCase.latest.happyCircleCaseId),
+      buildTransactionMovementHistoryCases(historyTransactionItems).filter((itemCase) =>
+        historyCaseVisibleWithPendingHappyCircle(itemCase, visiblePendingHappyCircleCaseIds),
       ),
     [historyTransactionItems, visiblePendingHappyCircleCaseIds],
   );

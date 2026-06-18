@@ -12,6 +12,7 @@ import { SwipePager } from '@/components/swipe-pager';
 import { balanceOverviewStyles as styles } from './balance-overview-screen.styles';
 import {
   FOCUS_OPTIONS,
+  balanceAnalyticsPeriodLabel,
   categoryLensAmount,
   type BalanceFocus,
   type FocusOption,
@@ -209,6 +210,7 @@ export function BalanceLensCarousel({
           onCategoryPress={
             onCategoryPress ? (category) => onCategoryPress(category, selectedPeriod) : undefined
           }
+          periodLabel={balanceAnalyticsPeriodLabel(selectedPeriod, currentPeriod.labels.current)}
         />
       );
 

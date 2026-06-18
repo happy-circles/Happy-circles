@@ -73,6 +73,7 @@ const config: ExpoConfig = {
   },
   userInterfaceStyle: 'automatic',
   plugins: [
+    './plugins/with-ios-modular-headers.cjs',
     'expo-router',
     ...(includeDevClient ? ['expo-dev-client'] : []),
     [

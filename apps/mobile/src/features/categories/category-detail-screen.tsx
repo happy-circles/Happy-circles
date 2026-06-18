@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type {
   ActivityItemDto,
   BalanceAnalyticsCategoryRowDto,
-  BalanceAnalyticsPeriod,
   PersonCardDto,
 } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
@@ -15,7 +14,7 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { PrimaryAction } from '@/components/primary-action';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { SegmentedControl, type SegmentedOption } from '@/components/segmented-control';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
@@ -51,13 +50,11 @@ import {
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
-
-const PERIOD_OPTIONS: readonly SegmentedOption<BalanceAnalyticsPeriod>[] = [
-  { label: 'Semana', value: 'week' },
-  { label: 'Mes', value: 'month' },
-  { label: 'Ano', value: 'year' },
-  { label: 'Todo', value: 'all' },
-];
+import {
+  CATEGORY_PERIOD_OPTIONS,
+  filterActivityItemsByPeriod,
+  snapshotReferenceDate,
+} from './category-period';
 
 function movementCountLabel(count: number): string {
   return `${count} movimiento${count === 1 ? '' : 's'}`;
@@ -162,6 +159,7 @@ export function CategoryDetailScreen({
     defaultPeriod: analytics?.defaultPeriod,
     initialPeriod,
   });
+  const periodReferenceDate = snapshotReferenceDate(snapshotQuery.data?.balanceOverview.updatedAt);
 
   if (snapshotQuery.error && !analytics) {
     return (
@@ -202,7 +200,9 @@ export function CategoryDetailScreen({
     .filter(isConsolidatedTransactionItem)
     .filter(isHistoryCaseItem)
     .filter((item) => matchesCategory(item, category));
-  const visibleHistoryItems = buildLatestMovementHistoryCaseItems(historyItems);
+  const visibleHistoryItems = buildLatestMovementHistoryCaseItems(
+    filterActivityItemsByPeriod(historyItems, period, periodReferenceDate),
+  );
   const icon = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
   const color = transactionCategoryColor(category);
   const backgroundColor = transactionCategoryBackgroundColor(category);
@@ -217,7 +217,7 @@ export function CategoryDetailScreen({
       <SegmentedControl
         label="Periodo"
         onChange={setPeriod}
-        options={PERIOD_OPTIONS}
+        options={CATEGORY_PERIOD_OPTIONS}
         value={period}
       />
 

@@ -1,6 +1,17 @@
 export type IdentityFlowCenterLayout = 'balanced' | 'compact';
 export type IdentityFlowIdentityPosition = 'auto' | 'center' | 'top';
 
+export function resolveIdentityFlowVisualOffset(input: {
+  readonly identityY: number;
+  readonly requestedOffset: number;
+  readonly topIdentityY: number;
+}) {
+  const requestedOffset = Math.max(0, input.requestedOffset);
+  const maxOffsetBeforeTop = Math.max(0, input.identityY - input.topIdentityY);
+
+  return Math.min(requestedOffset, maxOffsetBeforeTop);
+}
+
 export function resolveIdentityFlowLayout(input: {
   readonly bodyHeight: number;
   readonly centerLayout: IdentityFlowCenterLayout;

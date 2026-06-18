@@ -166,40 +166,6 @@ function personIdFromHref(href: string | undefined): string | null {
   }
 }
 
-export function activityHistoryCaseItem(item: ActivityItemDto): HistoryCaseItem {
-  const normalizedKind: HistoryCaseItem['kind'] =
-    item.kind === 'settlement'
-      ? 'settlement'
-      : item.kind === 'payment' || item.kind === 'manual_payment'
-        ? 'payment'
-        : item.kind === 'system'
-          ? 'system'
-          : 'request';
-
-  return {
-    amountMinor: item.amountMinor,
-    category: item.category,
-    counterpartyLabel: item.counterpartyLabel,
-    detail: item.detail,
-    flowLabel: item.flowLabel,
-    happenedAt: item.happenedAt,
-    happenedAtLabel: item.happenedAtLabel,
-    happyCircleCaseId: item.happyCircleCaseId,
-    href: item.href,
-    id: item.id,
-    kind: normalizedKind,
-    originRequestId: item.originRequestId,
-    originSettlementProposalId: item.originSettlementProposalId,
-    replacedByProposalId: item.replacedByProposalId,
-    replacesProposalId: item.replacesProposalId,
-    staleReason: item.staleReason,
-    status: item.status,
-    subtitle: item.subtitle,
-    title: item.title,
-    tone: item.tone,
-  };
-}
-
 export function transactionPersonForHistoryCase(
   people: readonly PersonCardDto[],
   itemCase: Pick<HistoryCase<HistoryCaseItem>, 'latest'>,

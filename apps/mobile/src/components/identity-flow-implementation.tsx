@@ -61,6 +61,7 @@ import { theme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
   resolveIdentityFlowLayout,
+  resolveIdentityFlowVisualOffset,
   type IdentityFlowCenterLayout,
   type IdentityFlowIdentityPosition,
 } from './identity-flow-helpers';
@@ -237,8 +238,7 @@ export function IdentityFlowScreen({
   const measuredFlowHeight = fitContentToScreen
     ? contentHeight + actionStackLayoutHeight + fittedContentClearance
     : 0;
-  const actionStackKeyboardClearance =
-    actionStackMeasuredHeight + IDENTITY_FLOW_KEYBOARD_FIELD_GAP;
+  const actionStackKeyboardClearance = actionStackMeasuredHeight + IDENTITY_FLOW_KEYBOARD_FIELD_GAP;
   const resolvedKeyboardActionClearance =
     keyboardActionClearance ??
     (resolvedFooter
@@ -277,6 +277,7 @@ export function IdentityFlowScreen({
   const topContentY = layoutMetrics.topContentY;
   const centerContentY = layoutMetrics.centerContentY;
   const contentLayoutY = isCenterIdentity ? centerContentY : topContentY;
+  const identityLayoutY = isCenterIdentity ? centerIdentityY : topIdentityY;
   const identityTranslateY = identityMotion.interpolate({
     inputRange: [0, 1],
     outputRange: [centerIdentityY, topIdentityY],
@@ -366,10 +367,19 @@ export function IdentityFlowScreen({
             theme.spacing.xs,
         )
       : 0;
-  const contentVisualOffsetY =
+  const requestedFlowVisualOffsetY =
     Platform.OS === 'web' && fitContentToScreen
       ? Math.max(0, pinnedActionScrollY - theme.spacing.xs)
       : 0;
+  const flowVisualOffsetY = resolveIdentityFlowVisualOffset({
+    identityY: identityLayoutY,
+    requestedOffset: requestedFlowVisualOffsetY,
+    topIdentityY,
+  });
+  const identityVisualTranslateY =
+    flowVisualOffsetY > 0
+      ? Animated.add(identityTranslateY, -flowVisualOffsetY)
+      : identityTranslateY;
 
   const resetKeyboardTranslation = useCallback(() => {
     keyboardAdjustmentGenerationRef.current += 1;
@@ -478,7 +488,7 @@ export function IdentityFlowScreen({
             scrollYRef.current = targetScrollY;
             updateIdentityFlowScrollMetrics({
               scrollY: targetScrollY,
-            viewportHeight,
+              viewportHeight,
             });
             scrollView.scrollTo({ animated: true, y: targetScrollY });
           },
@@ -934,7 +944,7 @@ export function IdentityFlowScreen({
                     styles.identityMotionLayer,
                     {
                       opacity: layoutReady ? 1 : 0,
-                      transform: [{ translateY: identityTranslateY }],
+                      transform: [{ translateY: identityVisualTranslateY }],
                     },
                   ]}
                 >
@@ -946,7 +956,7 @@ export function IdentityFlowScreen({
                   styles.belowIdentity,
                   {
                     opacity: layoutReady ? 1 : 0,
-                    paddingTop: Math.max(0, contentLayoutY - contentVisualOffsetY),
+                    paddingTop: Math.max(0, contentLayoutY - flowVisualOffsetY),
                   },
                 ]}
               >

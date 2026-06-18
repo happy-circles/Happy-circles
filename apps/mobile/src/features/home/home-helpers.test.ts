@@ -291,6 +291,25 @@ describe('dashboard transaction preview', () => {
     expect(preview.visibleItems.map(({ item }) => item.id)).toEqual(['settlement-v2']);
   });
 
+  it('normalizes history item kinds before building the home preview', () => {
+    const manualPayment = activityItem({
+      id: 'manual-payment',
+      kind: 'manual_payment',
+      status: 'posted',
+    });
+
+    const preview = buildDashboardTransactionPreview({
+      historyItems: [manualPayment],
+      limit: 4,
+      notificationViewedKeys: new Set(),
+      pendingItems: [],
+    });
+
+    expect(preview.visibleItems.map(({ item }) => [item.id, item.kind])).toEqual([
+      ['manual-payment', 'payment'],
+    ]);
+  });
+
   it('keeps both direct closed Circle ledger movements in the preview', () => {
     const outgoingMovement = activityItem({
       amountMinor: 25_000,

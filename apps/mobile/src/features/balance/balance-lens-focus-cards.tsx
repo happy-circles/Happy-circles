@@ -136,9 +136,11 @@ function amountVisual(amountMinor: number): {
 function FocusCardTitle({
   align = 'center',
   children,
+  subtitle,
 }: {
   readonly align?: 'center' | 'start';
   readonly children: string;
+  readonly subtitle?: string;
 }) {
   return (
     <View style={[styles.focusCardHeader, align === 'start' ? styles.focusCardHeaderStart : null]}>
@@ -148,6 +150,14 @@ function FocusCardTitle({
       >
         {children}
       </AppText>
+      {subtitle ? (
+        <AppText
+          numberOfLines={1}
+          style={[styles.focusCardSubtitle, align === 'start' ? styles.focusCardTitleStart : null]}
+        >
+          {subtitle}
+        </AppText>
+      ) : null}
     </View>
   );
 }
@@ -966,10 +976,12 @@ export function CategoriesFocusCard({
   categories,
   isActive = true,
   onCategoryPress,
+  periodLabel,
 }: {
   readonly categories: readonly BalanceAnalyticsCategoryRowDto[];
   readonly isActive?: boolean;
   readonly onCategoryPress?: (category: BalanceAnalyticsCategoryRowDto['category']) => void;
+  readonly periodLabel?: string;
 }) {
   const visibleCategories = useMemo(
     () =>
@@ -1002,7 +1014,9 @@ export function CategoriesFocusCard({
     >
       <View style={styles.categoryUniverse}>
         <View pointerEvents="none" style={styles.categoryFixedHeader}>
-          <FocusCardTitle align="start">Categorías</FocusCardTitle>
+          <FocusCardTitle align="start" subtitle={periodLabel}>
+            Categorías
+          </FocusCardTitle>
         </View>
         {visibleCategories.length === 0 ? (
           <View style={styles.categoryUniverseEmptyState}>

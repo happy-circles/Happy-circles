@@ -1,14 +1,15 @@
 import type { ActivityItemDto } from '@happy-circles/application';
 
-import { buildMovementHistoryCases, isHistoryCaseItem } from '@/lib/history-cases';
 import {
   notificationItemCanAlert,
   notificationViewKeyForItem,
 } from '@/lib/live-data/builders/notifications';
 import {
-  isConsolidatedTransactionItem,
-  isPendingTransactionItem,
-} from '@/lib/transaction-presentation';
+  buildTransactionMovementHistoryCases,
+  historyCaseVisibleWithPendingHappyCircle,
+  pendingHappyCircleCaseIds,
+} from '@/lib/transaction-history-cases';
+import { isPendingTransactionItem } from '@/lib/transaction-presentation';
 
 export interface DashboardTransactionPreviewItem {
   readonly highlightPending: boolean;
@@ -33,19 +34,10 @@ export function buildDashboardTransactionPreview({
   readonly pendingItems: readonly ActivityItemDto[];
 }): DashboardTransactionPreview {
   const pendingTransactionItems = pendingItems.filter(isPendingTransactionItem);
-  const pendingHappyCircleCaseIds = new Set(
-    pendingTransactionItems.flatMap((item) =>
-      item.kind === 'settlement_proposal' && item.happyCircleCaseId ? [item.happyCircleCaseId] : [],
-    ),
-  );
-  const recentHistoryItems = buildMovementHistoryCases(
-    historyItems.filter(isConsolidatedTransactionItem).filter(isHistoryCaseItem),
-  )
-    .filter(
-      (itemCase) =>
-        itemCase.latest.status !== 'stale' ||
-        !itemCase.latest.happyCircleCaseId ||
-        !pendingHappyCircleCaseIds.has(itemCase.latest.happyCircleCaseId),
+  const activeHappyCircleCaseIds = pendingHappyCircleCaseIds(pendingTransactionItems);
+  const recentHistoryItems = buildTransactionMovementHistoryCases(historyItems)
+    .filter((itemCase) =>
+      historyCaseVisibleWithPendingHappyCircle(itemCase, activeHappyCircleCaseIds),
     )
     .map((itemCase) => itemCase.latest);
   const visibleItems = [

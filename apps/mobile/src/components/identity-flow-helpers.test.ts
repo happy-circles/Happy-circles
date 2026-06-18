@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveIdentityFlowLayout } from './identity-flow-helpers';
+import {
+  resolveIdentityFlowLayout,
+  resolveIdentityFlowVisualOffset,
+} from './identity-flow-helpers';
 
 describe('identity flow helpers', () => {
   it('resolves auto identity position to centered layout', () => {
@@ -117,5 +120,25 @@ describe('identity flow helpers', () => {
       topContentY: 256,
       topIdentityY: 40,
     });
+  });
+
+  it('does not lift top-aligned content into the identity mark', () => {
+    expect(
+      resolveIdentityFlowVisualOffset({
+        identityY: 60,
+        requestedOffset: 180,
+        topIdentityY: 60,
+      }),
+    ).toBe(0);
+  });
+
+  it('caps centered flow lifting at the top identity position', () => {
+    expect(
+      resolveIdentityFlowVisualOffset({
+        identityY: 180,
+        requestedOffset: 160,
+        topIdentityY: 60,
+      }),
+    ).toBe(120);
   });
 });

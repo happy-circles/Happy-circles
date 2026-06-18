@@ -15,6 +15,7 @@ export default tseslint.config(
       'supabase/functions/**/*.ts',
       'apps/mobile/babel.config.js',
       'apps/mobile/index.js',
+      'apps/mobile/plugins/**/*.cjs',
       'apps/mobile/scripts/**/*.mjs',
       'apps/landing/next.config.mjs',
       'eslint.config.mjs',

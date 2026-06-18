@@ -17,6 +17,7 @@ vi.mock('react-native', () => ({
 }));
 
 import {
+  balanceAnalyticsPeriodLabel,
   categoryFlowAmount,
   categoryFocusMeta,
   categoryFocusDisplayAmount,
@@ -80,6 +81,13 @@ describe('balance helpers', () => {
     expect(isBalanceAnalyticsPeriod('week')).toBe(true);
     expect(isBalanceAnalyticsPeriod('quarter')).toBe(false);
     expect(focusIndex('categories')).toBe(2);
+  });
+
+  it('labels balance analytics periods for summary surfaces', () => {
+    expect(balanceAnalyticsPeriodLabel('week')).toBe('Esta semana');
+    expect(balanceAnalyticsPeriodLabel('month', 'junio de 2026')).toBe('Junio de 2026');
+    expect(balanceAnalyticsPeriodLabel('year')).toBe('Este año');
+    expect(balanceAnalyticsPeriodLabel('all', 'Todo el tiempo')).toBe('Todo el historial');
   });
 
   it('selects person and category amounts by lens', () => {

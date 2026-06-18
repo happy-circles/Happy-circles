@@ -67,16 +67,16 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.start-app-session]
-verify_jwt = false
+verify_jwt = true
 
 [functions.record-product-event]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analytics-ingest]
-verify_jwt = false
+verify_jwt = true
 
 [functions.report-client-error]
-verify_jwt = false
+verify_jwt = true
 
 [functions.register-push-token]
 verify_jwt = true
@@ -106,7 +106,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.get-app-snapshot]
-verify_jwt = false
+verify_jwt = true
 
 [functions.execute-approved-cycle-settlement]
 verify_jwt = true

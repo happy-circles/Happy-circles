@@ -72,6 +72,11 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     gap: theme.spacing.md,
     justifyContent: 'space-between',
   },
+  categoriesHeaderCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
   categoriesHeaderTitle: {
     color: theme.colors.text,
     flex: 1,
@@ -79,6 +84,13 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 28,
+  },
+  categoriesHeaderPeriod: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 18,
+    minWidth: 0,
   },
   topVisualBand: {
     gap: theme.spacing.sm,

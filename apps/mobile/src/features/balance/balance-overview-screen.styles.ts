@@ -538,6 +538,14 @@ export const balanceOverviewStyles = StyleSheet.create({
   focusCardTitleStart: {
     textAlign: 'left',
   },
+  focusCardSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 18,
+    minWidth: 0,
+    textAlign: 'center',
+  },
   cardMeta: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,

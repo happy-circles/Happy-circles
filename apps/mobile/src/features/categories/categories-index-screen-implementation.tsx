@@ -3,7 +3,10 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { ActivityItemDto, BalanceAnalyticsCategoryRowDto } from '@happy-circles/application';
+import type {
+  ActivityItemDto,
+  BalanceAnalyticsCategoryRowDto,
+} from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
 import { AppText } from '@/components/app-text';
@@ -13,6 +16,9 @@ import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
 import { ScreenShell } from '@/components/screen-shell';
+import { SegmentedControl } from '@/components/segmented-control';
+import { balanceAnalyticsPeriodLabel } from '@/features/balance/balance-helpers';
+import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
 import { buildLatestMovementHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
@@ -43,6 +49,11 @@ import {
   type CategoryInsightRow,
   type CategoryInsightTone,
 } from './categories-index-cards';
+import {
+  CATEGORY_PERIOD_OPTIONS,
+  filterActivityItemsByPeriod,
+  snapshotReferenceDate,
+} from './category-period';
 
 const CATEGORY_INSIGHT_OPTIONS = [
   { label: 'Balance', value: 'balance' },
@@ -689,6 +700,7 @@ function normalizeInitialCategory(value: string | null | undefined): Transaction
 
 export function CategoriesIndexScreen({
   initialCategory,
+  initialPeriod,
 }: {
   readonly initialCategory?: string | null;
   readonly initialPeriod?: string | null;
@@ -698,8 +710,16 @@ export function CategoriesIndexScreen({
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
   const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
+  const [period, setPeriod] = useSyncedBalanceAnalyticsPeriod({
+    defaultPeriod: analytics?.defaultPeriod,
+    initialPeriod,
+  });
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<CategoryInsightFilter>('balance');
+  const periodReferenceDate = useMemo(
+    () => snapshotReferenceDate(snapshotQuery.data?.balanceOverview.updatedAt),
+    [snapshotQuery.data?.balanceOverview.updatedAt],
+  );
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategory | null>(() =>
     normalizeInitialCategory(initialCategory),
   );
@@ -710,7 +730,8 @@ export function CategoriesIndexScreen({
     }
   }, [initialCategory]);
 
-  const analyticsAllPeriod = analytics?.periods.all ?? null;
+  const currentPeriod = analytics?.periods[period] ?? null;
+  const periodLabel = balanceAnalyticsPeriodLabel(period, currentPeriod?.labels.current);
   const activitySections = snapshotQuery.data?.activitySections;
   const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
   const pendingItems = useMemo(
@@ -727,9 +748,13 @@ export function CategoriesIndexScreen({
       ),
     [activitySections],
   );
+  const periodHistoryItems = useMemo(
+    () => filterActivityItemsByPeriod(historyItems, period, periodReferenceDate),
+    [historyItems, period, periodReferenceDate],
+  );
   const categories = useMemo(
     () =>
-      [...(analyticsAllPeriod?.categories ?? [])].sort((left, right) => {
+      [...(currentPeriod?.categories ?? [])].sort((left, right) => {
         const amountDiff = Math.abs(right.netMinor) - Math.abs(left.netMinor);
         if (amountDiff !== 0) {
           return amountDiff;
@@ -737,7 +762,7 @@ export function CategoriesIndexScreen({
 
         return right.movementCount - left.movementCount;
       }),
-    [analyticsAllPeriod?.categories],
+    [currentPeriod?.categories],
   );
   const categoryRowsByFilter = useMemo(() => {
     const nextRows = {} as Record<CategoryInsightFilter, readonly CategoryInsightRow[]>;
@@ -746,13 +771,13 @@ export function CategoriesIndexScreen({
       nextRows[filter] = buildCategoryInsightRows({
         categories,
         filter,
-        historyItems,
+        historyItems: periodHistoryItems,
         pendingItems,
       });
     }
 
     return nextRows;
-  }, [categories, historyItems, pendingItems]);
+  }, [categories, pendingItems, periodHistoryItems]);
   const categoryRows = categoryRowsByFilter[activeFilter] ?? [];
   const rankingsByFilter = useMemo(() => {
     const nextRankings = {} as Record<CategoryInsightFilter, readonly CategoryInsightRow[]>;
@@ -784,10 +809,10 @@ export function CategoriesIndexScreen({
     () =>
       buildCategoryInsightActivitySections({
         filter: activeFilter,
-        historyItems,
+        historyItems: periodHistoryItems,
         pendingItems,
       }),
-    [activeFilter, historyItems, pendingItems],
+    [activeFilter, pendingItems, periodHistoryItems],
   );
   const visibleCategoryRows = useMemo(
     () => categoryRows.filter((insight) => categoryInsightMatchesQuery(insight, query)),
@@ -958,7 +983,12 @@ export function CategoriesIndexScreen({
                 >
                   <View style={styles.containedContent}>
                     <View style={styles.categoriesHeader}>
-                      <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
+                      <View style={styles.categoriesHeaderCopy}>
+                        <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
+                        <AppText numberOfLines={1} style={styles.categoriesHeaderPeriod}>
+                          {periodLabel}
+                        </AppText>
+                      </View>
                     </View>
                   </View>
 
@@ -985,6 +1015,13 @@ export function CategoriesIndexScreen({
                 </View>
 
                 <View style={[styles.containedContent, styles.categoriesControlsSection]}>
+                  <SegmentedControl
+                    label="Periodo"
+                    onChange={setPeriod}
+                    options={CATEGORY_PERIOD_OPTIONS}
+                    value={period}
+                  />
+
                   <View
                     style={[
                       styles.searchWrap,

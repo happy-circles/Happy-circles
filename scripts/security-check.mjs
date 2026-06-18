@@ -69,6 +69,7 @@ const config = readFile('supabase/config.toml');
 const publicFunctionAllowlist = new Set([
   'get-account-invite-preview-public',
   'process-graph-cycle-jobs',
+  'send-push-notifications',
 ]);
 const functionBlocks = [...config.matchAll(/^\[functions\.([^\]]+)\]\s*([\s\S]*?)(?=^\[|\s*$)/gm)];
 const declaredFunctionNames = new Set(functionBlocks.map(([, functionName]) => functionName));
@@ -107,6 +108,16 @@ assertContains(
   'supabase/functions/process-graph-cycle-jobs/index.ts',
   /jsonResponse\(403[\s\S]*code:\s*'forbidden'/,
   'graph worker must reject bad secrets with a generic 403',
+);
+assertContains(
+  'supabase/functions/send-push-notifications/index.ts',
+  /jsonResponse\(503[\s\S]*worker_not_configured/,
+  'push notification worker must fail closed when PUSH_NOTIFICATION_WORKER_SECRET is missing',
+);
+assertContains(
+  'supabase/functions/send-push-notifications/index.ts',
+  /jsonResponse\(403[\s\S]*code:\s*'forbidden'/,
+  'push notification worker must reject bad secrets with a generic 403',
 );
 assertContains(
   'supabase/functions/_shared/cycle-worker.ts',

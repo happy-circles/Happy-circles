@@ -47,6 +47,30 @@ export function isBalanceAnalyticsPeriod(
   return BALANCE_ANALYTICS_PERIODS.includes(value as BalanceAnalyticsPeriod);
 }
 
+export function balanceAnalyticsPeriodLabel(
+  period: BalanceAnalyticsPeriod,
+  currentLabel?: string | null,
+): string {
+  if (period === 'all') {
+    return 'Todo el historial';
+  }
+
+  if (currentLabel && currentLabel.trim().length > 0) {
+    const trimmedLabel = currentLabel.trim();
+    return trimmedLabel.charAt(0).toLocaleUpperCase('es-CO') + trimmedLabel.slice(1);
+  }
+
+  if (period === 'week') {
+    return 'Esta semana';
+  }
+
+  if (period === 'year') {
+    return 'Este año';
+  }
+
+  return 'Este mes';
+}
+
 export function balanceTone(amountMinor: number): 'positive' | 'negative' | 'neutral' {
   if (amountMinor > 0) {
     return 'positive';
