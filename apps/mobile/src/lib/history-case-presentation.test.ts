@@ -18,7 +18,11 @@ import {
   historyImpactLabel,
   historyImpactTone,
   historyStepAmountLabel,
+  historyTimelineStepActionLabel,
+  historyTimelineStepActorLabel,
   historyTimelineStepAmountLabel,
+  historyTimelineStepConversationSide,
+  historyTimelineStepDetailLabel,
   historyTimelineStepMetaLabel,
   type HistoryCaseItem,
 } from './history-cases';
@@ -137,6 +141,59 @@ describe('history case presentation', () => {
 
     expect(friendlyHistoryStepLabel(ledgerStep)).toBe('Pagaste a Sofia');
     expect(historyImpactLabel(ledgerStep)).toBeNull();
+  });
+
+  it('keeps request descriptions and identifies each side of the conversation', () => {
+    const ownProposal = item({
+      detail: 'Hamburguesas del domingo',
+      sourceType: 'user',
+      status: 'pending',
+      subtitle: 'Usuario | Hamburguesas del domingo | hoy',
+      title: 'Tú propuso una salida',
+    });
+    const counterProposal = item({
+      detail: 'Hamburguesas y bebidas',
+      sourceType: 'user',
+      status: 'amended',
+      title: 'Pablo Lemus propuso un nuevo monto',
+    });
+
+    const ownActor = historyTimelineStepActorLabel(ownProposal, 'Pablo Lemus');
+    const otherActor = historyTimelineStepActorLabel(counterProposal, 'Pablo Lemus');
+
+    expect(historyTimelineStepDetailLabel(ownProposal)).toBe('Hamburguesas del domingo');
+    expect(historyTimelineStepDetailLabel(counterProposal)).toBe('Hamburguesas y bebidas');
+    expect(historyTimelineStepActionLabel(ownProposal, ownActor)).toBe('Propusiste una salida');
+    expect(historyTimelineStepActionLabel(counterProposal, otherActor)).toBe(
+      'Propuso un nuevo monto',
+    );
+    expect(historyTimelineStepConversationSide(ownProposal, ownActor)).toBe('self');
+    expect(historyTimelineStepConversationSide(counterProposal, otherActor)).toBe('other');
+  });
+
+  it('centers system events in the conversation', () => {
+    const systemStep = item({
+      sourceType: 'system',
+      title: 'Sistema registró la salida',
+    });
+    const actor = historyTimelineStepActorLabel(systemStep, 'Pablo');
+
+    expect(actor).toBe('Sistema');
+    expect(historyTimelineStepConversationSide(systemStep, actor)).toBe('system');
+  });
+
+  it('recognizes actors before accented action verbs', () => {
+    const accepted = item({
+      subtitle: 'Pablo Lemus -> Tú | hoy',
+      title: 'Tú aceptó el nuevo monto',
+    });
+    const registered = item({
+      subtitle: 'Usuario | hoy',
+      title: 'Pablo Lemus registró la salida',
+    });
+
+    expect(historyTimelineStepActorLabel(accepted, 'Pablo Lemus')).toBe('Tú');
+    expect(historyTimelineStepActorLabel(registered, 'Pablo Lemus')).toBe('Pablo Lemus');
   });
 
   it('does not use completion copy as the Circle case impact label', () => {

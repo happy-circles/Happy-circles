@@ -7,7 +7,6 @@ import {
   getOrCreateDeviceId,
 } from '@/lib/device-trust';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
-import { prefetchAppSnapshot } from '@/lib/live-data/app-snapshot-prefetch';
 import type { supabase } from '@/lib/supabase';
 import {
   deriveAccountAccessState,
@@ -47,7 +46,6 @@ export interface LoadedSessionAccountState {
 
 interface LoadSessionAccountStateInput {
   readonly client: SessionClient;
-  readonly isCurrentLoad: () => boolean;
   readonly nextSession: Session;
   readonly setLoadingStage: (stage: SessionLoadingStage) => void;
 }
@@ -128,7 +126,6 @@ async function persistCurrentTrustedDevice(input: {
 
 export async function loadSessionAccountState({
   client,
-  isCurrentLoad,
   nextSession,
   setLoadingStage,
 }: LoadSessionAccountStateInput): Promise<LoadedSessionAccountState> {
@@ -196,16 +193,6 @@ export async function loadSessionAccountState({
         error instanceof Error ? error.message : String(error),
       );
     }
-  }
-
-  if (
-    isCurrentLoad() &&
-    accountAccessState === 'active' &&
-    emailConfirmed &&
-    profileCompletionState === 'complete' &&
-    deviceTrustState === 'trusted'
-  ) {
-    void prefetchAppSnapshot(nextSession.user.id).catch(() => undefined);
   }
 
   setLoadingStage('device');

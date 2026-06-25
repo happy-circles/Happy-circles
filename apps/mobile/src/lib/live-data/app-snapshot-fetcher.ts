@@ -2,8 +2,10 @@ import { hydrateSignedAvatarUrlCache } from '../avatar';
 import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '../avatar-prefetch';
 import { recordSnapshotNetworkResolved } from '../performance-metrics';
 import { reportAndCreateSupportError } from '../support-errors';
+import { buildPeopleOverviewFromAppSnapshot } from './build-people-overview';
 import { buildLiveSnapshot } from './build-snapshot';
 import { createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
+import { persistCachedPeopleOverview } from './people-overview-cache';
 import { persistCachedAppSnapshot } from './snapshot-cache';
 import type { AppSnapshot, LiveSnapshotRows } from './types';
 
@@ -37,6 +39,19 @@ async function fetchLiveSnapshot(
       ...rows,
       currentUserId,
     });
+    const peopleOverview = buildPeopleOverviewFromAppSnapshot(snapshot, rows.fetchedAt);
+    try {
+      await persistCachedPeopleOverview(
+        currentUserId,
+        peopleOverview,
+        rows.avatarSignedUrlsByPath,
+      );
+    } catch (cacheError) {
+      console.warn(
+        'Failed to persist people overview from app snapshot',
+        cacheError instanceof Error ? cacheError.message : String(cacheError),
+      );
+    }
     void prefetchCriticalAvatarImages(snapshot).catch(() => undefined);
     scheduleDeferredAvatarPrefetch(snapshot);
     void persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(

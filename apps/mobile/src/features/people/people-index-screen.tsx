@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Animated, FlatList, Pressable, StyleSheet, View } from 'react-native';
@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
 import { AppTextInput } from '@/components/app-text-input';
@@ -14,18 +15,26 @@ import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { LoopingInsightSwitcher } from '@/components/looping-insight-switcher';
 import { ScreenShell } from '@/components/screen-shell';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SurfaceCard } from '@/components/surface-card';
 import { TransactionEventCard } from '@/components/transaction-event-card';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { noActiveRelationshipsEmptyState } from '@/lib/empty-state-copy';
 import { prefetchAvatarPaths } from '@/lib/avatar-prefetch';
+import { useSyncedBalanceAnalyticsPeriod } from '@/features/balance/balance-period-selection';
+import {
+  CATEGORY_PERIOD_OPTIONS,
+  filterActivityItemsByPeriod,
+  snapshotReferenceDate,
+} from '@/features/categories/category-period';
 import {
   notificationItemCanAlert,
   notificationViewKeyForItem,
   notificationViewedKeysWithLocalCache,
   useAppSnapshot,
+  usePeopleOverview,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { theme, type AppTheme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
@@ -44,6 +53,7 @@ import { transactionCircleHref } from '@/lib/transaction-people';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import { useSession } from '@/providers/session-provider';
 import {
+  balanceAnalyticsPeriodLabel,
   firstName,
   formatCompactCop,
   signedFormatCompactCop,
@@ -680,13 +690,7 @@ function PeopleInsightPodiumCard({
                       {rankLabel}
                     </AppText>
                   </View>
-                  <View
-                    style={[
-                      styles.podiumAvatarRing,
-                      isFocused ? styles.podiumAvatarRingFocused : null,
-                      { borderColor: color },
-                    ]}
-                  >
+                  <View style={[styles.podiumAvatarRing, { borderColor: color }]}>
                     <AppAvatar
                       fallbackBackgroundColor={softColor}
                       fallbackTextColor={color}
@@ -700,7 +704,6 @@ function PeopleInsightPodiumCard({
                   style={[
                     styles.podiumStep,
                     stepStyle,
-                    isFocused ? styles.podiumStepFocused : null,
                     { backgroundColor: softColor, borderColor: color },
                   ]}
                 >
@@ -847,12 +850,29 @@ export function PeopleIndexScreen() {
     description?: string;
     direction?: string;
     filter?: string | string[];
+    period?: string | string[];
     requests?: string;
     requestTab?: string;
   }>();
   const snapshotQuery = useAppSnapshot();
-  const refresh = useSnapshotRefresh(snapshotQuery);
-  const people = snapshotQuery.data?.dashboard.activePeople ?? snapshotQuery.data?.people ?? [];
+  const peopleOverviewQuery = usePeopleOverview();
+  const refetchPeopleScreen = useCallback(async () => {
+    await Promise.allSettled([peopleOverviewQuery.refetch(), snapshotQuery.refetch()]);
+  }, [peopleOverviewQuery.refetch, snapshotQuery.refetch]);
+  const refreshTarget = useMemo(
+    () => ({
+      isLoading: peopleOverviewQuery.isLoading || snapshotQuery.isLoading,
+      refetch: refetchPeopleScreen,
+    }),
+    [peopleOverviewQuery.isLoading, refetchPeopleScreen, snapshotQuery.isLoading],
+  );
+  const refresh = useSnapshotRefresh(refreshTarget);
+  const people =
+    snapshotQuery.data?.dashboard.activePeople ??
+    snapshotQuery.data?.people ??
+    peopleOverviewQuery.data?.people ??
+    [];
+  const hasPeopleScreenData = Boolean(snapshotQuery.data || peopleOverviewQuery.data);
   const currentUserProfile = snapshotQuery.data?.currentUserProfile ?? null;
   const inviteRequests = usePeopleInviteRequestsController({
     accountInviteHistoryItems: snapshotQuery.data?.accountInviteHistoryItems ?? [],
@@ -869,10 +889,25 @@ export function PeopleIndexScreen() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [addPersonSheetVisible, setAddPersonSheetVisible] = useState(false);
   const handledRequestParamRef = useRef<string | null>(null);
-  const analyticsAllPeriod = snapshotQuery.data?.balanceAnalytics.periods.all ?? null;
+  const analytics = snapshotQuery.data?.balanceAnalytics ?? null;
+  const rawInitialPeriod = Array.isArray(params.period) ? params.period[0] : params.period;
+  const [period, setPeriod] = useSyncedBalanceAnalyticsPeriod({
+    defaultPeriod: analytics?.defaultPeriod,
+    initialPeriod: rawInitialPeriod,
+  });
+  const currentPeriod = analytics?.periods[period] ?? null;
+  const periodLabel = balanceAnalyticsPeriodLabel(period, currentPeriod?.labels.current);
+  const periodReferenceDate = useMemo(
+    () => snapshotReferenceDate(snapshotQuery.data?.balanceOverview.updatedAt),
+    [snapshotQuery.data?.balanceOverview.updatedAt],
+  );
   const sections = snapshotQuery.data?.activitySections ?? [];
   const pendingSection = sections.find((section) => section.key === 'pending');
   const historySection = sections.find((section) => section.key === 'history');
+  const periodHistoryItems = useMemo(
+    () => filterActivityItemsByPeriod(historySection?.items ?? [], period, periodReferenceDate),
+    [historySection?.items, period, periodReferenceDate],
+  );
   const notificationViewedKeys = useMemo(
     () =>
       notificationViewedKeysWithLocalCache(
@@ -885,25 +920,25 @@ export function PeopleIndexScreen() {
     () =>
       buildPeopleInsightActivitySections({
         filter: activeFilter,
-        historyItems: historySection?.items ?? [],
+        historyItems: periodHistoryItems,
         pendingItems: pendingSection?.items ?? [],
       }),
-    [activeFilter, historySection?.items, pendingSection?.items],
+    [activeFilter, pendingSection?.items, periodHistoryItems],
   );
   const personRowsByFilter = useMemo(
     () =>
       buildPeopleInsightRowsByFilter({
-        activeCircleProposals: analyticsAllPeriod?.settlements.activeProposals ?? [],
-        analyticsPeople: analyticsAllPeriod?.people ?? [],
-        historyItems: historySection?.items ?? [],
+        activeCircleProposals: currentPeriod?.settlements.activeProposals ?? [],
+        analyticsPeople: currentPeriod?.people ?? [],
+        historyItems: periodHistoryItems,
         pendingItems: pendingSection?.items ?? [],
         people,
       }),
     [
-      analyticsAllPeriod?.people,
-      analyticsAllPeriod?.settlements.activeProposals,
-      historySection?.items,
+      currentPeriod?.people,
+      currentPeriod?.settlements.activeProposals,
       pendingSection?.items,
+      periodHistoryItems,
       people,
     ],
   );
@@ -1161,9 +1196,20 @@ export function PeopleIndexScreen() {
     openInviteRequests(parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab);
   }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab]);
 
-  if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
+  if (
+    !hasPeopleScreenData &&
+    (snapshotQuery.isRestoringCache ||
+      snapshotQuery.isLoading ||
+      peopleOverviewQuery.isRestoringCache ||
+      peopleOverviewQuery.isLoading)
+  ) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} title="Personas">
+      <ScreenShell
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerVariant="plain"
+        largeTitle={false}
+        title="Personas"
+      >
         <View style={styles.loadingMotion}>
           <HappyCirclesMotion size={108} variant="loading" />
         </View>
@@ -1172,10 +1218,17 @@ export function PeopleIndexScreen() {
     );
   }
 
-  if (snapshotQuery.error && !snapshotQuery.data) {
+  const peopleScreenError = peopleOverviewQuery.error ?? snapshotQuery.error;
+  if (peopleScreenError && !hasPeopleScreenData) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Personas">
-        <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
+      <ScreenShell
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerVariant="plain"
+        largeTitle={false}
+        refresh={refresh}
+        title="Personas"
+      >
+        <AppText style={styles.supportText}>{peopleScreenError.message}</AppText>
       </ScreenShell>
     );
   }
@@ -1207,8 +1260,22 @@ export function PeopleIndexScreen() {
                 <View style={[styles.peopleTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
                   <View style={styles.containedContent}>
                     <View style={styles.peopleHeader}>
-                      <AppText style={styles.peopleHeaderTitle}>Personas</AppText>
+                      <AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />
+                      <View style={styles.peopleHeaderCopy}>
+                        <AppText style={styles.peopleHeaderTitle}>Personas</AppText>
+                        <AppText
+                          numberOfLines={1}
+                          style={[
+                            styles.peopleHeaderPeriod,
+                            { color: activeTheme.colors.textMuted },
+                          ]}
+                        >
+                          {periodLabel}
+                        </AppText>
+                      </View>
                       <Pressable
+                        accessibilityLabel="Agregar persona"
+                        accessibilityRole="button"
                         onPress={() => setAddPersonSheetVisible(true)}
                         style={({ pressed }) => [
                           styles.addButton,
@@ -1250,6 +1317,13 @@ export function PeopleIndexScreen() {
                 </View>
 
                 <View style={[styles.containedContent, styles.peopleControlsSection]}>
+                  <SegmentedControl
+                    label="Periodo"
+                    onChange={setPeriod}
+                    options={CATEGORY_PERIOD_OPTIONS}
+                    value={period}
+                  />
+
                   <View
                     style={[
                       styles.searchWrap,
@@ -1395,9 +1469,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 42,
+    height: 44,
     justifyContent: 'center',
-    width: 42,
+    width: 44,
   },
   pressed: {
     opacity: 0.62,
@@ -1435,11 +1509,25 @@ const styles = StyleSheet.create({
   },
   peopleHeaderTitle: {
     color: theme.colors.text,
-    flex: 1,
     fontSize: theme.typography.title2,
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 28,
+    textAlign: 'center',
+  },
+  peopleHeaderCopy: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  peopleHeaderPeriod: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 18,
+    minWidth: 0,
+    textAlign: 'center',
   },
   topVisualBand: {
     gap: theme.spacing.sm,
@@ -1497,12 +1585,14 @@ const styles = StyleSheet.create({
   podiumSlot: {
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderRadius: theme.radius.large,
     flex: 1,
     gap: 8,
     height: PEOPLE_INSIGHT_BODY_HEIGHT,
     justifyContent: 'flex-end',
     minWidth: 0,
+    outlineColor: 'transparent',
+    outlineStyle: 'solid',
+    outlineWidth: 0,
     paddingHorizontal: 6,
     paddingTop: theme.spacing.xs,
   },
@@ -1510,10 +1600,13 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   podiumSlotDimmed: {
-    transform: [{ scale: 0.98 }],
+    opacity: 0.38,
+    transform: [{ scale: 0.94 }],
   },
   podiumSlotFocused: {
     opacity: 1,
+    transform: [{ scale: 1.04 }],
+    zIndex: 2,
   },
   podiumSlotSelected: {
     transform: [{ scale: 0.99 }],
@@ -1575,10 +1668,6 @@ const styles = StyleSheet.create({
     padding: 3,
     zIndex: 1,
   },
-  podiumAvatarRingFocused: {
-    borderWidth: 2.5,
-    padding: 4,
-  },
   podiumAvatarRingEmpty: {
     borderStyle: 'dashed',
   },
@@ -1602,9 +1691,6 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     paddingHorizontal: 8,
     width: '84%',
-  },
-  podiumStepFocused: {
-    borderWidth: 1.5,
   },
   podiumStepFirst: {
     height: 94,

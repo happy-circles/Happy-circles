@@ -308,6 +308,12 @@ describe('dashboard transaction preview', () => {
     expect(preview.visibleItems.map(({ item }) => [item.id, item.kind])).toEqual([
       ['manual-payment', 'payment'],
     ]);
+    const historyPreview = preview.visibleItems[0];
+    expect(historyPreview?.isPending).toBe(false);
+    if (!historyPreview || historyPreview.isPending) {
+      throw new Error('Expected a consolidated history preview.');
+    }
+    expect(historyPreview.historyCase.latest.id).toBe('manual-payment');
   });
 
   it('keeps both direct closed Circle ledger movements in the preview', () => {

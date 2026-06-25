@@ -14,10 +14,15 @@ export function useAppSnapshot() {
     () => [APP_SNAPSHOT_QUERY_KEY, userId ?? 'signed-out'] as const,
     [userId],
   );
+  const cacheHydrationComplete = Boolean(
+    userId &&
+      cacheHydration.userId === userId &&
+      !cacheHydration.isRestoringCache,
+  );
 
   const query = useQuery({
     queryKey,
-    enabled: Boolean(userId),
+    enabled: cacheHydrationComplete,
     staleTime: 60_000,
     queryFn: async ({ signal }) => fetchAppSnapshotForUser(userId, signal),
   });
@@ -42,7 +47,7 @@ export function useAppSnapshot() {
     ...query,
     hasCachedData: cacheHydration.hasCachedData,
     hasLiveData,
-    isRestoringCache: Boolean(userId) && !query.data && cacheHydration.isRestoringCache,
+    isRestoringCache: Boolean(userId) && !query.data && !cacheHydrationComplete,
     isShowingCachedData: Boolean(query.data && cacheHydration.didRestore && !hasLiveData),
     lastCacheUpdatedAt: cacheHydration.cacheUpdatedAt,
     networkStatus:

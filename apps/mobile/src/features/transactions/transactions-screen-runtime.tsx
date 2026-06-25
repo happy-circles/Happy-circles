@@ -4,31 +4,14 @@ import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { BrandedRefreshVirtualizedListContainer } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
-import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { ScreenShell } from '@/components/screen-shell';
 import { SectionBlock } from '@/components/section-block';
-import { pushRoute, returnToRoute } from '@/lib/navigation';
+import { backOrReturnTo } from '@/lib/navigation';
 import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
-import {
-  friendlyHistoryStepLabel,
-  historyAmountIsVoided,
-  historyCardTitle,
-  historyCaseAmountLabel,
-  historyCaseEyebrow,
-  historyCaseMeta,
-  historyCaseStatusLabel,
-  historyCaseStatusTone,
-  historyCaseVisualCategory,
-  historyImpactLabel,
-  historyImpactTone,
-  historyTimelineStepCategory,
-  historyTimelineStepDetailLabel,
-  historyTimelineStepAmountLabel,
-  historyTimelineStepMetaLabel,
-} from '@/lib/history-cases';
 import {
   notificationItemCanAlert,
   notificationViewKeyForItem,
@@ -61,17 +44,15 @@ import {
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 import { PendingTransactionCard } from './transactions-pending-card';
+import { TransactionHistoryCaseCard } from './transaction-history-case-card';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
   PRIMARY_FILTER_OPTIONS,
   emptyFilterDescription,
   emptyFilterTitle,
-  initialsBackgroundColor,
   matchesCategoryFilter,
   matchesHistoryFilter,
   matchesPendingFilter,
-  transactionHistoryCaseHref,
-  transactionPersonForHistoryCase,
 } from './transactions-screen-model';
 
 function FilterPill({
@@ -213,58 +194,9 @@ export function TransactionsScreen() {
   }
 
   function renderHistoryCase({ item }: { readonly item: (typeof historyCases)[number] }) {
-    const latest = item.latest;
-    const caseAmountLabel = historyCaseAmountLabel(latest);
-    const caseTone = historyImpactTone(latest) as HistoryCaseTone;
-    const caseTitle = friendlyHistoryStepLabel(latest);
-    const caseDescription = historyCardTitle(item);
-    const caseEyebrow = historyCaseEyebrow(item);
-    const historyPerson = transactionPersonForHistoryCase(people, item);
-    const fallbackPerson = {
-      displayName: caseEyebrow ?? latest.counterpartyLabel ?? 'Persona',
-      userId: historyPerson?.userId ?? item.id,
-    };
-
     return (
       <View style={styles.containedListItem}>
-        <HistoryCaseCard
-          actorAvatarUrl={item.isCycleSnippet ? null : (historyPerson?.avatarUrl ?? null)}
-          actorFallbackColor={
-            item.isCycleSnippet ? undefined : initialsBackgroundColor(fallbackPerson, activeTheme)
-          }
-          amountLabel={caseAmountLabel}
-          amountStruckThrough={historyAmountIsVoided(latest)}
-          category={historyCaseVisualCategory(item)}
-          description={null}
-          eyebrow={caseEyebrow}
-          expandable={false}
-          isCycleSnippet={item.isCycleSnippet}
-          isExpanded={false}
-          meta={historyCaseMeta(item)}
-          onPress={() => pushRoute(router, transactionHistoryCaseHref(people, item))}
-          statusLabel={historyCaseStatusLabel(item)}
-          statusTone={historyCaseStatusTone(item)}
-          steps={item.steps.map((step, index) => {
-            const amountLabel = historyTimelineStepAmountLabel(item, step, index);
-            const impact = historyImpactLabel(step);
-
-            return {
-              amountLabel,
-              category: historyTimelineStepCategory(item, step, index),
-              detail: historyTimelineStepDetailLabel(step),
-              id: step.id,
-              impact:
-                !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
-                  ? null
-                  : impact,
-              meta: historyTimelineStepMetaLabel(item, step),
-              title: friendlyHistoryStepLabel(step),
-              tone: historyImpactTone(step) as HistoryCaseTone,
-            };
-          })}
-          title={caseDescription || caseTitle}
-          tone={caseTone}
-        />
+        <TransactionHistoryCaseCard itemCase={item} people={people} />
       </View>
     );
   }
@@ -339,15 +271,7 @@ export function TransactionsScreen() {
       <View style={[styles.transactionsTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
         <View style={styles.containedContent}>
           <View style={styles.transactionsHeader}>
-            <Pressable
-              onPress={() => returnToRoute(router, '/home')}
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed ? styles.backButtonPressed : null,
-              ]}
-            >
-              <Ionicons color={activeTheme.colors.text} name="chevron-back" size={20} />
-            </Pressable>
+            <AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />
             <AppText style={[styles.transactionsHeaderTitle, { color: activeTheme.colors.text }]}>
               Movimientos
             </AppText>
@@ -383,6 +307,8 @@ export function TransactionsScreen() {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerSlot={<View style={styles.headerActionSpacer} />}
         headerVariant="plain"
         largeTitle={false}
         safeAreaEdges={['left', 'right']}
@@ -401,6 +327,8 @@ export function TransactionsScreen() {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerSlot={<View style={styles.headerActionSpacer} />}
         headerVariant="plain"
         largeTitle={false}
         refresh={refresh}

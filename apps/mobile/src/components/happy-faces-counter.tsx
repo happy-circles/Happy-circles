@@ -3,12 +3,14 @@ import { Pressable, StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/app-text';
+import { HappyCirclesCenterSvg } from '@/components/happy-circles-glyph';
 import { theme } from '@/lib/theme';
 import { useAppTheme } from '@/providers/theme-provider';
 
 export const HAPPY_FACES_TREASURE_GOLD = theme.colors.treasure;
 
 const HAPPY_FACES_TREASURE_SOFT = theme.colors.treasureSoft;
+const HAPPY_FACE_VIEW_BOX = '290 290 100 100';
 
 type HappyFacesCounterProps = {
   closedCircleCount: number;
@@ -37,10 +39,17 @@ export function HappyFacesCounter({
   const hasFaces = totalFaces > 0 || closedCircleCount > 0;
   const faceLabel = compactFacesLabel(totalFaces);
   const isReward = variant === 'reward';
+  const faceColor = isReward || hasFaces ? tone : activeTheme.colors.muted;
+  const faceSize = isReward ? 23 : compact ? 17 : 18;
+  const facePalette = {
+    navy: faceColor,
+    green: faceColor,
+    coral: faceColor,
+    face: faceColor,
+    faceDetail: activeTheme.colors.white,
+  };
   const surfaceStyle = {
-    backgroundColor: isReward
-      ? activeTheme.colors.treasureSoft
-      : activeTheme.colors.surface,
+    backgroundColor: isReward ? activeTheme.colors.treasureSoft : activeTheme.colors.surface,
     borderColor: activeTheme.colors.hairline,
   };
 
@@ -59,11 +68,15 @@ export function HappyFacesCounter({
         style,
       ]}
     >
-      <Ionicons
-        color={isReward || hasFaces ? tone : activeTheme.colors.muted}
-        name={isReward || hasFaces ? 'happy' : 'happy-outline'}
-        size={isReward ? 23 : compact ? 17 : 18}
-      />
+      {isReward || hasFaces ? (
+        <HappyCirclesCenterSvg
+          palette={facePalette}
+          size={faceSize}
+          viewBox={HAPPY_FACE_VIEW_BOX}
+        />
+      ) : (
+        <Ionicons color={faceColor} name="happy-outline" size={faceSize} />
+      )}
       <AppText
         adjustsFontSizeToFit
         minimumFontScale={0.82}

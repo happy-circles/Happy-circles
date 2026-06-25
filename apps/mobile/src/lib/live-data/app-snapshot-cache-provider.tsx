@@ -37,7 +37,7 @@ const AppSnapshotCacheHydrationContext = createContext<AppSnapshotCacheHydration
   DEFAULT_CACHE_HYDRATION_STATE,
 );
 
-const SNAPSHOT_CACHE_RESTORE_SOFT_TIMEOUT_MS = 900;
+const SNAPSHOT_CACHE_RESTORE_SOFT_TIMEOUT_MS = 1_200;
 
 function parsedUpdatedAt(value: string | null): number | null {
   if (!value) {

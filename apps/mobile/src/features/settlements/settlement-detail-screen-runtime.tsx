@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { CardTimeline } from '@/components/card-shell';
 import { CircleActionFeedbackOverlay } from '@/components/circle-action-feedback-overlay';
 import { EmptyState } from '@/components/empty-state';
@@ -36,7 +37,7 @@ import {
   useApproveSettlementMutation,
   useRejectSettlementMutation,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { settlementDetailScreenStyles as styles } from './settlement-detail-screen-styles';
 import {
@@ -226,12 +227,13 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
     return (
       <ScreenShell
-        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
-        eyebrow="Happy Circle"
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.xs }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/circles')} />}
+        headerVariant="plain"
         largeTitle={false}
         safeAreaEdges={['left', 'right']}
         subtitle="Cargando el detalle de la propuesta."
-        title="Happy Circle"
+        title="Detalle"
       >
         <HappyCirclesMotion size={108} variant="loading" />
         <AppText style={styles.supportText}>
@@ -244,13 +246,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (snapshotQuery.error && !snapshotQuery.data) {
     return (
       <ScreenShell
-        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
-        eyebrow="Happy Circle"
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.xs }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/circles')} />}
+        headerVariant="plain"
         largeTitle={false}
         refresh={refresh}
         safeAreaEdges={['left', 'right']}
         subtitle="No pudimos cargar esta propuesta."
-        title="Happy Circle"
+        title="Detalle"
       >
         <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
@@ -260,13 +263,14 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
   if (!settlement) {
     return (
       <ScreenShell
-        contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
-        eyebrow="Happy Circle"
+        contentContainerStyle={{ paddingTop: topInset + theme.spacing.xs }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/circles')} />}
+        headerVariant="plain"
         largeTitle={false}
         refresh={refresh}
         safeAreaEdges={['left', 'right']}
         subtitle="No encontramos esta propuesta."
-        title="Happy Circle"
+        title="Detalle"
       >
         <EmptyState
           description="Confirma que sigas siendo participante o vuelve a abrir la propuesta desde tu historial."
@@ -321,7 +325,9 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
 
   return (
     <ScreenShell
-      contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
+      contentContainerStyle={{ paddingTop: topInset + theme.spacing.xs }}
+      headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/circles')} />}
+      headerVariant="plain"
       largeTitle={false}
       overlay={
         <Snackbar message={snackbar.message} tone={snackbar.tone} visible={snackbar.visible} />
@@ -329,7 +335,6 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
       refresh={refresh}
       safeAreaEdges={['left', 'right']}
       title="Detalle"
-      headerVariant="plain"
     >
       {banner ? <MessageBanner message={banner.message} tone={banner.tone} /> : null}
 
@@ -577,7 +582,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
           </View>
         </View>
         <View style={styles.versionStoryPanel}>
-          <CardTimeline steps={versionSteps} />
+          <CardTimeline presentation="conversation" steps={versionSteps} />
         </View>
         {replacementProposalId ? (
           <View style={styles.replacementAction}>

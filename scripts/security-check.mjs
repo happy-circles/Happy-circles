@@ -50,7 +50,11 @@ const forbiddenMigrationPatterns = [
   { pattern: /\bseed_demo_data\b/i, label: 'seed_demo_data helper' },
   { pattern: /\breset_demo_data\b/i, label: 'reset_demo_data helper' },
   { pattern: /\btrust_demo_devices\b/i, label: 'trust_demo_devices helper' },
-  { pattern: /\b(ana|bruno|carla|diego)@example\.com\b/i, label: 'demo account email' },
+  {
+    pattern:
+      /\b(?:(?:ana|bruno|carla|diego)@example\.com|apple-review@happy-circles\.com|demo-(?:ana|bruno|carla)@happy-circles\.com)\b/i,
+    label: 'demo account email',
+  },
   { pattern: /\bCircles1234\b/i, label: 'demo password' },
 ];
 

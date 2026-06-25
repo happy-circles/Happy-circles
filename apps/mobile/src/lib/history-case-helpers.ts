@@ -59,7 +59,7 @@ export function historyCreatorLabel(item: HistoryCaseItem, fallbackLabel: string
 
   const subtitleParts = splitHistorySubtitle(item.subtitle);
   const titleCreator = item.title.match(
-    /^(.+?)\s+(propuso|acept[oó]|registr[oó]|aplic[oó]|no acept[oó])\b/i,
+    /^(.+?)\s+(propuso|acept[oó]|registr[oó]|aplic[oó]|no acept[oó])(?:\s|$)/i,
   )?.[1];
 
   if (titleCreator?.trim()) {

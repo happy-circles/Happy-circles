@@ -1,5 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import type { AccessibilityRole, GestureResponderEvent, StyleProp, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
@@ -234,8 +235,10 @@ function withAlpha(color: string, alpha: number): string {
 }
 
 export interface CardTimelineStep {
+  readonly actorLabel?: string | null;
   readonly amountLabel?: string | null;
   readonly amountStruckThrough?: boolean;
+  readonly conversationSide?: 'self' | 'other' | 'system';
   readonly detail?: string | null;
   readonly id: string;
   readonly leadingNode?: ReactNode;
@@ -244,8 +247,103 @@ export interface CardTimelineStep {
   readonly title: string;
 }
 
-export function CardTimeline({ steps }: { readonly steps: readonly CardTimelineStep[] }) {
+export function CardTimeline({
+  presentation = 'timeline',
+  steps,
+}: {
+  readonly presentation?: 'timeline' | 'conversation';
+  readonly steps: readonly CardTimelineStep[];
+}) {
   const activeTheme = useAppTheme();
+
+  if (presentation === 'conversation') {
+    return (
+      <View style={[styles.conversation, { borderTopColor: activeTheme.colors.hairline }]}>
+        {steps.map((step, index) => {
+          const side = step.conversationSide ?? 'other';
+          const isSystem = side === 'system';
+          const markerColor = conversationMarkerColor(activeTheme, side, step.tone ?? 'neutral');
+
+          return (
+            <View key={step.id} style={styles.conversationRow}>
+              <View style={styles.conversationRail}>
+                <View
+                  accessibilityLabel={step.actorLabel ?? 'Participante'}
+                  accessible
+                  style={[styles.conversationMarker, { backgroundColor: markerColor }]}
+                >
+                  {isSystem ? (
+                    <Ionicons
+                      color={activeTheme.colors.white}
+                      name={
+                        step.actorLabel === 'Happy Circle' ? 'sparkles-outline' : 'settings-outline'
+                      }
+                      size={12}
+                    />
+                  ) : (
+                    <AppText
+                      style={[styles.conversationMarkerText, { color: activeTheme.colors.white }]}
+                    >
+                      {conversationActorInitial(step.actorLabel, side)}
+                    </AppText>
+                  )}
+                </View>
+                {index < steps.length - 1 ? (
+                  <View
+                    style={[
+                      styles.conversationLine,
+                      { backgroundColor: withAlpha(markerColor, 0.34) },
+                    ]}
+                  />
+                ) : null}
+              </View>
+              <View style={styles.conversationBody}>
+                <View style={styles.conversationTop}>
+                  <AppText style={[styles.conversationTitle, { color: activeTheme.colors.text }]}>
+                    {step.title}
+                  </AppText>
+                  {step.amountLabel ? (
+                    <AppText
+                      style={[
+                        styles.conversationAmount,
+                        { color: timelineTextToneColor(activeTheme, step.tone ?? 'neutral') },
+                        step.amountStruckThrough ? styles.timelineAmountStruckThrough : null,
+                      ]}
+                    >
+                      {step.amountLabel}
+                    </AppText>
+                  ) : null}
+                </View>
+                {step.detail ? (
+                  <View
+                    style={[
+                      styles.conversationDetail,
+                      {
+                        borderLeftColor: markerColor,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      style={[styles.conversationDetailText, { color: activeTheme.colors.text }]}
+                    >
+                      {step.detail}
+                    </AppText>
+                  </View>
+                ) : null}
+                {step.meta ? (
+                  <AppText
+                    style={[styles.conversationMeta, { color: activeTheme.colors.textMuted }]}
+                  >
+                    {step.meta}
+                  </AppText>
+                ) : null}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.timeline, { borderTopColor: activeTheme.colors.hairline }]}>
@@ -299,6 +397,38 @@ export function CardTimeline({ steps }: { readonly steps: readonly CardTimelineS
       ))}
     </View>
   );
+}
+
+function conversationActorInitial(
+  actorLabel: string | null | undefined,
+  side: NonNullable<CardTimelineStep['conversationSide']>,
+): string {
+  if (side === 'self') {
+    return 'T';
+  }
+
+  const initial = actorLabel?.trim().charAt(0);
+  return initial ? initial.toLocaleUpperCase('es-CO') : 'P';
+}
+
+function conversationMarkerColor(
+  activeTheme: AppTheme,
+  side: NonNullable<CardTimelineStep['conversationSide']>,
+  tone: CardTone,
+): string {
+  if (tone === 'danger') {
+    return activeTheme.colors.danger;
+  }
+
+  if (side === 'self') {
+    return activeTheme.colors.primary;
+  }
+
+  if (side === 'other') {
+    return activeTheme.colors.success;
+  }
+
+  return tone === 'cycle' ? activeTheme.colors.cycle : activeTheme.colors.textMuted;
 }
 
 function timelineToneColor(activeTheme: AppTheme, tone: CardTone) {
@@ -542,5 +672,77 @@ const styles = StyleSheet.create({
   },
   timelineTextCycle: {
     color: theme.colors.cycle,
+  },
+  conversation: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: theme.spacing.sm,
+  },
+  conversationRow: {
+    alignItems: 'stretch',
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  conversationRail: {
+    alignItems: 'center',
+    width: 26,
+  },
+  conversationMarker: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  conversationMarkerText: {
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+  },
+  conversationLine: {
+    flex: 1,
+    marginVertical: 3,
+    minHeight: 18,
+    width: 2,
+  },
+  conversationBody: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+    paddingBottom: theme.spacing.md,
+  },
+  conversationTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+  },
+  conversationTitle: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+    lineHeight: 18,
+    minWidth: 0,
+  },
+  conversationAmount: {
+    flexShrink: 0,
+    fontSize: theme.typography.footnote,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  conversationDetail: {
+    borderLeftWidth: 2,
+    paddingLeft: 8,
+    paddingVertical: 1,
+  },
+  conversationDetailText: {
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  conversationMeta: {
+    fontSize: 10,
+    lineHeight: 13,
   },
 });

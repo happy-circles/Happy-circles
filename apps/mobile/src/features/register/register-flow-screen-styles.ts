@@ -31,6 +31,7 @@ export const styles = StyleSheet.create({
     maxHeight: '90%',
   },
   layoutCompact: {
+    height: '90%',
     maxHeight: '90%',
   },
   fixedTop: {
@@ -70,18 +71,20 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     gap: theme.spacing.xs,
+    minHeight: 0,
   },
   panelAreaCompact: {
-    flex: 0,
+    flex: 1,
     flexShrink: 1,
   },
   sheetScrollWrap: {
     flex: 1,
     flexShrink: 1,
+    minHeight: 0,
     position: 'relative',
   },
   sheetScrollWrapCompact: {
-    flex: 0,
+    flex: 1,
     flexShrink: 1,
   },
   sheetScrollContent: {

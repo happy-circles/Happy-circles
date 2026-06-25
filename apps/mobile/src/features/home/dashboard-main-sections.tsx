@@ -8,11 +8,17 @@ import { CardPressable } from '@/components/card-shell';
 import { SectionBlock } from '@/components/section-block';
 import { dashboardStyles as styles } from '@/features/home/dashboard-screen.styles';
 import type { ActivityItemDto, PendingActionDto, PersonCardDto } from '@happy-circles/application';
+import type {
+  DashboardHistoryTransactionPreviewItem,
+  DashboardPendingTransactionPreviewItem,
+  DashboardTransactionPreviewItem,
+} from './dashboard-transaction-preview';
 import {
   statusLabelForHomePendingPreview,
   type TransactionTargetPanel,
 } from './dashboard-helpers';
 import { PersonTile, ShortcutTile, TransactionPreviewCard } from './dashboard-preview-cards';
+import { TransactionHistoryCaseCard } from '@/features/transactions/transaction-history-case-card';
 import { AppText } from '@/components/app-text';
 import { cardStateColor, cardStateIntentFromStatus, cardStateSoftColor } from '@/lib/card-language';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -145,12 +151,7 @@ export function DashboardTransactionsSection({
   onOpenItem,
   people,
 }: {
-  readonly items: readonly {
-    readonly highlightPending: boolean;
-    readonly isPending: boolean;
-    readonly item: ActivityItemDto;
-    readonly unread: boolean;
-  }[];
+  readonly items: readonly DashboardTransactionPreviewItem[];
   readonly onOpenItem: (item: ActivityItemDto, panel: TransactionTargetPanel) => void;
   readonly people: readonly PersonCardDto[];
 }) {
@@ -158,8 +159,12 @@ export function DashboardTransactionsSection({
     return null;
   }
 
-  const pendingItems = items.filter((entry) => entry.isPending);
-  const historyItems = items.filter((entry) => !entry.isPending);
+  const pendingItems = items.filter(
+    (entry): entry is DashboardPendingTransactionPreviewItem => entry.isPending,
+  );
+  const historyItems = items.filter(
+    (entry): entry is DashboardHistoryTransactionPreviewItem => !entry.isPending,
+  );
 
   return (
     <SectionBlock
@@ -211,15 +216,11 @@ export function DashboardTransactionsSection({
               <AppText style={styles.transactionGroupTitle}>Historial reciente</AppText>
             </View>
             <View style={styles.transactionList}>
-              {historyItems.map(({ highlightPending, isPending, item, unread }) => (
-                <TransactionPreviewCard
-                  highlightPending={highlightPending}
-                  isPending={isPending}
-                  item={item}
-                  key={item.id}
-                  onPress={() => onOpenItem(item, isPending ? 'pending' : 'history')}
+              {historyItems.map(({ historyCase }) => (
+                <TransactionHistoryCaseCard
+                  itemCase={historyCase}
+                  key={historyCase.id}
                   people={people}
-                  unread={unread}
                 />
               ))}
             </View>

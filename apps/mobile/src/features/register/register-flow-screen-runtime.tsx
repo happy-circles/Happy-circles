@@ -725,6 +725,8 @@ export function RegisterFlowScreen() {
               {isCorrectionMode ? 'Correccion del movimiento' : 'Nuevo movimiento'}
             </AppText>
             <Pressable
+              accessibilityLabel="Cerrar movimiento"
+              accessibilityRole="button"
               onPress={closeRegister}
               style={({ pressed }) => [
                 styles.closeButton,

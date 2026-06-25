@@ -38,16 +38,20 @@ function person(value: Partial<PersonCardDto>): PersonCardDto {
 function analyticsPerson(
   value: Partial<BalanceAnalyticsPersonRowDto>,
 ): BalanceAnalyticsPersonRowDto {
+  const netMinor = value.netMinor ?? 0;
+  const iOweMinor = value.iOweMinor ?? 0;
+  const owedToMeMinor = value.owedToMeMinor ?? 0;
+
   return {
-    iOweMinor: 0,
+    iOweMinor,
     key: value.userId ?? 'person',
     label: 'Persona',
     movementCount: 0,
-    netMinor: 0,
-    owedToMeMinor: 0,
-    periodIOweMinor: 0,
-    periodNetMinor: 0,
-    periodOwedToMeMinor: 0,
+    netMinor,
+    owedToMeMinor,
+    periodIOweMinor: value.periodIOweMinor ?? iOweMinor,
+    periodNetMinor: value.periodNetMinor ?? netMinor,
+    periodOwedToMeMinor: value.periodOwedToMeMinor ?? owedToMeMinor,
     previousPeriodNetMinor: 0,
     topCategories: [],
     topCategoryBreakdown: [],
@@ -451,5 +455,64 @@ describe('people insights', () => {
 
     expect(rows.map((row) => row.userId)).toEqual(['ben', 'ana']);
     expect(rows.map((row) => row.metricLabel)).toEqual(['+$\u00a0400', '$\u00a00']);
+  });
+
+  it('ranks balance directions using the selected period impact', () => {
+    const people = [
+      person({ displayName: 'Ana Perez', netAmountMinor: 90_000, userId: 'ana' }),
+      person({ displayName: 'Ben Ruiz', netAmountMinor: -70_000, userId: 'ben' }),
+    ];
+    const analyticsPeople = [
+      analyticsPerson({
+        label: 'Ana Perez',
+        netMinor: 90_000,
+        periodNetMinor: 10_000,
+        periodOwedToMeMinor: 10_000,
+        userId: 'ana',
+      }),
+      analyticsPerson({
+        label: 'Ben Ruiz',
+        netMinor: -70_000,
+        periodIOweMinor: 40_000,
+        periodNetMinor: -40_000,
+        userId: 'ben',
+      }),
+    ];
+
+    expect(
+      buildPeopleInsightRows({
+        activeCircleProposals: [],
+        analyticsPeople,
+        filter: 'balance',
+        historyItems: [],
+        pendingItems: [],
+        people,
+      }).map((row) => [row.userId, row.metricLabel]),
+    ).toEqual([
+      ['ben', '-$\u00a0400'],
+      ['ana', '+$\u00a0100'],
+    ]);
+
+    expect(
+      buildPeopleInsightRows({
+        activeCircleProposals: [],
+        analyticsPeople,
+        filter: 'owed_to_me',
+        historyItems: [],
+        pendingItems: [],
+        people,
+      }).map((row) => row.userId),
+    ).toEqual(['ana']);
+
+    expect(
+      buildPeopleInsightRows({
+        activeCircleProposals: [],
+        analyticsPeople,
+        filter: 'i_owe',
+        historyItems: [],
+        pendingItems: [],
+        people,
+      }).map((row) => row.userId),
+    ).toEqual(['ben']);
   });
 });

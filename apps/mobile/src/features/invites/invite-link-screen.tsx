@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AppAvatar } from '@/components/app-avatar';
 import {
   IdentityFlowIdentity,
@@ -354,6 +355,12 @@ export function InviteLinkScreen() {
     <IdentityFlowScreen
       actions={inviteLinkActions}
       contentTransitionKey={contentTransitionKey}
+      headerLeading={
+        <AppHeaderBackButton
+          accessibilityLabel="Cerrar invitación"
+          onPress={() => void handleDismissInvite()}
+        />
+      }
       identity={<IdentityFlowIdentity state={tokenState} variant="status" />}
       identityPosition="top"
       message={<IdentityFlowLogoCopy subtitle={tokenSubtitle} title={tokenTitle} />}

@@ -539,13 +539,7 @@ export function CategoriesPodiumCard({
                       {rankLabel}
                     </AppText>
                   </View>
-                  <View
-                    style={[
-                      styles.podiumIconRing,
-                      isFocused ? styles.podiumIconRingFocused : null,
-                      { borderColor: color },
-                    ]}
-                  >
+                  <View style={[styles.podiumIconRing, { borderColor: color }]}>
                     <View
                       style={[
                         styles.podiumCategoryIcon,
@@ -565,7 +559,6 @@ export function CategoriesPodiumCard({
                   style={[
                     styles.podiumStep,
                     stepStyle,
-                    isFocused ? styles.podiumStepFocused : null,
                     { backgroundColor: softColor, borderColor: color },
                   ]}
                 >

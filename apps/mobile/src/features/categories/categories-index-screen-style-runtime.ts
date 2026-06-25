@@ -129,12 +129,14 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
   podiumSlot: {
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderRadius: theme.radius.large,
     flex: 1,
     gap: 8,
     height: CATEGORY_INSIGHT_BODY_HEIGHT,
     justifyContent: 'flex-end',
     minWidth: 0,
+    outlineColor: 'transparent',
+    outlineStyle: 'solid',
+    outlineWidth: 0,
     paddingHorizontal: 6,
     paddingTop: theme.spacing.xs,
   },
@@ -142,10 +144,13 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     paddingTop: 0,
   },
   podiumSlotDimmed: {
-    transform: [{ scale: 0.98 }],
+    opacity: 0.38,
+    transform: [{ scale: 0.94 }],
   },
   podiumSlotFocused: {
     opacity: 1,
+    transform: [{ scale: 1.04 }],
+    zIndex: 2,
   },
   podiumSlotSelected: {
     transform: [{ scale: 0.99 }],
@@ -207,10 +212,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     padding: 3,
     zIndex: 1,
   },
-  podiumIconRingFocused: {
-    borderWidth: 2.5,
-    padding: 4,
-  },
   podiumIconRingEmpty: {
     borderColor: theme.colors.border,
     borderStyle: 'dashed',
@@ -246,9 +247,6 @@ export const categoriesIndexScreenStyles = StyleSheet.create({
     maxWidth: '100%',
     paddingHorizontal: 8,
     width: '84%',
-  },
-  podiumStepFocused: {
-    borderWidth: 1.5,
   },
   podiumStepFirst: {
     height: 94,

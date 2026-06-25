@@ -10,6 +10,7 @@ import type {
   HappyCircleScoreDto,
 } from '@happy-circles/application';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AppText } from '@/components/app-text';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCircleCard } from '@/components/happy-circle-card';
@@ -50,8 +51,10 @@ import {
   historyCaseVisualCategory,
   historyImpactLabel,
   historyImpactTone,
+  historyTimelineStepActorLabel,
   historyTimelineStepAmountLabel,
   historyTimelineStepCategory,
+  historyTimelineStepConversationSide,
   historyTimelineStepDetailLabel,
   historyTimelineStepMetaLabel,
   isHistoryCaseItem,
@@ -64,7 +67,7 @@ import {
   notificationViewedKeysWithLocalCache,
   useAppSnapshot,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { transactionCategoryColor } from '@/lib/transaction-categories';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
@@ -204,11 +207,13 @@ function CircleHeaderMetric({
 function CirclesHeader({
   closedCircleCount,
   metrics,
+  onBack,
   topInset,
   totalFaces,
 }: {
   readonly closedCircleCount: number;
   readonly metrics: CirclePersonalMetrics;
+  readonly onBack: () => void;
   readonly topInset: number;
   readonly totalFaces: number;
 }) {
@@ -216,22 +221,25 @@ function CirclesHeader({
   const { width } = useWindowDimensions();
   const containerWidth = Math.min(560, Math.max(0, width));
   const headerInnerWidth = Math.max(0, containerWidth - theme.spacing.lg * 2);
-  const isTightHeader = headerInnerWidth < 340;
+  const isTightHeader = headerInnerWidth < 420;
   const isRoomyMetrics = headerInnerWidth >= 330;
   const heroGap = isTightHeader ? theme.spacing.xs : theme.spacing.md;
+  const backSlotWidth = 44;
   const rewardSlotWidth = isTightHeader ? 96 : 106;
-  const brandMaxWidth = Math.max(0, headerInnerWidth - rewardSlotWidth - heroGap);
+  const brandMaxWidth = Math.max(
+    0,
+    headerInnerWidth - backSlotWidth - rewardSlotWidth - heroGap * 2,
+  );
   const titleColor =
     activeTheme.scheme === 'dark' ? activeTheme.colors.white : activeTheme.colors.primary;
 
   return (
     <View style={[styles.hero, { paddingTop: topInset + theme.spacing.lg }]}>
       <View style={[styles.heroTop, { gap: heroGap }]}>
+        <View style={styles.heroBackSlot}>
+          <AppHeaderBackButton onPress={onBack} />
+        </View>
         <View style={[styles.heroBrand, { maxWidth: brandMaxWidth, width: brandMaxWidth }]}>
-          <HappyCirclesMotion
-            size={isTightHeader ? 38 : 46}
-            variant={totalFaces > 0 ? 'wink' : 'idle'}
-          />
           <AppText
             adjustsFontSizeToFit
             color={titleColor}
@@ -687,13 +695,17 @@ function LatestCircleTransactionCard({
       onToggle={onToggle}
       statusLabel={historyCaseStatusLabel(itemCase)}
       statusTone={historyCaseStatusTone(itemCase)}
+      stepPresentation="conversation"
       steps={itemCase.steps.map((step, index) => {
         const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
         const impact = historyImpactLabel(step);
+        const actorLabel = historyTimelineStepActorLabel(step, 'Happy Circle');
 
         return {
+          actorLabel,
           amountLabel,
           category: historyTimelineStepCategory(itemCase, step, index),
+          conversationSide: historyTimelineStepConversationSide(step, actorLabel),
           detail: historyTimelineStepDetailLabel(step),
           id: step.id,
           impact:
@@ -712,6 +724,7 @@ function LatestCircleTransactionCard({
 
 export function CirclesIndexScreen() {
   const { top: topInset } = useSafeAreaInsets();
+  const router = useRouter();
   const [expandedLatestCaseId, setExpandedLatestCaseId] = useState<string | null>(null);
   const session = useSession();
   const snapshotQuery = useAppSnapshot();
@@ -812,6 +825,7 @@ export function CirclesIndexScreen() {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
         headerVariant="plain"
         largeTitle={false}
         refresh={refresh}
@@ -828,6 +842,7 @@ export function CirclesIndexScreen() {
     return (
       <ScreenShell
         contentContainerStyle={{ paddingTop: topInset + theme.spacing.md }}
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
         headerVariant="plain"
         largeTitle={false}
         safeAreaEdges={['left', 'right']}
@@ -853,6 +868,7 @@ export function CirclesIndexScreen() {
       <CirclesHeader
         closedCircleCount={personalMetrics.closedCircleCount}
         metrics={personalMetrics}
+        onBack={() => backOrReturnTo(router, '/home')}
         topInset={topInset}
         totalFaces={happyCircleScore.totalFaces}
       />
@@ -962,6 +978,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  heroBackSlot: {
+    alignItems: 'flex-start',
+    flexShrink: 0,
+    width: 44,
   },
   heroBrand: {
     alignItems: 'center',

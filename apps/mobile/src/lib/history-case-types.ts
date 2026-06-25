@@ -11,6 +11,7 @@ export interface HistoryCaseItem {
   readonly kind: 'request' | 'payment' | 'settlement' | 'system' | 'friendship_invite';
   readonly amountMinor?: number;
   readonly category?: string | null;
+  readonly sourceType?: 'user' | 'system';
   readonly tone?: 'positive' | 'negative' | 'neutral';
   readonly flowLabel?: string;
   readonly detail?: string;

@@ -155,10 +155,6 @@ function ResponseActionButton({
   );
 }
 
-function historyActorLabel(label: string): string {
-  return label === 'Tú' || label === 'Tu' ? 'Por ti' : `Por ${label}`;
-}
-
 function hasPendingHistoryAmountChanges(
   steps: readonly PendingFinancialRequestHistoryStep[],
 ): boolean {
@@ -333,8 +329,6 @@ export function PendingFinancialRequestCard({
         ];
   const [isLocallyExpanded, setIsLocallyExpanded] = useState(false);
   const expanded = isExpanded ?? isLocallyExpanded;
-  const showHistoryActors =
-    new Set(requestHistorySteps.map((step) => step.createdByLabel)).size > 1;
   const statusLabel =
     responseState === 'requires_you'
       ? moneyStatusCopy.requiresYou
@@ -342,17 +336,16 @@ export function PendingFinancialRequestCard({
   const statusTone = responseState === 'requires_you' ? 'warning' : 'neutral';
   const timelineSteps: readonly HistoryCaseStepViewModel[] = requestHistorySteps.map(
     (step, index) => {
-      const stepMeta = [
-        pendingHistoryStatusLabel(step, responseState),
-        showHistoryActors ? historyActorLabel(step.createdByLabel) : null,
-        step.createdAtLabel,
-      ]
+      const stepMeta = [pendingHistoryStatusLabel(step, responseState), step.createdAtLabel]
         .filter(Boolean)
         .join(' - ');
 
       return {
+        actorLabel: step.createdByLabel,
         amountLabel: pendingHistoryStepAmountLabel(requestHistorySteps, step, index),
         category: step.category ?? safeCategory,
+        conversationSide:
+          step.createdByLabel === 'Tú' || step.createdByLabel === 'Tu' ? 'self' : 'other',
         detail: step.description,
         id: step.id,
         meta: stepMeta,
@@ -388,6 +381,7 @@ export function PendingFinancialRequestCard({
       isExpanded={expanded}
       statusLabel={statusLabel}
       statusTone={statusTone}
+      stepPresentation="conversation"
       steps={timelineSteps}
       title={title}
       tone={pendingCardTone(amountTone, responseState)}

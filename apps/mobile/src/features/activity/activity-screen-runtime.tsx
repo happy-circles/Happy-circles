@@ -13,7 +13,6 @@ import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
 import { EmptyState } from '@/components/empty-state';
-import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { SwipePager, type SwipePagerProgress } from '@/components/swipe-pager';
 import {
@@ -57,6 +56,7 @@ import {
   isCycleTransactionItem,
 } from '@/lib/transaction-presentation';
 import { useSession } from '@/providers/session-provider';
+import { ActivitySheetStatus } from './activity-sheet-status';
 import {
   initialCategoryFromDomain,
   matchesNotificationCategory,
@@ -1184,12 +1184,11 @@ export function ActivityScreen() {
         edges={['left', 'right']}
         style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
       >
-        <View style={[styles.loadingState, { backgroundColor: activeTheme.colors.surface }]}>
-          <View style={styles.loadingMotion}>
-            <HappyCirclesMotion size={108} variant="loading" />
-          </View>
-          <AppText style={styles.supportText}>Estamos cargando tus movimientos.</AppText>
-        </View>
+        <ActivitySheetStatus
+          loading
+          message="Estamos cargando tus movimientos."
+          onClose={closeNotifications}
+        />
       </SafeAreaView>
     );
   }
@@ -1200,9 +1199,10 @@ export function ActivityScreen() {
         edges={['left', 'right']}
         style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
       >
-        <View style={[styles.loadingState, { backgroundColor: activeTheme.colors.surface }]}>
-          <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
-        </View>
+        <ActivitySheetStatus
+          message={snapshotQuery.error.message}
+          onClose={closeNotifications}
+        />
       </SafeAreaView>
     );
   }
@@ -1219,6 +1219,8 @@ export function ActivityScreen() {
             <View style={styles.heroRow}>
               <AppText style={styles.heroTitle}>Notificaciones</AppText>
               <Pressable
+                accessibilityLabel="Cerrar notificaciones"
+                accessibilityRole="button"
                 onPress={closeNotifications}
                 style={({ pressed }) => [
                   styles.closeButton,

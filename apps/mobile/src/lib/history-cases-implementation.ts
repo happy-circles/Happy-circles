@@ -252,6 +252,7 @@ export function toHistoryFeedItem(
     kind: item.kind,
     amountMinor: item.amountMinor,
     category: item.category,
+    sourceType: item.sourceType,
     tone: item.tone,
     flowLabel: item.flowLabel,
     detail: item.detail,

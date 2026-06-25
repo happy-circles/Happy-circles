@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 import { AppText } from '@/components/app-text';
+import { useAppTheme } from '@/providers/theme-provider';
 
 export interface SegmentedOption<T extends string> {
   readonly label: string;
@@ -21,19 +22,59 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
 }: SegmentedControlProps<T>) {
+  const activeTheme = useAppTheme();
+
   return (
     <View style={styles.root}>
-      {label ? <AppText style={styles.controlLabel}>{label}</AppText> : null}
-      <View style={styles.container}>
+      {label ? (
+        <AppText style={[styles.controlLabel, { color: activeTheme.colors.textMuted }]}>
+          {label}
+        </AppText>
+      ) : null}
+      <View
+        accessibilityLabel={label}
+        accessibilityRole="radiogroup"
+        style={[
+          styles.container,
+          {
+            backgroundColor: activeTheme.colors.surfaceMuted,
+            borderColor: activeTheme.colors.border,
+          },
+        ]}
+      >
         {options.map((option) => {
           const selected = option.value === value;
           return (
             <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
               key={option.value}
               onPress={() => onChange(option.value)}
-              style={[styles.segment, selected ? styles.segmentSelected : null]}
+              style={({ pressed }) => [
+                styles.segment,
+                selected
+                  ? [
+                      styles.segmentSelected,
+                      {
+                        backgroundColor: activeTheme.colors.elevated,
+                        borderColor: activeTheme.colors.hairline,
+                      },
+                      activeTheme.shadow.card,
+                    ]
+                  : null,
+                pressed ? styles.segmentPressed : null,
+              ]}
             >
-              <AppText style={[styles.label, selected ? styles.labelSelected : null]}>
+              <AppText
+                style={[
+                  styles.optionLabel,
+                  {
+                    color: selected
+                      ? activeTheme.colors.text
+                      : activeTheme.colors.textMuted,
+                  },
+                ]}
+              >
                 {option.label}
               </AppText>
             </Pressable>
@@ -49,14 +90,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   controlLabel: {
-    color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
     fontWeight: '700',
     marginLeft: 2,
   },
   container: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
     borderRadius: theme.radius.medium,
     borderWidth: 1,
     flexDirection: 'row',
@@ -71,15 +109,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
   segmentSelected: {
-    backgroundColor: theme.colors.elevated,
-    ...theme.shadow.card,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  label: {
-    color: theme.colors.textMuted,
+  segmentPressed: {
+    opacity: 0.72,
+  },
+  optionLabel: {
     fontSize: theme.typography.footnote,
     fontWeight: '700',
-  },
-  labelSelected: {
-    color: theme.colors.text,
   },
 });

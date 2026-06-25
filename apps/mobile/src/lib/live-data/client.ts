@@ -6,7 +6,11 @@ import {
   readFunctionErrorDetails,
   reportAndCreateSupportError,
 } from '../support-errors';
-import { APP_SNAPSHOT_QUERY_KEY, LIVE_SNAPSHOT_TIMEOUT_MS } from './constants';
+import {
+  APP_SNAPSHOT_QUERY_KEY,
+  LIVE_SNAPSHOT_TIMEOUT_MS,
+  PEOPLE_OVERVIEW_QUERY_KEY,
+} from './constants';
 
 export function createSnapshotAbortSignal(parentSignal?: AbortSignal) {
   const controller = new AbortController();
@@ -136,7 +140,12 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
 }
 
 export async function invalidateAppSnapshot() {
-  await queryClient.invalidateQueries({
-    queryKey: [APP_SNAPSHOT_QUERY_KEY],
-  });
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: [APP_SNAPSHOT_QUERY_KEY],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: [PEOPLE_OVERVIEW_QUERY_KEY],
+    }),
+  ]);
 }

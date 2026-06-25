@@ -403,6 +403,10 @@ export function BrandedRefreshVirtualizedListContainer({
     [handleAndroidPanMove, handleAndroidPanRelease, handleAndroidTouchCancel, refresh.refreshing],
   );
 
+  if (Platform.OS === 'web') {
+    return <>{children({})}</>;
+  }
+
   if (Platform.OS !== 'android') {
     return <>{children({ refreshControl: <BrandedRefreshControl refresh={refresh} /> })}</>;
   }

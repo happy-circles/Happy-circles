@@ -24,6 +24,7 @@ export type HistoryCaseTone = 'positive' | 'negative' | 'neutral' | 'danger' | '
 export type HistoryCaseExpandedLayout = 'panel' | 'showcase';
 
 export interface HistoryCaseStepViewModel {
+  readonly actorLabel?: string | null;
   readonly id: string;
   readonly title: string;
   readonly detail?: string | null;
@@ -31,6 +32,7 @@ export interface HistoryCaseStepViewModel {
   readonly meta?: string | null;
   readonly amountLabel?: string | null;
   readonly category?: string | null;
+  readonly conversationSide?: 'self' | 'other' | 'system';
   readonly tone: HistoryCaseTone;
 }
 
@@ -53,6 +55,7 @@ export interface HistoryCaseCardProps {
   readonly meta?: string | null;
   readonly statusLabel: string;
   readonly statusTone?: 'primary' | 'success' | 'warning' | 'neutral' | 'danger' | 'cycle';
+  readonly stepPresentation?: 'timeline' | 'conversation';
   readonly tone: HistoryCaseTone;
   readonly isCycleSnippet?: boolean;
   readonly expandable?: boolean;
@@ -113,6 +116,7 @@ export function HistoryCaseCard({
   meta,
   statusLabel,
   statusTone = 'neutral',
+  stepPresentation = 'timeline',
   tone,
   isCycleSnippet = false,
   expandable = true,
@@ -129,7 +133,8 @@ export function HistoryCaseCard({
     : null;
   const primaryLabel = eyebrow ?? (isCycleSnippet ? 'Happy Circle' : title);
   const detailTitle = primaryLabel !== title ? title : null;
-  const showExpandedSummary = Boolean(detailTitle || description);
+  const showExpandedSummary =
+    stepPresentation !== 'conversation' && Boolean(detailTitle || description);
   const isExpandedShowcase = expandedLayout === 'showcase';
   const canExpand = expandable && steps.length > 0 && typeof onToggle === 'function';
   const isActionable = canExpand || typeof onPress === 'function';
@@ -312,7 +317,7 @@ export function HistoryCaseCard({
               ) : null}
             </View>
           ) : null}
-          <CardTimeline steps={historyTimelineSteps(steps)} />
+          <CardTimeline presentation={stepPresentation} steps={historyTimelineSteps(steps)} />
           {children ? (
             <View style={[styles.expandedActions, { borderTopColor: activeTheme.colors.hairline }]}>
               {children}
@@ -328,7 +333,9 @@ function historyTimelineSteps(
   steps: readonly HistoryCaseStepViewModel[],
 ): readonly CardTimelineStep[] {
   return steps.map((step) => ({
+    actorLabel: step.actorLabel,
     amountLabel: step.amountLabel,
+    conversationSide: step.conversationSide,
     detail: step.detail ?? (step.impact && step.impact !== step.title ? step.impact : null),
     id: step.id,
     leadingNode: step.category ? (

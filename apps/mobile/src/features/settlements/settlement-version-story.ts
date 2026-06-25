@@ -127,8 +127,10 @@ export function versionStorySteps(
     const amountStruckThrough = transactionAmountIsVoided({ status: item.status });
 
     return {
+      actorLabel: 'Happy Circle',
       amountLabel: formatCop(item.amountMinor),
       amountStruckThrough,
+      conversationSide: 'system',
       detail: versionStoryDetail(item),
       id: item.proposalId,
       meta: versionStoryMeta(item, index),

@@ -5,7 +5,7 @@ import { supabase } from '../supabase';
 import { invalidateAppSnapshot } from './client';
 
 const SNAPSHOT_REALTIME_DEBOUNCE_MS = 650;
-const FOREGROUND_REFETCH_AFTER_MS = 30_000;
+const FOREGROUND_REFETCH_AFTER_MS = 5 * 60_000;
 const MAX_REMEMBERED_EVENT_IDS = 80;
 
 interface BroadcastEnvelope {

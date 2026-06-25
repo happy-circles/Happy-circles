@@ -108,6 +108,9 @@ verify_jwt = true
 [functions.get-app-snapshot]
 verify_jwt = true
 
+[functions.get-people-overview]
+verify_jwt = true
+
 [functions.execute-approved-cycle-settlement]
 verify_jwt = true
 

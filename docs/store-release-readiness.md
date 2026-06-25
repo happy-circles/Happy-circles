@@ -95,29 +95,71 @@ Flujo implementado:
 
 ## Data Safety / App Privacy Inventory
 
-Declarar como datos recolectados/procesados:
+Respuesta base para App Store Connect:
 
-- Email.
-- Nombre visible.
-- Telefono.
-- Contactos opcionales usados para invitaciones.
-- Foto/avatar opcional.
-- Identificadores de sesion y dispositivo confiable.
-- Analitica propia de producto.
-- Datos financieros entre usuarios: solicitudes, saldos, ledger, auditoria y cierres.
+- La app recolecta datos: Si.
+- Los datos se usan para tracking: No.
+- La app usa publicidad de terceros o retargeting: No.
+- Los datos se venden a brokers o redes publicitarias: No.
+- La mayoria de datos deben marcarse como "Linked to the User", porque se guardan contra la
+  cuenta autenticada, el usuario Supabase, el dispositivo confiable o relaciones financieras.
+- Usos principales: App Functionality, Analytics y, donde aplique, Product Personalization.
+- Privacy Policy URL: `https://app.happy-circles.com/privacy`.
+- Privacy Choices URL opcional: `https://app.happy-circles.com/privacy` o
+  `https://app.happy-circles.com/support`.
 
-Declarar:
+La siguiente tabla es una guia para llenar el formulario de privacidad de App Store Connect. En la
+interfaz de Apple no se pega como tabla; se usa para saber que categorias seleccionar y con que
+uso declarar cada dato.
 
-- No venta de datos.
-- No tracking publicitario.
-- Datos usados para funcionalidad, seguridad, auditoria y soporte.
-- Eliminacion de cuenta disponible dentro de la app con retencion minima del ledger.
+Categorias recomendadas en App Store Connect:
+
+| Categoria ASC | Tipo de dato | Linked to user | Usos | Notas |
+| --- | --- | --- | --- | --- |
+| Contact Info | Name | Yes | App Functionality, Product Personalization | Nombre visible de perfil y personas de confianza. |
+| Contact Info | Email Address | Yes | App Functionality | Auth, cuenta, soporte y notificaciones transaccionales. |
+| Contact Info | Phone Number | Yes | App Functionality | Perfil, resolucion de contactos e invitaciones. |
+| Contacts | Contacts | Yes | App Functionality | Opcional; se usa para encontrar o invitar personas iniciadas por el usuario. |
+| User Content | Photos or Videos | Yes | App Functionality, Product Personalization | Foto/avatar opcional desde camara o libreria. |
+| User Content | Customer Support | Yes | App Functionality | Reportes/metadata sanitizada de soporte y errores con supportId. |
+| User Content | Other User Content | Yes | App Functionality | Notas/descripciones libres en solicitudes financieras y auditoria visible. |
+| Financial Info | Other Financial Info | Yes | App Functionality, Analytics | Solicitudes, saldos, deudas entre usuarios, ledger, cierres y auditoria. |
+| Identifiers | User ID | Yes | App Functionality, Analytics | ID de cuenta, usuario, sesion, proveedores de acceso y auditoria. |
+| Identifiers | Device ID | Yes | App Functionality, Analytics | Device trust, push device, session/device id hasheado. |
+| Usage Data | Product Interaction | Yes | Analytics, App Functionality | Pantallas, acciones, funnels, aperturas y eventos de producto. |
+| Diagnostics | Performance Data | Yes | Analytics, App Functionality | Tiempos de inicio, cache, snapshot y screen-ready. |
+| Diagnostics | Other Diagnostic Data | Yes | App Functionality | Errores operativos sanitizados, request/support IDs y fallas tecnicas. |
+
+Categorias que no deben marcarse salvo que cambie el producto:
+
+- Payment Info: la app no procesa tarjetas, cuentas bancarias ni pagos.
+- Credit Info: la app no consulta puntajes ni buro de credito.
+- Location: no hay uso declarado de ubicacion.
+- Browsing History / Search History: no aplica.
+- Advertising Data: no hay publicidad.
+- Sensitive Info por biometria: Face ID/biometria se usa localmente como step-up; no se envia el
+  dato biometrico al servidor.
+- Crash Data: no declarar salvo que se agregue un SDK de crash reporting que envie crash logs.
+
+Texto corto para guardar junto a la ficha:
+
+> Happy Circles collects account, contact, optional profile content, product usage, diagnostics and
+> private financial-organizer data only to operate the app, authenticate users, protect sensitive
+> actions, support invitations, keep auditability and improve reliability. The app does not sell data
+> and does not use data for advertising tracking.
 
 ## DNS y App Links
 
 Estado actual:
 
 - `https://app.happy-circles.com/privacy`, `/terms` y `/support` responden 200.
+- Validado el 2026-06-22:
+  - `https://app.happy-circles.com/privacy`: 200, `text/html; charset=utf-8`.
+  - `https://app.happy-circles.com/terms`: 200, `text/html; charset=utf-8`.
+  - `https://app.happy-circles.com/support`: 200, `text/html; charset=utf-8`.
+  - `https://app.happy-circles.com/.well-known/apple-app-site-association`: 200,
+    `application/json`.
+  - `https://app.happy-circles.com/.well-known/assetlinks.json`: 200, `application/json`.
 - `assetlinks.json` ya incluye fingerprint Android del certificado de upload EAS.
 - SHA256 Android actual: `CE:9F:B0:28:2F:5C:7D:0A:DC:A9:37:34:92:86:1F:59:4B:2B:82:84:EB:5A:5C:DA:0E:40:03:54:B5:94:05:EB`.
 - `apple-app-site-association` ya incluye `AA75LHJ4LC.com.happycircles.app`.
@@ -153,6 +195,43 @@ Preparar para Apple/Google:
   - `https://app.happy-circles.com/privacy`
   - `https://app.happy-circles.com/terms`
   - `https://app.happy-circles.com/support`
+
+Texto listo para App Review Notes:
+
+> Happy Circles is a private balance organizer for people who already know each other. It is not a
+> bank, wallet, payment processor, credit product, loan product or investment service. The app does
+> not move money, disburse funds, charge interest, consult credit bureaus or process payments. Users
+> create and confirm private balance requests, invitations and settlement records with trusted
+> contacts.
+>
+> Sign in is required because all product features depend on private account data, trusted devices,
+> relationship permissions, RLS-protected Supabase data and audit history. The app supports Sign in
+> with Apple as an equivalent login option.
+>
+> Permissions used:
+> - Camera: scan invitation QR codes and optionally update the profile avatar.
+> - Contacts: optional, user-initiated contact matching and invitations.
+> - Photos: optional profile avatar upload.
+> - Notifications: reminders and updates about pending requests or invitations.
+> - Face ID / biometrics: local step-up protection for sensitive account or financial actions.
+>
+> Account deletion is available in the app under Profile -> Delete account. The flow requires a
+> trusted device and biometric step-up. Personal profile data is anonymized, trusted devices are
+> revoked and the auth user is soft-deleted. Minimal ledger/audit records are retained only for
+> financial integrity, abuse prevention and dispute support.
+>
+> Public links:
+> - Privacy Policy: https://app.happy-circles.com/privacy
+> - Terms: https://app.happy-circles.com/terms
+> - Support: https://app.happy-circles.com/support
+
+Antes de enviar:
+
+- Usar la cuenta demo existente en App Store Connect > App Review Information. Cuentas esperadas:
+  `apple-review@happy-circles.com`, `demo-ana@happy-circles.com` y
+  `demo-bruno@happy-circles.com`. No versionar la contrasena en este repositorio.
+- Si la cuenta demo requiere pasos especiales, pegarlos directamente en App Review Information.
+- Review contact email: `soporte@happy-circles.com`.
 
 ## Bloqueos de release
 

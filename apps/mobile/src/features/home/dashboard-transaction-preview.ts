@@ -8,15 +8,29 @@ import {
   buildTransactionMovementHistoryCases,
   historyCaseVisibleWithPendingHappyCircle,
   pendingHappyCircleCaseIds,
+  type TransactionHistoryCaseItem,
 } from '@/lib/transaction-history-cases';
+import type { HistoryCase } from '@/lib/history-cases';
 import { isPendingTransactionItem } from '@/lib/transaction-presentation';
 
-export interface DashboardTransactionPreviewItem {
+export interface DashboardPendingTransactionPreviewItem {
   readonly highlightPending: boolean;
-  readonly isPending: boolean;
+  readonly isPending: true;
   readonly item: ActivityItemDto;
   readonly unread: boolean;
 }
+
+export interface DashboardHistoryTransactionPreviewItem {
+  readonly highlightPending: false;
+  readonly historyCase: HistoryCase<TransactionHistoryCaseItem>;
+  readonly isPending: false;
+  readonly item: TransactionHistoryCaseItem;
+  readonly unread: false;
+}
+
+export type DashboardTransactionPreviewItem =
+  | DashboardPendingTransactionPreviewItem
+  | DashboardHistoryTransactionPreviewItem;
 
 export interface DashboardTransactionPreview {
   readonly visibleItems: readonly DashboardTransactionPreviewItem[];
@@ -35,25 +49,25 @@ export function buildDashboardTransactionPreview({
 }): DashboardTransactionPreview {
   const pendingTransactionItems = pendingItems.filter(isPendingTransactionItem);
   const activeHappyCircleCaseIds = pendingHappyCircleCaseIds(pendingTransactionItems);
-  const recentHistoryItems = buildTransactionMovementHistoryCases(historyItems)
+  const recentHistoryCases = buildTransactionMovementHistoryCases(historyItems)
     .filter((itemCase) =>
       historyCaseVisibleWithPendingHappyCircle(itemCase, activeHappyCircleCaseIds),
-    )
-    .map((itemCase) => itemCase.latest);
-  const visibleItems = [
+    );
+  const visibleItems: DashboardTransactionPreviewItem[] = [
     ...pendingTransactionItems.map((item) => ({
-      highlightPending: true,
-      isPending: true,
+      highlightPending: true as const,
+      isPending: true as const,
       item,
       unread:
         notificationItemCanAlert(item) &&
         !notificationViewedKeys.has(notificationViewKeyForItem(item)),
     })),
-    ...recentHistoryItems.map((item) => ({
-      highlightPending: false,
-      isPending: false,
-      item,
-      unread: false,
+    ...recentHistoryCases.map((historyCase) => ({
+      highlightPending: false as const,
+      historyCase,
+      isPending: false as const,
+      item: historyCase.latest,
+      unread: false as const,
     })),
   ]
     .sort(comparePreviewItems)

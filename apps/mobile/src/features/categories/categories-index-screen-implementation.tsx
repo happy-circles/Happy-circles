@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import type {
 } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AppText } from '@/components/app-text';
 import { AppTextInput } from '@/components/app-text-input';
 import { BrandedRefreshVirtualizedListContainer } from '@/components/branded-refresh-control';
@@ -23,6 +25,7 @@ import { triggerAppSelectionHaptic } from '@/lib/app-haptics';
 import { formatCop } from '@/lib/data';
 import { buildLatestMovementHistoryCaseItems, isHistoryCaseItem } from '@/lib/history-cases';
 import { useAppSnapshot } from '@/lib/live-data';
+import { backOrReturnTo } from '@/lib/navigation';
 import { theme, type AppTheme } from '@/lib/theme';
 import {
   normalizeTransactionCategory,
@@ -706,6 +709,7 @@ export function CategoriesIndexScreen({
   readonly initialPeriod?: string | null;
 }) {
   const activeTheme = useAppTheme();
+  const router = useRouter();
   const { top: topInset } = useSafeAreaInsets();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -896,7 +900,13 @@ export function CategoriesIndexScreen({
 
   if (snapshotQuery.error && !analytics) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} refresh={refresh} title="Categorías">
+      <ScreenShell
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerVariant="plain"
+        largeTitle={false}
+        refresh={refresh}
+        title="Categorías"
+      >
         <AppText style={styles.supportText}>{snapshotQuery.error.message}</AppText>
       </ScreenShell>
     );
@@ -904,7 +914,12 @@ export function CategoriesIndexScreen({
 
   if (snapshotQuery.isLoading || !analytics) {
     return (
-      <ScreenShell headerVariant="plain" largeTitle={false} title="Categorías">
+      <ScreenShell
+        headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
+        headerVariant="plain"
+        largeTitle={false}
+        title="Categorías"
+      >
         <View style={styles.loadingState}>
           <HappyCirclesMotion size={108} variant="loading" />
           <AppText style={styles.supportText}>Estamos organizando tus categorías.</AppText>
@@ -983,9 +998,16 @@ export function CategoriesIndexScreen({
                 >
                   <View style={styles.containedContent}>
                     <View style={styles.categoriesHeader}>
+                      <AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />
                       <View style={styles.categoriesHeaderCopy}>
                         <AppText style={styles.categoriesHeaderTitle}>Categorías</AppText>
-                        <AppText numberOfLines={1} style={styles.categoriesHeaderPeriod}>
+                        <AppText
+                          numberOfLines={1}
+                          style={[
+                            styles.categoriesHeaderPeriod,
+                            { color: activeTheme.colors.textMuted },
+                          ]}
+                        >
                           {periodLabel}
                         </AppText>
                       </View>

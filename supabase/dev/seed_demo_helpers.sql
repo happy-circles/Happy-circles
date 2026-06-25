@@ -151,43 +151,43 @@ begin
       values
         (
           v_ana_id,
-          'ana@example.com',
-          'Ana Torres',
-          'CO',
-          '57',
-          '3001112233',
-          '+573001112233',
-          'https://ui-avatars.com/api/?name=Ana+Torres&background=F59E0B&color=ffffff&size=256'
+          'apple-review@happy-circles.com',
+          'Apple Review',
+          'US',
+          '1',
+          '4155550100',
+          '+14155550100',
+          'https://ui-avatars.com/api/?name=Apple+Review&background=F59E0B&color=ffffff&size=256'
         ),
         (
           v_bruno_id,
-          'bruno@example.com',
-          'Bruno Diaz',
-          'CO',
-          '57',
-          '3001112244',
-          '+573001112244',
-          'https://ui-avatars.com/api/?name=Bruno+Diaz&background=2563EB&color=ffffff&size=256'
+          'demo-ana@happy-circles.com',
+          'Ana Demo',
+          'US',
+          '1',
+          '4155550101',
+          '+14155550101',
+          'https://ui-avatars.com/api/?name=Ana+Demo&background=2563EB&color=ffffff&size=256'
         ),
         (
           v_carla_id,
-          'carla@example.com',
-          'Carla Mejia',
-          'CO',
-          '57',
-          '3001112255',
-          '+573001112255',
-          'https://ui-avatars.com/api/?name=Carla+Mejia&background=DB2777&color=ffffff&size=256'
+          'demo-bruno@happy-circles.com',
+          'Bruno Demo',
+          'US',
+          '1',
+          '4155550102',
+          '+14155550102',
+          'https://ui-avatars.com/api/?name=Bruno+Demo&background=DB2777&color=ffffff&size=256'
         ),
         (
           v_diego_id,
-          'diego@example.com',
-          'Diego Ruiz',
-          'CO',
-          '57',
-          '3001112266',
-          '+573001112266',
-          'https://ui-avatars.com/api/?name=Diego+Ruiz&background=059669&color=ffffff&size=256'
+          'demo-carla@happy-circles.com',
+          'Carla Demo',
+          'US',
+          '1',
+          '4155550103',
+          '+14155550103',
+          'https://ui-avatars.com/api/?name=Carla+Demo&background=059669&color=ffffff&size=256'
         )
     ) as seed_user(
       id,
@@ -257,10 +257,10 @@ begin
     select *
     from (
       values
-        (v_ana_id, 'ana@example.com'),
-        (v_bruno_id, 'bruno@example.com'),
-        (v_carla_id, 'carla@example.com'),
-        (v_diego_id, 'diego@example.com')
+        (v_ana_id, 'apple-review@happy-circles.com'),
+        (v_bruno_id, 'demo-ana@happy-circles.com'),
+        (v_carla_id, 'demo-bruno@happy-circles.com'),
+        (v_diego_id, 'demo-carla@happy-circles.com')
     ) as seed_identity(id, email)
   )
   insert into auth.identities (
@@ -303,43 +303,43 @@ begin
       values
         (
           v_ana_id,
-          'ana@example.com',
-          'Ana Torres',
-          'CO',
-          '57',
-          '3001112233',
-          '+573001112233',
-          'https://ui-avatars.com/api/?name=Ana+Torres&background=F59E0B&color=ffffff&size=256'
+          'apple-review@happy-circles.com',
+          'Apple Review',
+          'US',
+          '1',
+          '4155550100',
+          '+14155550100',
+          'https://ui-avatars.com/api/?name=Apple+Review&background=F59E0B&color=ffffff&size=256'
         ),
         (
           v_bruno_id,
-          'bruno@example.com',
-          'Bruno Diaz',
-          'CO',
-          '57',
-          '3001112244',
-          '+573001112244',
-          'https://ui-avatars.com/api/?name=Bruno+Diaz&background=2563EB&color=ffffff&size=256'
+          'demo-ana@happy-circles.com',
+          'Ana Demo',
+          'US',
+          '1',
+          '4155550101',
+          '+14155550101',
+          'https://ui-avatars.com/api/?name=Ana+Demo&background=2563EB&color=ffffff&size=256'
         ),
         (
           v_carla_id,
-          'carla@example.com',
-          'Carla Mejia',
-          'CO',
-          '57',
-          '3001112255',
-          '+573001112255',
-          'https://ui-avatars.com/api/?name=Carla+Mejia&background=DB2777&color=ffffff&size=256'
+          'demo-bruno@happy-circles.com',
+          'Bruno Demo',
+          'US',
+          '1',
+          '4155550102',
+          '+14155550102',
+          'https://ui-avatars.com/api/?name=Bruno+Demo&background=DB2777&color=ffffff&size=256'
         ),
         (
           v_diego_id,
-          'diego@example.com',
-          'Diego Ruiz',
-          'CO',
-          '57',
-          '3001112266',
-          '+573001112266',
-          'https://ui-avatars.com/api/?name=Diego+Ruiz&background=059669&color=ffffff&size=256'
+          'demo-carla@happy-circles.com',
+          'Carla Demo',
+          'US',
+          '1',
+          '4155550103',
+          '+14155550103',
+          'https://ui-avatars.com/api/?name=Carla+Demo&background=059669&color=ffffff&size=256'
         )
     ) as seed_profile(
       id,
@@ -427,13 +427,13 @@ begin
     v_ana_id,
     v_bruno_id,
     60000,
-    'Historico | Mercado Ana -> Bruno'
+    'Historico | Mercado Apple Review -> Ana'
   );
 
   perform public.accept_financial_request(
     v_bruno_id,
     'demo-historic-a-b-accept',
-    (select id from public.financial_requests where description = 'Historico | Mercado Ana -> Bruno')
+    (select id from public.financial_requests where description = 'Historico | Mercado Apple Review -> Ana')
   );
 
   perform public.create_balance_request(
@@ -444,13 +444,13 @@ begin
     v_bruno_id,
     v_carla_id,
     60000,
-    'Historico | Viaje Bruno -> Carla'
+    'Historico | Viaje Ana -> Bruno'
   );
 
   perform public.accept_financial_request(
     v_carla_id,
     'demo-historic-b-c-accept',
-    (select id from public.financial_requests where description = 'Historico | Viaje Bruno -> Carla')
+    (select id from public.financial_requests where description = 'Historico | Viaje Ana -> Bruno')
   );
 
   perform public.create_balance_request(
@@ -461,13 +461,13 @@ begin
     v_carla_id,
     v_diego_id,
     60000,
-    'Historico | Cena Carla -> Diego'
+    'Historico | Cena Bruno -> Carla'
   );
 
   perform public.accept_financial_request(
     v_diego_id,
     'demo-historic-c-d-accept',
-    (select id from public.financial_requests where description = 'Historico | Cena Carla -> Diego')
+    (select id from public.financial_requests where description = 'Historico | Cena Bruno -> Carla')
   );
 
   perform public.create_balance_request(
@@ -478,13 +478,13 @@ begin
     v_diego_id,
     v_ana_id,
     60000,
-    'Historico | Taxi Diego -> Ana'
+    'Historico | Taxi Carla -> Apple Review'
   );
 
   perform public.accept_financial_request(
     v_ana_id,
     'demo-historic-d-a-accept',
-    (select id from public.financial_requests where description = 'Historico | Taxi Diego -> Ana')
+    (select id from public.financial_requests where description = 'Historico | Taxi Carla -> Apple Review')
   );
 
   select public.compute_graph_snapshot_hash(),
@@ -527,13 +527,13 @@ begin
     v_ana_id,
     v_bruno_id,
     180000,
-    'Demo live | Hotel Ana -> Bruno'
+    'Demo live | Hotel Apple Review -> Ana'
   );
 
   perform public.accept_financial_request(
     v_bruno_id,
     'demo-live-a-b-accept',
-    (select id from public.financial_requests where description = 'Demo live | Hotel Ana -> Bruno')
+    (select id from public.financial_requests where description = 'Demo live | Hotel Apple Review -> Ana')
   );
 
   perform public.create_balance_request(
@@ -544,13 +544,13 @@ begin
     v_bruno_id,
     v_carla_id,
     120000,
-    'Demo live | Gasolina Bruno -> Carla'
+    'Demo live | Gasolina Ana -> Bruno'
   );
 
   perform public.accept_financial_request(
     v_carla_id,
     'demo-live-b-c-accept',
-    (select id from public.financial_requests where description = 'Demo live | Gasolina Bruno -> Carla')
+    (select id from public.financial_requests where description = 'Demo live | Gasolina Ana -> Bruno')
   );
 
   perform public.create_balance_request(
@@ -561,13 +561,13 @@ begin
     v_carla_id,
     v_diego_id,
     120000,
-    'Demo live | Almuerzo Carla -> Diego'
+    'Demo live | Almuerzo Bruno -> Carla'
   );
 
   perform public.accept_financial_request(
     v_diego_id,
     'demo-live-c-d-accept',
-    (select id from public.financial_requests where description = 'Demo live | Almuerzo Carla -> Diego')
+    (select id from public.financial_requests where description = 'Demo live | Almuerzo Bruno -> Carla')
   );
 
   perform public.create_balance_request(
@@ -578,13 +578,13 @@ begin
     v_diego_id,
     v_ana_id,
     120000,
-    'Demo live | Tiquetes Diego -> Ana'
+    'Demo live | Tiquetes Carla -> Apple Review'
   );
 
   perform public.accept_financial_request(
     v_ana_id,
     'demo-live-d-a-accept',
-    (select id from public.financial_requests where description = 'Demo live | Tiquetes Diego -> Ana')
+    (select id from public.financial_requests where description = 'Demo live | Tiquetes Carla -> Apple Review')
   );
 
   select public.compute_graph_snapshot_hash(),
@@ -625,7 +625,7 @@ begin
     v_carla_id,
     v_ana_id,
     35000,
-    'Pendiente | Carla le debe a Ana por entradas'
+    'Pendiente | Bruno le debe a Apple Review por entradas'
   );
 
   perform public.create_balance_request(
@@ -636,88 +636,88 @@ begin
     v_ana_id,
     v_diego_id,
     28000,
-    'Pendiente | Ana le debe a Diego por parqueadero'
+    'Pendiente | Apple Review le debe a Carla por parqueadero'
   );
 
   update public.financial_requests
   set created_at = v_historic_request_1_created_at,
       updated_at = v_historic_request_1_resolved_at,
       resolved_at = v_historic_request_1_resolved_at
-  where description = 'Historico | Mercado Ana -> Bruno';
+  where description = 'Historico | Mercado Apple Review -> Ana';
 
   update public.financial_requests
   set created_at = v_historic_request_2_created_at,
       updated_at = v_historic_request_2_resolved_at,
       resolved_at = v_historic_request_2_resolved_at
-  where description = 'Historico | Viaje Bruno -> Carla';
+  where description = 'Historico | Viaje Ana -> Bruno';
 
   update public.financial_requests
   set created_at = v_historic_request_3_created_at,
       updated_at = v_historic_request_3_resolved_at,
       resolved_at = v_historic_request_3_resolved_at
-  where description = 'Historico | Cena Carla -> Diego';
+  where description = 'Historico | Cena Bruno -> Carla';
 
   update public.financial_requests
   set created_at = v_historic_request_4_created_at,
       updated_at = v_historic_request_4_resolved_at,
       resolved_at = v_historic_request_4_resolved_at
-  where description = 'Historico | Taxi Diego -> Ana';
+  where description = 'Historico | Taxi Carla -> Apple Review';
 
   update public.financial_requests
   set created_at = v_live_request_1_created_at,
       updated_at = v_live_request_1_resolved_at,
       resolved_at = v_live_request_1_resolved_at
-  where description = 'Demo live | Hotel Ana -> Bruno';
+  where description = 'Demo live | Hotel Apple Review -> Ana';
 
   update public.financial_requests
   set created_at = v_live_request_2_created_at,
       updated_at = v_live_request_2_resolved_at,
       resolved_at = v_live_request_2_resolved_at
-  where description = 'Demo live | Gasolina Bruno -> Carla';
+  where description = 'Demo live | Gasolina Ana -> Bruno';
 
   update public.financial_requests
   set created_at = v_live_request_3_created_at,
       updated_at = v_live_request_3_resolved_at,
       resolved_at = v_live_request_3_resolved_at
-  where description = 'Demo live | Almuerzo Carla -> Diego';
+  where description = 'Demo live | Almuerzo Bruno -> Carla';
 
   update public.financial_requests
   set created_at = v_live_request_4_created_at,
       updated_at = v_live_request_4_resolved_at,
       resolved_at = v_live_request_4_resolved_at
-  where description = 'Demo live | Tiquetes Diego -> Ana';
+  where description = 'Demo live | Tiquetes Carla -> Apple Review';
 
   update public.financial_requests
   set created_at = v_pending_incoming_created_at,
       updated_at = v_pending_incoming_created_at
-  where description = 'Pendiente | Carla le debe a Ana por entradas';
+  where description = 'Pendiente | Bruno le debe a Apple Review por entradas';
 
   update public.financial_requests
   set created_at = v_pending_outgoing_created_at,
       updated_at = v_pending_outgoing_created_at
-  where description = 'Pendiente | Ana le debe a Diego por parqueadero';
+  where description = 'Pendiente | Apple Review le debe a Carla por parqueadero';
 
   update public.ledger_transactions
   set created_at = case description
-    when 'Historico | Mercado Ana -> Bruno' then v_historic_request_1_resolved_at
-    when 'Historico | Viaje Bruno -> Carla' then v_historic_request_2_resolved_at
-    when 'Historico | Cena Carla -> Diego' then v_historic_request_3_resolved_at
-    when 'Historico | Taxi Diego -> Ana' then v_historic_request_4_resolved_at
-    when 'Demo live | Hotel Ana -> Bruno' then v_live_request_1_resolved_at
-    when 'Demo live | Gasolina Bruno -> Carla' then v_live_request_2_resolved_at
-    when 'Demo live | Almuerzo Carla -> Diego' then v_live_request_3_resolved_at
-    when 'Demo live | Tiquetes Diego -> Ana' then v_live_request_4_resolved_at
+    when 'Historico | Mercado Apple Review -> Ana' then v_historic_request_1_resolved_at
+    when 'Historico | Viaje Ana -> Bruno' then v_historic_request_2_resolved_at
+    when 'Historico | Cena Bruno -> Carla' then v_historic_request_3_resolved_at
+    when 'Historico | Taxi Carla -> Apple Review' then v_historic_request_4_resolved_at
+    when 'Demo live | Hotel Apple Review -> Ana' then v_live_request_1_resolved_at
+    when 'Demo live | Gasolina Ana -> Bruno' then v_live_request_2_resolved_at
+    when 'Demo live | Almuerzo Bruno -> Carla' then v_live_request_3_resolved_at
+    when 'Demo live | Tiquetes Carla -> Apple Review' then v_live_request_4_resolved_at
     else created_at
   end
   where description in (
-    'Historico | Mercado Ana -> Bruno',
-    'Historico | Viaje Bruno -> Carla',
-    'Historico | Cena Carla -> Diego',
-    'Historico | Taxi Diego -> Ana',
-    'Demo live | Hotel Ana -> Bruno',
-    'Demo live | Gasolina Bruno -> Carla',
-    'Demo live | Almuerzo Carla -> Diego',
-    'Demo live | Tiquetes Diego -> Ana'
+    'Historico | Mercado Apple Review -> Ana',
+    'Historico | Viaje Ana -> Bruno',
+    'Historico | Cena Bruno -> Carla',
+    'Historico | Taxi Carla -> Apple Review',
+    'Demo live | Hotel Apple Review -> Ana',
+    'Demo live | Gasolina Ana -> Bruno',
+    'Demo live | Almuerzo Bruno -> Carla',
+    'Demo live | Tiquetes Carla -> Apple Review'
   );
 
   update public.ledger_entries
@@ -725,14 +725,14 @@ begin
   from public.ledger_transactions tx
   where public.ledger_entries.ledger_transaction_id = tx.id
     and tx.description in (
-      'Historico | Mercado Ana -> Bruno',
-      'Historico | Viaje Bruno -> Carla',
-      'Historico | Cena Carla -> Diego',
-      'Historico | Taxi Diego -> Ana',
-      'Demo live | Hotel Ana -> Bruno',
-      'Demo live | Gasolina Bruno -> Carla',
-      'Demo live | Almuerzo Carla -> Diego',
-      'Demo live | Tiquetes Diego -> Ana'
+      'Historico | Mercado Apple Review -> Ana',
+      'Historico | Viaje Ana -> Bruno',
+      'Historico | Cena Bruno -> Carla',
+      'Historico | Taxi Carla -> Apple Review',
+      'Demo live | Hotel Apple Review -> Ana',
+      'Demo live | Gasolina Ana -> Bruno',
+      'Demo live | Almuerzo Bruno -> Carla',
+      'Demo live | Tiquetes Carla -> Apple Review'
     );
 
   update public.settlement_proposals
@@ -802,10 +802,10 @@ begin
     'seedPassword', v_seed_password,
     'pendingSettlementProposalId', v_live_proposal_id,
     'demoUsers', jsonb_build_array(
-      jsonb_build_object('email', 'ana@example.com', 'displayName', 'Ana Torres'),
-      jsonb_build_object('email', 'bruno@example.com', 'displayName', 'Bruno Diaz'),
-      jsonb_build_object('email', 'carla@example.com', 'displayName', 'Carla Mejia'),
-      jsonb_build_object('email', 'diego@example.com', 'displayName', 'Diego Ruiz')
+      jsonb_build_object('email', 'apple-review@happy-circles.com', 'displayName', 'Apple Review'),
+      jsonb_build_object('email', 'demo-ana@happy-circles.com', 'displayName', 'Ana Demo'),
+      jsonb_build_object('email', 'demo-bruno@happy-circles.com', 'displayName', 'Bruno Demo'),
+      jsonb_build_object('email', 'demo-carla@happy-circles.com', 'displayName', 'Carla Demo')
     )
   );
 end;

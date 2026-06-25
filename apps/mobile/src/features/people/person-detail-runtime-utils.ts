@@ -4,7 +4,21 @@ import type { ActivityItemDto } from '@happy-circles/application';
 
 import type { CircleActionFeedbackAction } from '@/components/circle-action-feedback-overlay';
 import type { HappyCircleRingParticipant } from '@/components/happy-circle-ring';
-import type { HistoryCaseTone } from '@/components/history-case-card';
+import type { HistoryCaseStepViewModel, HistoryCaseTone } from '@/components/history-case-card';
+import {
+  historyCaseVisualCategory,
+  historyImpactLabel,
+  historyImpactTone,
+  historyTimelineStepActionLabel,
+  historyTimelineStepActorLabel,
+  historyTimelineStepAmountLabel,
+  historyTimelineStepCategory,
+  historyTimelineStepConversationSide,
+  historyTimelineStepDetailLabel,
+  historyTimelineStepMetaLabel,
+  type HistoryCase,
+  type HistoryCaseItem,
+} from '@/lib/history-cases';
 import { transactionStatusLabel } from '@/lib/transaction-presentation';
 import { pendingStatusLabel, type PersonSegmentKey } from './person-detail-helpers';
 
@@ -50,6 +64,88 @@ export function buildPersonPanelHref(input: {
   const focusParam = input.focusId ? `&focus=${encodeURIComponent(input.focusId)}` : '';
 
   return `/person/${encodeURIComponent(input.userId)}?panel=${input.panel}${focusParam}` as Href;
+}
+
+export function buildPersonHistoryConversationSteps(input: {
+  readonly caseAmountLabel: string | null;
+  readonly counterpartyLabel: string;
+  readonly itemCase: HistoryCase<HistoryCaseItem>;
+}): readonly HistoryCaseStepViewModel[] {
+  const conversationSteps: HistoryCaseStepViewModel[] = [];
+
+  for (let index = 0; index < input.itemCase.steps.length; index += 1) {
+    const step = input.itemCase.steps[index];
+    if (!step) {
+      continue;
+    }
+
+    const nextStep = input.itemCase.steps[index + 1];
+    const completionLabel =
+      step.kind === 'request' && step.status === 'accepted' && nextStep?.status === 'posted'
+        ? successfulHistoryCompletionLabel(nextStep)
+        : null;
+    const amountLabel = historyTimelineStepAmountLabel(input.itemCase, step, index);
+    const impact = historyImpactLabel(step);
+    const actorLabel = historyTimelineStepActorLabel(step, input.counterpartyLabel);
+    const detail = historyTimelineStepDetailLabel(step);
+    const previousStep = input.itemCase.steps[index - 1];
+    const previousDetail = previousStep ? historyTimelineStepDetailLabel(previousStep) : null;
+
+    const actionLabel = historyTimelineStepActionLabel(step, actorLabel);
+
+    conversationSteps.push({
+      actorLabel,
+      amountLabel,
+      category:
+        step.category ??
+        historyTimelineStepCategory(input.itemCase, step, index) ??
+        historyCaseVisualCategory(input.itemCase),
+      conversationSide: historyTimelineStepConversationSide(step, actorLabel),
+      detail: detail && detail !== previousDetail ? detail : null,
+      id: step.id,
+      impact:
+        !amountLabel && input.caseAmountLabel && impact?.includes(input.caseAmountLabel)
+          ? null
+          : impact,
+      meta: historyTimelineStepMetaLabel(input.itemCase, step),
+      title: completionLabel
+        ? mergeAcceptedActionWithCompletion(actionLabel, completionLabel)
+        : actionLabel,
+      tone: historyImpactTone(step) as HistoryCaseTone,
+    });
+
+    if (completionLabel) {
+      index += 1;
+    }
+  }
+
+  return conversationSteps;
+}
+
+function mergeAcceptedActionWithCompletion(actionLabel: string, completionLabel: string): string {
+  const acceptedAction = actionLabel.match(
+    /^(Aceptaste|Aceptó)(?: la propuesta| el nuevo monto| el ajuste)?$/i,
+  );
+
+  return acceptedAction?.[1]
+    ? `${acceptedAction[1]} y ${completionLabel}`
+    : `${actionLabel} y ${completionLabel}`;
+}
+
+function successfulHistoryCompletionLabel(step: HistoryCaseItem): string | null {
+  const actionLabel = historyTimelineStepActionLabel(step, historyTimelineStepActorLabel(step));
+  const normalizedAction = actionLabel.trim();
+  const registered = normalizedAction.match(/^(?:se\s+)?registr(?:aste|ó)\s+(.+)$/i);
+  if (registered?.[1]) {
+    return `se registró ${registered[1]}`;
+  }
+
+  const applied = normalizedAction.match(/^(?:se\s+)?aplic(?:aste|ó)\s+(.+)$/i);
+  if (applied?.[1]) {
+    return `se aplicó ${applied[1]}`;
+  }
+
+  return step.kind === 'payment' || step.kind === 'system' ? 'se registró el movimiento' : null;
 }
 
 export function pendingCaseTone(item: ActivityItemDto): HistoryCaseTone {

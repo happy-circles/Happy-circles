@@ -428,7 +428,6 @@ export function useSessionController(): SessionContextValue {
       );
       const loadedAccountState = await loadSessionAccountState({
         client,
-        isCurrentLoad: () => loadId === accountLoadIdRef.current,
         nextSession,
         setLoadingStage,
       });

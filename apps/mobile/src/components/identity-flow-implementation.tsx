@@ -130,6 +130,8 @@ interface IdentityFlowScreenProps extends Pick<
   readonly contentVisible?: boolean;
   readonly contentWidthStyle?: StyleProp<ViewStyle>;
   readonly fitContentToScreen?: boolean;
+  readonly headerLeading?: ReactNode;
+  readonly headerTrailing?: ReactNode;
   readonly identity?: ReactNode;
   readonly identityCenterLayout?: IdentityFlowCenterLayout;
   readonly identityPosition?: IdentityFlowIdentityPosition;
@@ -150,6 +152,8 @@ export function IdentityFlowScreen({
   contentWidthStyle,
   fitContentToScreen = false,
   footer,
+  headerLeading,
+  headerTrailing,
   identity,
   identityCenterLayout = 'balanced',
   identityPosition = 'auto',
@@ -194,9 +198,11 @@ export function IdentityFlowScreen({
   const screenBackgroundColor = activeTheme.colors.background;
   const screenTitleTop = Math.max(0, insets.top) + theme.spacing.xxs;
   const screenTitleClearance = fitContentToScreen ? theme.spacing.xs : theme.spacing.lg;
+  const screenHeaderHeight =
+    headerLeading || headerTrailing ? 44 : IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT;
   const titleClearedTopOffset = Math.max(
     IDENTITY_FLOW_TOP_OFFSET,
-    screenTitleTop + IDENTITY_FLOW_SCREEN_TITLE_LINE_HEIGHT + screenTitleClearance,
+    screenTitleTop + screenHeaderHeight + screenTitleClearance,
   );
   const fallbackScrollViewRef = useRef<ScrollView | null>(null);
   const activeScrollViewRef = scrollViewRef ?? fallbackScrollViewRef;
@@ -908,16 +914,19 @@ export function IdentityFlowScreen({
         >
           <Animated.View style={styles.keyboardContent}>
             <View
-              pointerEvents="none"
+              pointerEvents="box-none"
               style={[
                 styles.screenTitle,
                 {
+                  minHeight: screenHeaderHeight,
                   opacity: layoutReady ? 1 : 0,
                   top: screenTitleTop,
                 },
               ]}
             >
+              <View style={styles.screenTitleSide}>{headerLeading}</View>
               <AppText style={styles.screenTitleText}>{IDENTITY_FLOW_HEADER_TITLE}</AppText>
+              <View style={styles.screenTitleSide}>{headerTrailing}</View>
             </View>
             <View
               onLayout={(event) => {
@@ -1580,7 +1589,9 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     alignItems: 'center',
+    flexDirection: 'row',
     left: 0,
+    paddingHorizontal: theme.spacing.lg,
     position: 'absolute',
     right: 0,
     top: theme.spacing.xxs,
@@ -1588,11 +1599,18 @@ const styles = StyleSheet.create({
   },
   screenTitleText: {
     color: theme.colors.text,
+    flex: 1,
     fontSize: theme.typography.title2,
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 28,
     textAlign: 'center',
+  },
+  screenTitleSide: {
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+    width: 44,
   },
   identityTarget: {
     alignSelf: 'center',

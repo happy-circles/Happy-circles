@@ -7,6 +7,7 @@ const DEFAULT_JSON_BODY_BYTES = 64 * 1024;
 const FUNCTION_BODY_LIMITS: Record<string, number> = {
   'analytics-ingest': 128 * 1024,
   'get-app-snapshot': 4 * 1024,
+  'get-people-overview': 4 * 1024,
   'process-graph-cycle-jobs': 16 * 1024,
   'register-push-token': 8 * 1024,
   'send-push-notifications': 16 * 1024,
@@ -18,7 +19,11 @@ const CORS_HEADERS = {
   'access-control-allow-origin': '*',
   'access-control-max-age': '86400',
 } as const;
-const READ_FUNCTIONS = new Set(['get-app-snapshot', 'get-friendship-invite-preview']);
+const READ_FUNCTIONS = new Set([
+  'get-app-snapshot',
+  'get-friendship-invite-preview',
+  'get-people-overview',
+]);
 const ANALYTICS_FUNCTIONS = new Set([
   'analytics-ingest',
   'record-product-event',

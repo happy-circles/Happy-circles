@@ -23,6 +23,7 @@ export type {
   SettlementVersionTimelineItemDto,
 } from './types';
 export { useAppSnapshot } from './fetch-snapshot';
+export { usePeopleOverview } from './fetch-people-overview';
 export {
   circleDiscoveryViewKeyForProposalId,
   type NotificationViewDescriptor,

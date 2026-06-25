@@ -645,7 +645,7 @@ function buildPeopleInsightRowsForFilter(
         };
 
     if (filter === 'balance') {
-      const amountMinor = row?.netMinor ?? person.netAmountMinor;
+      const amountMinor = row?.periodNetMinor ?? person.netAmountMinor;
 
       return [
         {
@@ -659,7 +659,8 @@ function buildPeopleInsightRowsForFilter(
 
     if (filter === 'owed_to_me') {
       const amountMinor =
-        row?.owedToMeMinor ?? (person.direction === 'owes_me' ? person.netAmountMinor : 0);
+        row?.periodOwedToMeMinor ??
+        (person.direction === 'owes_me' ? person.netAmountMinor : 0);
       if (amountMinor <= 0) {
         return [];
       }
@@ -676,7 +677,7 @@ function buildPeopleInsightRowsForFilter(
 
     if (filter === 'i_owe') {
       const amountMinor = Math.abs(
-        row?.iOweMinor ?? (person.direction === 'i_owe' ? person.netAmountMinor : 0),
+        row?.periodIOweMinor ?? (person.direction === 'i_owe' ? person.netAmountMinor : 0),
       );
       if (amountMinor <= 0) {
         return [];

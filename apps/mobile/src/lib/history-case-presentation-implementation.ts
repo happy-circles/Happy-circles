@@ -11,6 +11,7 @@ import type { HistoryCase, HistoryCaseItem, HistoryStatusTone } from './history-
 import {
   compactHistoryLabel,
   extractHistoryConcept,
+  historyCreatorLabel,
   historyCaseInviteCategory,
   historyDirectionFromItem,
   historyItemVisualCategory,
@@ -46,7 +47,7 @@ export function historyTimelineStepCategory<T extends HistoryCaseItem>(
 
 export function historyTimelineStepDetailLabel(item: HistoryCaseItem): string | null {
   if (!isInviteTrajectoryItem(item)) {
-    return null;
+    return extractHistoryConcept(item.detail);
   }
 
   const ignored = new Set(
@@ -67,6 +68,46 @@ export function historyTimelineStepDetailLabel(item: HistoryCaseItem): string | 
   });
 
   return details.length > 0 ? details.join(' · ') : null;
+}
+
+export function historyTimelineStepActorLabel(
+  item: HistoryCaseItem,
+  fallbackLabel = 'Persona',
+): string {
+  if (isCircleActivityItem(item)) {
+    return 'Happy Circle';
+  }
+
+  if (item.sourceType === 'system') {
+    return 'Sistema';
+  }
+
+  return historyCreatorLabel(item, fallbackLabel);
+}
+
+export function historyTimelineStepConversationSide(
+  item: HistoryCaseItem,
+  actorLabel: string,
+): 'self' | 'other' | 'system' {
+  if (item.sourceType === 'system' || actorLabel === 'Sistema' || actorLabel === 'Happy Circle') {
+    return 'system';
+  }
+
+  return /^(t[uú]|por ti)$/i.test(actorLabel.trim()) ? 'self' : 'other';
+}
+
+export function historyTimelineStepActionLabel(item: HistoryCaseItem, actorLabel: string): string {
+  const friendlyLabel = friendlyHistoryStepLabel(item);
+  const actorPrefix = `${actorLabel} `;
+
+  if (friendlyLabel.toLocaleLowerCase('es-CO').startsWith(actorPrefix.toLocaleLowerCase('es-CO'))) {
+    const action = friendlyLabel.slice(actorPrefix.length).trim();
+    return action.length > 0
+      ? `${action.charAt(0).toUpperCase()}${action.slice(1)}`
+      : friendlyLabel;
+  }
+
+  return friendlyLabel;
 }
 
 export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
@@ -101,6 +142,16 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
     return actor === 'Tú' || actor === 'Tu'
       ? 'Propusiste un nuevo monto'
       : `${actor} propuso un nuevo monto`;
+  }
+
+  const selfProposal = item.title.match(/^T[uú] propuso (.+)$/i);
+  if (selfProposal?.[1]) {
+    return `Propusiste ${selfProposal[1]}`;
+  }
+
+  const selfRejected = item.title.match(/^T[uú] no acept[oó] (.+)$/i);
+  if (selfRejected?.[1]) {
+    return `No aceptaste ${selfRejected[1]}`;
   }
 
   const selfAction = item.title.match(

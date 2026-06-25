@@ -9,9 +9,6 @@ export const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     maxWidth: IDENTITY_FLOW_CONTENT_MAX_WIDTH,
   },
-  headerActionPlaceholder: {
-    width: 40,
-  },
   headerSignOutButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.dangerSoft,

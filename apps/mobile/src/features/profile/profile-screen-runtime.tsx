@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AppText } from '@/components/app-text';
 import type { AppTextInputRef } from '@/components/app-text-input';
 import { MessageBanner } from '@/components/message-banner';
@@ -37,7 +38,7 @@ import {
   useRequestAccountDeletionMutation,
   useUpdateProfileAvatarMutation,
 } from '@/lib/live-data';
-import { pushRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import { buildNotificationSummary } from '@/lib/notification-summary';
 import { buildSetupAccountHref, isLowQualityDisplayName } from '@/lib/setup-account';
 import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
@@ -809,7 +810,7 @@ export function ProfileScreen() {
     <ScreenShell
       contentContainerStyle={profileContentContainerStyle}
       contentWidthStyle={styles.contentWidth}
-      headerLeading={<View style={styles.headerActionPlaceholder} />}
+      headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
       headerSlot={
         <Pressable
           accessibilityLabel="Cerrar sesión"

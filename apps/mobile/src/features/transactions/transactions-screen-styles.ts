@@ -4,16 +4,6 @@ import { theme } from '@/lib/theme';
 import { transactionsFilterStyles } from './transactions-filter-styles';
 
 const transactionsBaseStyles = StyleSheet.create({
-  backButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  backButtonPressed: {
-    opacity: 0.68,
-  },
   containedContent: {
     alignSelf: 'center',
     gap: theme.spacing.lg,
@@ -37,8 +27,8 @@ const transactionsBaseStyles = StyleSheet.create({
     height: theme.spacing.sm,
   },
   headerActionSpacer: {
-    height: 36,
-    width: 36,
+    height: 44,
+    width: 44,
   },
   transactionsControlsSection: {
     gap: theme.spacing.lg,

@@ -40,12 +40,7 @@ import {
   historyCaseStatusLabel,
   historyCaseStatusTone,
   historyCaseVisualCategory,
-  historyImpactLabel,
   historyImpactTone,
-  historyTimelineStepCategory,
-  historyTimelineStepDetailLabel,
-  historyTimelineStepAmountLabel,
-  historyTimelineStepMetaLabel,
   toHistoryFeedItem,
 } from '@/lib/history-cases';
 import {
@@ -99,6 +94,7 @@ import {
 } from './person-detail-states';
 import { CircleDetailLink } from './person-detail-circle-link';
 import {
+  buildPersonHistoryConversationSteps,
   buildPersonPanelHref,
   fallbackCircleFeedbackParticipants,
   pendingCaseTone,
@@ -692,10 +688,16 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         onToggle={() => togglePendingItem(item.id)}
         statusLabel={statusLabel}
         statusTone={statusTone}
+        stepPresentation="conversation"
         steps={[
           {
+            actorLabel:
+              item.kind === 'settlement_proposal'
+                ? 'Happy Circle'
+                : (person?.displayName ?? 'Persona'),
             amountLabel,
             category: item.category ?? (item.kind === 'settlement_proposal' ? 'cycle' : null),
+            conversationSide: item.kind === 'settlement_proposal' ? 'system' : 'other',
             detail,
             id: `${item.id}:context`,
             meta,
@@ -703,6 +705,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
             tone: pendingCaseTone(item),
           },
           {
+            actorLabel: 'Sistema',
+            conversationSide: 'system',
             detail: pendingCurrentStatusDetail(item),
             id: `${item.id}:status`,
             meta: null,
@@ -865,23 +869,11 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           onToggle={() => toggleHistoryCase(itemCase.id)}
           statusLabel={historyCaseStatusLabel(itemCase)}
           statusTone={historyCaseStatusTone(itemCase)}
-          steps={itemCase.steps.map((step, index) => {
-            const amountLabel = historyTimelineStepAmountLabel(itemCase, step, index);
-            const impact = historyImpactLabel(step);
-
-            return {
-              id: step.id,
-              title: friendlyHistoryStepLabel(step),
-              category: historyTimelineStepCategory(itemCase, step, index),
-              detail: historyTimelineStepDetailLabel(step),
-              amountLabel,
-              impact:
-                !amountLabel && caseAmountLabel && impact?.includes(caseAmountLabel)
-                  ? null
-                  : impact,
-              meta: historyTimelineStepMetaLabel(itemCase, step),
-              tone: historyImpactTone(step) as HistoryCaseTone,
-            };
+          stepPresentation="conversation"
+          steps={buildPersonHistoryConversationSteps({
+            caseAmountLabel,
+            counterpartyLabel: person?.displayName ?? 'Persona',
+            itemCase,
           })}
           title={caseDescription || caseTitle}
           tone={caseTone}
