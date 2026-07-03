@@ -10,8 +10,8 @@ export const CONTACT_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 15 * 60 * 1000;
 export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
-export const CONTACT_DISPLAY_LIMIT = 36;
-export const CONTACT_SEARCH_DISPLAY_LIMIT = 60;
+export const CONTACT_INDEX_INITIAL_READ_LIMIT = 120;
+export const CONTACT_INDEX_READ_PAGE_SIZE = 120;
 
 export type EnrichedContact = {
   readonly contact: ContactCandidate;
@@ -276,8 +276,6 @@ export function buildContactSectionItems(input: {
     normalizedSearch.length === 0
       ? input.contacts
       : input.contacts.filter((contact) => contact.searchKey.includes(normalizedSearch));
-  const displayLimit =
-    normalizedSearch.length > 0 ? CONTACT_SEARCH_DISPLAY_LIMIT : CONTACT_DISPLAY_LIMIT;
   const enrichedContacts = filteredContacts.map((contact) => ({
     contact,
     resolution: input.targetCache[contact.primaryPhone.phoneE164] ?? null,
@@ -288,12 +286,10 @@ export function buildContactSectionItems(input: {
     visibleResolutionContacts: filteredContacts.slice(0, CONTACT_TARGET_RESOLUTION_LIMIT),
     inAppContacts: enrichedContacts
       .filter((item) => shouldShowInApp(item.resolution))
-      .sort(compareEnrichedContacts)
-      .slice(0, displayLimit),
+      .sort(compareEnrichedContacts),
     inviteContacts: enrichedContacts
       .filter((item) => !shouldShowInApp(item.resolution))
-      .sort(compareEnrichedContacts)
-      .slice(0, displayLimit),
+      .sort(compareEnrichedContacts),
   };
 }
 

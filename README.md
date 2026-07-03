@@ -44,7 +44,7 @@ The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage
 - Money is stored as integer minor units in `COP`.
 - `v_pair_net_edges_authoritative` is the canonical pair-net projection.
 - `pair_net_edges_cache` is an optimization that must remain reconstructible from ledger history.
-- The mobile app reads live Supabase views and builds dashboard, balance, people, transaction, settlement, and audit DTOs through `apps/mobile/src/lib/live-data.ts`.
+- The mobile app reads live Supabase views and builds dashboard, balance, people, transaction, settlement, and audit DTOs through the `apps/mobile/src/lib/live-data` module.
 
 ### Happy Circle Settlement
 
@@ -116,8 +116,10 @@ pnpm dev:landing
 Quality checks:
 
 ```bash
+pnpm ci
 pnpm test
 pnpm typecheck
+pnpm typecheck:landing
 pnpm lint
 pnpm build:landing
 pnpm security:check
@@ -132,8 +134,10 @@ Supabase usage helpers:
 pnpm supabase:usage
 pnpm supabase:cron:analytics -- --apply
 pnpm supabase:cron:graph-cycle -- --apply
+pnpm supabase:cron:push-notifications -- --apply
 pnpm supabase:cleanup:avatars
 pnpm supabase:cleanup:avatars -- --apply
+pnpm eas:push-credentials
 ```
 
 ## Environment
@@ -150,6 +154,10 @@ Mobile variables:
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY` or `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `EXPO_PUBLIC_APP_WEB_ORIGIN`
 - `EXPO_PUBLIC_AUTH_REDIRECT_MODE`
+- `EXPO_PUBLIC_AUTH_DEBUG`
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 
 Landing and app-link variables:
 
@@ -163,9 +171,15 @@ Landing and app-link variables:
 - `ANDROID_PACKAGE_NAME`
 - `ANDROID_SHA256_CERT_FINGERPRINTS`
 
-Backend worker variable:
+Backend email and worker variables:
 
+- `APP_WEB_ORIGIN`
+- `RESEND_API_KEY`
+- `WELCOME_EMAIL_ENABLED`
+- `WELCOME_EMAIL_FROM`
+- `WELCOME_EMAIL_REPLY_TO`
 - `GRAPH_CYCLE_WORKER_SECRET`
+- `PUSH_NOTIFICATION_WORKER_SECRET`
 
 Operational Supabase script variables:
 
@@ -173,7 +187,7 @@ Operational Supabase script variables:
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_SERVICE_ROLE_KEY` only for deleting orphaned Storage objects with `--apply`
 
-Production deployments must set `GRAPH_CYCLE_WORKER_SECRET`; the graph-cycle worker intentionally returns an operational error and processes no jobs when the secret is missing.
+Production deployments must set `GRAPH_CYCLE_WORKER_SECRET`. Push workers may use `PUSH_NOTIFICATION_WORKER_SECRET` or fall back to `GRAPH_CYCLE_WORKER_SECRET`. Public workers intentionally return operational errors and process no jobs when their required secret is missing.
 
 Never commit real `.env` files.
 
@@ -185,7 +199,7 @@ Never commit real `.env` files.
 - Deploy Edge Functions from `supabase/functions`.
 - Keep `supabase/config.toml` aligned with function auth requirements.
 - Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, storage, security, or graph-cycle behavior.
-- Configure the scheduled graph-cycle fallback described in `docs/graph-cycle-worker.md` for deployed environments.
+- Configure the scheduled graph-cycle fallback described in `docs/graph-cycle-worker.md` and the scheduled push worker described in `docs/push-notification-worker.md` for deployed environments.
 
 ## App-Link Workflow
 
@@ -206,15 +220,22 @@ Production setup still requires DNS, Vercel domain attachment, Apple Team ID, An
 
 ## Documentation Index
 
+- `docs/project-map.md`: shortest project map, feature ownership, route map, command list, and recommended doc review order.
 - `docs/authentication-roadmap.md`: authentication state, pending setup, and identity strategy.
 - `docs/auth-email-setup.md`: Supabase, Resend, and auth email delivery setup.
 - `docs/app-link-gateway.md`: web gateway, Universal Links, Android App Links, and auth redirects.
 - `docs/security-architecture.md`: RLS, Edge Function, invite-token, device-trust, and migration rules.
+- `docs/security-hardening-audit.md`: closed security risks, CI guardrails, and residual risks.
+- `docs/supabase-prod-test-separation-runbook.md`: production/test Supabase split and operating rules.
 - `docs/analytics-data-model.md`: product analytics schema, privacy rules, and metric sources.
 - `docs/support-observability.md`: support codes, client error reports, and how to trace user-reported failures.
 - `docs/graph-cycle-worker.md`: durable graph job queue and scheduled worker fallback.
+- `docs/push-notification-worker.md`: push token registration, worker cron, delivery checks, and EAS push credentials.
+- `docs/happy-circles-history.md`: settlement history concepts, activity kinds, KPI truth rules, and presentation rules.
+- `docs/mobile-typography.md`: mobile text roles and variant usage.
 - `docs/store-release-readiness.md`: App Store and Play Store release checklist.
 - `docs/ux-copy-standards.md`: visible copy, UI state, and design source guidance.
+- `docs/adr`: architectural decision records for ledger truth, request-first negotiation, pair-net modeling, deterministic settlement, snapshot validation, and Supabase environment separation.
 
 ## Current Implementation Status
 

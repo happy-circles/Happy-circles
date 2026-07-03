@@ -1260,7 +1260,12 @@ export function PeopleIndexScreen() {
                 <View style={[styles.peopleTopChrome, { paddingTop: topInset + theme.spacing.md }]}>
                   <View style={styles.containedContent}>
                     <View style={styles.peopleHeader}>
-                      <AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />
+                      <View style={styles.peopleHeaderBackSlot}>
+                        <AppHeaderBackButton
+                          onPress={() => backOrReturnTo(router, '/home')}
+                          style={styles.peopleHeaderBackButton}
+                        />
+                      </View>
                       <View style={styles.peopleHeaderCopy}>
                         <AppText style={styles.peopleHeaderTitle}>Personas</AppText>
                         <AppText
@@ -1506,6 +1511,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
+  },
+  peopleHeaderBackSlot: {
+    alignItems: 'flex-start',
+    flexShrink: 0,
+    width: 44,
+  },
+  peopleHeaderBackButton: {
+    width: 36,
   },
   peopleHeaderTitle: {
     color: theme.colors.text,

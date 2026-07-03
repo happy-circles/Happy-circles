@@ -1,173 +1,189 @@
 # Supabase production/test separation runbook
 
-This runbook cuts the current Supabase project over to clean production while
-preserving existing accounts, and moves the current test data into a separate
-test/demo project.
+Ultima revision: 2026-07-03.
 
-## Target state
+Este runbook mantiene un backend de produccion limpio para tiendas y un backend
+test/demo separado para QA, datos sembrados, APKs e internal builds.
 
-- Current Supabase project: production, clean product state, same published app backend.
-- New Supabase project: test/demo, cloned from the current project before cleanup.
-- Production keeps current `auth.users`, `auth.identities`, `user_profiles`,
-  `app_settings`, `analytics_event_catalog`, and storage buckets.
-- Production deletes product state, sessions, refresh tokens, push devices,
-  trusted devices, analytics events/facts, rate limits, support reports, invites,
-  balances, ledgers, settlements, notification views, storage objects, audit
-  events, and idempotency keys.
+## Estado objetivo
 
-## Environment map
+- Produccion: backend limpio, usado por App Store/TestFlight production, Play
+  internal/production y App Review.
+- Test/demo: backend separado, usado por QA, demos, screenshots, APKs,
+  development builds y datos sembrados.
+- Produccion conserva `auth.users`, `auth.identities`, `user_profiles`,
+  `app_settings`, `analytics_event_catalog` y storage buckets.
+- Produccion borra estado de producto, sesiones, refresh tokens, push devices,
+  trusted devices, analytics events/facts, rate limits, support reports,
+  invites, balances, ledgers, settlements, notification views, storage objects,
+  audit events e idempotency keys cuando se ejecuta un clean start.
 
-| Environment | Supabase project | Project ref | Intended usage |
-| --- | --- | --- | --- |
-| Production | Current App Store backend | `vknfhyfdtlvvfzptpqpj` | Real users, App Review, store builds |
-| Test/demo | `happy-circles-test-demo` | `ciozrkhwekzbhsvgfqdg` | QA, demo data, internal builds, APK builds, development builds |
+## Mapa de entornos
 
-The production URL is the existing app backend. The test/demo URL is:
+| Entorno    | Supabase project          | Project ref            | Uso                                                      |
+| ---------- | ------------------------- | ---------------------- | -------------------------------------------------------- |
+| Production | Current App Store backend | `vknfhyfdtlvvfzptpqpj` | Usuarios reales, App Review, builds de tienda            |
+| Test/demo  | `happy-circles-test-demo` | `ciozrkhwekzbhsvgfqdg` | QA, demo data, internal builds, APKs, development builds |
+
+URL test/demo:
 
 ```text
 https://ciozrkhwekzbhsvgfqdg.supabase.co
 ```
 
-## Operating rules
+## Reglas operativas
 
-- Never seed demo data into production.
-- Never point `preview`, `development`, or `apk` EAS profiles at production.
-- Never run destructive cleanup in production until a test/demo clone or backup
-  has been verified.
-- Use production only for App Store/TestFlight production releases and App
-  Review validation.
-- Use test/demo for screenshots, QA, manual testing, App Store review rehearsal,
-  feature demos, and seeded data experiments.
-- If production needs another clean reset, run
-  `supabase/manual/07_production_clean_start.sql` only after updating the
-  expected preserved user count and confirming backup/test-demo state.
-- If test/demo needs fresh production-like data, clone or copy production into
-  test/demo. Do not copy test/demo back into production except for intentional
-  preserved reference data that has been reviewed table by table.
-- Treat push tokens, trusted devices, sessions, analytics events, invites,
-  requests, ledger rows, settlement rows, and storage objects as
-  environment-local data.
+- Nunca sembrar demo data en produccion.
+- Nunca apuntar perfiles EAS `development`, `preview` o `apk` a produccion.
+- Nunca correr limpieza destructiva en produccion sin backup y test/demo
+  verificado.
+- Usar produccion solo para builds de tienda, TestFlight production y App
+  Review.
+- Usar test/demo para screenshots, QA, pruebas manuales, ensayos de review,
+  demos y datos sembrados.
+- Si produccion necesita otro clean start, correr
+  `supabase/manual/07_production_clean_start.sql` solo despues de actualizar el
+  conteo esperado de usuarios preservados y confirmar backup/test-demo.
+- Si test/demo necesita datos frescos, clonar o copiar produccion hacia
+  test/demo. No copiar test/demo hacia produccion salvo referencia preservada y
+  revisada tabla por tabla.
+- Tratar push tokens, trusted devices, sesiones, analytics, invites,
+  solicitudes, ledger, settlements, storage objects y support reports como datos
+  locales de cada entorno.
 
-## Current execution notes
+## Estado versionado del repo
+
+- Migraciones versionadas hasta `0072_supabase_lint_warning_cleanup.sql`, mas
+  migraciones timestamped `0062`, `0063` y `0064`.
+- SQL tests versionados hasta
+  `supabase/tests/22_happy_circle_edge_reservations.sql`.
+- `supabase/manual/07_production_clean_start.sql` preserva usuarios/perfiles y
+  limpia tablas de producto, incluida `settlement_edge_reservations`.
+- `apps/mobile/eas.json` enruta `development`, `preview` y `apk` al EAS
+  environment `preview`; `production` usa EAS environment `production`.
+- `.env.example` contiene variables de mobile, landing, email, worker y scripts
+  operacionales.
+
+## Notas de ejecucion historicas
 
 - Production project ref: `vknfhyfdtlvvfzptpqpj`.
 - Test/demo project: `happy-circles-test-demo`.
 - Test/demo project ref: `ciozrkhwekzbhsvgfqdg`.
 - Test/demo URL: `https://ciozrkhwekzbhsvgfqdg.supabase.co`.
-- Supabase Branching was unavailable on the current plan, so test/demo was
-  created as a separate project and populated from production.
-- The restore point API was unavailable during execution, so schema, data,
-  storage metadata/files, Edge Functions, secrets, and Auth provider settings
-  were copied through the available Management, Storage, and CLI APIs.
-- Auth sessions and refresh tokens were intentionally not copied to test/demo
-  because project JWT secrets differ.
-- The test/demo schema includes a compatibility no-op for the Realtime snapshot
-  notification functions because the new project did not expose the same
-  `realtime.messages` interface during migration replay. Snapshot fetches still
-  work; revisit this before depending on test/demo for live Realtime broadcasts.
-- EAS environment variables still need to be configured in the Expo dashboard or
-  through an authenticated `eas env` CLI session.
+- Supabase Branching no estaba disponible en el plan usado, asi que test/demo
+  se creo como proyecto separado y se poblo desde produccion.
+- El restore point API no estuvo disponible durante la ejecucion original; se
+  copiaron schema, data, storage metadata/files, Edge Functions, secrets y Auth
+  provider settings usando Management, Storage y CLI APIs disponibles.
+- Auth sessions y refresh tokens no se copiaron a test/demo porque los JWT
+  secrets de proyectos distintos no son intercambiables.
+- Test/demo incluyo una compatibilidad no-op para funciones de Realtime snapshot
+  porque el nuevo proyecto no exponia la misma interfaz `realtime.messages`
+  durante replay de migraciones. Snapshot fetches funcionaban; revalidar antes
+  de depender de broadcasts realtime en test/demo.
 
 ## Preflight
 
-1. In Supabase, take or verify a full backup of the current production project.
-2. Create a new Supabase project for test/demo.
-3. Clone or restore the current project into the test/demo project.
-4. Copy required secrets/configuration into test/demo:
-   - Auth providers and redirect URLs.
-   - Edge Function secrets, including graph and push worker secrets.
-   - Storage bucket configuration.
+1. Verificar backup completo del proyecto production.
+2. Verificar que test/demo existe y puede recibir el refresh.
+3. Confirmar que el repo local esta en el commit que se quiere operar.
+4. Confirmar que las migraciones esperadas llegan al estado versionado actual.
+5. Copiar o validar en test/demo:
+   - Auth providers y redirect URLs.
+   - Edge Function secrets, incluidos graph y push worker secrets.
+   - Storage buckets y politicas.
    - Email provider settings.
-5. Verify test/demo has the current data before touching production:
-   - `auth.users` count matches production.
-   - `public.user_profiles` count matches production.
-   - `storage.objects` count is nonzero if avatars currently exist.
-   - Key app flows can log in against test/demo.
+   - Edge Functions versionadas.
+6. Verificar test/demo antes de tocar produccion:
+   - `auth.users` count esperado.
+   - `public.user_profiles` count esperado.
+   - `storage.objects` si hay avatars/datos que deban existir.
+   - Login y flujos principales contra test/demo.
 
 ## Production cleanup
 
-1. Open `supabase/manual/07_production_clean_start.sql`.
-2. Confirm the expected preserved account count is still correct:
-   - The script currently expects `23` `auth.users`.
-   - If real users joined after the plan was made, stop and re-audit before
-     changing this number.
-3. Replace:
+1. Abrir `supabase/manual/07_production_clean_start.sql`.
+2. Confirmar el conteo esperado de cuentas preservadas:
+   - El script actualmente espera `23` `auth.users`.
+   - Si entraron usuarios reales despues del plan, parar y re-auditar antes de
+     cambiar ese numero.
+3. Reemplazar:
 
    ```sql
    REPLACE_WITH_BACKUP_AND_TEST_CLONE_VERIFIED
    ```
 
-   with:
+   con:
 
    ```sql
    BACKUP_AND_TEST_CLONE_VERIFIED
    ```
 
-4. Run the script once in the Supabase SQL Editor for the current production
-   project.
-   - The script uses guarded `DELETE` statements instead of `TRUNCATE CASCADE`
-     so preserved tables such as `public.user_profiles` cannot be deleted
-     through foreign-key cascades.
-5. Confirm the final result grid shows:
+4. Ejecutar el script una sola vez en Supabase SQL Editor del proyecto
+   production.
+   - El script usa `DELETE` guardado en vez de `TRUNCATE CASCADE` para no borrar
+     tablas preservadas por cascada.
+5. Confirmar la grilla final:
    - `auth.users = 23`
    - `public.user_profiles = 23`
    - `auth.sessions = 0`
    - `auth.refresh_tokens = 0`
    - `storage.objects = 0`
-   - product-state tables such as `relationships`, `financial_requests`,
-     `ledger_transactions`, `settlement_proposals`, `friendship_invites`,
-     `account_invites`, `product_events`, `app_sessions`, `push_devices`, and
-     `trusted_devices` are `0`.
-6. Empty physical files from the `avatars` bucket in Supabase Storage if object
-   bytes remain after metadata cleanup.
+   - Tablas de producto en `0`, incluyendo `relationships`,
+     `financial_requests`, `ledger_transactions`, `settlement_proposals`,
+     `settlement_edge_reservations`, `friendship_invites`, `account_invites`,
+     `product_events`, `app_sessions`, `push_devices` y `trusted_devices`.
+6. Vaciar archivos fisicos del bucket `avatars` en Supabase Storage si quedan
+   bytes despues de limpiar metadata.
 
 ## Build environment split
 
-Use separate EAS environment variable sets:
+Usar conjuntos separados de variables EAS:
 
 - `production`
-  - `EXPO_PUBLIC_SUPABASE_URL`: current cleaned production Supabase URL.
-  - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: current cleaned production publishable key.
+  - `EXPO_PUBLIC_SUPABASE_URL`: URL Supabase production.
+  - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: publishable key production.
+  - Google OAuth client IDs de produccion si aplican.
+  - `EXPO_PUBLIC_APP_WEB_ORIGIN=https://app.happy-circles.com`.
+  - `EXPO_PUBLIC_AUTH_REDIRECT_MODE=universal-link`.
 - `preview`
-  - `EXPO_PUBLIC_SUPABASE_URL`: new test/demo Supabase URL.
-  - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: new test/demo publishable key.
+  - `EXPO_PUBLIC_SUPABASE_URL`: URL Supabase test/demo.
+  - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: publishable key test/demo.
+  - Google OAuth client IDs de test/demo si aplican.
+  - `EXPO_PUBLIC_APP_WEB_ORIGIN=https://app.happy-circles.com`.
+  - `EXPO_PUBLIC_AUTH_REDIRECT_MODE=universal-link` o `scheme` segun build.
 
-`apps/mobile/eas.json` is configured so `development`, `preview`, and `apk`
-build profiles use the EAS `preview` environment, while `production` uses the
-EAS `production` environment.
+Routing esperado:
 
-Expected build routing:
+| EAS profile   | EAS environment | Supabase target |
+| ------------- | --------------- | --------------- |
+| `development` | `preview`       | Test/demo       |
+| `preview`     | `preview`       | Test/demo       |
+| `apk`         | `preview`       | Test/demo       |
+| `production`  | `production`    | Production      |
 
-| EAS profile | EAS environment | Supabase target |
-| --- | --- | --- |
-| `development` | `preview` | Test/demo |
-| `preview` | `preview` | Test/demo |
-| `apk` | `preview` | Test/demo |
-| `production` | `production` | Production |
+Antes de crear build de tienda, verificar que EAS `production` solo contiene la
+URL/key de production. Antes de build demo/internal, verificar que EAS `preview`
+solo contiene URL/key de test/demo.
 
-Before creating a store build, verify the EAS `production` environment contains
-only the production Supabase URL and publishable key. Before creating a demo or
-internal build, verify the EAS `preview` environment contains only the test/demo
-Supabase URL and publishable key.
+## Refresh futuro de test/demo
 
-## Future refresh procedure
+Usar cuando test/demo deba refrescarse desde produccion:
 
-Use this when test/demo should be refreshed from production:
+1. Confirmar que produccion esta sana y debe ser la fuente.
+2. Tomar o verificar backup de produccion.
+3. Pausar actividad QA en test/demo.
+4. Copiar schema, data, storage objects, Edge Functions, Auth provider settings,
+   redirect URLs y secrets requeridos hacia test/demo.
+5. No copiar `auth.sessions` ni `auth.refresh_tokens`.
+6. Verificar row counts de `auth.users`, `public.user_profiles`,
+   `storage.objects` y tablas principales de producto.
+7. Ejecutar build preview/internal contra test/demo y smoke test de login mas
+   flujos principales.
 
-1. Confirm production is healthy and should be used as the source.
-2. Take or verify a production backup.
-3. Pause QA activity in test/demo.
-4. Copy schema, data, storage objects, Edge Functions, Auth provider settings,
-   redirect URLs, and required secrets into test/demo.
-5. Do not copy `auth.sessions` or `auth.refresh_tokens`.
-6. Verify row counts for `auth.users`, `public.user_profiles`, storage objects,
-   and key product tables.
-7. Run a preview/internal build against test/demo and smoke test login plus the
-   main app flows.
+## Validacion
 
-## Validation
-
-Run local checks after the repo change:
+Checks locales despues de cambios de repo:
 
 ```powershell
 pnpm security:check
@@ -175,11 +191,24 @@ pnpm test:supabase
 pnpm typecheck
 ```
 
-After production cleanup:
+Despues de production cleanup:
 
-- Sign in with a preserved account and confirm the app shows a clean/empty
-  state.
-- Sign in with the App Review account and confirm login still works.
-- Build or run an internal preview build and confirm it points at the test/demo
-  Supabase project with the cloned data.
-- Confirm push notifications do not target old production push tokens.
+- Entrar con una cuenta preservada y confirmar estado limpio/vacio.
+- Entrar con cuenta de App Review y confirmar login.
+- Correr un build preview/internal contra test/demo y confirmar que apunta al
+  project ref `ciozrkhwekzbhsvgfqdg`.
+- Confirmar que push notifications no apuntan a tokens viejos de produccion.
+- Confirmar que graph-cycle, push y analytics crons existen en el proyecto que
+  corresponde.
+
+## Cuándo actualizar este runbook
+
+Actualizar este archivo si cambia cualquiera de estos puntos:
+
+- Nuevas tablas de producto que deban limpiarse en production clean start.
+- Nuevas tablas preservadas.
+- Nuevas variables EAS o `.env.example`.
+- Nuevas Edge Functions o worker secrets.
+- Cambios en project refs de Supabase.
+- Cambios en el routing de perfiles EAS.
+- Cambios en App Review, demo accounts o separacion prod/test.

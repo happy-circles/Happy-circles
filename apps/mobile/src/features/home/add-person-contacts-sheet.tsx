@@ -2,7 +2,16 @@ import { useMemo, useRef } from 'react';
 import { CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Platform,
+  Pressable,
+  View,
+} from 'react-native';
 
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
 import { AppAvatar } from '@/components/app-avatar';
@@ -30,6 +39,7 @@ import {
 } from '@/features/invites/people-outreach-utils';
 
 const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
+const CONTACT_SCROLL_LOAD_MORE_THRESHOLD = 520;
 
 export function AddPersonContactsSheet({
   currentUserAvatarUrl,
@@ -55,7 +65,6 @@ export function AddPersonContactsSheet({
     contactsLoading,
     contactsPermissionStatus,
     contactsScanComplete,
-    displayedContactsCount,
     handleBarcodeScanned,
     handleContactPress,
     handleCreateOutreach,
@@ -66,6 +75,7 @@ export function AddPersonContactsSheet({
     handleReviewPhone,
     handleShareMyQr,
     handleShowMyQr,
+    hasMoreContactsToDisplay,
     inAppContacts,
     inviteContacts,
     message,
@@ -76,6 +86,7 @@ export function AddPersonContactsSheet({
     pendingContactOptions,
     pendingContactSelection,
     requestContactsAccess,
+    requestMoreContacts,
     scannerMessage,
     scannerOpen,
     searchValue,
@@ -96,6 +107,7 @@ export function AddPersonContactsSheet({
     : null;
   const manualInviteBusy = Boolean(manualInvitePhoneE164 && busyKey === manualInvitePhoneE164);
   const isSearchingContacts = searchValue.trim().length > 0;
+  const displayedContactsCount = inAppContacts.length + inviteContacts.length;
   const searchStillIndexing = isSearchingContacts && contactsLoading && displayedContactsCount === 0;
   const compactActionsRevealY = useRef(new Animated.Value(0)).current;
   const compactActionsRevealStyle = useMemo(
@@ -108,6 +120,18 @@ export function AddPersonContactsSheet({
     }),
     [compactActionsRevealY],
   );
+
+  function handleSheetScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!hasMoreContactsToDisplay) {
+      return;
+    }
+
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    if (distanceFromBottom <= CONTACT_SCROLL_LOAD_MORE_THRESHOLD) {
+      requestMoreContacts();
+    }
+  }
 
   function renderContactSection(title: string, items: readonly EnrichedContact[]) {
     if (items.length === 0) {
@@ -170,7 +194,7 @@ export function AddPersonContactsSheet({
               keyboardShouldPersistTaps="handled"
               onScroll={Animated.event(
                 [{ nativeEvent: { contentOffset: { y: compactActionsRevealY } } }],
-                { useNativeDriver: true },
+                { listener: handleSheetScroll, useNativeDriver: true },
               )}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
@@ -223,6 +247,15 @@ export function AddPersonContactsSheet({
 
                   {renderContactSection('En Happy Circles', inAppContacts)}
                   {renderContactSection('Invitar a Happy Circles', inviteContacts)}
+
+                  {hasMoreContactsToDisplay ? (
+                    <PrimaryAction
+                      compact
+                      label="Cargar más contactos"
+                      onPress={requestMoreContacts}
+                      variant="secondary"
+                    />
+                  ) : null}
 
                   {displayedContactsCount === 0 && (!contactsLoading || searchStillIndexing) ? (
                     <View style={styles.emptyState}>

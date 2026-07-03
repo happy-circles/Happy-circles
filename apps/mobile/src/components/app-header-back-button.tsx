@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useAppTheme } from '@/providers/theme-provider';
 
 export interface AppHeaderBackButtonProps {
   readonly accessibilityLabel?: string;
   readonly onPress: () => void;
+  readonly style?: StyleProp<ViewStyle>;
 }
 
 export function AppHeaderBackButton({
   accessibilityLabel = 'Volver',
   onPress,
+  style,
 }: AppHeaderBackButtonProps) {
   const activeTheme = useAppTheme();
 
@@ -20,7 +22,7 @@ export function AppHeaderBackButton({
       accessibilityRole="button"
       hitSlop={4}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.button, style, pressed ? styles.pressed : null]}
     >
       <Ionicons color={activeTheme.colors.text} name="chevron-back" size={24} />
     </Pressable>

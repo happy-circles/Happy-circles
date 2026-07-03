@@ -30,6 +30,7 @@ export type ContactIndexStartReason =
 export type ContactIndexReadResult = {
   readonly contacts: readonly ContactCandidate[];
   readonly loadedCount: number;
+  readonly matchingCount: number;
   readonly permissionStatus: ContactsPermissionStatus;
   readonly status: ContactIndexStatus;
   readonly lastCompletedAt: number | null;
@@ -207,6 +208,36 @@ async function countIndexedContacts(
        AND schema_version = ?`,
     [userKey, CONTACT_INDEX_SCHEMA_VERSION],
   );
+
+  return row?.count ?? 0;
+}
+
+async function countMatchingContacts(input: {
+  readonly database: SQLite.SQLiteDatabase;
+  readonly normalizedSearch: string;
+  readonly userKey: string;
+}): Promise<number> {
+  const row =
+    input.normalizedSearch.length > 0
+      ? await input.database.getFirstAsync<CountRow>(
+          `SELECT COUNT(*) as count
+           FROM ${CONTACT_TABLE_NAME}
+           WHERE user_id = ?
+             AND schema_version = ?
+             AND search_key LIKE ? ESCAPE '\\'`,
+          [
+            input.userKey,
+            CONTACT_INDEX_SCHEMA_VERSION,
+            `%${escapeLikeValue(input.normalizedSearch)}%`,
+          ],
+        )
+      : await input.database.getFirstAsync<CountRow>(
+          `SELECT COUNT(*) as count
+           FROM ${CONTACT_TABLE_NAME}
+           WHERE user_id = ?
+             AND schema_version = ?`,
+          [input.userKey, CONTACT_INDEX_SCHEMA_VERSION],
+        );
 
   return row?.count ?? 0;
 }
@@ -538,6 +569,7 @@ export async function readContactIndex(input: {
       contacts: [],
       lastCompletedAt: null,
       loadedCount: 0,
+      matchingCount: 0,
       permissionStatus: 'unavailable',
       status: Platform.OS === 'web' ? 'permission_blocked' : 'idle',
     };
@@ -555,7 +587,12 @@ export async function readContactIndex(input: {
     : 'undetermined';
   const status: ContactIndexStatus = isContactIndexStatus(metaScanStatus) ? metaScanStatus : 'idle';
   const normalizedSearch = normalizeSearchValue(input.searchValue);
-  const limit = Math.max(1, Math.min(input.limit, 120));
+  const limit = Number.isFinite(input.limit) ? Math.max(1, Math.floor(input.limit)) : 1;
+  const matchingCount = await countMatchingContacts({
+    database,
+    normalizedSearch,
+    userKey,
+  });
   const rows =
     normalizedSearch.length > 0
       ? await database.getAllAsync<ContactIndexRow>(
@@ -592,6 +629,7 @@ export async function readContactIndex(input: {
     contacts,
     lastCompletedAt: meta?.last_completed_at ?? null,
     loadedCount: Math.max(meta?.contact_count ?? meta?.loaded_count ?? 0, contacts.length),
+    matchingCount: Math.max(matchingCount, contacts.length),
     permissionStatus,
     status,
   };

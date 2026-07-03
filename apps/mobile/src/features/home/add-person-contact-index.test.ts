@@ -51,8 +51,11 @@ const sqliteMock = vi.hoisted(() => {
     getFirstAsync: vi.fn(async (query: string, params: readonly unknown[]) => {
       const userId = String(params[0]);
       if (query.includes('COUNT(*)')) {
+        const searchPattern = query.includes('LIKE') ? String(params[2]).replace(/%/g, '') : null;
         return {
-          count: [...contacts.values()].filter((row) => row.user_id === userId).length,
+          count: [...contacts.values()]
+            .filter((row) => row.user_id === userId)
+            .filter((row) => !searchPattern || row.search_key.includes(searchPattern)).length,
         };
       }
 
@@ -221,11 +224,37 @@ describe('contact index', () => {
     });
     await waitForIndexStatus('ready');
 
-    expect(
-      (await readContactIndex({ limit: 10, searchValue: 'ben', userId: 'user-a' })).contacts.map(
-        (contact) => contact.alias,
+    const result = await readContactIndex({ limit: 10, searchValue: 'ben', userId: 'user-a' });
+
+    expect(result.contacts.map((contact) => contact.alias)).toEqual(['Ben Mora']);
+    expect(result.matchingCount).toBe(1);
+  });
+
+  it('allows reads beyond the first sheet window', async () => {
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: Array.from({ length: 150 }, (_, index) =>
+        nativeContact(
+          `contact-${index}`,
+          `Persona ${String(index).padStart(3, '0')}`,
+          `3001234${String(index).padStart(3, '0')}`,
+        ),
       ),
-    ).toEqual(['Ben Mora']);
+      hasNextPage: false,
+    });
+
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'manual_refresh',
+      userId: 'user-a',
+    });
+    await waitForIndexStatus('ready');
+
+    const firstWindow = await readContactIndex({ limit: 120, userId: 'user-a' });
+    const expandedWindow = await readContactIndex({ limit: 150, userId: 'user-a' });
+
+    expect(firstWindow.contacts).toHaveLength(120);
+    expect(firstWindow.matchingCount).toBe(150);
+    expect(expandedWindow.contacts).toHaveLength(150);
   });
 
   it('keeps partial progress when indexing is paused', async () => {

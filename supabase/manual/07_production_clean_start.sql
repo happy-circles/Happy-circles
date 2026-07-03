@@ -71,6 +71,7 @@ declare
     'push_devices',
     'push_notification_events',
     'relationships',
+    'settlement_edge_reservations',
     'settlement_executions',
     'settlement_proposal_participants',
     'settlement_proposals',
@@ -201,6 +202,8 @@ union all
 select 'public.ledger_transactions', count(*)::integer from public.ledger_transactions
 union all
 select 'public.ledger_entries', count(*)::integer from public.ledger_entries
+union all
+select 'public.settlement_edge_reservations', count(*)::integer from public.settlement_edge_reservations
 union all
 select 'public.settlement_proposals', count(*)::integer from public.settlement_proposals
 union all
