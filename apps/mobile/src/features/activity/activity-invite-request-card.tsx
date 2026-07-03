@@ -8,12 +8,15 @@ import { AppText } from '@/components/app-text';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
 import {
+  canCancelInviteRequest,
+  canResendInviteRequest,
   displayNameForInvite,
   inviteAccentBackgroundColor,
   inviteAccentColor,
   inviteCardIcon,
   inviteRequestPersonHref,
   inviteRequestMeta,
+  inviteRequestResendLabel,
   isActiveQrInvite,
   shouldShowRespondingInviteProfile,
   type InviteRequestAction,
@@ -73,6 +76,9 @@ export function ActivityInviteRequestCard({
         : null);
   const requiresAction =
     item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review';
+  const canCancel = canCancelInviteRequest(item);
+  const canResend = canResendInviteRequest(item);
+  const resendLabel = inviteRequestResendLabel(item);
   const actorIntent = requiresAction
     ? 'needsAction'
     : item.actionState === 'history'
@@ -107,7 +113,7 @@ export function ActivityInviteRequestCard({
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={21} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aceptar solicitud"
@@ -128,7 +134,7 @@ export function ActivityInviteRequestCard({
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={21} />
         </Pressable>
       </View>
     ) : item.actionState === 'requires_you_review' ? (
@@ -152,7 +158,7 @@ export function ActivityInviteRequestCard({
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
+          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={21} />
         </Pressable>
         <Pressable
           accessibilityLabel="Aprobar solicitud"
@@ -173,35 +179,61 @@ export function ActivityInviteRequestCard({
             isBusy ? styles.notificationInviteDisabled : null,
           ]}
         >
-          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
+          <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={21} />
         </Pressable>
       </View>
-    ) : (item.kind === 'friendship_invite' && item.actionState === 'pending_claim') ||
-      (item.kind === 'account_invite' &&
-        item.actionState === 'pending_activation' &&
-        !item.activatedUserId) ? (
+    ) : canResend || canCancel ? (
       <View style={styles.notificationInviteActions}>
-        <Pressable
-          accessibilityLabel="Cancelar invitación"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => {
-            triggerAppSelectionHaptic();
-            onAction(item, 'cancel');
-          }}
-          style={({ pressed }) => [
-            styles.notificationInviteIconButton,
-            styles.notificationInviteIconButtonDanger,
-            {
-              backgroundColor: activeTheme.colors.dangerSoft,
-              borderColor: activeTheme.colors.dangerSoft,
-            },
-            pressed ? styles.tabButtonPressed : null,
-            isBusy ? styles.notificationInviteDisabled : null,
-          ]}
-        >
-          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={15} />
-        </Pressable>
+        {canResend ? (
+          <Pressable
+            accessibilityLabel={resendLabel}
+            accessibilityRole="button"
+            disabled={isBusy}
+            onPress={() => {
+              triggerAppActionHaptic();
+              onAction(item, 'resend');
+            }}
+            style={({ pressed }) => [
+              styles.notificationInviteIconButton,
+              styles.notificationInviteIconButtonPrimary,
+              {
+                backgroundColor: activeTheme.colors.primarySoft,
+                borderColor: activeTheme.colors.primaryGhost,
+              },
+              pressed ? styles.tabButtonPressed : null,
+              isBusy ? styles.notificationInviteDisabled : null,
+            ]}
+          >
+            <Ionicons
+              color={activeTheme.colors.primary}
+              name="refresh-circle-outline"
+              size={21}
+            />
+          </Pressable>
+        ) : null}
+        {canCancel ? (
+          <Pressable
+            accessibilityLabel="Cancelar solicitud enviada"
+            accessibilityRole="button"
+            disabled={isBusy}
+            onPress={() => {
+              triggerAppSelectionHaptic();
+              onAction(item, 'cancel');
+            }}
+            style={({ pressed }) => [
+              styles.notificationInviteIconButton,
+              styles.notificationInviteIconButtonDanger,
+              {
+                backgroundColor: activeTheme.colors.dangerSoft,
+                borderColor: activeTheme.colors.dangerSoft,
+              },
+              pressed ? styles.tabButtonPressed : null,
+              isBusy ? styles.notificationInviteDisabled : null,
+            ]}
+          >
+            <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={21} />
+          </Pressable>
+        ) : null}
       </View>
     ) : null;
 

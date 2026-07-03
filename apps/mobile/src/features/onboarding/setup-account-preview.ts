@@ -5,6 +5,7 @@ import type { SetupStep } from '@/lib/setup-account';
 import type {
   CompleteProfileInput,
   SessionContextValue,
+  SetupPermissionStatus,
   SetupState,
   UserProfileRow,
 } from '@/providers/session/types';
@@ -17,7 +18,9 @@ const PREVIEW_NOW = '2026-01-01T00:00:00.000Z';
 
 interface SetupAccountPreviewState {
   readonly biometricsEnabled: boolean;
+  readonly contactsPermissionStatus: SetupPermissionStatus;
   readonly emailConfirmed: boolean;
+  readonly notificationsPermissionStatus: SetupPermissionStatus;
   readonly profile: UserProfileRow;
   readonly profileComplete: boolean;
   readonly trustedDevice: boolean;
@@ -80,10 +83,13 @@ function createInitialPreviewState(previewCase: SetupAccountPreviewCase): SetupA
     previewCase === 'complete' || previewCase === 'email' || previewCase === 'security';
   const emailConfirmed = previewCase === 'complete' || previewCase === 'security';
   const trustedDevice = previewCase === 'complete';
+  const permissionsGranted = previewCase === 'complete';
 
   return {
     biometricsEnabled: trustedDevice,
+    contactsPermissionStatus: permissionsGranted ? 'granted' : 'undetermined',
     emailConfirmed,
+    notificationsPermissionStatus: permissionsGranted ? 'granted' : 'undetermined',
     profile: profileComplete ? buildCompleteProfile() : buildIncompleteProfile(),
     profileComplete,
     trustedDevice,
@@ -103,9 +109,9 @@ function buildPreviewSetupState(state: SetupAccountPreviewState): SetupState {
 
   return {
     biometricsEligible: state.trustedDevice,
-    contactsPermissionStatus: 'granted',
+    contactsPermissionStatus: state.contactsPermissionStatus,
     emailConfirmed: state.emailConfirmed,
-    notificationsPermissionStatus: 'granted',
+    notificationsPermissionStatus: state.notificationsPermissionStatus,
     pendingRequiredSteps,
     requiredComplete: pendingRequiredSteps.length === 0,
     securityPending: !state.trustedDevice,
@@ -199,6 +205,22 @@ export function useSetupAccountPreviewSession(
       },
       async refreshAccountState() {
         return undefined;
+      },
+      async requestContactsPermission() {
+        setPreviewState((current) => ({
+          ...current,
+          contactsPermissionStatus: 'granted',
+        }));
+
+        return 'Contactos activados.';
+      },
+      async requestNotificationsPermission() {
+        setPreviewState((current) => ({
+          ...current,
+          notificationsPermissionStatus: 'granted',
+        }));
+
+        return 'Recordatorios activados.';
       },
       async resendEmailConfirmation() {
         return 'Preview QA: reenviamos el correo simulado.';

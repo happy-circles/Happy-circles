@@ -40,6 +40,11 @@ function readString(record: RecordValue | null, key: string): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function readNumber(record: RecordValue | null, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 export function readPayloadString(value: unknown, key: string): string | null {
   return readString(asRecord(value), key);
 }
@@ -73,6 +78,71 @@ async function findProfile(
   }
 
   return findById(client, 'user_profiles', userId, 'id, display_name, email');
+}
+
+function formatCopMinor(amountMinor: number): string {
+  return new Intl.NumberFormat('es-CO', {
+    currency: 'COP',
+    maximumFractionDigits: 0,
+    style: 'currency',
+  }).format(amountMinor / 100);
+}
+
+function parseSettlementMovements(value: unknown): readonly {
+  readonly amountMinor: number;
+  readonly creditorUserId: string;
+  readonly debtorUserId: string;
+}[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    const record = asRecord(entry);
+    const amountMinor = readNumber(record, 'amount_minor');
+    const creditorUserId = readString(record, 'creditor_user_id');
+    const debtorUserId = readString(record, 'debtor_user_id');
+
+    if (!amountMinor || !creditorUserId || !debtorUserId) {
+      return [];
+    }
+
+    return [{ amountMinor, creditorUserId, debtorUserId }];
+  });
+}
+
+function settlementParticipantAmountMinor(
+  proposal: RecordValue | null,
+  participantUserId: string | null,
+): number {
+  if (!participantUserId) {
+    return 0;
+  }
+
+  const summary = parseSettlementMovements(proposal?.movements_json).reduce(
+    (totals, movement) => ({
+      paidMinor:
+        totals.paidMinor + (movement.debtorUserId === participantUserId ? movement.amountMinor : 0),
+      receivedMinor:
+        totals.receivedMinor +
+        (movement.creditorUserId === participantUserId ? movement.amountMinor : 0),
+    }),
+    { paidMinor: 0, receivedMinor: 0 },
+  );
+
+  return Math.max(summary.paidMinor, summary.receivedMinor);
+}
+
+function settlementFoundTitle(amountMinor: number): string {
+  return amountMinor > 0
+    ? `Happy Circle de ${formatCopMinor(amountMinor)} encontrado`
+    : 'Happy Circle encontrado';
+}
+
+function settlementFoundBody(amountMinor: number): string {
+  return amountMinor > 0
+    ? `Se encontro una compensacion de ${formatCopMinor(amountMinor)} para aprobar.`
+    : 'Se encontro una compensacion para aprobar.';
 }
 
 export function triggerPushNotificationWorker(limit = 25): void {
@@ -303,8 +373,12 @@ export async function notifySettlementProposalPending(
     return;
   }
 
-  const actor = await findProfile(client, actorUserId);
-  const proposal = await findById(client, 'settlement_proposals', proposalId, 'id, status');
+  const proposal = await findById(
+    client,
+    'settlement_proposals',
+    proposalId,
+    'id, status, movements_json',
+  );
 
   if (readString(proposal, 'status') !== 'pending_approvals') {
     return;
@@ -328,15 +402,18 @@ export async function notifySettlementProposalPending(
         return Promise.resolve(false);
       }
 
+      const recipientUserId = readString(participant, 'participant_user_id');
+      const amountMinor = settlementParticipantAmountMinor(proposal, recipientUserId);
+
       return enqueuePushNotification(client, {
-        body: `${displayName(actor)} propuso un Happy Circle para aprobar.`,
+        body: settlementFoundBody(amountMinor),
         href: `/settlements/${proposalId}`,
         metadata: { actorUserId },
         notificationKey: `settlement_proposal:${proposalId}:pending_approvals`,
-        recipientUserId: readString(participant, 'participant_user_id'),
+        recipientUserId,
         sourceItemId: proposalId,
         sourceKind: 'settlement_proposal',
-        title: 'Happy Circle por aprobar',
+        title: settlementFoundTitle(amountMinor),
       });
     }),
   );

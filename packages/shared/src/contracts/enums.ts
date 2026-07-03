@@ -81,11 +81,15 @@ export const SETTLEMENT_STALE_REASONS = [
   'balance_changed',
   'related_execution_changed_balance',
   'participant_set_changed',
+  'reserved_capacity_lost',
 ] as const;
 export type SettlementStaleReason = (typeof SETTLEMENT_STALE_REASONS)[number];
 
 export const PARTICIPANT_DECISIONS = ['pending', 'approved', 'rejected'] as const;
 export type ParticipantDecision = (typeof PARTICIPANT_DECISIONS)[number];
+
+export const PARTICIPANT_DECISION_SOURCES = ['manual', 'carried'] as const;
+export type ParticipantDecisionSource = (typeof PARTICIPANT_DECISION_SOURCES)[number];
 
 export const FRIENDSHIP_INVITE_FLOWS = ['internal', 'external'] as const;
 export type FriendshipInviteFlow = (typeof FRIENDSHIP_INVITE_FLOWS)[number];
@@ -175,9 +179,12 @@ export const AUDIT_EVENT_NAMES = [
   'happy_circle_case.version_created',
   'happy_circle_case.version_replaced',
   'happy_circle_case.version_revalidated',
+  'happy_circle_case.version_morphed',
   'happy_circle_case.version_stale',
   'happy_circle_case.version_approved',
   'happy_circle_case.version_executed',
+  'settlement_approval_carried',
+  'settlement_auto_executed_after_revalidation',
   'account_deletion_completed',
 ] as const;
 export type AuditEventName = (typeof AUDIT_EVENT_NAMES)[number];

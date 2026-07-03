@@ -71,7 +71,7 @@ The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage
 - `supabase/migrations`: ordered Postgres schema, RLS, views, RPCs, analytics, security, invites, and graph worker migrations.
 - `supabase/functions`: Supabase Edge Functions for authenticated commands, public previews, analytics writes, and graph-cycle processing.
 - `supabase/tests`: SQL-level verification fixtures for ledger/cache consistency, cycle proposals, invite flows, security hardening, analytics, and graph jobs.
-- `docs/adr`: architectural decision records for ledger truth, request-first negotiation, pair-net modeling, deterministic cycle settlement, and snapshot validation.
+- `docs/adr`: architectural decision records for ledger truth, request-first negotiation, pair-net modeling, deterministic cycle settlement, snapshot validation, and Supabase production/test separation.
 - `docs`: operational notes for authentication, email delivery, app links, analytics, security, graph worker scheduling, release readiness, and UX/copy standards.
 
 ## Architectural Principles
@@ -130,6 +130,7 @@ Supabase usage helpers:
 
 ```bash
 pnpm supabase:usage
+pnpm supabase:cron:analytics -- --apply
 pnpm supabase:cron:graph-cycle -- --apply
 pnpm supabase:cleanup:avatars
 pnpm supabase:cleanup:avatars -- --apply
@@ -180,6 +181,7 @@ Never commit real `.env` files.
 
 - Apply migrations in order from `supabase/migrations`.
 - Use the `[db.seed]` files in `supabase/dev` and the scripts in `supabase/scripts` for demo and remote development data workflows. Demo users and demo reset helpers must not live in production migrations.
+- Keep production and test/demo Supabase projects separated as documented in `docs/supabase-prod-test-separation-runbook.md`. Production is the clean App Store backend; preview, development, APK, QA, and demo data use the separate test/demo project.
 - Deploy Edge Functions from `supabase/functions`.
 - Keep `supabase/config.toml` aligned with function auth requirements.
 - Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, storage, security, or graph-cycle behavior.

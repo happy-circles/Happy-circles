@@ -1,10 +1,15 @@
-import { type CardTimelineStep, type CardTone } from '@/components/card-shell';
+import type { CardTimelineStep, CardTone } from '@/components/card-shell';
 import { formatCop } from '@/lib/data';
-import { type SettlementVersionTimelineItemDto } from '@/lib/live-data';
-import { transactionAmountIsVoided } from '@/lib/transaction-presentation';
+import type { SettlementVersionTimelineItemDto } from '@/lib/live-data/settlement-version-types';
+
+const VOIDED_VERSION_STATUSES = new Set(['rejected', 'canceled', 'expired', 'stale']);
+
+function versionAmountIsVoided(item: Pick<SettlementVersionTimelineItemDto, 'status'>): boolean {
+  return VOIDED_VERSION_STATUSES.has(item.status);
+}
 
 function versionTimelineTone(status: string): CardTone {
-  if (transactionAmountIsVoided({ status })) {
+  if (versionAmountIsVoided({ status })) {
     return 'danger';
   }
 
@@ -75,7 +80,7 @@ function versionDateLabel(timestamp: string): string | null {
 }
 
 function versionStoryTitle(item: SettlementVersionTimelineItemDto, index: number): string {
-  if (transactionAmountIsVoided({ status: item.status })) {
+  if (versionAmountIsVoided(item)) {
     return index === 0 ? 'Calculo sin efecto' : 'Calculo anterior';
   }
 
@@ -90,8 +95,65 @@ function versionStoryTitle(item: SettlementVersionTimelineItemDto, index: number
   return index === 0 ? 'Primer cálculo' : 'Nuevo cálculo';
 }
 
+function personChangeLabel(count: number, action: 'added' | 'removed'): string {
+  const verb =
+    action === 'added'
+      ? count === 1
+        ? 'agrego'
+        : 'agregaron'
+      : count === 1
+        ? 'quito'
+        : 'quitaron';
+  const plural = count === 1 ? 'persona' : 'personas';
+
+  return `Se ${verb} ${count} ${plural}.`;
+}
+
+function carriedApprovalLabel(count: number): string {
+  const plural = count === 1 ? 'aprobacion' : 'aprobaciones';
+
+  return `Se conservaron ${count} ${plural}.`;
+}
+
+function versionChangeDetail(item: SettlementVersionTimelineItemDto): string | null {
+  const parts: string[] = [];
+  const addedParticipantCount = item.addedParticipantCount ?? 0;
+  const removedParticipantCount = item.removedParticipantCount ?? 0;
+  const carriedApprovalCount = item.carriedApprovalCount ?? 0;
+
+  if (item.amountChanged) {
+    if (typeof item.previousAmountMinor === 'number' && item.previousAmountMinor > 0) {
+      parts.push(
+        `El monto cambio de ${formatCop(item.previousAmountMinor)} a ${formatCop(item.amountMinor)}.`,
+      );
+    } else if (item.amountMinor > 0) {
+      parts.push(`Nuevo monto: ${formatCop(item.amountMinor)}.`);
+    }
+  }
+
+  if (addedParticipantCount > 0) {
+    parts.push(personChangeLabel(addedParticipantCount, 'added'));
+  }
+
+  if (removedParticipantCount > 0) {
+    parts.push(personChangeLabel(removedParticipantCount, 'removed'));
+  }
+
+  if (carriedApprovalCount > 0) {
+    parts.push(carriedApprovalLabel(carriedApprovalCount));
+  }
+
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 function versionStoryDetail(item: SettlementVersionTimelineItemDto): string | null {
-  if (transactionAmountIsVoided({ status: item.status })) {
+  const changeDetail = versionChangeDetail(item);
+
+  if (changeDetail) {
+    return changeDetail;
+  }
+
+  if (versionAmountIsVoided(item)) {
     return item.detail || 'No cambio el saldo.';
   }
 
@@ -124,7 +186,7 @@ export function versionStorySteps(
   timeline: readonly SettlementVersionTimelineItemDto[],
 ): readonly CardTimelineStep[] {
   return timeline.map((item, index) => {
-    const amountStruckThrough = transactionAmountIsVoided({ status: item.status });
+    const amountStruckThrough = versionAmountIsVoided(item);
 
     return {
       actorLabel: 'Happy Circle',

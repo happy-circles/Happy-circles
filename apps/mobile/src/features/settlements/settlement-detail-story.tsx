@@ -10,20 +10,8 @@ import {
 } from '@/lib/live-data';
 import { transactionAmountIsVoided } from '@/lib/transaction-presentation';
 import { useAppTheme } from '@/providers/theme-provider';
+import { circleImpactMovementsForUser } from './settlement-detail-impact';
 import { settlementDetailStoryStyles as styles } from './settlement-detail-story-styles';
-
-function personalMovementsForUser(
-  movements: readonly SettlementDetailMovementDto[],
-  currentUserId: string | null,
-): readonly SettlementDetailMovementDto[] {
-  if (!currentUserId) {
-    return [];
-  }
-
-  const incoming = movements.filter((movement) => movement.creditorUserId === currentUserId);
-  const outgoing = movements.filter((movement) => movement.debtorUserId === currentUserId);
-  return [...incoming, ...outgoing];
-}
 
 function participantById(
   participants: readonly SettlementDetailParticipantDto[],
@@ -43,8 +31,15 @@ function participantById(
   );
 }
 
-function approvalDecisionLabel(decision: SettlementDetailParticipantDto['decision']): string {
+function approvalDecisionLabel(
+  decision: SettlementDetailParticipantDto['decision'],
+  decisionSource?: SettlementDetailParticipantDto['decisionSource'],
+): string {
   if (decision === 'approved') {
+    if (decisionSource === 'carried') {
+      return 'Aprobacion conservada';
+    }
+
     return 'Aprobado';
   }
 
@@ -151,7 +146,10 @@ export function ApprovalPills({
         return (
           <View
             accessible
-            accessibilityLabel={`${participant.label}: ${approvalDecisionLabel(participant.decision)}`}
+            accessibilityLabel={`${participant.label}: ${approvalDecisionLabel(
+              participant.decision,
+              participant.decisionSource,
+            )}`}
             key={participant.userId}
             style={[styles.approvalPill, { backgroundColor: color, shadowColor: color }]}
           />
@@ -215,7 +213,7 @@ export function ApprovalDecisionList({
                 {participant.label}
               </AppText>
               <AppText numberOfLines={1} style={[styles.approvalDecisionStatus, { color }]}>
-                {approvalDecisionLabel(participant.decision)}
+                {approvalDecisionLabel(participant.decision, participant.decisionSource)}
               </AppText>
             </View>
             {isCurrentUser ? (
@@ -294,7 +292,7 @@ export function settlementStoryText(status: string, approvalsPending: number): s
       return 'Todos aprobaron este cálculo. El siguiente paso es registrar los movimientos para cerrar saldos.';
     }
 
-    return 'Este cálculo muestra quién paga y quién recibe. Solo se aplica cuando las aprobaciones necesarias están completas.';
+    return 'Este cálculo muestra qué saldos se cierran entre ustedes. Solo se aplica cuando las aprobaciones necesarias están completas.';
   }
 
   if (status === 'approved') {
@@ -424,11 +422,10 @@ export function CircleMovementDetails({
   readonly participants: readonly SettlementDetailParticipantDto[];
   readonly status: string;
 }) {
-  const personalMovements = personalMovementsForUser(movements, currentUserId);
-  const incomingMovement =
-    personalMovements.find((movement) => movement.creditorUserId === currentUserId) ?? null;
-  const outgoingMovement =
-    personalMovements.find((movement) => movement.debtorUserId === currentUserId) ?? null;
+  const { incomingMovement, outgoingMovement } = circleImpactMovementsForUser({
+    currentUserId,
+    movements,
+  });
   const incomingParticipant = incomingMovement
     ? participantById(participants, incomingMovement.debtorUserId, incomingMovement.debtorLabel)
     : null;
@@ -449,7 +446,7 @@ export function CircleMovementDetails({
       ? `${outgoingParticipant.label} - no cambio el saldo`
       : status === 'executed'
         ? `Pagaste a ${outgoingParticipant.label}`
-        : `A ${outgoingParticipant.label}`
+        : `Pagas a ${outgoingParticipant.label}`
     : inactiveDetail;
 
   return (
@@ -467,7 +464,7 @@ export function CircleMovementDetails({
             ? () => onOpenMovement(incomingMovement.debtorUserId)
             : undefined
         }
-        title={incomingMovement ? 'Recibes' : 'No recibes'}
+        title={incomingMovement ? 'Te pagan' : 'No te pagan'}
         tone="success"
       />
       <TransactionChangeRow

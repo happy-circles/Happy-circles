@@ -213,6 +213,7 @@ const SETTLEMENT_PARTICIPANT_SELECT = [
   'settlement_proposal_id',
   'participant_user_id',
   'decision',
+  'decision_source',
   'decided_at',
   'created_at',
 ].join(', ');
@@ -382,6 +383,7 @@ function sanitizeSettlementRowsForActor(input: {
     const directUserIds = new Set<string>([input.actorUserId]);
 
     addMovementUserIds(directUserIds, actorMovements);
+    addMovementUserIds(directUserIds, actorGraphSnapshot);
 
     for (const participant of participants) {
       const participantUserId = participant.participant_user_id;
@@ -848,6 +850,7 @@ Deno.serve((request) =>
         proposal.anchor_user_high_id,
       );
       addMovementUserIds(visibleUserIds, proposal.movements_json);
+      addMovementUserIds(visibleUserIds, proposal.graph_snapshot);
     }
 
     for (const participant of settlementParticipants) {

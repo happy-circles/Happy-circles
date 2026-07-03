@@ -56,6 +56,7 @@ import {
 import { AccountInviteEntryTokenForm } from './account-invite-entry-token-form';
 import { AuthEntryIdentity } from './account-invite-entry-identity';
 import { AccountInviteEntryAuthForm } from './account-invite-entry-auth-form';
+import { rememberPendingAccountInviteToken } from './account-invite-entry-pending-token';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
   AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
@@ -352,9 +353,14 @@ export function AccountSignInEntry({
           'Failed to persist pending invite before automatic remembered-account unlock',
           error instanceof Error ? error.message : String(error),
         );
+        return false;
       })
-      .then(() => {
-        completeSuccessfulSignIn();
+      .then((tokenReady) => {
+        if (tokenReady) {
+          completeSuccessfulSignIn();
+        } else {
+          clearAuthRouteTransitionHold();
+        }
       });
   }, [
     account,
@@ -783,15 +789,16 @@ export function AccountSignInEntry({
     }
   }
 
-  async function rememberPendingToken() {
-    if (!pendingToken) {
-      return;
-    }
-
-    await writePendingInviteIntent({
-      type: 'account_invite',
-      token: pendingToken,
-      source: 'account_invite_auth',
+  async function rememberPendingToken(): Promise<boolean> {
+    return rememberPendingAccountInviteToken({
+      pendingToken,
+      preview,
+      refetchPreview: () => previewQuery.refetch(),
+      onInvalidToken: (nextMessage) => {
+        setTokenMessage(nextMessage);
+        setAuthResultState('error');
+        setMessage(nextMessage);
+      },
     });
   }
 
@@ -839,7 +846,10 @@ export function AccountSignInEntry({
         return;
       }
 
-      await rememberPendingToken();
+      if (!(await rememberPendingToken())) {
+        clearAuthRouteTransitionHold();
+        return;
+      }
       completeSuccessfulSignIn();
     } finally {
       setBiometricBusy(false);
@@ -901,7 +911,10 @@ export function AccountSignInEntry({
     setSocialBusyProvider(provider);
 
     try {
-      await rememberPendingToken();
+      if (!(await rememberPendingToken())) {
+        clearAuthRouteTransitionHold();
+        return;
+      }
       const result =
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
 
@@ -937,7 +950,10 @@ export function AccountSignInEntry({
     setPasswordBusy(true);
 
     try {
-      await rememberPendingToken();
+      if (!(await rememberPendingToken())) {
+        clearAuthRouteTransitionHold();
+        return;
+      }
       const result = await session.signInWithPassword({
         email: locksRememberedEmail ? (account?.email ?? email) : email,
         password,

@@ -69,6 +69,41 @@ export function buildFriendshipInviteLink(deliveryToken: string): string {
   return `${appConfig.appWebOrigin.replace(/\/$/, '')}/invite/${deliveryToken}`;
 }
 
+function normalizeShareText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function buildInviteGreeting(inviteeAlias: string): string {
+  const alias = normalizeShareText(inviteeAlias);
+  return alias.length > 0 ? `Hola ${alias},` : 'Hola,';
+}
+
+function buildWhatsappShareMessage(input: {
+  readonly body: string;
+  readonly inviteLink: string;
+  readonly inviteeAlias: string;
+}): string {
+  return [
+    buildInviteGreeting(input.inviteeAlias),
+    '',
+    input.body,
+    '',
+    'Abre tu invitación aquí:',
+    input.inviteLink,
+  ].join('\n');
+}
+
+export function buildFriendshipInviteShareMessage(input: {
+  readonly inviteeAlias: string;
+  readonly inviteLink: string;
+}): string {
+  return buildWhatsappShareMessage({
+    body: 'Te compartí una invitación a *Happy Circles* para que te conectes conmigo.',
+    inviteLink: input.inviteLink,
+    inviteeAlias: input.inviteeAlias,
+  });
+}
+
 export function buildAccountInviteShareMessage(input: {
   readonly inviteeAlias: string;
   readonly amountMinor: number | null;
@@ -76,9 +111,6 @@ export function buildAccountInviteShareMessage(input: {
   readonly description: string | null;
   readonly inviteLink: string;
 }): string {
-  const alias = input.inviteeAlias.trim();
-  const prefix = alias.length > 0 ? `Hola ${alias},` : 'Hola,';
-
   if (input.amountMinor && input.amountMinor > 0 && input.direction) {
     const movementText =
       input.direction === 'i_owe'
@@ -86,13 +118,21 @@ export function buildAccountInviteShareMessage(input: {
         : `que tú me debes ${formatCop(input.amountMinor)}`;
     const descriptionText =
       input.description && input.description.trim().length > 0
-        ? ` por ${input.description.trim()}`
+        ? ` por ${normalizeShareText(input.description)}`
         : '';
 
-    return `${prefix} te compartí un acceso privado a Happy Circles para registrar ${movementText}${descriptionText}. Abre este enlace para entrar o crear tu cuenta: ${input.inviteLink}`;
+    return buildWhatsappShareMessage({
+      body: `Te compartí un acceso privado a *Happy Circles* para registrar ${movementText}${descriptionText}.`,
+      inviteLink: input.inviteLink,
+      inviteeAlias: input.inviteeAlias,
+    });
   }
 
-  return `${prefix} te compartí un acceso privado a Happy Circles para que entres y te conectes conmigo. Abre este enlace para entrar o crear tu cuenta: ${input.inviteLink}`;
+  return buildWhatsappShareMessage({
+    body: 'Te compartí un acceso privado a *Happy Circles* para que entres y te conectes conmigo.',
+    inviteLink: input.inviteLink,
+    inviteeAlias: input.inviteeAlias,
+  });
 }
 
 function maskPhoneValue(value: string): string {

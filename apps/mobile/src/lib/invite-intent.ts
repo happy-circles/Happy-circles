@@ -134,3 +134,16 @@ export async function writePendingInviteIntent(intent: PendingInviteIntentInput)
 export async function clearPendingInviteIntent(): Promise<void> {
   await removeStoredItem(INVITE_INTENT_KEY);
 }
+
+export async function clearPendingInviteIntentIfMatches(input: {
+  readonly token: string;
+  readonly type: PendingInviteIntent['type'];
+}): Promise<boolean> {
+  const pendingIntent = await readPendingInviteIntent();
+  if (pendingIntent?.type !== input.type || pendingIntent.token !== input.token.trim()) {
+    return false;
+  }
+
+  await clearPendingInviteIntent();
+  return true;
+}

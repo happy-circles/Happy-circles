@@ -116,6 +116,9 @@ import type {
   UserProfileRow,
 } from '../session/types';
 
+const ACCOUNT_INVITE_USED_OR_UNAVAILABLE_MESSAGE =
+  'Esta invitación ya fue utilizada o no está disponible. Pídele a quien te invitó que genere una nueva desde la app.';
+
 export function useSessionController(): SessionContextValue {
   const authMode: AuthMode = 'supabase';
 
@@ -842,7 +845,7 @@ export function useSessionController(): SessionContextValue {
         registrationPreview.data.status !== 'pending_activation' ||
         registrationPreview.data.deliveryStatus !== 'issued'
       ) {
-        return 'Esta invitación ya fue usada o ya no está disponible.';
+        return ACCOUNT_INVITE_USED_OR_UNAVAILABLE_MESSAGE;
       }
 
       const accountInviteDeliveryTokenHash = await hashInviteTokenForRegistration(

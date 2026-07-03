@@ -1,19 +1,17 @@
-import type { Metadata, Viewport } from 'next';
+import type { Viewport } from 'next';
+
+import {
+  DEFAULT_SOCIAL_DESCRIPTION,
+  DEFAULT_SOCIAL_TITLE,
+  buildSocialMetadata,
+} from '@/lib/social-preview';
 
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Happy Circles | Finanzas entre amigos',
-  description:
-    'Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.',
-  openGraph: {
-    title: 'Happy Circles',
-    description:
-      'Registra solicitudes, confirma saldos y cierra deudas pequeñas entre personas de confianza.',
-    siteName: 'Happy Circles',
-    type: 'website',
-  },
-};
+export const metadata = buildSocialMetadata({
+  description: DEFAULT_SOCIAL_DESCRIPTION,
+  title: `${DEFAULT_SOCIAL_TITLE} | Finanzas entre amigos`,
+});
 
 export const viewport: Viewport = {
   colorScheme: 'light dark',

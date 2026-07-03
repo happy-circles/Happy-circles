@@ -27,6 +27,7 @@
     "security:check": "node ./scripts/security-check.mjs",
     "eas:push-credentials": "node --use-system-ca ./scripts/configure-eas-push-credentials.mjs",
     "supabase:cleanup:avatars": "node --use-system-ca ./scripts/cleanup-orphaned-avatars.mjs",
+    "supabase:cron:analytics": "node --use-system-ca ./scripts/update-analytics-cron.mjs",
     "supabase:cron:graph-cycle": "node --use-system-ca ./scripts/update-graph-cycle-cron.mjs",
     "supabase:cron:push-notifications": "node --use-system-ca ./scripts/update-push-notification-cron.mjs",
     "supabase:usage": "node --use-system-ca ./scripts/supabase-usage-report.mjs",

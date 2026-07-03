@@ -6,7 +6,6 @@ import {
   getCurrentDeviceName,
   getOrCreateDeviceId,
 } from '@/lib/device-trust';
-import { readPendingInviteIntent } from '@/lib/invite-intent';
 import type { supabase } from '@/lib/supabase';
 import {
   deriveAccountAccessState,
@@ -134,7 +133,7 @@ export async function loadSessionAccountState({
   const timestamp = new Date().toISOString();
 
   setLoadingStage('profile');
-  const [profileResult, identities, currentDevice, pendingInviteIntent, authUserResult] =
+  const [profileResult, identities, currentDevice, authUserResult] =
     await Promise.all([
       client
         .from('user_profiles')
@@ -150,7 +149,6 @@ export async function loadSessionAccountState({
         timestamp,
         userId: nextSession.user.id,
       }),
-      readPendingInviteIntent(),
       client.auth.getUser(),
     ]);
 
@@ -164,11 +162,7 @@ export async function loadSessionAccountState({
 
   const profile = profileResult.data;
   const emailConfirmed = isAuthUserEmailConfirmed(authUserResult.data.user ?? nextSession.user);
-  const derivedAccountAccessState = deriveAccountAccessState(profile);
-  const accountAccessState =
-    derivedAccountAccessState === 'needs_invite' && pendingInviteIntent?.type === 'account_invite'
-      ? 'needs_activation'
-      : derivedAccountAccessState;
+  const accountAccessState = deriveAccountAccessState(profile);
   const linkedMethods = deriveLinkedMethods({
     identities,
     profile,

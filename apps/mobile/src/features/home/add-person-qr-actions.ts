@@ -6,6 +6,7 @@ import { Share } from 'react-native';
 
 import { isFreshQrDelivery } from '@/features/home/contacts-sheet-helpers';
 import {
+  buildFriendshipInviteShareMessage,
   buildFriendshipInviteLink,
   extractInviteToken,
 } from '@/features/invites/people-outreach-utils';
@@ -145,7 +146,10 @@ export function useAddPersonQrActions({
 
     try {
       await Share.share({
-        message: `Escanea o abre este enlace para conectar conmigo en Happy Circles: ${myQrLink}`,
+        message: buildFriendshipInviteShareMessage({
+          inviteLink: myQrLink,
+          inviteeAlias: '',
+        }),
         title: 'Mi QR de Happy Circles',
       });
     } catch {

@@ -2431,6 +2431,65 @@ export type Database = {
           },
         ]
       }
+      settlement_edge_reservations: {
+        Row: {
+          amount_minor: number
+          consumed_at: string | null
+          created_at: string
+          creditor_user_id: string
+          currency_code: string
+          debtor_user_id: string
+          id: string
+          movement_index: number
+          release_reason: string | null
+          released_at: string | null
+          settlement_proposal_id: string
+          status: Database["public"]["Enums"]["settlement_edge_reservation_status"]
+          user_high_id: string
+          user_low_id: string
+        }
+        Insert: {
+          amount_minor: number
+          consumed_at?: string | null
+          created_at?: string
+          creditor_user_id: string
+          currency_code?: string
+          debtor_user_id: string
+          id?: string
+          movement_index: number
+          release_reason?: string | null
+          released_at?: string | null
+          settlement_proposal_id: string
+          status?: Database["public"]["Enums"]["settlement_edge_reservation_status"]
+          user_high_id: string
+          user_low_id: string
+        }
+        Update: {
+          amount_minor?: number
+          consumed_at?: string | null
+          created_at?: string
+          creditor_user_id?: string
+          currency_code?: string
+          debtor_user_id?: string
+          id?: string
+          movement_index?: number
+          release_reason?: string | null
+          released_at?: string | null
+          settlement_proposal_id?: string
+          status?: Database["public"]["Enums"]["settlement_edge_reservation_status"]
+          user_high_id?: string
+          user_low_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_edge_reservations_settlement_proposal_id_fkey"
+            columns: ["settlement_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlement_executions: {
         Row: {
           created_at: string
@@ -2490,30 +2549,49 @@ export type Database = {
       }
       settlement_proposal_participants: {
         Row: {
+          approval_scope_hash: string
+          carried_at: string | null
+          carried_from_participant_id: string | null
           created_at: string
           decided_at: string | null
           decision: Database["public"]["Enums"]["settlement_participant_decision"]
+          decision_source: Database["public"]["Enums"]["settlement_participant_decision_source"]
           id: string
           participant_user_id: string
           settlement_proposal_id: string
         }
         Insert: {
+          approval_scope_hash: string
+          carried_at?: string | null
+          carried_from_participant_id?: string | null
           created_at?: string
           decided_at?: string | null
           decision?: Database["public"]["Enums"]["settlement_participant_decision"]
+          decision_source?: Database["public"]["Enums"]["settlement_participant_decision_source"]
           id?: string
           participant_user_id: string
           settlement_proposal_id: string
         }
         Update: {
+          approval_scope_hash?: string
+          carried_at?: string | null
+          carried_from_participant_id?: string | null
           created_at?: string
           decided_at?: string | null
           decision?: Database["public"]["Enums"]["settlement_participant_decision"]
+          decision_source?: Database["public"]["Enums"]["settlement_participant_decision_source"]
           id?: string
           participant_user_id?: string
           settlement_proposal_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "settlement_proposal_participants_carried_from_participant_id_fkey"
+            columns: ["carried_from_participant_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_proposal_participants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "settlement_proposal_participants_participant_user_id_fkey"
             columns: ["participant_user_id"]
@@ -4133,6 +4211,14 @@ export type Database = {
         Args: { p_participant_user_ids: string[] }
         Returns: string
       }
+      compute_cycle_participant_approval_scope_hash: {
+        Args: {
+          p_currency_code?: string
+          p_movements_json: Json
+          p_participant_user_id: string
+        }
+        Returns: string
+      }
       compute_settlement_result_hash: {
         Args: {
           p_currency_code?: string
@@ -4565,6 +4651,8 @@ export type Database = {
         | "expired"
       request_type: "balance_increase" | "transaction_reversal"
       settlement_participant_decision: "pending" | "approved" | "rejected"
+      settlement_participant_decision_source: "manual" | "carried"
+      settlement_edge_reservation_status: "active" | "released" | "consumed"
       settlement_proposal_status:
         | "pending_approvals"
         | "approved"
@@ -4576,6 +4664,7 @@ export type Database = {
         | "balance_changed"
         | "related_execution_changed_balance"
         | "participant_set_changed"
+        | "reserved_capacity_lost"
       transaction_category:
         | "food_drinks"
         | "transport"
@@ -5225,6 +5314,8 @@ export const Constants = {
       ],
       request_type: ["balance_increase", "transaction_reversal"],
       settlement_participant_decision: ["pending", "approved", "rejected"],
+      settlement_participant_decision_source: ["manual", "carried"],
+      settlement_edge_reservation_status: ["active", "released", "consumed"],
       settlement_proposal_status: [
         "pending_approvals",
         "approved",
@@ -5237,6 +5328,7 @@ export const Constants = {
         "balance_changed",
         "related_execution_changed_balance",
         "participant_set_changed",
+        "reserved_capacity_lost",
       ],
       transaction_category: [
         "food_drinks",

@@ -19,6 +19,9 @@ export function staleReasonDetail(reason: string | null): string {
   if (reason === 'related_execution_changed_balance') {
     return 'Otra ejecucion cambio saldos.';
   }
+  if (reason === 'reserved_capacity_lost') {
+    return 'El monto reservado ya no esta disponible.';
+  }
 
   return 'Saldos nuevos.';
 }
@@ -107,6 +110,39 @@ function buildVisibleSettlementVersionGroups(
   }));
 }
 
+function participantIdSet(participants: readonly SettlementParticipantRow[]): ReadonlySet<string> {
+  return new Set(participants.map((participant) => participant.participant_user_id));
+}
+
+function countAddedParticipants(
+  previousParticipants: readonly SettlementParticipantRow[],
+  currentParticipants: readonly SettlementParticipantRow[],
+): number {
+  const previousIds = participantIdSet(previousParticipants);
+
+  return currentParticipants.filter(
+    (participant) => !previousIds.has(participant.participant_user_id),
+  ).length;
+}
+
+function countRemovedParticipants(
+  previousParticipants: readonly SettlementParticipantRow[],
+  currentParticipants: readonly SettlementParticipantRow[],
+): number {
+  const currentIds = participantIdSet(currentParticipants);
+
+  return previousParticipants.filter(
+    (participant) => !currentIds.has(participant.participant_user_id),
+  ).length;
+}
+
+function countCarriedApprovals(participants: readonly SettlementParticipantRow[]): number {
+  return participants.filter(
+    (participant) =>
+      participant.decision === 'approved' && participant.decision_source === 'carried',
+  ).length;
+}
+
 export function buildSettlementVersionTimeline(input: {
   readonly proposal: SettlementProposalRow;
   readonly allProposals: readonly SettlementProposalRow[];
@@ -124,27 +160,48 @@ export function buildSettlementVersionTimeline(input: {
     uniqueById.set(proposal.id, proposal);
   }
 
-  return buildVisibleSettlementVersionGroups(Array.from(uniqueById.values())).map(
-    ({ displayVersionNumber, proposal }) => {
-      const participants = input.participantsByProposalId.get(proposal.id) ?? [];
-      const approvalsPending = settlementProposalApprovalsPending(proposal, participants);
-      const isCurrent = isCurrentSettlementVersion(proposal);
+  const visibleGroups = buildVisibleSettlementVersionGroups(Array.from(uniqueById.values()));
 
-      return {
-        proposalId: proposal.id,
-        versionNumber: proposal.version_number,
-        displayVersionNumber,
-        status: proposal.status,
-        title: settlementVersionTitle(displayVersionNumber),
-        detail: settlementVersionDetail({ proposal, approvalsPending }),
-        amountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
-        createdAt: proposal.created_at,
-        updatedAt: proposal.updated_at,
-        isCurrent,
-        replacesProposalId: proposal.replaces_proposal_id,
-        replacedByProposalId: proposal.replaced_by_proposal_id,
-        staleReason: proposal.stale_reason,
-      };
-    },
-  );
+  return visibleGroups.map(({ displayVersionNumber, proposal }, index) => {
+    const previousProposal = visibleGroups[index - 1]?.proposal ?? null;
+    const previousParticipants = previousProposal
+      ? (input.participantsByProposalId.get(previousProposal.id) ?? [])
+      : [];
+    const participants = input.participantsByProposalId.get(proposal.id) ?? [];
+    const approvalsPending = settlementProposalApprovalsPending(proposal, participants);
+    const isCurrent = isCurrentSettlementVersion(proposal);
+    const amountMinor = settlementProposalParticipantAmount(proposal, input.currentUserId);
+    const previousAmountMinor = previousProposal
+      ? settlementProposalParticipantAmount(previousProposal, input.currentUserId)
+      : undefined;
+    const addedParticipantCount = previousProposal
+      ? countAddedParticipants(previousParticipants, participants)
+      : undefined;
+    const removedParticipantCount = previousProposal
+      ? countRemovedParticipants(previousParticipants, participants)
+      : undefined;
+    const carriedApprovalCount = countCarriedApprovals(participants);
+
+    return {
+      proposalId: proposal.id,
+      versionNumber: proposal.version_number,
+      displayVersionNumber,
+      status: proposal.status,
+      title: settlementVersionTitle(displayVersionNumber),
+      detail: settlementVersionDetail({ proposal, approvalsPending }),
+      amountMinor,
+      previousAmountMinor,
+      amountChanged:
+        typeof previousAmountMinor === 'number' ? previousAmountMinor !== amountMinor : undefined,
+      addedParticipantCount,
+      removedParticipantCount,
+      carriedApprovalCount,
+      createdAt: proposal.created_at,
+      updatedAt: proposal.updated_at,
+      isCurrent,
+      replacesProposalId: proposal.replaces_proposal_id,
+      replacedByProposalId: proposal.replaced_by_proposal_id,
+      staleReason: proposal.stale_reason,
+    };
+  });
 }

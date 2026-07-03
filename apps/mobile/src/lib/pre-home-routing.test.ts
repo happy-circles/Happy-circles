@@ -160,6 +160,26 @@ describe('resolvePreHomeRouteDecision', () => {
     });
   });
 
+  it('routes invite-gated accounts to their pending account invite without fake activation state', () => {
+    expect(
+      resolve({
+        accountAccessState: 'needs_invite',
+        pendingInviteIntent: {
+          createdAt: new Date().toISOString(),
+          source: 'account_invite_link',
+          token: 'invite-token-123456',
+          type: 'account_invite',
+        },
+      }),
+    ).toEqual({
+      action: 'replace',
+      href: {
+        pathname: '/join/[token]',
+        params: { token: 'invite-token-123456' },
+      },
+    });
+  });
+
   it('sends active complete users from join to Home after auth handoff clears', () => {
     expect(resolve({ isJoinRoute: true })).toEqual({
       action: 'replace',

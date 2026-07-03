@@ -7,11 +7,13 @@ export interface SettlementMovement {
 }
 
 export type SettlementDetailDecision = 'approved' | 'pending' | 'rejected';
+export type SettlementParticipantDecisionSource = 'manual' | 'carried';
 
 export interface SettlementDetailParticipantDto {
   readonly userId: string;
   readonly label: string;
   readonly decision: SettlementDetailDecision;
+  readonly decisionSource?: SettlementParticipantDecisionSource;
 }
 
 export interface SettlementDetailMovementDto {

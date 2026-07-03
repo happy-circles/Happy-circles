@@ -1,8 +1,17 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Router } from 'expo-router';
 import { Share } from 'react-native';
 
+import type { ContactActionFeedbackMode } from '@/components/contact-action-feedback-overlay';
 import {
   compareEnrichedContacts,
   type AddPersonTransactionContext,
@@ -15,7 +24,7 @@ import {
   type ContactCandidate,
   type PendingContactSelection,
 } from '@/features/invites/people-outreach-utils';
-import { showBlockedActionAlert } from '@/lib/action-feedback';
+import { showBlockedActionAlert, type ActionFeedbackVariant } from '@/lib/action-feedback';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import type {
   AccountInviteDeliveryResult,
@@ -32,6 +41,14 @@ type CreatePeopleOutreachMutation = {
     readonly sourceContext: string;
   }) => Promise<PeopleOutreachResult>;
 };
+
+export interface AddPersonContactActionFeedback {
+  readonly alias: string;
+  readonly message?: string;
+  readonly mode: ContactActionFeedbackMode;
+  readonly title?: string;
+  readonly variant: ActionFeedbackVariant;
+}
 
 export function useAddPersonOutreachActions({
   busyKey,
@@ -58,6 +75,10 @@ export function useAddPersonOutreachActions({
 }) {
   const [pendingContactSelection, setPendingContactSelection] =
     useState<PendingContactSelection | null>(null);
+  const [contactActionFeedback, setContactActionFeedback] =
+    useState<AddPersonContactActionFeedback | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackResolveRef = useRef<(() => void) | null>(null);
 
   const pendingContactOptions = useMemo<readonly EnrichedContact[]>(
     () =>
@@ -78,6 +99,74 @@ export function useAddPersonOutreachActions({
     [pendingContactSelection, targetCache],
   );
 
+  const clearFeedbackTimeout = useCallback(() => {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+      feedbackTimeoutRef.current = null;
+    }
+
+    if (feedbackResolveRef.current) {
+      feedbackResolveRef.current();
+      feedbackResolveRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearFeedbackTimeout(), [clearFeedbackTimeout]);
+
+  const showContactActionLoading = useCallback(
+    (input: {
+      readonly alias: string;
+      readonly message?: string;
+      readonly mode?: ContactActionFeedbackMode;
+      readonly title?: string;
+    }) => {
+      clearFeedbackTimeout();
+      setContactActionFeedback({
+        alias: input.alias,
+        message: input.message,
+        mode: input.mode ?? 'prepare',
+        title: input.title,
+        variant: 'loading',
+      });
+    },
+    [clearFeedbackTimeout],
+  );
+
+  const showContactActionResult = useCallback(
+    (input: {
+      readonly alias: string;
+      readonly durationMs?: number;
+      readonly message?: string;
+      readonly mode?: ContactActionFeedbackMode;
+      readonly title: string;
+      readonly variant?: Exclude<ActionFeedbackVariant, 'loading'>;
+    }) => {
+      clearFeedbackTimeout();
+      const variant = input.variant ?? 'success';
+      setContactActionFeedback({
+        alias: input.alias,
+        message: input.message,
+        mode: input.mode ?? 'prepare',
+        title: input.title,
+        variant,
+      });
+
+      return new Promise<void>((resolve) => {
+        feedbackResolveRef.current = resolve;
+        feedbackTimeoutRef.current = setTimeout(
+          () => {
+            setContactActionFeedback(null);
+            feedbackTimeoutRef.current = null;
+            feedbackResolveRef.current = null;
+            resolve();
+          },
+          input.durationMs ?? (variant === 'danger' ? 1900 : 950),
+        );
+      });
+    },
+    [clearFeedbackTimeout],
+  );
+
   const resetPendingContactSelection = useCallback(() => {
     setPendingContactSelection(null);
   }, []);
@@ -93,6 +182,12 @@ export function useAddPersonOutreachActions({
     });
 
     setMessage(`Acceso listo para ${alias}. Elige cómo enviarlo.`);
+    showContactActionLoading({
+      alias,
+      message: 'Tu telefono esta abriendo las opciones para enviar el acceso.',
+      mode: 'share',
+      title: 'Abriendo compartir',
+    });
 
     try {
       const result = await Share.share({
@@ -199,6 +294,12 @@ export function useAddPersonOutreachActions({
 
     setBusyKey(input.phoneE164);
     setMessage(`Preparando invitación para ${input.alias}.`);
+    showContactActionLoading({
+      alias: input.alias,
+      message: 'Estamos revisando el numero y preparando la accion correcta.',
+      mode: 'prepare',
+      title: 'Preparando contacto',
+    });
 
     try {
       const response = await createPeopleOutreach.mutateAsync({
@@ -213,6 +314,11 @@ export function useAddPersonOutreachActions({
 
       if (response.kind === 'already_related') {
         setMessage(`${input.alias} ya aparece en tus personas.`);
+        await showContactActionResult({
+          alias: input.alias,
+          message: 'Ya estaba en tu lista de personas.',
+          title: 'Persona encontrada',
+        });
         return;
       }
 
@@ -230,6 +336,12 @@ export function useAddPersonOutreachActions({
             tone: 'success',
           });
         }
+        await showContactActionResult({
+          alias: input.alias,
+          message: nextMessage,
+          title:
+            response.status === 'pending_friendship' ? 'Solicitud pendiente' : 'Solicitud enviada',
+        });
         return;
       }
 
@@ -238,10 +350,22 @@ export function useAddPersonOutreachActions({
       }
 
       await shareAccountInviteLink(input.alias, response.result);
+      await showContactActionResult({
+        alias: input.alias,
+        message: 'El acceso privado quedo listo para enviar o reenviar.',
+        mode: 'share',
+        title: 'Acceso listo',
+      });
     } catch (error) {
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
       setMessage(failureMessage);
+      await showContactActionResult({
+        alias: input.alias,
+        message: failureMessage,
+        title: 'No se pudo completar',
+        variant: 'danger',
+      });
       showBlockedActionAlert(failureMessage, router);
     } finally {
       setBusyKey(null);
@@ -249,6 +373,10 @@ export function useAddPersonOutreachActions({
   }
 
   async function handleContactPress(contact: ContactCandidate) {
+    if (busyKey) {
+      return;
+    }
+
     if (contact.phoneOptions.length === 1) {
       await handleCreateOutreach({
         alias: contact.alias,
@@ -259,22 +387,25 @@ export function useAddPersonOutreachActions({
       return;
     }
 
-    try {
-      await ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164));
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
-      );
-    }
-
     setPendingContactSelection({
       alias: contact.alias,
       contactId: contact.contactId,
       phoneOptions: contact.phoneOptions,
     });
+
+    void ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164)).catch(
+      (error) => {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'No se pudo revisar los numeros de este contacto.',
+        );
+      },
+    );
   }
 
   return {
+    contactActionFeedback,
     handleContactPress,
     handleCreateOutreach,
     pendingContactOptions,

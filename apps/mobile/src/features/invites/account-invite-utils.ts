@@ -1,4 +1,40 @@
 export const MIN_ACCOUNT_INVITE_TOKEN_LENGTH = 12;
+export const ACCOUNT_INVITE_USED_MESSAGE =
+  'Esta invitación ya fue utilizada. Pídele a quien te invitó que genere una nueva desde la app.';
+export const ACCOUNT_INVITE_UNAVAILABLE_MESSAGE =
+  'Esta invitación ya fue utilizada o no está disponible. Pídele a quien te invitó que genere una nueva desde la app.';
+
+export function inviteReasonLabel(reason: string): string {
+  if (reason === 'invite_unavailable') {
+    return ACCOUNT_INVITE_UNAVAILABLE_MESSAGE;
+  }
+
+  if (reason === 'delivery_revoked') {
+    return 'Este enlace ya fue utilizado o reemplazado. Pídele a quien te invitó que genere una nueva desde la app.';
+  }
+
+  if (reason === 'delivery_expired' || reason === 'expired') {
+    return 'Esta invitación ya venció.';
+  }
+
+  if (reason === 'pending_inviter_review') {
+    return 'Tu cuenta ya quedó activa. Solo falta que la persona que te invitó confirme el contacto.';
+  }
+
+  if (reason === 'accepted') {
+    return ACCOUNT_INVITE_USED_MESSAGE;
+  }
+
+  if (reason === 'rejected') {
+    return 'La invitación fue cerrada después de revisar el contacto.';
+  }
+
+  if (reason === 'canceled') {
+    return 'La invitación fue cancelada.';
+  }
+
+  return 'Necesitas terminar la activacion para entrar a Happy Circles.';
+}
 
 export function extractAccountInviteToken(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? '';
@@ -33,16 +69,20 @@ export function extractAccountInviteToken(value: string | null | undefined): str
 }
 
 export function accountInviteStatusMessage(status: string, deliveryStatus: string): string | null {
+  if (deliveryStatus === 'unavailable' || status === 'unavailable') {
+    return ACCOUNT_INVITE_UNAVAILABLE_MESSAGE;
+  }
+
   if (deliveryStatus === 'revoked') {
-    return 'Este enlace fue reemplazado por una invitación más reciente.';
+    return 'Este enlace ya fue utilizado o reemplazado. Pídele a quien te invitó que genere una nueva desde la app.';
   }
 
   if (deliveryStatus === 'expired' || status === 'expired') {
     return 'Esta invitación ya venció. Pide una nueva para empezar.';
   }
 
-  if (status === 'accepted') {
-    return 'Esta invitación ya fue usada.';
+  if (deliveryStatus === 'activated' || status === 'accepted') {
+    return ACCOUNT_INVITE_USED_MESSAGE;
   }
 
   if (status === 'rejected' || status === 'canceled') {
@@ -50,7 +90,7 @@ export function accountInviteStatusMessage(status: string, deliveryStatus: strin
   }
 
   if (status === 'pending_inviter_review') {
-    return 'Esta invitación ya fue reclamada y está esperando revisión.';
+    return 'Esta invitación ya fue utilizada y está esperando revisión. Si no fuiste tú, pídele a quien te invitó que genere una nueva desde la app.';
   }
 
   return null;

@@ -14,6 +14,7 @@ export type SurfaceCardShape = 'rounded' | 'pill';
 const shouldMountNativeGlass = Platform.OS === 'ios';
 const hasNativeLiquidGlass = shouldMountNativeGlass && isLiquidGlassAvailable();
 const shouldUseAndroidGlassFallback = Platform.OS === 'android';
+const shouldSuppressWebFallbackDecoration = Platform.OS === 'web';
 
 function SurfaceLiquidGlassLayer({
   activeTheme,
@@ -33,6 +34,7 @@ function SurfaceLiquidGlassLayer({
     !shouldUseAndroidGlassFallback && (isFlat || !hasNativeLiquidGlass);
   const shouldRenderFallbackDepth =
     !shouldUseAndroidGlassFallback &&
+    !shouldSuppressWebFallbackDecoration &&
     !hasNativeLiquidGlass &&
     (treatment === 'standard' || treatment === 'flatSoft');
 
@@ -55,7 +57,7 @@ function SurfaceLiquidGlassLayer({
         />
       ) : null}
       {isFlat ? (
-        isFlatSolid ? null : (
+        isFlatSolid || shouldSuppressWebFallbackDecoration ? null : (
           <>
             <View
               pointerEvents="none"
@@ -75,7 +77,7 @@ function SurfaceLiquidGlassLayer({
             ) : null}
           </>
         )
-      ) : !shouldUseAndroidGlassFallback ? (
+      ) : !shouldUseAndroidGlassFallback && !shouldSuppressWebFallbackDecoration ? (
         <View
           pointerEvents="none"
           style={[

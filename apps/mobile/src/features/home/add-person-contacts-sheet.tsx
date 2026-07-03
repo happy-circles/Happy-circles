@@ -6,15 +6,15 @@ import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, View } from
 
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
 import { AppAvatar } from '@/components/app-avatar';
+import { ContactActionFeedbackOverlay } from '@/components/contact-action-feedback-overlay';
 import { MessageBanner } from '@/components/message-banner';
 import { PrimaryAction } from '@/components/primary-action';
 import {
-  actionMetaForResolution,
-  contactMeta,
   formatQrExpiry,
   type AddPersonTransactionContext,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
+import { AddPersonContactOptionsModal } from '@/features/home/add-person-contact-options-modal';
 import {
   AddPersonInPersonQrBlock,
   AddPersonSearchControls,
@@ -28,6 +28,8 @@ import {
   buildManualPhoneE164,
   formatPhonePreview,
 } from '@/features/invites/people-outreach-utils';
+
+const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
 
 export function AddPersonContactsSheet({
   currentUserAvatarUrl,
@@ -48,6 +50,7 @@ export function AddPersonContactsSheet({
   const {
     busyKey,
     canReadContacts,
+    contactActionFeedback,
     contactsLoadedCount,
     contactsLoading,
     contactsPermissionStatus,
@@ -59,6 +62,8 @@ export function AddPersonContactsSheet({
     handleExpandLimitedContactsAccess,
     handleOpenScanner,
     handleRefreshMyQr,
+    handleReviewContact,
+    handleReviewPhone,
     handleShareMyQr,
     handleShowMyQr,
     inAppContacts,
@@ -90,6 +95,8 @@ export function AddPersonContactsSheet({
     ? resolveManualInviteAlias(searchValue, manualInvitePhoneE164)
     : null;
   const manualInviteBusy = Boolean(manualInvitePhoneE164 && busyKey === manualInvitePhoneE164);
+  const isSearchingContacts = searchValue.trim().length > 0;
+  const searchStillIndexing = isSearchingContacts && contactsLoading && displayedContactsCount === 0;
   const compactActionsRevealY = useRef(new Animated.Value(0)).current;
   const compactActionsRevealStyle = useMemo(
     () => ({
@@ -116,7 +123,11 @@ export function AddPersonContactsSheet({
               busy={busyKey === contact.primaryPhone.phoneE164}
               contact={contact}
               key={`${contact.contactId}:${contact.primaryPhone.id}`}
-              onPress={() => void handleContactPress(contact)}
+              onPress={() =>
+                resolution || contact.phoneOptions.length > 1
+                  ? void handleContactPress(contact)
+                  : void handleReviewContact(contact)
+              }
               resolution={resolution}
             />
           ))}
@@ -213,15 +224,21 @@ export function AddPersonContactsSheet({
                   {renderContactSection('En Happy Circles', inAppContacts)}
                   {renderContactSection('Invitar a Happy Circles', inviteContacts)}
 
-                  {displayedContactsCount === 0 && !contactsLoading ? (
+                  {displayedContactsCount === 0 && (!contactsLoading || searchStillIndexing) ? (
                     <View style={styles.emptyState}>
                       <AppText style={styles.emptyTitle}>
-                        {searchValue.trim().length > 0 ? 'Sin resultados' : 'Sin contactos utiles'}
+                        {searchStillIndexing
+                          ? 'Buscando en tu agenda...'
+                          : isSearchingContacts
+                            ? 'Sin resultados'
+                            : 'Sin contactos utiles'}
                       </AppText>
                       <AppText style={styles.emptyText}>
-                        {manualInvitePhoneE164
+                        {searchStillIndexing
+                          ? 'Seguimos cargando contactos guardados en este telefono.'
+                          : manualInvitePhoneE164
                           ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
-                          : searchValue.trim().length > 0
+                          : isSearchingContacts
                             ? 'Prueba con otro nombre o celular.'
                             : 'No encontramos contactos con numero en la agenda disponible.'}
                       </AppText>
@@ -245,7 +262,7 @@ export function AddPersonContactsSheet({
                             compact
                             disabled={Boolean(busyKey)}
                             icon="paper-plane-outline"
-                            label={manualInviteBusy ? 'Preparando...' : 'Enviar invitacion'}
+                            label={manualInviteBusy ? 'Preparando...' : 'Revisar y continuar'}
                             loading={manualInviteBusy}
                             onPress={handleManualInvitePress}
                           />
@@ -390,94 +407,24 @@ export function AddPersonContactsSheet({
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setPendingContactSelection(null)}
-        transparent
-        visible={pendingContactSelection !== null}
-      >
-        <View style={[styles.optionScrim, { backgroundColor: activeTheme.colors.overlay }]}>
-          <Pressable
-            onPress={() => setPendingContactSelection(null)}
-            style={styles.sheetBackdrop}
-          />
-          <View style={[styles.optionCard, { backgroundColor: activeTheme.colors.surface }]}>
-            <AppText style={styles.optionTitle}>Elige el numero</AppText>
-            <AppText style={styles.emptyText}>
-              {pendingContactSelection
-                ? `${pendingContactSelection.alias} tiene varios numeros.`
-                : ''}
-            </AppText>
-            <View style={styles.optionList}>
-              {pendingContactOptions.map(({ contact, resolution }) => {
-                const phoneOption = contact.primaryPhone;
-                const action = actionMetaForResolution(resolution, false);
-                const disabled = action.disabled || busyKey === phoneOption.phoneE164;
+      <AddPersonContactOptionsModal
+        busyKey={busyKey}
+        inviteAvailableLabel={CONTACT_CAN_RECEIVE_INVITE_LABEL}
+        onCancel={() => setPendingContactSelection(null)}
+        onCreateOutreach={handleCreateOutreach}
+        onReviewPhone={handleReviewPhone}
+        pendingContactOptions={pendingContactOptions}
+        pendingContactSelection={pendingContactSelection}
+      />
 
-                return (
-                  <View
-                    key={phoneOption.id}
-                    style={[styles.optionRow, { backgroundColor: activeTheme.colors.surfaceMuted }]}
-                  >
-                    <View style={styles.contactCopy}>
-                      <AppText style={styles.contactName}>{contactMeta(phoneOption)}</AppText>
-                      <AppText style={styles.contactPhone}>
-                        {resolution?.status === 'active_user'
-                          ? 'Ya esta en Happy Circles'
-                          : resolution?.status === 'already_related'
-                            ? 'Agregado'
-                            : resolution?.status === 'pending_friendship'
-                              ? 'Pendiente'
-                              : resolution?.status === 'pending_activation'
-                                ? 'Pendiente de abrir'
-                                : 'Puede recibir invitación'}
-                      </AppText>
-                    </View>
-                    <Pressable
-                      disabled={disabled}
-                      onPress={
-                        disabled || !pendingContactSelection
-                          ? undefined
-                          : () => {
-                              setPendingContactSelection(null);
-                              void handleCreateOutreach({
-                                alias: pendingContactSelection.alias,
-                                phoneE164: phoneOption.phoneE164,
-                                phoneLabel: phoneOption.label,
-                                sourceContext: 'home_add_contact_option',
-                              });
-                            }
-                      }
-                      style={({ pressed }) => [
-                        styles.contactActionButton,
-                        {
-                          backgroundColor:
-                            action.tone === 'invite'
-                              ? activeTheme.colors.warning
-                              : action.tone === 'muted'
-                                ? activeTheme.colors.muted
-                                : activeTheme.colors.primary,
-                        },
-                        pressed && !disabled ? styles.pressed : null,
-                        disabled ? styles.disabled : null,
-                      ]}
-                    >
-                      <Ionicons color={activeTheme.colors.white} name={action.icon} size={14} />
-                      <AppText style={styles.contactActionText}>{action.label}</AppText>
-                    </Pressable>
-                  </View>
-                );
-              })}
-              <PrimaryAction
-                compact
-                label="Cancelar"
-                onPress={() => setPendingContactSelection(null)}
-                variant="ghost"
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ContactActionFeedbackOverlay
+        alias={contactActionFeedback?.alias}
+        message={contactActionFeedback?.message}
+        mode={contactActionFeedback?.mode}
+        title={contactActionFeedback?.title}
+        variant={contactActionFeedback?.variant}
+        visible={Boolean(contactActionFeedback)}
+      />
     </>
   );
 }

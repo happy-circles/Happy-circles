@@ -210,21 +210,28 @@ describe('people target resolution cache helpers', () => {
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 25 * 60 * 60 * 1000,
+        resolvedAt: now - 29 * 24 * 60 * 60 * 1000,
+        status: 'already_related',
+      }),
+    ).toBe(true);
+    expect(
+      isPeopleTargetResolutionCacheEntryFresh({
+        now,
+        resolvedAt: now - 31 * 24 * 60 * 60 * 1000,
         status: 'already_related',
       }),
     ).toBe(false);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 5 * 60 * 60 * 1000,
+        resolvedAt: now - 29 * 24 * 60 * 60 * 1000,
         status: 'no_account',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 7 * 60 * 60 * 1000,
+        resolvedAt: now - 31 * 24 * 60 * 60 * 1000,
         status: 'no_account',
       }),
     ).toBe(false);

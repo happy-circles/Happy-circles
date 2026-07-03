@@ -508,16 +508,19 @@ function financialRequestNotificationTitle(item: ActivityItemDto): string {
 }
 
 function settlementNotificationTitle(item: ActivityItemDto): string {
+  const amountLabel = transactionAmountLabel(item);
+  const amountSuffix = amountLabel ? ` de ${amountLabel}` : '';
+
   if (item.status === 'pending_approvals') {
-    return 'Aprueba este Happy Circle';
+    return `Happy Circle${amountSuffix} encontrado`;
   }
 
   if (item.status === 'waiting_other_side') {
-    return 'Esperando aprobaciones';
+    return `Happy Circle${amountSuffix} en aprobacion`;
   }
 
   if (item.status === 'approved') {
-    return 'Completa este Happy Circle';
+    return `Happy Circle${amountSuffix} listo`;
   }
 
   if (item.status === 'executed' || item.status === 'posted') {

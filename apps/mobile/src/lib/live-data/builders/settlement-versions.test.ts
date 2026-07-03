@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SettlementParticipantRow, SettlementProposalRow } from '../types';
-import { buildSettlementVersionTimeline } from './settlement-versions';
+import { buildSettlementVersionTimeline, staleReasonDetail } from './settlement-versions';
 
 const NOW = '2026-05-05T12:00:00.000Z';
 const CURRENT_USER_ID = 'user-a';
@@ -53,12 +53,18 @@ function participant(
   proposalId: string,
   userId: string,
   decision: SettlementParticipantRow['decision'] = 'pending',
+  decisionSource: SettlementParticipantRow['decision_source'] = 'manual',
 ): SettlementParticipantRow {
   return row<SettlementParticipantRow>({
+    approval_scope_hash: `${proposalId}:${userId}:scope`,
+    carried_at: decisionSource === 'carried' ? NOW : null,
+    carried_from_participant_id:
+      decisionSource === 'carried' ? `${proposalId}:${userId}:old` : null,
     id: `${proposalId}:${userId}`,
     settlement_proposal_id: proposalId,
     participant_user_id: userId,
     decision,
+    decision_source: decisionSource,
     decided_at: decision === 'pending' ? null : NOW,
     created_at: NOW,
   });
@@ -76,6 +82,12 @@ function participantsByProposalId(
 }
 
 describe('buildSettlementVersionTimeline', () => {
+  it('describes reserved capacity loss as a stale reason', () => {
+    expect(staleReasonDetail('reserved_capacity_lost')).toBe(
+      'El monto reservado ya no esta disponible.',
+    );
+  });
+
   it('collapses consecutive technical versions with the same visible result', () => {
     const proposals = [
       proposal({
@@ -165,10 +177,16 @@ describe('buildSettlementVersionTimeline', () => {
     });
 
     expect(
-      timeline.map((item) => [item.proposalId, item.displayVersionNumber, item.amountMinor]),
+      timeline.map((item) => [
+        item.proposalId,
+        item.displayVersionNumber,
+        item.amountMinor,
+        item.previousAmountMinor,
+        item.amountChanged,
+      ]),
     ).toEqual([
-      ['settlement-v1', 1, 2500],
-      ['settlement-v2', 2, 3000],
+      ['settlement-v1', 1, 2500, undefined, undefined],
+      ['settlement-v2', 2, 3000, 2500, true],
     ]);
   });
 
@@ -204,9 +222,59 @@ describe('buildSettlementVersionTimeline', () => {
       currentUserId: CURRENT_USER_ID,
     });
 
-    expect(timeline.map((item) => [item.proposalId, item.displayVersionNumber])).toEqual([
-      ['settlement-v1', 1],
-      ['settlement-v2', 2],
+    expect(
+      timeline.map((item) => [
+        item.proposalId,
+        item.displayVersionNumber,
+        item.addedParticipantCount,
+        item.removedParticipantCount,
+      ]),
+    ).toEqual([
+      ['settlement-v1', 1, undefined, undefined],
+      ['settlement-v2', 2, 1, 0],
     ]);
+  });
+
+  it('reports removed participants and carried approvals between visible versions', () => {
+    const proposals = [
+      proposal({
+        id: 'settlement-v1',
+        status: 'stale',
+        version_number: 1,
+        result_hash: 'result-hash-users-a-b-c',
+        replaced_by_proposal_id: 'settlement-v2',
+        stale_reason: 'participant_set_changed',
+      }),
+      proposal({
+        id: 'settlement-v2',
+        status: 'pending_approvals',
+        version_number: 2,
+        result_hash: 'result-hash-users-a-b',
+        replaces_proposal_id: 'settlement-v1',
+      }),
+    ];
+    const participants = participantsByProposalId(proposals);
+    participants.set('settlement-v1', [
+      participant('settlement-v1', 'user-a', 'approved'),
+      participant('settlement-v1', 'user-b', 'approved'),
+      participant('settlement-v1', 'user-c', 'approved'),
+    ]);
+    participants.set('settlement-v2', [
+      participant('settlement-v2', 'user-a', 'approved', 'carried'),
+      participant('settlement-v2', 'user-b', 'pending'),
+    ]);
+
+    const timeline = buildSettlementVersionTimeline({
+      proposal: proposals[1],
+      allProposals: proposals,
+      participantsByProposalId: participants,
+      currentUserId: CURRENT_USER_ID,
+    });
+
+    expect(timeline[1]).toMatchObject({
+      addedParticipantCount: 0,
+      carriedApprovalCount: 1,
+      removedParticipantCount: 1,
+    });
   });
 });

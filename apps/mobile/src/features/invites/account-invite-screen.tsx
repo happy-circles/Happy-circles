@@ -15,7 +15,11 @@ import {
 } from '@/components/identity-flow';
 import { MessageBanner } from '@/components/message-banner';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
-import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import {
+  clearPendingInviteIntent,
+  clearPendingInviteIntentIfMatches,
+  writePendingInviteIntent,
+} from '@/lib/invite-intent';
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import {
@@ -28,42 +32,11 @@ import {
   useActivateAccountFromInviteMutation,
 } from '@/lib/live-data';
 import { accountInviteStyles as styles } from './account-invite-screen.styles';
+import { inviteReasonLabel } from './account-invite-utils';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 
 type IoniconName = ComponentProps<typeof IdentityFlowField>['icon'];
-
-function inviteReasonLabel(reason: string): string {
-  if (reason === 'invite_unavailable') {
-    return 'Esta invitación no está disponible o ya no puede usarse.';
-  }
-
-  if (reason === 'delivery_revoked') {
-    return 'Este acceso fue reemplazado por un enlace más reciente.';
-  }
-
-  if (reason === 'delivery_expired' || reason === 'expired') {
-    return 'Esta invitación ya venció.';
-  }
-
-  if (reason === 'pending_inviter_review') {
-    return 'Tu cuenta ya quedó activa. Solo falta que la persona que te invitó confirme el contacto.';
-  }
-
-  if (reason === 'accepted') {
-    return 'La cuenta ya quedó activa y la conexión fue creada.';
-  }
-
-  if (reason === 'rejected') {
-    return 'La invitación fue cerrada después de revisar el contacto.';
-  }
-
-  if (reason === 'canceled') {
-    return 'La invitación fue cancelada.';
-  }
-
-  return 'Necesitas terminar la activacion para entrar a Happy Circles.';
-}
 
 function channelLabel(channel: 'remote' | 'qr') {
   return channel === 'qr' ? 'QR temporal' : 'Invitación privada';
@@ -255,7 +228,24 @@ export function AccountInviteScreen() {
       : 'account-invite:empty';
 
   useEffect(() => {
-    if (!deliveryToken) {
+    if (!deliveryToken || !preview) {
+      return;
+    }
+
+    const inviteAvailableForActivation =
+      !tokenUnavailable &&
+      preview.status === 'pending_activation' &&
+      ['issued', 'authenticated'].includes(preview.deliveryStatus);
+
+    if (!inviteAvailableForActivation || session.accountAccessState === 'active') {
+      void clearPendingInviteIntentIfMatches({
+        type: 'account_invite',
+        token: deliveryToken,
+      }).then((cleared) => {
+        if (cleared) {
+          void refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+        }
+      });
       return;
     }
 
@@ -264,7 +254,13 @@ export function AccountInviteScreen() {
       token: deliveryToken,
       source: 'account_invite_link',
     });
-  }, [deliveryToken]);
+  }, [
+    deliveryToken,
+    preview,
+    refreshAccountState,
+    session.accountAccessState,
+    tokenUnavailable,
+  ]);
 
   useFocusEffect(
     useCallback(() => {

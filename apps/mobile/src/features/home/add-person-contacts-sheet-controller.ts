@@ -3,13 +3,18 @@ import { useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 
 import { pumpAddPersonResolutionQueue } from '@/features/home/add-person-contact-resolution-queue';
-import { updateWarmContactScanTargetCache } from '@/features/home/add-person-contact-scan-cache';
-import { runAddPersonContactScan } from '@/features/home/add-person-contact-scan-runner';
+import {
+  readContactIndex,
+  startContactIndexing,
+  subscribeContactIndex,
+} from '@/features/home/add-person-contact-index';
 import { useAddPersonContactPermissionActions } from '@/features/home/add-person-contact-permissions';
 import { useAddPersonOutreachActions } from '@/features/home/add-person-outreach-actions';
 import { useAddPersonQrActions } from '@/features/home/add-person-qr-actions';
 import {
   buildContactSectionItems,
+  CONTACT_DISPLAY_LIMIT,
+  CONTACT_SEARCH_DISPLAY_LIMIT,
   getUnresolvedContactPhoneE164List,
   uniqueContactPhoneE164List,
   type AddPersonTransactionContext,
@@ -20,6 +25,7 @@ import {
 } from '@/features/home/people-target-resolution-cache';
 import {
   canReadContactsPermissionStatus,
+  getContactsPermissionStatus,
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
 import {
@@ -59,7 +65,7 @@ export function useAddPersonContactsSheetController({
   const [contactsScanComplete, setContactsScanComplete] = useState(false);
   const [contactsLoadedCount, setContactsLoadedCount] = useState(0);
   const scanRunIdRef = useRef(0);
-  const contactsRef = useRef<readonly ContactCandidate[]>([]);
+  const indexReadVersionRef = useRef(0);
   const targetCacheRef = useRef<Record<string, PeopleTargetResolution>>({});
   const pendingResolutionQueueRef = useRef<string[]>([]);
   const pendingResolutionSetRef = useRef(new Set<string>());
@@ -116,10 +122,9 @@ export function useAddPersonContactsSheetController({
       }
 
       targetCacheRef.current = next;
-      updateWarmContactScanTargetCache(session.userId, next);
       setTargetCache(next);
     },
-    [session.userId],
+    [],
   );
 
   const persistTargetResolutions = useCallback(
@@ -142,6 +147,7 @@ export function useAddPersonContactsSheetController({
   );
 
   const {
+    contactActionFeedback,
     handleContactPress,
     handleCreateOutreach,
     pendingContactOptions,
@@ -250,27 +256,74 @@ export function useAddPersonContactsSheetController({
     [enqueueResolutionPhones, loadCachedTargetResolutionsForPhones],
   );
 
-  const loadContacts = useCallback(async () => {
-    await runAddPersonContactScan({
-      contactsRef,
-      hydrateAndEnqueueResolutionPhones,
-      inFlightResolutionSetRef,
-      pendingResolutionQueueRef,
-      pendingResolutionSetRef,
-      scanRunIdRef,
-      setBusyKey,
-      setContacts,
-      setContactsLoadedCount,
-      setContactsLoading,
-      setContactsPermissionStatus,
-      setContactsScanComplete,
-      setMessage,
-      setTargetCache,
-      targetCacheRef,
+  const refreshContactIndex = useCallback(async () => {
+    const readVersion = indexReadVersionRef.current + 1;
+    indexReadVersionRef.current = readVersion;
+
+    if (!session.userId) {
+      setContacts([]);
+      setContactsLoadedCount(0);
+      setContactsLoading(false);
+      setContactsScanComplete(false);
+      return;
+    }
+
+    const readLimit =
+      searchValue.trim().length > 0 ? CONTACT_SEARCH_DISPLAY_LIMIT : CONTACT_DISPLAY_LIMIT * 2;
+    const result = await readContactIndex({
+      limit: readLimit,
+      searchValue,
       userId: session.userId,
-      visibleResolutionPhonesRef,
     });
-  }, [hydrateAndEnqueueResolutionPhones, session.userId]);
+
+    if (indexReadVersionRef.current !== readVersion) {
+      return;
+    }
+
+    setContacts(result.contacts);
+    setContactsLoadedCount(result.loadedCount);
+    setContactsLoading(result.status === 'indexing');
+    setContactsScanComplete(result.status === 'ready');
+    setContactsPermissionStatus((current) =>
+      result.permissionStatus === 'undetermined' && canReadContactsPermissionStatus(current)
+        ? current
+        : result.permissionStatus,
+    );
+  }, [searchValue, session.userId]);
+
+  const loadContacts = useCallback(async () => {
+    if (!session.userId) {
+      setContacts([]);
+      setContactsLoadedCount(0);
+      setContactsLoading(false);
+      setContactsScanComplete(false);
+      return;
+    }
+
+    try {
+      const permissionStatus = await getContactsPermissionStatus();
+      setContactsPermissionStatus(permissionStatus);
+
+      if (!canReadContactsPermissionStatus(permissionStatus)) {
+        setContacts([]);
+        setContactsLoadedCount(0);
+        setContactsLoading(false);
+        setContactsScanComplete(true);
+        return;
+      }
+
+      setContactsLoading(true);
+      void startContactIndexing({
+        permissionStatus,
+        reason: 'sheet_open',
+        userId: session.userId,
+      }).catch(() => undefined);
+      await refreshContactIndex();
+    } catch (error) {
+      setContactsLoading(false);
+      setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
+    }
+  }, [refreshContactIndex, session.userId]);
 
   const { handleExpandLimitedContactsAccess, requestContactsAccess } =
     useAddPersonContactPermissionActions({
@@ -282,6 +335,20 @@ export function useAddPersonContactsSheetController({
       setContactsPermissionStatus,
       setMessage,
     });
+
+  useEffect(() => {
+    if (!visible || !session.userId) {
+      return undefined;
+    }
+
+    const unsubscribe = subscribeContactIndex(session.userId, () => {
+      void refreshContactIndex().catch(() => undefined);
+    });
+
+    void refreshContactIndex().catch(() => undefined);
+
+    return unsubscribe;
+  }, [refreshContactIndex, session.userId, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -315,8 +382,23 @@ export function useAddPersonContactsSheetController({
 
     const visiblePhones = uniqueContactPhoneE164List(contactResolutionWindow);
     visibleResolutionPhonesRef.current = new Set(visiblePhones);
-    hydrateAndEnqueueResolutionPhones(scanRunIdRef.current, visiblePhones, 'visible');
-  }, [canReadContacts, contactResolutionWindow, hydrateAndEnqueueResolutionPhones, visible]);
+    const timeout = setTimeout(
+      () => {
+        hydrateAndEnqueueResolutionPhones(scanRunIdRef.current, visiblePhones, 'visible');
+      },
+      searchValue.trim().length > 0 ? 220 : 0,
+    );
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [
+    canReadContacts,
+    contactResolutionWindow,
+    hydrateAndEnqueueResolutionPhones,
+    searchValue,
+    visible,
+  ]);
 
   async function ensurePhoneStatuses(phoneE164List: readonly string[]) {
     const cachedResolutions = await loadPeopleTargetResolutionCache(session.userId, phoneE164List);
@@ -351,9 +433,47 @@ export function useAddPersonContactsSheetController({
     }
   }
 
+  async function forceResolvePhones(input: {
+    readonly busyKey: string;
+    readonly phoneE164List: readonly string[];
+  }) {
+    if (busyKey || input.phoneE164List.length === 0) {
+      return;
+    }
+
+    const uniquePhones = [...new Set(input.phoneE164List)].slice(0, 60);
+    setBusyKey(input.busyKey);
+    setMessage('Revisando este contacto en Happy Circles.');
+
+    try {
+      const resolutions = await resolvePeopleTargets.mutateAsync(uniquePhones);
+      mergeAndPersistTargetResolutions(resolutions);
+      setMessage('Contacto revisado.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo revisar este contacto.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleReviewContact(contact: ContactCandidate) {
+    await forceResolvePhones({
+      busyKey: contact.primaryPhone.phoneE164,
+      phoneE164List: uniqueContactPhoneE164List([contact]),
+    });
+  }
+
+  async function handleReviewPhone(input: { readonly phoneE164: string }) {
+    await forceResolvePhones({
+      busyKey: input.phoneE164,
+      phoneE164List: [input.phoneE164],
+    });
+  }
+
   return {
     busyKey,
     canReadContacts,
+    contactActionFeedback,
     contactsLoadedCount,
     contactsLoading,
     contactsPermissionStatus,
@@ -365,6 +485,8 @@ export function useAddPersonContactsSheetController({
     handleExpandLimitedContactsAccess,
     handleOpenScanner,
     handleRefreshMyQr,
+    handleReviewContact,
+    handleReviewPhone,
     handleShareMyQr,
     handleShowMyQr,
     inAppContacts,

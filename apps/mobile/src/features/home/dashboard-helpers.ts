@@ -6,7 +6,7 @@ import { theme } from '@/lib/theme';
 import type { BalanceFocus } from '@/features/balance/balance-helpers';
 
 export type InviteRequestsTab = 'received' | 'sent' | 'history';
-export type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel';
+export type InviteRequestAction = 'accept' | 'reject' | 'approve' | 'cancel' | 'resend';
 export type InviteRequestItem = FriendshipInviteListItem | AccountInviteListItem;
 export type TransactionTargetPanel = 'pending' | 'history';
 export type InviteCardIconName =
@@ -128,6 +128,64 @@ export function isSentInvite(item: InviteRequestItem): boolean {
   }
 
   return item.actorRole === 'inviter' && item.actionState === 'pending_activation';
+}
+
+export function canCancelInviteRequest(item: InviteRequestItem): boolean {
+  if (item.kind === 'friendship_invite') {
+    return (
+      item.actorRole === 'sender' &&
+      (item.actionState === 'pending_claim' || item.actionState === 'waiting_other_side')
+    );
+  }
+
+  return (
+    item.actorRole === 'inviter' &&
+    item.actionState === 'pending_activation' &&
+    !item.activatedUserId
+  );
+}
+
+export function canResendInviteRequest(item: InviteRequestItem): boolean {
+  if (item.kind === 'friendship_invite') {
+    if (item.actorRole !== 'sender') {
+      return false;
+    }
+
+    if (item.flow === 'internal') {
+      return (
+        Boolean(item.profileUserId) &&
+        (item.actionState === 'waiting_other_side' ||
+          (item.actionState === 'history' && item.status === 'expired'))
+      );
+    }
+
+    return (
+      item.originChannel === 'remote' &&
+      Boolean(item.intendedRecipientAlias && item.intendedRecipientPhoneE164) &&
+      (item.actionState === 'pending_claim' ||
+        (item.actionState === 'history' && item.status === 'expired'))
+    );
+  }
+
+  return (
+    item.actorRole === 'inviter' &&
+    item.originChannel === 'remote' &&
+    Boolean(item.intendedRecipientAlias && item.intendedRecipientPhoneE164) &&
+    ((item.actionState === 'pending_activation' && !item.activatedUserId) ||
+      (item.actionState === 'history' && item.status === 'expired'))
+  );
+}
+
+export function inviteRequestResendLabel(item: InviteRequestItem): string {
+  if (item.actionState === 'history' && item.status === 'expired') {
+    return 'Enviar de nuevo';
+  }
+
+  if (item.kind === 'friendship_invite' && item.flow === 'internal') {
+    return 'Recordar solicitud';
+  }
+
+  return 'Reenviar invitacion';
 }
 
 export function isActiveQrInvite(item: InviteRequestItem): boolean {

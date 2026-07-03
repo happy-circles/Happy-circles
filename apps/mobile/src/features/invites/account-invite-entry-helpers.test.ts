@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractAccountInviteToken } from './account-invite-utils';
+import { accountInviteStatusMessage, extractAccountInviteToken } from './account-invite-utils';
 import {
   biometricMessage,
   isRecoveryCodeValid,
@@ -110,6 +110,12 @@ describe('account invite entry helpers', () => {
         isFetching: false,
       }),
     ).toBe('Pega tu código para continuar.');
+    expect(accountInviteStatusMessage('unavailable', 'unavailable')).toBe(
+      'Esta invitación ya fue utilizada o no está disponible. Pídele a quien te invitó que genere una nueva desde la app.',
+    );
+    expect(accountInviteStatusMessage('accepted', 'activated')).toBe(
+      'Esta invitación ya fue utilizada. Pídele a quien te invitó que genere una nueva desde la app.',
+    );
     expect(
       resolveSecondaryAuthAction({
         hasRememberedAccount: true,

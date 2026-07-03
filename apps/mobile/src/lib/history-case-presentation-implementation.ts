@@ -291,14 +291,14 @@ function cycleLedgerStepLabel(item: Pick<HistoryCaseItem, 'flowLabel' | 'title'>
   const [from, to] = (item.flowLabel ?? '').split('->').map((part) => part.trim());
 
   if ((from === 'Tú' || from === 'Tu') && to) {
-    return `Pagaste a ${to}`;
+    return `Happy Circle con ${to}`;
   }
 
   if ((to === 'Tú' || to === 'Tu') && from) {
-    return `${from} te pagó`;
+    return `Happy Circle con ${from}`;
   }
 
-  return 'Movimiento de Circle aplicado';
+  return 'Happy Circle';
 }
 
 export function historyCaseEyebrow<T extends HistoryCaseItem>(

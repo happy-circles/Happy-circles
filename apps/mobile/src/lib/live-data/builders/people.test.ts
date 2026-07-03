@@ -67,7 +67,7 @@ function pendingSettlement(value: Partial<ActionableItem>): ActionableItem {
     participantUserIds: [CURRENT_USER_ID, 'user-ana', 'user-carlos', 'user-sofia'],
     status: 'pending_approvals',
     subtitle: 'Circle pendiente',
-    title: 'Happy Circle pendiente',
+    title: 'Happy Circle encontrado',
     ...value,
   };
 }

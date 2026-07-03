@@ -36,9 +36,9 @@ const names = new Map([
 ]);
 
 describe('relationship history cycle settlement copy', () => {
-  it('renders personal ledger rows as directional movements', () => {
+  it('renders personal ledger rows as Happy Circle copy', () => {
     expect(buildTimelineStepTitle(row({}), CURRENT_USER_ID, 'Sofia', names)).toBe(
-      'Pagaste a Sofia',
+      'Happy Circle con Sofia',
     );
     expect(historyToneForRow(row({}), CURRENT_USER_ID)).toBe('negative');
 
@@ -48,7 +48,7 @@ describe('relationship history cycle settlement copy', () => {
     });
 
     expect(buildTimelineStepTitle(incomingRow, CURRENT_USER_ID, 'Sofia', names)).toBe(
-      'Sofia te pag\u00f3',
+      'Happy Circle con Sofia',
     );
     expect(historyToneForRow(incomingRow, CURRENT_USER_ID)).toBe('positive');
   });
@@ -59,6 +59,6 @@ describe('relationship history cycle settlement copy', () => {
     expect(buildCycleSettlementImpactLabel(row({}))).toBeNull();
     expect(subtitle).not.toContain('Completaste un Circle');
     expect(subtitle).toContain('Happy Circle');
-    expect(subtitle).toContain('Tú -> Sofia');
+    expect(subtitle).toContain('Happy Circle con Sofia');
   });
 });

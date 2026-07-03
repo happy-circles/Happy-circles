@@ -15,6 +15,7 @@ vi.mock('./storage', () => ({
 
 import {
   PENDING_INVITE_INTENT_TTL_MS,
+  clearPendingInviteIntentIfMatches,
   readPendingInviteIntent,
   shouldActivateAccountInviteAfterSetup,
   writePendingInviteIntent,
@@ -85,6 +86,33 @@ describe('invite intent storage', () => {
 
     await expect(readPendingInviteIntent()).resolves.toBeNull();
     expect(storageMocks.removeStoredItem).toHaveBeenCalledWith(STORAGE_KEY);
+  });
+
+  it('clears only the matching pending invite intent', async () => {
+    await writePendingInviteIntent({
+      type: 'account_invite',
+      token: 'abcdefghijkl',
+      source: 'account_invite_link',
+    });
+
+    await expect(
+      clearPendingInviteIntentIfMatches({
+        type: 'friendship_invite',
+        token: 'abcdefghijkl',
+      }),
+    ).resolves.toBe(false);
+    await expect(readPendingInviteIntent()).resolves.toMatchObject({
+      type: 'account_invite',
+      token: 'abcdefghijkl',
+    });
+
+    await expect(
+      clearPendingInviteIntentIfMatches({
+        type: 'account_invite',
+        token: '  abcdefghijkl  ',
+      }),
+    ).resolves.toBe(true);
+    await expect(readPendingInviteIntent()).resolves.toBeNull();
   });
 
   it('only treats account invite intents as setup activation intents', () => {

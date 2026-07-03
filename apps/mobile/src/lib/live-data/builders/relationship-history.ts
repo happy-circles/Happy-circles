@@ -99,9 +99,7 @@ export function buildHistoryTitle(
   }
 
   if (row.subtype === 'cycle_settlement') {
-    return movementFlow
-      ? `Happy Circle completado: ${movementFlow}`
-      : `Happy Circle con ${counterpartyName}`;
+    return `Happy Circle con ${counterpartyName}`;
   }
 
   return movementFlow
@@ -131,14 +129,14 @@ function buildCycleSettlementStepTitle(
   const creditor = row.creditor_user_id ? (names.get(row.creditor_user_id) ?? 'Acreedor') : null;
 
   if (row.debtor_user_id === currentUserId && creditor) {
-    return `Pagaste a ${creditor}`;
+    return `Happy Circle con ${creditor}`;
   }
 
   if (row.creditor_user_id === currentUserId && debtor) {
-    return `${debtor} te pagó`;
+    return `Happy Circle con ${debtor}`;
   }
 
-  return 'Movimiento de Circle aplicado';
+  return 'Happy Circle';
 }
 
 export function buildTimelineStepTitle(
@@ -228,8 +226,10 @@ export function buildHistorySubtitle(
     isCycleSettlement ? 'Happy Circle' : sourceTypeForRow(row) === 'system' ? 'Sistema' : 'Usuario',
   ];
 
-  const movementFlow = buildMovementFlowLabel(row, names);
-  if (movementFlow) {
+  const movementFlow = isCycleSettlement
+    ? buildCycleSettlementStepTitle(row, currentUserId, names)
+    : buildMovementFlowLabel(row, names);
+  if (movementFlow && movementFlow !== 'Happy Circle') {
     pieces.push(movementFlow);
   }
 

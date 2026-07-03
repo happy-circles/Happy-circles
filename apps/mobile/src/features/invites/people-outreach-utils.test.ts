@@ -27,8 +27,10 @@ vi.mock('expo-contacts', () => ({
 }));
 
 import {
-  buildManualPhoneE164,
+  buildAccountInviteShareMessage,
   buildContactPhoneOptions,
+  buildFriendshipInviteShareMessage,
+  buildManualPhoneE164,
   CONTACTS_PAGE_SIZE,
   readContactsPageFromDevice,
 } from './people-outreach-utils';
@@ -58,6 +60,62 @@ describe('contact phone normalization', () => {
   it('drops manually entered phone numbers that exceed the backend contract', () => {
     expect(buildManualPhoneE164('+57 300 123 4567 9999999999999')).toBeNull();
     expect(buildManualPhoneE164('300 123 4567')).toBe('+573001234567');
+  });
+});
+
+describe('invite share messages', () => {
+  it('formats account invites for WhatsApp previews and scanning', () => {
+    const message = buildAccountInviteShareMessage({
+      amountMinor: null,
+      description: null,
+      direction: null,
+      inviteLink: 'https://app.happy-circles.com/join/token-123',
+      inviteeAlias: '  Ana María  ',
+    });
+
+    expect(message).toBe(
+      [
+        'Hola Ana María,',
+        '',
+        'Te compartí un acceso privado a *Happy Circles* para que entres y te conectes conmigo.',
+        '',
+        'Abre tu invitación aquí:',
+        'https://app.happy-circles.com/join/token-123',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps movement context in the private share text without breaking line layout', () => {
+    const message = buildAccountInviteShareMessage({
+      amountMinor: 125_000,
+      description: '  mercado\nmensual  ',
+      direction: 'owes_me',
+      inviteLink: 'https://app.happy-circles.com/join/token-456',
+      inviteeAlias: 'Luis',
+    });
+
+    expect(message).toContain('Te compartí un acceso privado a *Happy Circles*');
+    expect(message).toContain('que tú me debes');
+    expect(message).toContain('por mercado mensual.');
+    expect(message).toContain('\n\nAbre tu invitación aquí:\n');
+  });
+
+  it('formats friendship invites with the same WhatsApp-friendly structure', () => {
+    expect(
+      buildFriendshipInviteShareMessage({
+        inviteLink: 'https://app.happy-circles.com/invite/token-789',
+        inviteeAlias: '',
+      }),
+    ).toBe(
+      [
+        'Hola,',
+        '',
+        'Te compartí una invitación a *Happy Circles* para que te conectes conmigo.',
+        '',
+        'Abre tu invitación aquí:',
+        'https://app.happy-circles.com/invite/token-789',
+      ].join('\n'),
+    );
   });
 });
 

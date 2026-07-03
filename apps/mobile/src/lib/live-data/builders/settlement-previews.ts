@@ -10,7 +10,9 @@ import {
 import {
   buildSettlementParticipantLabels,
   normalizeSettlementDetailDecision,
+  normalizeSettlementDecisionSource,
   settlementParticipantLabel,
+  settlementProposalActionTitle,
   summarizeSettlementParticipants,
 } from './settlements-runtime';
 import { isCurrentSettlementVersion } from './settlement-versions';
@@ -97,10 +99,12 @@ export function buildActiveSettlementPreviews(input: {
       null;
     const outgoingMovement =
       personalMovements.find((movement) => movement.debtor_user_id === input.currentUserId) ?? null;
+    const personalAmountMinor = settlementProposalParticipantAmount(proposal, input.currentUserId);
     const participantDecisions = visibleParticipants.map((participant, index) => ({
       userId: participant.participant_user_id,
       label: participantLabels[index] ?? 'Persona',
       decision: normalizeSettlementDetailDecision(participant.decision),
+      decisionSource: normalizeSettlementDecisionSource(participant.decision_source),
     }));
 
     return {
@@ -112,13 +116,16 @@ export function buildActiveSettlementPreviews(input: {
       replacedByProposalId: proposal.replaced_by_proposal_id,
       staleReason: proposal.stale_reason,
       status: proposal.status === 'approved' ? 'approved' : 'pending_approvals',
-      title: proposal.status === 'approved' ? 'Happy Circle listo' : 'Happy Circle pendiente',
+      title: settlementProposalActionTitle(
+        proposal.status === 'approved' ? 'approved' : 'pending_approvals',
+        personalAmountMinor,
+      ),
       subtitle:
         proposal.status === 'approved'
           ? `Con ${summarizeSettlementParticipants(participantLabels)} se completara automaticamente.`
           : `Con ${summarizeSettlementParticipants(participantLabels)} faltan ${approvalsPending} ${approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}.`,
-      totalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
-      personalAmountMinor: settlementProposalParticipantAmount(proposal, input.currentUserId),
+      totalAmountMinor: personalAmountMinor,
+      personalAmountMinor,
       approvalsPending,
       movementCount,
       savedMovementsCount: settlementSavedMovementsCount(participantCount, movementCount),

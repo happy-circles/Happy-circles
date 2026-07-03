@@ -25,6 +25,7 @@ import {
 import {
   buildSettlementParticipantLabels,
   normalizeSettlementDetailDecision,
+  normalizeSettlementDecisionSource,
   settlementParticipantLabel,
   summarizeSettlementParticipants,
 } from './settlement-participants';
@@ -33,9 +34,28 @@ export { buildSettlementProposalHistoryTimelineItems } from './settlement-histor
 export {
   buildSettlementParticipantLabels,
   normalizeSettlementDetailDecision,
+  normalizeSettlementDecisionSource,
   settlementParticipantLabel,
   summarizeSettlementParticipants,
 } from './settlement-participants';
+
+export function settlementProposalActionTitle(
+  status: 'approved' | 'pending_approvals' | 'waiting_other_side',
+  amountMinor: number | null | undefined,
+): string {
+  const amountLabel =
+    typeof amountMinor === 'number' && amountMinor > 0 ? ` de ${formatCop(amountMinor)}` : '';
+
+  if (status === 'pending_approvals') {
+    return `Happy Circle${amountLabel} encontrado`;
+  }
+
+  if (status === 'waiting_other_side') {
+    return `Happy Circle${amountLabel} en aprobacion`;
+  }
+
+  return `Happy Circle${amountLabel} listo`;
+}
 
 function personalMovementAmount(
   movements: readonly {
@@ -68,6 +88,31 @@ function personalMovementCount(
     (movement) =>
       movement.debtorUserId === currentUserId || movement.creditorUserId === currentUserId,
   ).length;
+}
+
+function isReverseSettlementMovement(
+  candidate: ReturnType<typeof parseSettlementMovements>[number],
+  movements: readonly ReturnType<typeof parseSettlementMovements>[number][],
+): boolean {
+  return movements.some(
+    (movement) =>
+      movement.debtor_user_id === candidate.creditor_user_id &&
+      movement.creditor_user_id === candidate.debtor_user_id,
+  );
+}
+
+function circleOriginalMovementsForDisplay(
+  originalMovements: ReturnType<typeof parseSettlementMovements>,
+  settlementMovements: ReturnType<typeof parseSettlementMovements>,
+  isHappyCircleProposal: boolean,
+): ReturnType<typeof parseSettlementMovements> {
+  if (!isHappyCircleProposal) {
+    return originalMovements;
+  }
+
+  return originalMovements.filter((movement) =>
+    isReverseSettlementMovement(movement, settlementMovements),
+  );
 }
 
 export function buildPendingSettlementItems(
@@ -128,7 +173,7 @@ export function buildPendingSettlementItems(
     items.push({
       id: proposal.id,
       kind: 'settlement_proposal',
-      title: 'Happy Circle pendiente',
+      title: settlementProposalActionTitle('pending_approvals', personalAmountMinor),
       subtitle: `${titleBase} | ${formatRelativeLabel(proposal.created_at, nowMs)}`,
       status: 'pending_approvals',
       ctaLabel: LIVE_DATA_CTA.review,
@@ -174,7 +219,7 @@ export function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: 'Happy Circle esperando aprobaciones',
+        title: settlementProposalActionTitle('waiting_other_side', personalAmountMinor),
         subtitle: `${titleBase} | faltan ${approvalsPending} ${approvalsPending === 1 ? 'aprobación' : 'aprobaciones'}`,
         status: 'waiting_other_side',
         ctaLabel: LIVE_DATA_CTA.review,
@@ -198,7 +243,7 @@ export function buildPendingSettlementItems(
       items.push({
         id: proposal.id,
         kind: 'settlement_proposal',
-        title: 'Happy Circle listo',
+        title: settlementProposalActionTitle('approved', personalAmountMinor),
         subtitle: `${titleBase} | se completara automaticamente`,
         status: 'approved',
         ctaLabel: LIVE_DATA_CTA.complete,
@@ -234,16 +279,26 @@ export function buildSettlementDetail(
 ): SettlementDetailDto {
   const parsedMovements = parseSettlementMovements(proposal.movements_json);
   const parsedOriginalMovements = parseSettlementMovements(proposal.graph_snapshot);
+  const isHappyCircleProposal =
+    proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null;
+  const displayOriginalMovements = circleOriginalMovementsForDisplay(
+    parsedOriginalMovements,
+    parsedMovements,
+    isHappyCircleProposal,
+  );
   const personalMovements = parsedMovements.filter(
     (movement) =>
       movement.debtor_user_id === currentUserId || movement.creditor_user_id === currentUserId,
   );
-  const personalOriginalMovements = parsedOriginalMovements.filter(
+  const personalOriginalMovements = displayOriginalMovements.filter(
     (movement) =>
       movement.debtor_user_id === currentUserId || movement.creditor_user_id === currentUserId,
   );
   const directCounterpartyUserIds = new Set(
-    personalMovements.flatMap((movement) => [movement.debtor_user_id, movement.creditor_user_id]),
+    [...personalMovements, ...personalOriginalMovements].flatMap((movement) => [
+      movement.debtor_user_id,
+      movement.creditor_user_id,
+    ]),
   );
   directCounterpartyUserIds.delete(currentUserId);
   const participantLabel = (participantUserId: string) => {
@@ -291,13 +346,11 @@ export function buildSettlementDetail(
   );
   const totalAmountMinor = personalMovementAmount(movementDetails, currentUserId, {
     context: `Settlement detail ${proposal.id} visible total participant ${currentUserId}`,
-    requireBalanced:
-      proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+    requireBalanced: isHappyCircleProposal,
   });
   const personalAmountMinor = personalMovementAmount(movementDetails, currentUserId, {
     context: `Settlement detail ${proposal.id} participant ${currentUserId}`,
-    requireBalanced:
-      proposal.happy_circle_case_id !== null || proposal.source_graph_cycle_job_id !== null,
+    requireBalanced: isHappyCircleProposal,
   });
   const movementCount = movementDetails.length;
   const personalFinalMovementCount = personalMovementCount(movementDetails, currentUserId);
@@ -322,6 +375,7 @@ export function buildSettlementDetail(
     userId: participant.participant_user_id,
     label: participantLabel(participant.participant_user_id) ?? 'Persona',
     decision: normalizeSettlementDetailDecision(participant.decision),
+    decisionSource: normalizeSettlementDecisionSource(participant.decision_source),
   }));
   const participantStatuses = participantDecisions.map(
     (participant) => `${participant.label}: ${participant.decision}`,

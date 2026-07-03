@@ -5,15 +5,17 @@
   },
   "build": {
     "development": {
+      "environment": "preview",
       "developmentClient": true,
       "distribution": "internal"
     },
     "preview": {
+      "environment": "preview",
       "distribution": "internal"
     },
     "apk": {
       "distribution": "internal",
-      "environment": "production",
+      "environment": "preview",
       "autoIncrement": true,
       "credentialsSource": "remote",
       "android": {
@@ -21,6 +23,7 @@
       }
     },
     "production": {
+      "environment": "production",
       "autoIncrement": true,
       "channel": "production",
       "credentialsSource": "remote"

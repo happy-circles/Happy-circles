@@ -13,6 +13,7 @@ export interface SettlementParticipantDecisionDto {
   readonly userId: string;
   readonly label: string;
   readonly decision: 'approved' | 'pending' | 'rejected';
+  readonly decisionSource?: 'manual' | 'carried';
 }
 
 export interface HappyCircleScoreAwardDto {

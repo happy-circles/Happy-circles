@@ -121,7 +121,7 @@ describe('transaction presentation', () => {
     expect(transactionToneColor(circleItem('expired'))).toBe(theme.colors.danger);
   });
 
-  it('uses directional copy for posted Circle ledger rows', () => {
+  it('uses Circle payment copy for posted Circle ledger rows', () => {
     expect(
       transactionContextLabel(
         item({
@@ -132,7 +132,7 @@ describe('transaction presentation', () => {
         }),
         'Sofia',
       ),
-    ).toBe('Pagaste a Sofia');
+    ).toBe('Happy Circle con Sofia');
 
     expect(
       transactionContextLabel(
@@ -144,7 +144,7 @@ describe('transaction presentation', () => {
         }),
         'Sofia',
       ),
-    ).toBe('Sofia te pagó');
+    ).toBe('Happy Circle con Sofia');
   });
 
   it('keeps executed Circle proposal metadata separate from ledger copy', () => {

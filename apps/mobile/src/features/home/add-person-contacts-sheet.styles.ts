@@ -375,6 +375,24 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
   optionList: {
     gap: theme.spacing.sm,
   },
+  optionNotice: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.small,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  optionNoticeText: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
   optionRow: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceMuted,

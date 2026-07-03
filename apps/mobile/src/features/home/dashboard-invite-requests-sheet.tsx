@@ -17,6 +17,8 @@ import { cardStateIntentFromStatus } from '@/lib/card-language';
 import { useAppTheme } from '@/providers/theme-provider';
 import {
   INVITE_REQUEST_TABS,
+  canCancelInviteRequest,
+  canResendInviteRequest,
   displayNameForInvite,
   inviteAccentBackgroundColor,
   inviteAccentColor,
@@ -24,6 +26,7 @@ import {
   inviteRequestEmptyDescription,
   inviteRequestEmptyTitle,
   inviteRequestMeta,
+  inviteRequestResendLabel,
   isActiveQrInvite,
   shouldShowRespondingInviteProfile,
   type InviteRequestAction,
@@ -120,6 +123,9 @@ export function InviteRequestRow({
   };
   const requiresAction =
     item.actionState === 'requires_you_response' || item.actionState === 'requires_you_review';
+  const canCancel = canCancelInviteRequest(item);
+  const canResend = canResendInviteRequest(item);
+  const resendLabel = inviteRequestResendLabel(item);
   const actorIntent = requiresAction
     ? 'needsAction'
     : item.actionState === 'history'
@@ -218,32 +224,54 @@ export function InviteRequestRow({
           <Ionicons color={activeTheme.colors.primary} name="checkmark-circle" size={16} />
         </Pressable>
       </View>
-    ) : (item.kind === 'friendship_invite' && item.actionState === 'pending_claim') ||
-      (item.kind === 'account_invite' &&
-        item.actionState === 'pending_activation' &&
-        !item.activatedUserId) ? (
+    ) : canResend || canCancel ? (
       <View style={[styles.requestActions, styles.requestSingleActionRow]}>
-        <Pressable
-          accessibilityLabel="Cancelar invitación"
-          accessibilityRole="button"
-          disabled={isBusy}
-          onPress={() => {
-            triggerAppSelectionHaptic();
-            onAction(item, 'cancel');
-          }}
-          style={({ pressed }) => [
-            styles.requestIconButton,
-            styles.requestIconButtonDanger,
-            {
-              backgroundColor: activeTheme.colors.dangerSoft,
-              borderColor: activeTheme.colors.dangerSoft,
-            },
-            pressed ? styles.quickActionPressed : null,
-            isBusy ? styles.actionDisabled : null,
-          ]}
-        >
-          <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={15} />
-        </Pressable>
+        {canResend ? (
+          <Pressable
+            accessibilityLabel={resendLabel}
+            accessibilityRole="button"
+            disabled={isBusy}
+            onPress={() => {
+              triggerAppActionHaptic();
+              onAction(item, 'resend');
+            }}
+            style={({ pressed }) => [
+              styles.requestIconButton,
+              styles.requestIconButtonPrimary,
+              {
+                backgroundColor: activeTheme.colors.primaryGhost,
+                borderColor: activeTheme.colors.primaryGhost,
+              },
+              pressed ? styles.quickActionPressed : null,
+              isBusy ? styles.actionDisabled : null,
+            ]}
+          >
+            <Ionicons color={activeTheme.colors.primary} name="refresh-circle-outline" size={16} />
+          </Pressable>
+        ) : null}
+        {canCancel ? (
+          <Pressable
+            accessibilityLabel="Cancelar solicitud enviada"
+            accessibilityRole="button"
+            disabled={isBusy}
+            onPress={() => {
+              triggerAppSelectionHaptic();
+              onAction(item, 'cancel');
+            }}
+            style={({ pressed }) => [
+              styles.requestIconButton,
+              styles.requestIconButtonDanger,
+              {
+                backgroundColor: activeTheme.colors.dangerSoft,
+                borderColor: activeTheme.colors.dangerSoft,
+              },
+              pressed ? styles.quickActionPressed : null,
+              isBusy ? styles.actionDisabled : null,
+            ]}
+          >
+            <Ionicons color={activeTheme.colors.danger} name="close-circle-outline" size={16} />
+          </Pressable>
+        ) : null}
       </View>
     ) : null;
   const typeIcon = (

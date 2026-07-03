@@ -106,6 +106,15 @@ export const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     fontWeight: '800',
   },
+  permissionTrailing: {
+    alignItems: 'flex-end',
+    gap: theme.spacing.xs,
+  },
+  permissionStatus: {
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   helperText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.footnote,

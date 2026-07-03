@@ -102,7 +102,19 @@ Run `refresh_analytics_daily_facts(p_day date)` to rebuild daily facts idempoten
 
 Run `refresh_analytics_recent_facts(p_days_back integer default 3)` to recompute today and recent UTC days.
 
-Recommended `pg_cron` schedule:
+The repo includes a helper to configure the production `pg_cron` jobs:
+
+```bash
+pnpm supabase:cron:analytics
+pnpm supabase:cron:analytics -- --apply
+```
+
+Required environment:
+
+- `SUPABASE_PROJECT_REF` or `EXPO_PUBLIC_SUPABASE_URL`
+- `SUPABASE_ACCESS_TOKEN`
+
+The helper installs this schedule:
 
 ```sql
 select cron.schedule(

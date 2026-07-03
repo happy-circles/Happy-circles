@@ -6,8 +6,8 @@ import type {
 } from '@/features/invites/people-outreach-utils';
 
 export const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
-export const CONTACT_RESOLUTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+export const CONTACT_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 15 * 60 * 1000;
 export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
 export const CONTACT_DISPLAY_LIMIT = 36;
@@ -27,6 +27,7 @@ export type AddPersonTransactionContext = {
 export type ContactActionIconName =
   | 'list-outline'
   | 'sync-outline'
+  | 'search-outline'
   | 'person-add-outline'
   | 'paper-plane-outline'
   | 'time-outline'
@@ -66,10 +67,10 @@ export function actionMetaForResolution(
 
   if (!resolution) {
     return {
-      disabled: true,
-      icon: 'sync-outline',
-      label: '...',
-      tone: 'muted',
+      disabled: false,
+      icon: 'search-outline',
+      label: 'Revisar',
+      tone: 'primary',
     };
   }
 

@@ -136,10 +136,10 @@ describe('history case presentation', () => {
       flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Happy Circle completado: Tú -> Sofia',
+      title: 'Happy Circle con Sofia',
     });
 
-    expect(friendlyHistoryStepLabel(ledgerStep)).toBe('Pagaste a Sofia');
+    expect(friendlyHistoryStepLabel(ledgerStep)).toBe('Happy Circle con Sofia');
     expect(historyImpactLabel(ledgerStep)).toBeNull();
   });
 
@@ -202,7 +202,7 @@ describe('history case presentation', () => {
       flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Happy Circle completado: Tú -> Sofia',
+      title: 'Happy Circle con Sofia',
     });
 
     expect(
@@ -222,7 +222,7 @@ describe('history case presentation', () => {
       flowLabel: 'Tu -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Happy Circle completado: Tu -> Sofia',
+      title: 'Happy Circle con Sofia',
     });
 
     expect(
@@ -233,7 +233,7 @@ describe('history case presentation', () => {
         latest: ledgerStep,
         steps: [ledgerStep],
       }),
-    ).toBe('Pagaste a Sofia');
+    ).toBe('Happy Circle con Sofia');
   });
 
   it('does not title a ledger-only Circle row as completed', () => {
@@ -242,7 +242,7 @@ describe('history case presentation', () => {
       flowLabel: 'Tú -> Sofia',
       kind: 'settlement',
       status: 'posted',
-      title: 'Pagaste a Sofia',
+      title: 'Happy Circle con Sofia',
     });
 
     expect(

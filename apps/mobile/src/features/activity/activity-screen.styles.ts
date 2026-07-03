@@ -175,16 +175,16 @@ export const activityScreenStyles = StyleSheet.create({
   notificationInviteActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     justifyContent: 'center',
   },
   notificationInviteIconButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
+    height: 44,
     justifyContent: 'center',
-    width: 34,
+    width: 44,
   },
   notificationInviteIconButtonPrimary: {
     backgroundColor: theme.colors.primarySoft,

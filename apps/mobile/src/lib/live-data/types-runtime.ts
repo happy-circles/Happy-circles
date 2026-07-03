@@ -12,6 +12,7 @@ export type {
   SettlementDetailMovementDto,
   SettlementDetailParticipantDto,
   SettlementDetailTreasureAwardDto,
+  SettlementParticipantDecisionSource,
   SettlementMovement,
 } from './settlement-detail-types';
 

@@ -1,4 +1,4 @@
-import type { SettlementDetailDecision } from '../types';
+import type { SettlementDetailDecision, SettlementParticipantDecisionSource } from '../types';
 
 export function normalizeSettlementDetailDecision(
   decision: string | null,
@@ -12,6 +12,12 @@ export function normalizeSettlementDetailDecision(
   }
 
   return 'pending';
+}
+
+export function normalizeSettlementDecisionSource(
+  decisionSource: string | null | undefined,
+): SettlementParticipantDecisionSource {
+  return decisionSource === 'carried' ? 'carried' : 'manual';
 }
 
 export function settlementParticipantLabel(input: {

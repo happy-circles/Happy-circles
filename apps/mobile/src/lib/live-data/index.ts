@@ -20,6 +20,7 @@ export type {
   SettlementDetailDto,
   SettlementDetailMovementDto,
   SettlementDetailParticipantDto,
+  SettlementParticipantDecisionSource,
   SettlementVersionTimelineItemDto,
 } from './types';
 export { useAppSnapshot } from './fetch-snapshot';

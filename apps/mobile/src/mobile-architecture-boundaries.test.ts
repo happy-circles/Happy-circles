@@ -43,7 +43,7 @@ describe('mobile architecture boundaries', () => {
       ['features/activity/activity-screen.tsx', 20],
       ['features/activity/activity-screen-runtime.tsx', 1280],
       ['features/onboarding/setup-account-screen.tsx', 20],
-      ['features/onboarding/setup-account-screen-runtime.tsx', 1220],
+      ['features/onboarding/setup-account-screen-runtime.tsx', 1230],
       ['features/register/register-flow-screen.tsx', 20],
       ['features/register/register-flow-screen-runtime.tsx', 1210],
       ['features/register/register-flow-screen-styles.ts', 360],

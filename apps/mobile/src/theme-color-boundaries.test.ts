@@ -12,6 +12,7 @@ const tokenSourceFiles = new Set([
   'apps/landing/app/globals.css',
   'apps/landing/app/layout.tsx',
   'apps/landing/app/_components/brand-assets.tsx',
+  'apps/landing/app/opengraph-image.tsx',
 ]);
 
 const rawColorLiteralPattern =

@@ -69,6 +69,7 @@ import {
   validateSetupProfile,
 } from './setup-account-helpers';
 import { useSetupAccountPreviewSession } from './setup-account-preview';
+import { SetupAccountPermissionsSection } from './setup-account-permissions-section';
 import { SetupProfilePhotoRequirement } from './setup-profile-photo-requirement';
 import { styles } from './setup-account-screen-runtime.styles';
 import { SecurityStatusRow } from './setup-security-status-row';
@@ -1199,6 +1200,15 @@ export function SetupAccountScreen() {
             ) : null}
           </View>
         </View>
+        {!securityOnlyMode && !editPhoneMode ? (
+          <SetupAccountPermissionsSection
+            contactsPermissionStatus={session.setupState.contactsPermissionStatus}
+            notificationsPermissionStatus={session.setupState.notificationsPermissionStatus}
+            onMessage={setMessage}
+            requestContactsPermission={() => session.requestContactsPermission()}
+            requestNotificationsPermission={() => session.requestNotificationsPermission()}
+          />
+        ) : null}
       </View>
       <AvatarOptionsSheet
         canViewPhoto={canViewProfileAvatar}

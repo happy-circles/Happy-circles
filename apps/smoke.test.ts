@@ -43,9 +43,40 @@ describe('app smoke checks', () => {
       ['apps', 'landing', 'app', '(app-links)', 'join', '[token]', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'reset-password', 'page.tsx'],
       ['apps', 'landing', 'app', '(app-links)', 'setup-account', 'page.tsx'],
+      ['apps', 'landing', 'app', 'opengraph-image.tsx'],
     ]) {
       expect(existsSync(join(repoRoot, ...routePath))).toBe(true);
     }
+  });
+
+  it('keeps invitation links ready for WhatsApp previews without private payloads', () => {
+    const socialPreview = readRepoFile('apps', 'landing', 'lib', 'social-preview.ts');
+    const accountInvitePage = readRepoFile(
+      'apps',
+      'landing',
+      'app',
+      '(app-links)',
+      'join',
+      '[token]',
+      'page.tsx',
+    );
+    const friendshipInvitePage = readRepoFile(
+      'apps',
+      'landing',
+      'app',
+      '(app-links)',
+      'invite',
+      '[token]',
+      'page.tsx',
+    );
+
+    expect(socialPreview).toContain("card: 'summary_large_image'");
+    expect(socialPreview).toContain('url: SOCIAL_IMAGE_PATH');
+    expect(socialPreview).toContain('Tu acceso privado a Happy Circles');
+    expect(socialPreview).toContain('Invitación privada a Happy Circles');
+    expect(accountInvitePage).toContain('ACCOUNT_INVITE_SOCIAL_TITLE');
+    expect(friendshipInvitePage).toContain('FRIENDSHIP_INVITE_SOCIAL_TITLE');
+    expect(socialPreview).not.toMatch(/amount|phone|token|recipient/i);
   });
 
   it('keeps invite actions free of internal labels', () => {

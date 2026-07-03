@@ -39,6 +39,8 @@ describe('get-app-snapshot contract', () => {
     expect(functionSource).toContain('sanitizeSettlementRowsForActor');
     expect(functionSource).toContain('privacy_participant_count');
     expect(functionSource).toContain('actorSettlementMovements(proposal.movements_json');
+    expect(functionSource).toContain('actorSettlementMovements(proposal.graph_snapshot');
+    expect(functionSource).toContain('addMovementUserIds(directUserIds, actorGraphSnapshot)');
   });
 
   it('bounds historical reads while keeping active reads independent from history limits', () => {

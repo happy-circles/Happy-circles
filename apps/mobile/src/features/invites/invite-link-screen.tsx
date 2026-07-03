@@ -28,6 +28,9 @@ import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
 
+const USED_FRIENDSHIP_INVITE_MESSAGE =
+  'Esta invitación ya fue utilizada. Pídele a quien te invitó que genere una nueva desde la app.';
+
 function inviteReasonLabel(reason: string): string {
   if (reason === 'identity_incomplete') {
     return 'Completa tu perfil para poder reclamar esta invitación.';
@@ -46,11 +49,11 @@ function inviteReasonLabel(reason: string): string {
   }
 
   if (reason === 'claimed_by_other') {
-    return 'Esta invitación ya fue reclamada por otra cuenta.';
+    return USED_FRIENDSHIP_INVITE_MESSAGE;
   }
 
   if (reason === 'delivery_revoked') {
-    return 'Este acceso ya fue reemplazado por otro.';
+    return 'Este enlace ya fue utilizado o reemplazado. Pídele a quien te invitó que genere una nueva desde la app.';
   }
 
   if (reason === 'accepted') {

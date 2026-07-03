@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { useEffect } from 'react';
+import { AppState, Platform } from 'react-native';
 
 import {
-  clearPersistedDeviceContactScanCache,
-  refreshPersistedDeviceContactScanCache,
-} from '@/features/home/add-person-device-contact-cache';
+  pauseContactIndexing,
+  startContactIndexing,
+} from '@/features/home/add-person-contact-index';
 import {
   canReadContactsPermissionStatus,
   getContactsPermissionStatus,
@@ -16,7 +16,6 @@ const CONTACT_PRELOAD_DELAY_MS = 700;
 
 export function AddPersonContactPreloadBridge() {
   const session = useSession();
-  const lastPreloadKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (
@@ -34,51 +33,64 @@ export function AddPersonContactPreloadBridge() {
     }
 
     if (!canReadContactsPermissionStatus(knownPermissionStatus)) {
-      if (knownPermissionStatus === 'denied' || knownPermissionStatus === 'unavailable') {
-        void clearPersistedDeviceContactScanCache(session.userId).catch(() => undefined);
-      }
-      return undefined;
-    }
-
-    const preloadKey = `${session.userId}:${knownPermissionStatus}`;
-    if (lastPreloadKeyRef.current === preloadKey) {
+      pauseContactIndexing(session.userId);
       return undefined;
     }
 
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
 
+    function startIndexIfActive() {
+      if (AppState.currentState !== 'active') {
+        pauseContactIndexing(session.userId);
+        return;
+      }
+
+      void getContactsPermissionStatus()
+        .then((currentPermissionStatus) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (!canReadContactsPermissionStatus(currentPermissionStatus)) {
+            pauseContactIndexing(session.userId);
+            return;
+          }
+
+          void startContactIndexing({
+            permissionStatus: currentPermissionStatus,
+            reason: 'app_active',
+            userId: session.userId,
+          }).catch(() => {
+            return undefined;
+          });
+        })
+        .catch(() => undefined);
+    }
+
     const unsubscribe = subscribeFirstScreenReady(() => {
       timeout = setTimeout(() => {
-        void getContactsPermissionStatus()
-          .then((currentPermissionStatus) => {
-            if (cancelled) {
-              return;
-            }
-
-            if (!canReadContactsPermissionStatus(currentPermissionStatus)) {
-              lastPreloadKeyRef.current = null;
-              void clearPersistedDeviceContactScanCache(session.userId).catch(() => undefined);
-              return;
-            }
-
-            lastPreloadKeyRef.current = preloadKey;
-            void refreshPersistedDeviceContactScanCache({
-              contactsPermissionStatus: currentPermissionStatus,
-              userId: session.userId,
-            }).catch(() => {
-              if (!cancelled) {
-                lastPreloadKeyRef.current = null;
-              }
-            });
-          })
-          .catch(() => undefined);
+        startIndexIfActive();
       }, CONTACT_PRELOAD_DELAY_MS);
+    });
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (nextState === 'active') {
+        startIndexIfActive();
+        return;
+      }
+
+      pauseContactIndexing(session.userId);
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
+      appStateSubscription.remove();
+      pauseContactIndexing(session.userId);
       if (timeout) {
         clearTimeout(timeout);
       }
