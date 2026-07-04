@@ -14,6 +14,7 @@ export interface ContactActionFeedbackOverlayProps {
   readonly alias?: string | null;
   readonly message?: string;
   readonly mode?: ContactActionFeedbackMode;
+  readonly presentation?: 'modal' | 'inline';
   readonly title?: string;
   readonly variant?: ActionFeedbackVariant;
   readonly visible: boolean;
@@ -102,6 +103,7 @@ export function ContactActionFeedbackOverlay({
   alias,
   message,
   mode = 'prepare',
+  presentation = 'modal',
   title,
   variant = 'loading',
   visible,
@@ -228,6 +230,135 @@ export function ContactActionFeedbackOverlay({
     return null;
   }
 
+  const content = (
+    <Animated.View
+      style={[
+        styles.scrim,
+        presentation === 'inline' ? styles.inlineScrim : null,
+        { backgroundColor: activeTheme.colors.scrim, opacity },
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            backgroundColor: activeTheme.colors.surface,
+            borderColor: activeTheme.colors.border,
+            ...activeTheme.shadow.floating,
+            transform: [{ translateY: cardTranslateY }, { scale: cardScale }],
+          },
+        ]}
+      >
+        <View style={styles.stage}>
+          <Animated.View
+            style={[
+              styles.halo,
+              {
+                backgroundColor: `${statusColor}10`,
+                borderColor: `${statusColor}24`,
+                transform: [{ scale: pulse }],
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.motionShell,
+              {
+                backgroundColor: activeTheme.colors.surface,
+                borderColor: `${statusColor}32`,
+              },
+            ]}
+          >
+            <HappyCirclesMotion
+              active={variant === 'loading'}
+              color={statusColor}
+              size={94}
+              tone="mono"
+              variant={variant === 'success' ? 'success' : 'loading'}
+            />
+            <View
+              style={[
+                styles.statusDot,
+                {
+                  backgroundColor: statusColor,
+                  borderColor: activeTheme.colors.surface,
+                },
+              ]}
+            >
+              <Ionicons color={activeTheme.colors.white} name={copy.icon} size={15} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.copy}>
+          <View
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: `${statusColor}12`,
+                borderColor: `${statusColor}24`,
+              },
+            ]}
+          >
+            <Ionicons color={statusColor} name={copy.icon} size={15} />
+            <AppText numberOfLines={1} style={[styles.statusText, { color: statusColor }]}>
+              {copy.label}
+            </AppText>
+          </View>
+          <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            numberOfLines={2}
+            style={[styles.title, { color: activeTheme.colors.text }]}
+          >
+            {copy.title}
+          </AppText>
+          <AppText
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            numberOfLines={2}
+            style={[
+              styles.message,
+              {
+                color:
+                  variant === 'danger' ? activeTheme.colors.danger : activeTheme.colors.textMuted,
+              },
+            ]}
+          >
+            {message ?? copy.message}
+          </AppText>
+          {alias ? (
+            <AppText numberOfLines={1} style={[styles.alias, { color: activeTheme.colors.text }]}>
+              {alias}
+            </AppText>
+          ) : null}
+        </View>
+
+        <View style={styles.progressRow}>
+          {phases.map((item, index) => {
+            const isActive = variant !== 'loading' || index <= phaseIndex;
+            return (
+              <View
+                key={item.title}
+                style={[
+                  styles.progressSegment,
+                  {
+                    backgroundColor: isActive ? statusColor : activeTheme.colors.border,
+                    opacity: isActive ? 1 : 0.72,
+                  },
+                ]}
+              />
+            );
+          })}
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+
+  if (presentation === 'inline') {
+    return content;
+  }
+
   return (
     <Modal
       animationType="none"
@@ -236,122 +367,7 @@ export function ContactActionFeedbackOverlay({
       transparent
       visible={mounted}
     >
-      <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
-        <Animated.View
-          style={[
-            styles.card,
-            {
-              backgroundColor: activeTheme.colors.surface,
-              borderColor: activeTheme.colors.border,
-              ...activeTheme.shadow.floating,
-              transform: [{ translateY: cardTranslateY }, { scale: cardScale }],
-            },
-          ]}
-        >
-          <View style={styles.stage}>
-            <Animated.View
-              style={[
-                styles.halo,
-                {
-                  backgroundColor: `${statusColor}10`,
-                  borderColor: `${statusColor}24`,
-                  transform: [{ scale: pulse }],
-                },
-              ]}
-            />
-            <View
-              style={[
-                styles.motionShell,
-                {
-                  backgroundColor: activeTheme.colors.surface,
-                  borderColor: `${statusColor}32`,
-                },
-              ]}
-            >
-              <HappyCirclesMotion
-                active={variant === 'loading'}
-                color={statusColor}
-                size={94}
-                tone="mono"
-                variant={variant === 'success' ? 'success' : 'loading'}
-              />
-              <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor: statusColor,
-                    borderColor: activeTheme.colors.surface,
-                  },
-                ]}
-              >
-                <Ionicons color={activeTheme.colors.white} name={copy.icon} size={15} />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.copy}>
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor: `${statusColor}12`,
-                  borderColor: `${statusColor}24`,
-                },
-              ]}
-            >
-              <Ionicons color={statusColor} name={copy.icon} size={15} />
-              <AppText numberOfLines={1} style={[styles.statusText, { color: statusColor }]}>
-                {copy.label}
-              </AppText>
-            </View>
-            <AppText
-              adjustsFontSizeToFit
-              minimumFontScale={0.82}
-              numberOfLines={2}
-              style={[styles.title, { color: activeTheme.colors.text }]}
-            >
-              {copy.title}
-            </AppText>
-            <AppText
-              adjustsFontSizeToFit
-              minimumFontScale={0.82}
-              numberOfLines={2}
-              style={[
-                styles.message,
-                {
-                  color:
-                    variant === 'danger' ? activeTheme.colors.danger : activeTheme.colors.textMuted,
-                },
-              ]}
-            >
-              {message ?? copy.message}
-            </AppText>
-            {alias ? (
-              <AppText numberOfLines={1} style={[styles.alias, { color: activeTheme.colors.text }]}>
-                {alias}
-              </AppText>
-            ) : null}
-          </View>
-
-          <View style={styles.progressRow}>
-            {phases.map((item, index) => {
-              const isActive = variant !== 'loading' || index <= phaseIndex;
-              return (
-                <View
-                  key={item.title}
-                  style={[
-                    styles.progressSegment,
-                    {
-                      backgroundColor: isActive ? statusColor : activeTheme.colors.border,
-                      opacity: isActive ? 1 : 0.72,
-                    },
-                  ]}
-                />
-              );
-            })}
-          </View>
-        </Animated.View>
-      </Animated.View>
+      {content}
     </Modal>
   );
 }
@@ -385,6 +401,11 @@ const styles = StyleSheet.create({
     height: 192,
     position: 'absolute',
     width: 192,
+  },
+  inlineScrim: {
+    ...StyleSheet.absoluteFillObject,
+    elevation: 30,
+    zIndex: 30,
   },
   message: {
     fontSize: theme.typography.footnote,

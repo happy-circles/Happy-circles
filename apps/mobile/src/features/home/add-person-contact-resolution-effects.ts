@@ -33,7 +33,7 @@ export function useAddPersonContactResolutionEffects(input: {
       () => {
         input.hydrateAndEnqueueResolutionPhones(input.scanRunIdRef.current, visiblePhones, 'visible');
       },
-      input.searchValue.trim().length > 0 ? 220 : 0,
+      0,
     );
 
     return () => {

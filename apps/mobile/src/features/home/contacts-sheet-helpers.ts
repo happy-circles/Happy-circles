@@ -69,7 +69,7 @@ export function actionMetaForResolution(
     return {
       disabled: false,
       icon: 'search-outline',
-      label: 'Revisar',
+      label: 'Consultar',
       tone: 'primary',
     };
   }
@@ -269,6 +269,7 @@ export function buildContactSectionItems(input: {
   readonly filteredContacts: readonly ContactCandidate[];
   readonly visibleResolutionContacts: readonly ContactCandidate[];
   readonly inAppContacts: readonly EnrichedContact[];
+  readonly unresolvedContacts: readonly EnrichedContact[];
   readonly inviteContacts: readonly EnrichedContact[];
 } {
   const normalizedSearch = input.searchValue.trim().toLocaleLowerCase('es-CO');
@@ -287,8 +288,11 @@ export function buildContactSectionItems(input: {
     inAppContacts: enrichedContacts
       .filter((item) => shouldShowInApp(item.resolution))
       .sort(compareEnrichedContacts),
+    unresolvedContacts: enrichedContacts
+      .filter((item) => !item.resolution)
+      .sort(compareEnrichedContacts),
     inviteContacts: enrichedContacts
-      .filter((item) => !shouldShowInApp(item.resolution))
+      .filter((item) => item.resolution && !shouldShowInApp(item.resolution))
       .sort(compareEnrichedContacts),
   };
 }

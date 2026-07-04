@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-07-03.
+Ultima revision: 2026-07-04.
 
 Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera
 salida en Colombia.
@@ -86,6 +86,17 @@ Estado versionado:
 No tratar build IDs o artifact URLs antiguos como estado actual. Confirmar el
 ultimo build en Expo/EAS antes de citarlo en una entrega.
 
+Estado EAS observado el 2026-07-04:
+
+- iOS production build `936eb1bd-a5f1-47c6-aaec-167dd3f6502a`:
+  `0.1.2 (30)`, subido a App Store Connect con submission
+  `4f86060c-0346-47be-9755-156a58234c48`.
+- Android production build `60d857ef-8a98-47dd-aa83-ee2909bf6592`:
+  `0.1.2 (19)`, AAB generado.
+- Android submit a Play queda bloqueado hasta asignar una Google Service
+  Account Key para Play Store Submissions en EAS. La key existente en EAS es de
+  FCM y no esta asignada a submissions.
+
 Requisitos remotos:
 
 - GitHub secret `EXPO_TOKEN`.
@@ -155,9 +166,10 @@ Requisitos de tienda:
   Console una URL web para solicitar eliminacion de cuenta/datos sin abrir la
   app. Candidato actual: `https://app.happy-circles.com/support`.
 
-Bloqueo antes de Play si no se ha hecho: hacer que `/support` diga
-explicitamente que sirve para solicitar eliminacion de cuenta y datos, no solo
-soporte general.
+Estado repo 2026-07-04: `/support` ya indica explicitamente que acepta
+solicitudes web de eliminacion de cuenta y datos. Antes de completar Google
+Play account deletion, desplegar el landing y verificar el contenido publicado
+en `https://app.happy-circles.com/support`.
 
 ## App Store Privacy Inventory
 
@@ -239,6 +251,49 @@ Notas:
   tener excepciones, pero hay que contestar con el criterio oficial de Play.
 - No declarar ubicacion, pagos, credit score, browsing history ni advertising
   data salvo que el producto cambie.
+
+## Google Play Console current status
+
+Observado en Play Console el 2026-07-04 para `com.happycircles.app`:
+
+- Estado de aplicacion: Borrador.
+- Produccion: Inactivo.
+- Prueba interna: Activo, Sin revisar.
+- Prueba cerrada: Inactivo.
+- Produccion bloqueada hasta solicitar acceso despues de una prueba cerrada.
+- Testers aceptados para el requisito de produccion: 0.
+
+Tareas pendientes visibles en el panel:
+
+- Establece la politica de privacidad.
+- Datos de inicio de sesion.
+- Anuncios.
+- Clasificacion de contenido.
+- Seguridad de los datos.
+- Selecciona una categoria de la aplicacion y proporciona datos de contacto.
+- Configura la Ficha de Play Store.
+
+Prueba cerrada pendiente:
+
+- Seleccionar paises y regiones.
+- Seleccionar testers.
+- Crear un nuevo lanzamiento.
+- Revisar y confirmar la version.
+- Enviar la version a Google para revision.
+
+Requisito para pedir produccion:
+
+- Publicar una version de prueba cerrada.
+- Tener al menos 12 testers que hayan aceptado participar.
+- Ejecutar la prueba cerrada con 12 testers como minimo durante al menos 14
+  dias.
+
+Estado EAS 2026-07-04:
+
+- AAB listo: build `60d857ef-8a98-47dd-aa83-ee2909bf6592`, version
+  `0.1.2 (19)`.
+- No se pudo enviar desde CLI porque `com.happycircles.app` no tiene Google
+  Service Account Key configurada para Play Store Submissions.
 
 ## DNS y App Links
 
@@ -347,8 +402,8 @@ Antes de enviar:
 ## Bloqueos de release
 
 - Revision/aprobacion legal de privacidad y terminos.
-- `/support` debe indicar explicitamente que acepta solicitudes web de
-  eliminacion de cuenta/datos antes de completar Google Play account deletion.
+- Desplegar el landing actualizado para que `/support` publicado declare
+  solicitudes web de eliminacion de cuenta/datos.
 - DNS opcional de `www.happy-circles.com` si se quiere separar marketing del
   dominio operativo.
 - Store URLs reales en Vercel.

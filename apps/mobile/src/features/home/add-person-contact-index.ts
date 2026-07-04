@@ -74,7 +74,6 @@ let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const activeRunsByUser = new Map<string, ActiveContactIndexRun>();
 const listenersByUser = new Map<string, Set<ContactIndexListener>>();
 const migratedLegacyCacheUsers = new Set<string>();
-const appActiveRefreshUsers = new Set<string>();
 
 function cacheUserKey(userId: string | null | undefined): string {
   return userId ?? USERLESS_CACHE_KEY;
@@ -666,16 +665,9 @@ export async function startContactIndexing(input: {
     return;
   }
 
-  if (
-    input.reason === 'app_active' &&
-    meta?.scan_status === 'ready' &&
-    appActiveRefreshUsers.has(userKey)
-  ) {
+  if (input.reason === 'app_active' && meta?.scan_status === 'ready') {
     notifyContactIndexSubscribers(input.userId);
     return;
-  }
-  if (input.reason === 'app_active') {
-    appActiveRefreshUsers.add(userKey);
   }
 
   const resume = shouldResumeMeta(meta);

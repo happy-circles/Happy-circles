@@ -21,6 +21,7 @@ vi.mock('expo-sqlite', () => ({
 import type { PeopleTargetResolution } from '@/lib/live-data';
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
 import {
+  actionMetaForResolution,
   buildContactSectionItems,
   chunkContactPhoneE164List,
   CONTACT_TARGET_RESOLUTION_LIMIT,
@@ -135,6 +136,27 @@ describe('contact resolution queue helpers', () => {
 });
 
 describe('contact section helpers', () => {
+  it('keeps add-person actions explicit for unresolved, multiple-number, and invite contacts', () => {
+    expect(actionMetaForResolution(null, false)).toEqual({
+      disabled: false,
+      icon: 'search-outline',
+      label: 'Consultar',
+      tone: 'primary',
+    });
+    expect(actionMetaForResolution(null, true)).toEqual({
+      disabled: false,
+      icon: 'list-outline',
+      label: 'Elegir',
+      tone: 'primary',
+    });
+    expect(actionMetaForResolution(resolution('+573005', 'no_account'), false)).toEqual({
+      disabled: false,
+      icon: 'paper-plane-outline',
+      label: 'Invitar',
+      tone: 'invite',
+    });
+  });
+
   it('surfaces Happy Circles contacts resolved outside the first backend window', () => {
     const contacts = Array.from({ length: CONTACT_TARGET_RESOLUTION_LIMIT + 5 }, (_, index) =>
       contact(index),
@@ -159,6 +181,30 @@ describe('contact section helpers', () => {
     );
   });
 
+  it('keeps unresolved contacts separate from confirmed invite contacts', () => {
+    const contacts = [contact(1), contact(2), contact(3)];
+    const sections = buildContactSectionItems({
+      contacts,
+      searchValue: '',
+      targetCache: {
+        [contacts[1].primaryPhone.phoneE164]: resolution(
+          contacts[1].primaryPhone.phoneE164,
+          'no_account',
+        ),
+        [contacts[2].primaryPhone.phoneE164]: resolution(
+          contacts[2].primaryPhone.phoneE164,
+          'active_user',
+        ),
+      },
+    });
+
+    expect(sections.unresolvedContacts.map((item) => item.contact.alias)).toEqual([
+      'Persona 001',
+    ]);
+    expect(sections.inviteContacts.map((item) => item.contact.alias)).toEqual(['Persona 002']);
+    expect(sections.inAppContacts.map((item) => item.contact.alias)).toEqual(['Persona 003']);
+  });
+
   it('filters both sections by active search', () => {
     const contacts = [contact(1), contact(64)];
     const sections = buildContactSectionItems({
@@ -173,6 +219,7 @@ describe('contact section helpers', () => {
     });
 
     expect(sections.inAppContacts.map((item) => item.contact.alias)).toEqual(['Persona 064']);
+    expect(sections.unresolvedContacts).toHaveLength(0);
     expect(sections.inviteContacts).toHaveLength(0);
   });
 });

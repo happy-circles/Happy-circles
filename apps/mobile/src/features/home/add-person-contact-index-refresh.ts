@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 
-import { subscribeContactIndex } from '@/features/home/add-person-contact-index';
+import {
+  subscribeContactIndex,
+  type ContactIndexReadResult,
+} from '@/features/home/add-person-contact-index';
 
 type MutableRef<T> = {
   current: T;
@@ -8,7 +11,7 @@ type MutableRef<T> = {
 
 export function useAddPersonContactIndexRefresh(input: {
   readonly contactsReadLimit: number;
-  readonly refreshContactIndexRef: MutableRef<() => Promise<void>>;
+  readonly refreshContactIndexRef: MutableRef<() => Promise<ContactIndexReadResult | null>>;
   readonly searchValue: string;
   readonly userId: string | null | undefined;
   readonly visible: boolean;

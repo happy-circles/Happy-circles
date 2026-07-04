@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 
 import { pumpAddPersonResolutionQueue } from '@/features/home/add-person-contact-resolution-queue';
 import {
+  type ContactIndexReadResult,
   readContactIndex,
   startContactIndexing,
 } from '@/features/home/add-person-contact-index';
@@ -66,7 +67,9 @@ export function useAddPersonContactsSheetController({
   const [contactsLoadedCount, setContactsLoadedCount] = useState(0);
   const scanRunIdRef = useRef(0);
   const indexReadVersionRef = useRef(0);
-  const refreshContactIndexRef = useRef<() => Promise<void>>(async () => undefined);
+  const refreshContactIndexRef = useRef<() => Promise<ContactIndexReadResult | null>>(
+    async () => null,
+  );
   const targetCacheRef = useRef<Record<string, PeopleTargetResolution>>({});
   const pendingResolutionQueueRef = useRef<string[]>([]);
   const pendingResolutionSetRef = useRef(new Set<string>());
@@ -83,6 +86,7 @@ export function useAddPersonContactsSheetController({
   );
   const contactResolutionWindow = contactSections.visibleResolutionContacts;
   const inAppContacts = contactSections.inAppContacts;
+  const unresolvedContacts = contactSections.unresolvedContacts;
   const inviteContacts = contactSections.inviteContacts;
   const {
     contactsReadLimit,
@@ -273,7 +277,7 @@ export function useAddPersonContactsSheetController({
       setContactsMatchingCount(0);
       setContactsLoading(false);
       setContactsScanComplete(false);
-      return;
+      return null;
     }
 
     const result = await readContactIndex({
@@ -283,7 +287,7 @@ export function useAddPersonContactsSheetController({
     });
 
     if (indexReadVersionRef.current !== readVersion) {
-      return;
+      return null;
     }
 
     setContacts(result.contacts);
@@ -296,7 +300,18 @@ export function useAddPersonContactsSheetController({
         ? current
         : result.permissionStatus,
     );
-  }, [contactsReadLimit, searchValue, session.userId]);
+
+    const indexedPhones = uniqueContactPhoneE164List(result.contacts);
+    void loadCachedTargetResolutionsForPhones(scanRunIdRef.current, indexedPhones);
+
+    return result;
+  }, [
+    contactsReadLimit,
+    loadCachedTargetResolutionsForPhones,
+    searchValue,
+    session.userId,
+    setContactsMatchingCount,
+  ]);
 
   useEffect(() => {
     refreshContactIndexRef.current = refreshContactIndex;
@@ -325,18 +340,23 @@ export function useAddPersonContactsSheetController({
         return;
       }
 
-      setContactsLoading(true);
+      const cachedResult = await refreshContactIndexRef.current();
+      setContactsLoading(
+        cachedResult
+          ? cachedResult.status === 'indexing' ||
+              (cachedResult.status !== 'ready' && cachedResult.contacts.length === 0)
+          : true,
+      );
       void startContactIndexing({
         permissionStatus,
         reason: 'sheet_open',
         userId: session.userId,
       }).catch(() => undefined);
-      await refreshContactIndexRef.current();
     } catch (error) {
       setContactsLoading(false);
       setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
     }
-  }, [session.userId]);
+  }, [session.userId, setContactsMatchingCount]);
 
   const { handleExpandLimitedContactsAccess, requestContactsAccess } =
     useAddPersonContactPermissionActions({
@@ -348,6 +368,44 @@ export function useAddPersonContactsSheetController({
       setContactsPermissionStatus,
       setMessage,
     });
+
+  async function handleRefreshContacts() {
+    if (busyKey || !session.userId) {
+      return;
+    }
+
+    setBusyKey('refresh-contacts');
+    setMessage('Actualizando agenda. Mantendremos lo que ya estaba consultado.');
+
+    try {
+      const permissionStatus = await getContactsPermissionStatus();
+      setContactsPermissionStatus(permissionStatus);
+
+      if (!canReadContactsPermissionStatus(permissionStatus)) {
+        setContacts([]);
+        setContactsLoadedCount(0);
+        setContactsMatchingCount(0);
+        setContactsLoading(false);
+        setContactsScanComplete(true);
+        setMessage('Necesitamos acceso a contactos para actualizar la agenda.');
+        return;
+      }
+
+      resetContactReadLimit();
+      setContactsLoading(true);
+      await startContactIndexing({
+        permissionStatus,
+        reason: 'manual_refresh',
+        userId: session.userId,
+      });
+      await refreshContactIndexRef.current();
+      setMessage('Agenda actualizándose en segundo plano.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo actualizar la agenda.');
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
   useAddPersonContactIndexRefresh({
     contactsReadLimit,
@@ -437,12 +495,12 @@ export function useAddPersonContactsSheetController({
 
     const uniquePhones = [...new Set(input.phoneE164List)].slice(0, 60);
     setBusyKey(input.busyKey);
-    setMessage('Revisando este contacto en Happy Circles.');
+    setMessage('Consultando este contacto en Happy Circles.');
 
     try {
       const resolutions = await resolvePeopleTargets.mutateAsync(uniquePhones);
       mergeAndPersistTargetResolutions(resolutions);
-      setMessage('Contacto revisado.');
+      setMessage('Contacto consultado.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo revisar este contacto.');
     } finally {
@@ -478,6 +536,7 @@ export function useAddPersonContactsSheetController({
     handleExpandLimitedContactsAccess,
     handleOpenScanner,
     handleRefreshMyQr,
+    handleRefreshContacts,
     handleReviewContact,
     handleReviewPhone,
     handleShareMyQr,
@@ -501,5 +560,6 @@ export function useAddPersonContactsSheetController({
     setPendingContactSelection,
     setScannerOpen,
     setSearchValue,
+    unresolvedContacts,
   };
 }

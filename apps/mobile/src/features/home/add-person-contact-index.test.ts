@@ -257,6 +257,36 @@ describe('contact index', () => {
     expect(expandedWindow.contacts).toHaveLength(150);
   });
 
+  it('does not reindex a completed contact index on app active', async () => {
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [nativeContact('contact-ana', 'Ana Ruiz', '3001234567')],
+      hasNextPage: false,
+    });
+
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'manual_refresh',
+      userId: 'user-a',
+    });
+    await waitForIndexStatus('ready');
+
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [nativeContact('contact-ben', 'Ben Mora', '3011234567')],
+      hasNextPage: false,
+    });
+
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'app_active',
+      userId: 'user-a',
+    });
+
+    const result = await readContactIndex({ limit: 10, userId: 'user-a' });
+
+    expect(contactsMock.getContactsAsync).toHaveBeenCalledTimes(1);
+    expect(result.contacts.map((contact) => contact.alias)).toEqual(['Ana Ruiz']);
+  });
+
   it('keeps partial progress when indexing is paused', async () => {
     let releaseSecondPage: (() => void) | null = null;
     const getReleaseSecondPage = () => releaseSecondPage as (() => void) | null;

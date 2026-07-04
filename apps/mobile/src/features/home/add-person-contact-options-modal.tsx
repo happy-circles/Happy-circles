@@ -51,15 +51,15 @@ export function AddPersonContactOptionsModal({
       <View style={[styles.optionScrim, { backgroundColor: activeTheme.colors.overlay }]}>
         <Pressable onPress={onCancel} style={styles.sheetBackdrop} />
         <View style={[styles.optionCard, { backgroundColor: activeTheme.colors.surface }]}>
-          <AppText style={styles.optionTitle}>Elige el numero</AppText>
+          <AppText style={styles.optionTitle}>Elige el número</AppText>
           <AppText style={styles.emptyText}>
-            {pendingContactSelection ? `${pendingContactSelection.alias} tiene varios numeros.` : ''}
+            {pendingContactSelection ? `${pendingContactSelection.alias} tiene varios números.` : ''}
           </AppText>
           {pendingContactOptionsResolving ? (
             <View style={styles.optionNotice}>
               <Ionicons color={activeTheme.colors.primary} name="sync-outline" size={16} />
               <AppText style={styles.optionNoticeText}>
-                Revisando cada numero para saber si se agrega o se invita.
+                Consultando cada número para saber si se agrega o se invita.
               </AppText>
             </View>
           ) : null}
@@ -144,11 +144,11 @@ function contactOptionStatusLabel(
   }
 
   if (resolution.status === 'active_user') {
-    return 'Ya esta en Happy Circles';
+    return 'Está en Happy Circles';
   }
 
   if (resolution.status === 'already_related') {
-    return 'Agregado';
+    return 'Ya son amigos';
   }
 
   if (resolution.status === 'pending_friendship') {

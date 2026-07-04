@@ -30,8 +30,7 @@ export function ContactRow({
   const action = actionMetaForResolution(resolution, hasMultiplePhones);
   const disabled = action.disabled || busy;
   const phoneMeta = contactMeta(contact.primaryPhone);
-  const detailMeta =
-    resolution?.status === 'pending_activation' ? `${phoneMeta} | Pendiente de abrir` : phoneMeta;
+  const detailMeta = contactResolutionDetail(phoneMeta, resolution);
   const actionBackgroundColor =
     action.tone === 'invite'
       ? activeTheme.colors.warning
@@ -88,4 +87,31 @@ export function ContactRow({
       </Pressable>
     </View>
   );
+}
+
+function contactResolutionDetail(
+  phoneMeta: string,
+  resolution: PeopleTargetResolution | null,
+): string {
+  if (!resolution) {
+    return `${phoneMeta} | Consulta si está en Happy Circles`;
+  }
+
+  if (resolution.status === 'active_user') {
+    return `${phoneMeta} | Está en Happy Circles`;
+  }
+
+  if (resolution.status === 'already_related') {
+    return `${phoneMeta} | Ya son amigos`;
+  }
+
+  if (resolution.status === 'pending_friendship') {
+    return `${phoneMeta} | Solicitud pendiente`;
+  }
+
+  if (resolution.status === 'pending_activation') {
+    return `${phoneMeta} | Pendiente de abrir`;
+  }
+
+  return `${phoneMeta} | No aparece en Happy Circles`;
 }

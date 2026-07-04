@@ -12,9 +12,9 @@ const appWebOrigin = env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circle
 const authRedirectMode = env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
 const authDebugEnabled = firstNonEmpty(env.EXPO_PUBLIC_AUTH_DEBUG);
 const appLinkPathPrefixes = ['/invite/', '/join', '/reset-password', '/setup-account'];
-const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.1';
-const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '1';
-const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '1', 10);
+const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '0.1.2';
+const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '30';
+const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '19', 10);
 const includeDevClient =
   env.EXPO_PUBLIC_INCLUDE_DEV_CLIENT === '1' || env.EAS_BUILD_PROFILE === 'development';
 const splashBackgroundColor = '#fbfcff';

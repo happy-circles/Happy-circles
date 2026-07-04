@@ -417,7 +417,7 @@ export function badgeForResolution(resolution: PeopleTargetResolution | null): {
 
 export function actionLabelForResolution(resolution: PeopleTargetResolution | null): string {
   if (!resolution) {
-    return 'Revisar contacto';
+    return 'Consultar contacto';
   }
 
   if (resolution.status === 'already_related') {
