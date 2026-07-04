@@ -22,11 +22,15 @@ declare
   v_first_amount bigint;
   v_second_amount bigint;
   v_available_amount bigint;
+  v_reducer_amount bigint;
+  v_reducer_debtor_user_id uuid;
+  v_reducer_creditor_user_id uuid;
   v_anchor_before bigint;
   v_anchor_after bigint;
   v_edge_after bigint;
   v_response jsonb;
   v_case_id uuid;
+  v_debug jsonb;
 begin
   for v_proposal_id in
     select id
@@ -361,20 +365,36 @@ begin
   );
   v_second_id := (v_second ->> 'proposalId')::uuid;
 
+  select
+    edge.amount_minor - v_first_amount - 1,
+    edge.creditor_user_id,
+    edge.debtor_user_id
+    into v_reducer_amount,
+         v_reducer_debtor_user_id,
+         v_reducer_creditor_user_id
+  from public.pair_net_edges_cache edge
+  where edge.user_low_id = least(v_a, v_d)
+    and edge.user_high_id = greatest(v_a, v_d)
+    and edge.currency_code = 'COP';
+
+  if v_reducer_amount is null or v_reducer_amount <= 0 then
+    raise exception 'expected reducible A-D capacity, got %', v_reducer_amount;
+  end if;
+
   v_request := public.create_balance_request(
-    v_d,
+    v_reducer_debtor_user_id,
     'test-edge-capacity-loss-reducer-request',
     'balance_increase',
-    v_a,
-    v_d,
-    v_a,
-    v_second_amount,
+    v_reducer_creditor_user_id,
+    v_reducer_debtor_user_id,
+    v_reducer_creditor_user_id,
+    v_reducer_amount,
     'Reduce reserved capacity',
     null,
     null
   );
   perform public.accept_financial_request(
-    v_a,
+    v_reducer_creditor_user_id,
     'test-edge-capacity-loss-reducer-accept',
     (v_request ->> 'requestId')::uuid
   );
@@ -395,7 +415,28 @@ begin
       and status = 'stale'
       and stale_reason = 'reserved_capacity_lost'
   ) then
-    raise exception 'expected later reservation to become stale after capacity loss';
+    select jsonb_build_object(
+      'proposal', (
+        select to_jsonb(proposal)
+        from public.settlement_proposals proposal
+        where proposal.id = v_second_id
+      ),
+      'reservations', (
+        select coalesce(jsonb_agg(to_jsonb(reservation)), '[]'::jsonb)
+        from public.settlement_edge_reservations reservation
+        where reservation.settlement_proposal_id in (v_first_id, v_second_id)
+      ),
+      'edge', (
+        select to_jsonb(edge)
+        from public.pair_net_edges_cache edge
+        where edge.user_low_id = least(v_a, v_d)
+          and edge.user_high_id = greatest(v_a, v_d)
+          and edge.currency_code = 'COP'
+      )
+    )
+      into v_debug;
+
+    raise exception 'expected later reservation to become stale after capacity loss: %', v_debug;
   end if;
 
   if exists (

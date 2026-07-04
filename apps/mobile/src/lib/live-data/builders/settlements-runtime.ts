@@ -11,7 +11,6 @@ import {
   parseSettlementMovements,
   settlementProposalApprovedCount,
   settlementProposalApprovalsPending,
-  settlementParticipantLegAmount,
   settlementProposalParticipantAmount,
   settlementProposalParticipantCount,
 } from './settlement-core';
@@ -29,6 +28,11 @@ import {
   settlementParticipantLabel,
   summarizeSettlementParticipants,
 } from './settlement-participants';
+import {
+  circleOriginalMovementsForDisplay,
+  personalMovementAmount,
+  personalMovementCount,
+} from './settlement-detail-movements';
 
 export { buildSettlementProposalHistoryTimelineItems } from './settlement-history';
 export {
@@ -55,64 +59,6 @@ export function settlementProposalActionTitle(
   }
 
   return `Happy Circle${amountLabel} listo`;
-}
-
-function personalMovementAmount(
-  movements: readonly {
-    readonly amountMinor: number;
-    readonly creditorUserId: string;
-    readonly debtorUserId: string;
-  }[],
-  currentUserId: string,
-  options: { readonly context: string; readonly requireBalanced: boolean },
-): number {
-  const summary = movements.reduce(
-    (totals, movement) => ({
-      paidMinor:
-        totals.paidMinor + (movement.debtorUserId === currentUserId ? movement.amountMinor : 0),
-      receivedMinor:
-        totals.receivedMinor +
-        (movement.creditorUserId === currentUserId ? movement.amountMinor : 0),
-    }),
-    { paidMinor: 0, receivedMinor: 0 },
-  );
-
-  return settlementParticipantLegAmount(summary, options);
-}
-
-function personalMovementCount(
-  movements: readonly { readonly creditorUserId: string; readonly debtorUserId: string }[],
-  currentUserId: string,
-): number {
-  return movements.filter(
-    (movement) =>
-      movement.debtorUserId === currentUserId || movement.creditorUserId === currentUserId,
-  ).length;
-}
-
-function isReverseSettlementMovement(
-  candidate: ReturnType<typeof parseSettlementMovements>[number],
-  movements: readonly ReturnType<typeof parseSettlementMovements>[number][],
-): boolean {
-  return movements.some(
-    (movement) =>
-      movement.debtor_user_id === candidate.creditor_user_id &&
-      movement.creditor_user_id === candidate.debtor_user_id,
-  );
-}
-
-function circleOriginalMovementsForDisplay(
-  originalMovements: ReturnType<typeof parseSettlementMovements>,
-  settlementMovements: ReturnType<typeof parseSettlementMovements>,
-  isHappyCircleProposal: boolean,
-): ReturnType<typeof parseSettlementMovements> {
-  if (!isHappyCircleProposal) {
-    return originalMovements;
-  }
-
-  return originalMovements.filter((movement) =>
-    isReverseSettlementMovement(movement, settlementMovements),
-  );
 }
 
 export function buildPendingSettlementItems(

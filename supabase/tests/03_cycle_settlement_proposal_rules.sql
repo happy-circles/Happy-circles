@@ -14,6 +14,24 @@ declare
   v_pending_count integer;
   v_participant_count integer;
 begin
+  update public.settlement_proposals
+  set status = 'stale',
+      stale_reason = coalesce(stale_reason, 'related_execution_changed_balance'::public.settlement_stale_reason),
+      updated_at = timezone('utc', now())
+  where status in ('pending_approvals', 'approved');
+
+  update public.happy_circle_cases
+  set status = 'closed',
+      completed_at = coalesce(completed_at, timezone('utc', now())),
+      updated_at = timezone('utc', now())
+  where status = 'active'
+    and not exists (
+      select 1
+      from public.settlement_proposals proposal
+      where proposal.happy_circle_case_id = happy_circle_cases.id
+        and proposal.status in ('pending_approvals', 'approved')
+    );
+
   v_request := public.create_balance_request(
     '00000000-0000-0000-0000-0000000000a1',
     'test-cycle-proposal-anchor-request',

@@ -27,7 +27,7 @@ create table if not exists public.settlement_edge_reservations (
   amount_minor bigint not null check (amount_minor > 0),
   status public.settlement_edge_reservation_status not null default 'active',
   release_reason text,
-  created_at timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default clock_timestamp(),
   released_at timestamptz,
   consumed_at timestamptz,
   constraint settlement_edge_reservations_pair_order_chk check (user_low_id < user_high_id),
@@ -66,6 +66,15 @@ alter table public.settlement_edge_reservations enable row level security;
 
 revoke all on public.settlement_edge_reservations from public, anon, authenticated;
 grant all on public.settlement_edge_reservations to service_role;
+
+drop policy if exists settlement_edge_reservations_client_deny_all
+  on public.settlement_edge_reservations;
+create policy settlement_edge_reservations_client_deny_all
+  on public.settlement_edge_reservations
+  for all
+  to anon, authenticated
+  using (false)
+  with check (false);
 
 drop index if exists public.settlement_proposals_one_open_per_graph_idx;
 
@@ -1366,29 +1375,6 @@ begin
     return v_idempotency.response_json;
   end if;
 
-  if p_anchor_user_low_id is not null and p_anchor_user_high_id is not null then
-    v_current_hash := public.compute_available_graph_component_snapshot_hash(
-      p_anchor_user_low_id,
-      p_anchor_user_high_id,
-      coalesce(nullif(p_currency_code, ''), 'COP')
-    );
-  else
-    v_current_hash := public.compute_available_graph_snapshot_hash();
-  end if;
-
-  if v_current_hash is null or p_graph_snapshot_hash <> v_current_hash then
-    raise exception 'graph_snapshot_mismatch';
-  end if;
-
-  perform public.validate_cycle_settlement_payload(
-    p_graph_snapshot,
-    p_movements_json,
-    p_participant_user_ids,
-    p_anchor_user_low_id,
-    p_anchor_user_high_id,
-    coalesce(nullif(p_currency_code, ''), 'COP')
-  );
-
   v_participant_set_hash := public.compute_happy_circle_participant_set_hash(
     p_participant_user_ids
   );
@@ -1446,6 +1432,29 @@ begin
 
     return v_response;
   end if;
+
+  if p_anchor_user_low_id is not null and p_anchor_user_high_id is not null then
+    v_current_hash := public.compute_available_graph_component_snapshot_hash(
+      p_anchor_user_low_id,
+      p_anchor_user_high_id,
+      coalesce(nullif(p_currency_code, ''), 'COP')
+    );
+  else
+    v_current_hash := public.compute_available_graph_snapshot_hash();
+  end if;
+
+  if v_current_hash is null or p_graph_snapshot_hash <> v_current_hash then
+    raise exception 'graph_snapshot_mismatch';
+  end if;
+
+  perform public.validate_cycle_settlement_payload(
+    p_graph_snapshot,
+    p_movements_json,
+    p_participant_user_ids,
+    p_anchor_user_low_id,
+    p_anchor_user_high_id,
+    coalesce(nullif(p_currency_code, ''), 'COP')
+  );
 
   if p_anchor_user_low_id is null or p_anchor_user_high_id is null then
     insert into public.settlement_proposals (

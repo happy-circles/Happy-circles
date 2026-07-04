@@ -167,6 +167,8 @@ begin
     raise exception 'expected shifted active test cycle amount';
   end if;
 
+  v_amount_minor := greatest(1, v_amount_minor - 1);
+
   v_movements := jsonb_build_array(
     jsonb_build_object('debtor_user_id', v_b, 'creditor_user_id', v_a, 'amount_minor', v_amount_minor),
     jsonb_build_object('debtor_user_id', v_c, 'creditor_user_id', v_b, 'amount_minor', v_amount_minor),

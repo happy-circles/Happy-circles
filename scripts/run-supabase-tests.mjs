@@ -9,7 +9,9 @@ const pnpmCommand = 'pnpm';
 const nodeOptions = [process.env.NODE_OPTIONS, '--use-system-ca'].filter(Boolean).join(' ');
 
 function shouldUseCmdShim(command) {
-  return isWindows && ['pnpm', 'pnpm.cmd', 'supabase', 'supabase.cmd'].includes(command.toLowerCase());
+  return (
+    isWindows && ['pnpm', 'pnpm.cmd', 'supabase', 'supabase.cmd'].includes(command.toLowerCase())
+  );
 }
 
 function quoteCmdArg(value) {
@@ -21,7 +23,11 @@ function spawn(command, args, options) {
     return spawnSync(command, args, options);
   }
 
-  return spawnSync('cmd.exe', ['/d', '/s', '/c', [command, ...args].map(quoteCmdArg).join(' ')], options);
+  return spawnSync(
+    'cmd.exe',
+    ['/d', '/s', '/c', [command, ...args].map(quoteCmdArg).join(' ')],
+    options,
+  );
 }
 
 function run(command, args, options = {}) {
@@ -31,6 +37,9 @@ function run(command, args, options = {}) {
     env: {
       ...process.env,
       NODE_OPTIONS: nodeOptions,
+      SUPABASE_TELEMETRY_DISABLED: '1',
+      DO_NOT_TRACK: '1',
+      CI: process.env.CI ?? '1',
     },
     stdio: 'inherit',
     ...options,
@@ -48,6 +57,9 @@ function runForStatus(command, args, options = {}) {
     env: {
       ...process.env,
       NODE_OPTIONS: nodeOptions,
+      SUPABASE_TELEMETRY_DISABLED: '1',
+      DO_NOT_TRACK: '1',
+      CI: process.env.CI ?? '1',
     },
     stdio: 'inherit',
     ...options,
@@ -63,6 +75,9 @@ function capture(command, args) {
     env: {
       ...process.env,
       NODE_OPTIONS: nodeOptions,
+      SUPABASE_TELEMETRY_DISABLED: '1',
+      DO_NOT_TRACK: '1',
+      CI: process.env.CI ?? '1',
     },
   });
 

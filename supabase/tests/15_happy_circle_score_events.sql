@@ -354,12 +354,31 @@ begin
     settlement_proposal_id,
     participant_user_id,
     decision,
-    decided_at
+    decided_at,
+    approval_scope_hash
   )
   values
-    (v_proposal_id, v_a, 'approved', timezone('utc', now())),
-    (v_proposal_id, v_b, 'approved', timezone('utc', now())),
-    (v_proposal_id, v_c, 'approved', timezone('utc', now()));
+    (
+      v_proposal_id,
+      v_a,
+      'approved',
+      timezone('utc', now()),
+      public.compute_cycle_participant_approval_scope_hash('[]'::jsonb, v_a, 'COP')
+    ),
+    (
+      v_proposal_id,
+      v_b,
+      'approved',
+      timezone('utc', now()),
+      public.compute_cycle_participant_approval_scope_hash('[]'::jsonb, v_b, 'COP')
+    ),
+    (
+      v_proposal_id,
+      v_c,
+      'approved',
+      timezone('utc', now()),
+      public.compute_cycle_participant_approval_scope_hash('[]'::jsonb, v_c, 'COP')
+    );
 
   perform public.award_happy_circle_score(v_proposal_id);
   perform public.award_happy_circle_score(v_proposal_id);

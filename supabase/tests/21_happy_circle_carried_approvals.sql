@@ -38,6 +38,18 @@ begin
       updated_at = timezone('utc', now())
   where status in ('pending_approvals', 'approved');
 
+  update public.happy_circle_cases
+  set status = 'closed',
+      completed_at = coalesce(completed_at, timezone('utc', now())),
+      updated_at = timezone('utc', now())
+  where status = 'active'
+    and not exists (
+      select 1
+      from public.settlement_proposals proposal
+      where proposal.happy_circle_case_id = happy_circle_cases.id
+        and proposal.status in ('pending_approvals', 'approved')
+    );
+
   v_hash_base := public.compute_cycle_participant_approval_scope_hash(
     jsonb_build_array(
       jsonb_build_object('debtor_user_id', v_a, 'creditor_user_id', v_c, 'amount_minor', 1000),
