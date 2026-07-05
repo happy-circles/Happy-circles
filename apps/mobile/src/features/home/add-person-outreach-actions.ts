@@ -9,11 +9,12 @@ import {
 } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Router } from 'expo-router';
-import { Share } from 'react-native';
+import { Alert, Share } from 'react-native';
 
 import type { ContactActionFeedbackMode } from '@/components/contact-action-feedback-overlay';
 import {
   compareEnrichedContacts,
+  outreachPreflightActionForResolution,
   type AddPersonTransactionContext,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
@@ -55,6 +56,7 @@ export function useAddPersonOutreachActions({
   createPeopleOutreach,
   ensurePhoneStatuses,
   mergeAndPersistTargetResolutions,
+  resolvePhoneStatusesNow,
   router,
   setBusyKey,
   setMessage,
@@ -67,6 +69,9 @@ export function useAddPersonOutreachActions({
   readonly mergeAndPersistTargetResolutions: (
     resolutions: readonly PeopleTargetResolution[],
   ) => void;
+  readonly resolvePhoneStatusesNow: (
+    phoneE164List: readonly string[],
+  ) => Promise<readonly PeopleTargetResolution[]>;
   readonly router: Router;
   readonly setBusyKey: Dispatch<SetStateAction<string | null>>;
   readonly setMessage: Dispatch<SetStateAction<string | null>>;
@@ -112,6 +117,11 @@ export function useAddPersonOutreachActions({
   }, []);
 
   useEffect(() => () => clearFeedbackTimeout(), [clearFeedbackTimeout]);
+
+  const hideContactActionFeedback = useCallback(() => {
+    clearFeedbackTimeout();
+    setContactActionFeedback(null);
+  }, [clearFeedbackTimeout]);
 
   const showContactActionLoading = useCallback(
     (input: {
@@ -282,6 +292,102 @@ export function useAddPersonOutreachActions({
     mergeAndPersistTargetResolutions([resolution]);
   }
 
+  function confirmHappyCirclesFriendship(alias: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (value: boolean) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolve(value);
+      };
+
+      Alert.alert(
+        'Esta en Happy Circles',
+        `${alias} ya usa Happy Circles. Quieres enviarle una solicitud de amistad?`,
+        [
+          {
+            onPress: () => settle(false),
+            style: 'cancel',
+            text: 'Cancelar',
+          },
+          {
+            onPress: () => settle(true),
+            text: 'Enviar solicitud',
+          },
+        ],
+        {
+          cancelable: true,
+          onDismiss: () => settle(false),
+        },
+      );
+    });
+  }
+
+  async function runOutreachPreflight(input: {
+    readonly alias: string;
+    readonly phoneE164: string;
+  }): Promise<boolean> {
+    showContactActionLoading({
+      alias: input.alias,
+      message: 'Antes de invitar, revisamos si ya esta en Happy Circles.',
+      mode: 'prepare',
+      title: 'Revisando contacto',
+    });
+
+    const resolutions = await resolvePhoneStatusesNow([input.phoneE164]);
+    const resolution =
+      resolutions.find((item) => item.phoneE164 === input.phoneE164) ??
+      targetCache[input.phoneE164] ??
+      null;
+
+    if (!resolution) {
+      throw new Error('No pudimos confirmar si este numero esta en Happy Circles.');
+    }
+
+    const action = outreachPreflightActionForResolution(resolution);
+
+    if (action === 'block_already_related') {
+      setMessage(`${input.alias} ya aparece en tus personas.`);
+      await showContactActionResult({
+        alias: input.alias,
+        message: 'Ya estaba en tu lista de personas.',
+        title: 'Persona encontrada',
+      });
+      return false;
+    }
+
+    if (action === 'block_pending_friendship') {
+      setMessage(`${input.alias} ya tiene una solicitud pendiente.`);
+      await showContactActionResult({
+        alias: input.alias,
+        message: 'No enviamos otra solicitud para el mismo contacto.',
+        title: 'Solicitud pendiente',
+      });
+      return false;
+    }
+
+    if (action === 'confirm_friendship') {
+      hideContactActionFeedback();
+      const confirmed = await confirmHappyCirclesFriendship(input.alias);
+      if (!confirmed) {
+        setMessage(`No enviamos solicitud a ${input.alias}.`);
+        return false;
+      }
+
+      showContactActionLoading({
+        alias: input.alias,
+        message: 'Preparando la solicitud de amistad.',
+        mode: 'prepare',
+        title: 'Preparando solicitud',
+      });
+    }
+
+    return true;
+  }
+
   async function handleCreateOutreach(input: {
     readonly alias: string;
     readonly phoneE164: string;
@@ -302,6 +408,14 @@ export function useAddPersonOutreachActions({
     });
 
     try {
+      const shouldContinue = await runOutreachPreflight({
+        alias: input.alias,
+        phoneE164: input.phoneE164,
+      });
+      if (!shouldContinue) {
+        return;
+      }
+
       const response = await createPeopleOutreach.mutateAsync({
         channel: 'remote',
         intendedRecipientAlias: input.alias,
@@ -393,15 +507,13 @@ export function useAddPersonOutreachActions({
       phoneOptions: contact.phoneOptions,
     });
 
-    void ensurePhoneStatuses(contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164)).catch(
-      (error) => {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : 'No se pudo revisar los numeros de este contacto.',
-        );
-      },
-    );
+    void ensurePhoneStatuses(
+      contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164),
+    ).catch((error) => {
+      setMessage(
+        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
+      );
+    });
   }
 
   return {

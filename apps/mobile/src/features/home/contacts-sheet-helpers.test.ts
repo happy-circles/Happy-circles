@@ -28,6 +28,7 @@ import {
   filterReusableContactResolutionCache,
   getUnresolvedContactPhoneE164List,
   isReusableCachedContactResolution,
+  outreachPreflightActionForResolution,
 } from './contacts-sheet-helpers';
 import {
   createPeopleTargetResolutionCacheHashSource,
@@ -303,6 +304,32 @@ describe('contact section helpers', () => {
     expect(sections.inAppContacts.map((item) => item.contact.alias)).toEqual(['Persona 064']);
     expect(sections.unresolvedContacts).toHaveLength(0);
     expect(sections.inviteContacts).toHaveLength(0);
+  });
+});
+
+describe('contact outreach preflight helpers', () => {
+  it('asks for confirmation before turning an active Happy Circles user into a friendship request', () => {
+    expect(outreachPreflightActionForResolution(resolution('+573001', 'active_user'))).toBe(
+      'confirm_friendship',
+    );
+  });
+
+  it('blocks duplicate outreach for existing or pending friendships', () => {
+    expect(outreachPreflightActionForResolution(resolution('+573001', 'already_related'))).toBe(
+      'block_already_related',
+    );
+    expect(outreachPreflightActionForResolution(resolution('+573002', 'pending_friendship'))).toBe(
+      'block_pending_friendship',
+    );
+  });
+
+  it('continues to account invite sharing when the target is not an active HC friend target', () => {
+    expect(outreachPreflightActionForResolution(resolution('+573001', 'no_account'))).toBe(
+      'continue',
+    );
+    expect(outreachPreflightActionForResolution(resolution('+573002', 'pending_activation'))).toBe(
+      'continue',
+    );
   });
 });
 

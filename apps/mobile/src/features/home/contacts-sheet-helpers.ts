@@ -129,6 +129,30 @@ export function shouldShowInApp(resolution: PeopleTargetResolution | null): bool
   );
 }
 
+export type OutreachPreflightAction =
+  | 'block_already_related'
+  | 'block_pending_friendship'
+  | 'confirm_friendship'
+  | 'continue';
+
+export function outreachPreflightActionForResolution(
+  resolution: PeopleTargetResolution,
+): OutreachPreflightAction {
+  if (resolution.status === 'already_related') {
+    return 'block_already_related';
+  }
+
+  if (resolution.status === 'pending_friendship') {
+    return 'block_pending_friendship';
+  }
+
+  if (resolution.status === 'active_user') {
+    return 'confirm_friendship';
+  }
+
+  return 'continue';
+}
+
 export function isReusableCachedContactResolution(
   resolution: PeopleTargetResolution | null | undefined,
 ): resolution is PeopleTargetResolution {
