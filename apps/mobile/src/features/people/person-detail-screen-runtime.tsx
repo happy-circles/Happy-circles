@@ -10,6 +10,7 @@ import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import {
   CircleActionFeedbackOverlay,
@@ -56,7 +57,7 @@ import {
   useRejectSettlementMutation,
 } from '@/lib/live-data';
 import { toneVisual, type LedgerDirection } from '@/lib/direction-ui';
-import { pushRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute } from '@/lib/navigation';
 import {
   pendingNotificationDotColor,
   pendingNotificationSurfaceColor,
@@ -143,6 +144,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const { snackbar, showSnackbar } = useFeedbackSnackbar();
   const actionFeedback = useActionFeedbackOverlay();
   const topInset = Math.max(0, insets.top);
+  const handleBack = useCallback(() => {
+    backOrReturnTo(router, '/people');
+  }, [router]);
   const screenBackgroundStyle = useMemo(
     () => ({ backgroundColor: activeTheme.colors.background }),
     [activeTheme],
@@ -898,15 +902,21 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   }
 
   if ((snapshotQuery.isRestoringCache || snapshotQuery.isLoading) && !snapshotQuery.data) {
-    return <PersonDetailLoadingState />;
+    return <PersonDetailLoadingState onBack={handleBack} />;
   }
 
   if (snapshotQuery.error && !snapshotQuery.data) {
-    return <PersonDetailErrorState message={snapshotQuery.error.message} refresh={refresh} />;
+    return (
+      <PersonDetailErrorState
+        message={snapshotQuery.error.message}
+        onBack={handleBack}
+        refresh={refresh}
+      />
+    );
   }
 
   if (!person) {
-    return <PersonDetailMissingState refresh={refresh} />;
+    return <PersonDetailMissingState onBack={handleBack} refresh={refresh} />;
   }
 
   const activePerson = person;
@@ -938,6 +948,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     <SafeAreaView edges={['left', 'right']} style={[styles.safeArea, screenBackgroundStyle]}>
       <View style={screenContentStyle}>
         <View style={[styles.fixedTop, screenBackgroundStyle]}>
+          <View style={styles.detailHeader}>
+            <View style={styles.detailHeaderSide}>
+              <AppHeaderBackButton onPress={handleBack} style={styles.detailHeaderBackButton} />
+            </View>
+            <AppText style={styles.detailHeaderTitle}>Persona</AppText>
+            <View style={styles.detailHeaderSide} />
+          </View>
+
           <View style={styles.heroBlock}>
             <Pressable
               onPress={() => setAvatarViewerVisible(true)}

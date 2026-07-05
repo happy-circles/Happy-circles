@@ -1,13 +1,15 @@
 import { AppText } from '@/components/app-text';
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import type { BrandedRefreshProps } from '@/components/branded-refresh-control';
 import { EmptyState } from '@/components/empty-state';
 import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { ScreenShell } from '@/components/screen-shell';
 import { personDetailScreenStyles as styles } from './person-detail-screen.styles';
 
-export function PersonDetailLoadingState() {
+export function PersonDetailLoadingState({ onBack }: { readonly onBack: () => void }) {
   return (
     <ScreenShell
+      headerLeading={<AppHeaderBackButton onPress={onBack} />}
       headerVariant="plain"
       largeTitle={false}
       subtitle="Cargando esta relación."
@@ -21,13 +23,16 @@ export function PersonDetailLoadingState() {
 
 export function PersonDetailErrorState({
   message,
+  onBack,
   refresh,
 }: {
   readonly message: string;
+  readonly onBack: () => void;
   readonly refresh: BrandedRefreshProps;
 }) {
   return (
     <ScreenShell
+      headerLeading={<AppHeaderBackButton onPress={onBack} />}
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}
@@ -39,9 +44,16 @@ export function PersonDetailErrorState({
   );
 }
 
-export function PersonDetailMissingState({ refresh }: { readonly refresh: BrandedRefreshProps }) {
+export function PersonDetailMissingState({
+  onBack,
+  refresh,
+}: {
+  readonly onBack: () => void;
+  readonly refresh: BrandedRefreshProps;
+}) {
   return (
     <ScreenShell
+      headerLeading={<AppHeaderBackButton onPress={onBack} />}
       headerVariant="plain"
       largeTitle={false}
       refresh={refresh}

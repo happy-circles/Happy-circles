@@ -22,6 +22,30 @@ export const personDetailScreenStyles = StyleSheet.create({
     flexShrink: 0,
     gap: theme.spacing.md,
   },
+  detailHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  detailHeaderSide: {
+    alignItems: 'flex-start',
+    flexShrink: 0,
+    width: 44,
+  },
+  detailHeaderBackButton: {
+    width: 36,
+  },
+  detailHeaderTitle: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.title2,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 28,
+    minWidth: 0,
+    textAlign: 'center',
+  },
   heroBlock: {
     alignItems: 'center',
     gap: theme.spacing.sm,
