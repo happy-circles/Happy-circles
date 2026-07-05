@@ -39,7 +39,7 @@ export function useAddPersonContactIndexRefresh(input: {
       () => {
         void input.refreshContactIndexRef.current().catch(() => undefined);
       },
-      input.searchValue.trim().length > 0 ? 120 : 0,
+      input.searchValue.trim().length > 0 ? 300 : 0,
     );
 
     return () => {

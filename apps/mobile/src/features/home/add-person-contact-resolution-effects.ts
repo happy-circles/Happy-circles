@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { uniqueContactPhoneE164List } from '@/features/home/contacts-sheet-helpers';
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
@@ -17,24 +17,30 @@ export function useAddPersonContactResolutionEffects(input: {
     priority: 'visible' | 'background',
   ) => void;
   readonly scanRunIdRef: MutableRef<number>;
-  readonly searchValue: string;
   readonly visible: boolean;
   readonly visibleResolutionPhonesRef: MutableRef<Set<string>>;
 }) {
+  const backgroundPhonesKeyRef = useRef('');
+  const visiblePhonesKeyRef = useRef('');
+
   useEffect(() => {
     if (!input.visible || !input.canReadContacts || input.contactResolutionWindow.length === 0) {
       input.visibleResolutionPhonesRef.current = new Set();
+      visiblePhonesKeyRef.current = '';
       return;
     }
 
     const visiblePhones = uniqueContactPhoneE164List(input.contactResolutionWindow);
+    const visiblePhonesKey = visiblePhones.join('|');
+    if (visiblePhonesKeyRef.current === visiblePhonesKey) {
+      return undefined;
+    }
+
+    visiblePhonesKeyRef.current = visiblePhonesKey;
     input.visibleResolutionPhonesRef.current = new Set(visiblePhones);
-    const timeout = setTimeout(
-      () => {
-        input.hydrateAndEnqueueResolutionPhones(input.scanRunIdRef.current, visiblePhones, 'visible');
-      },
-      0,
-    );
+    const timeout = setTimeout(() => {
+      input.hydrateAndEnqueueResolutionPhones(input.scanRunIdRef.current, visiblePhones, 'visible');
+    }, 0);
 
     return () => {
       clearTimeout(timeout);
@@ -44,27 +50,30 @@ export function useAddPersonContactResolutionEffects(input: {
     input.contactResolutionWindow,
     input.hydrateAndEnqueueResolutionPhones,
     input.scanRunIdRef,
-    input.searchValue,
     input.visible,
     input.visibleResolutionPhonesRef,
   ]);
 
   useEffect(() => {
     if (!input.visible || !input.canReadContacts || input.contacts.length === 0) {
+      backgroundPhonesKeyRef.current = '';
       return undefined;
     }
 
     const backgroundPhones = uniqueContactPhoneE164List(input.contacts);
-    const timeout = setTimeout(
-      () => {
-        input.hydrateAndEnqueueResolutionPhones(
-          input.scanRunIdRef.current,
-          backgroundPhones,
-          'background',
-        );
-      },
-      input.searchValue.trim().length > 0 ? 420 : 180,
-    );
+    const backgroundPhonesKey = backgroundPhones.join('|');
+    if (backgroundPhonesKeyRef.current === backgroundPhonesKey) {
+      return undefined;
+    }
+
+    backgroundPhonesKeyRef.current = backgroundPhonesKey;
+    const timeout = setTimeout(() => {
+      input.hydrateAndEnqueueResolutionPhones(
+        input.scanRunIdRef.current,
+        backgroundPhones,
+        'background',
+      );
+    }, 240);
 
     return () => {
       clearTimeout(timeout);
@@ -74,7 +83,6 @@ export function useAddPersonContactResolutionEffects(input: {
     input.contacts,
     input.hydrateAndEnqueueResolutionPhones,
     input.scanRunIdRef,
-    input.searchValue,
     input.visible,
   ]);
 }

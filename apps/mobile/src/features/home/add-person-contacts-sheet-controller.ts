@@ -20,8 +20,11 @@ import {
   writeWarmContactScanCache,
 } from '@/features/home/add-person-contact-scan-cache';
 import {
+  bestResolutionForContact,
   buildContactSectionItems,
+  CONTACT_INDEX_IN_APP_BACKFILL_READ_LIMIT,
   getUnresolvedContactPhoneE164List,
+  shouldShowInApp,
   uniqueContactPhoneE164List,
   type AddPersonTransactionContext,
 } from '@/features/home/contacts-sheet-helpers';
@@ -63,6 +66,9 @@ export function useAddPersonContactsSheetController({
   const [contactsPermissionStatus, setContactsPermissionStatus] =
     useState<ContactsPermissionStatus>('undetermined');
   const [contacts, setContacts] = useState<readonly ContactCandidate[]>([]);
+  const [inAppBackfillContacts, setInAppBackfillContacts] = useState<readonly ContactCandidate[]>(
+    [],
+  );
   const [targetCache, setTargetCache] = useState<Record<string, PeopleTargetResolution>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -85,9 +91,20 @@ export function useAddPersonContactsSheetController({
 
   const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
 
+  const inAppBackfillContactsWithResolution = useMemo(
+    () =>
+      inAppBackfillContacts.filter((contact) =>
+        shouldShowInApp(bestResolutionForContact(contact, targetCache)),
+      ),
+    [inAppBackfillContacts, targetCache],
+  );
+  const sectionContacts = useMemo(
+    () => mergeUniqueContactCandidates(contacts, inAppBackfillContactsWithResolution),
+    [contacts, inAppBackfillContactsWithResolution],
+  );
   const contactSections = useMemo(
-    () => buildContactSectionItems({ contacts, searchValue, targetCache }),
-    [contacts, searchValue, targetCache],
+    () => buildContactSectionItems({ contacts: sectionContacts, searchValue, targetCache }),
+    [sectionContacts, searchValue, targetCache],
   );
   const contactResolutionWindow = contactSections.visibleResolutionContacts;
   const inAppContacts = contactSections.inAppContacts;
@@ -265,9 +282,19 @@ export function useAddPersonContactsSheetController({
         return;
       }
 
-      void loadCachedTargetResolutionsForPhones(runId, phoneE164List).finally(() => {
+      const unresolvedPhones = getUnresolvedContactPhoneE164List({
+        inFlightPhoneE164Set: inFlightResolutionSetRef.current,
+        pendingPhoneE164Set: pendingResolutionSetRef.current,
+        phoneE164List,
+        targetCache: targetCacheRef.current,
+      });
+      if (unresolvedPhones.length === 0) {
+        return;
+      }
+
+      void loadCachedTargetResolutionsForPhones(runId, unresolvedPhones).finally(() => {
         if (scanRunIdRef.current === runId) {
-          enqueueResolutionPhones(phoneE164List, priority);
+          enqueueResolutionPhones(unresolvedPhones, priority);
         }
       });
     },
@@ -282,8 +309,7 @@ export function useAddPersonContactsSheetController({
       if (
         !session.userId ||
         input.contacts.length === 0 ||
-        !canReadContactsPermissionStatus(input.permissionStatus) ||
-        searchValue.trim().length > 0
+        !canReadContactsPermissionStatus(input.permissionStatus)
       ) {
         return;
       }
@@ -295,16 +321,12 @@ export function useAddPersonContactsSheetController({
         userId: session.userId,
       });
     },
-    [searchValue, session.userId],
+    [session.userId],
   );
 
   const applyWarmContactSnapshot = useCallback(
     (permissionStatus: ContactsPermissionStatus) => {
-      if (
-        !session.userId ||
-        !canReadContactsPermissionStatus(permissionStatus) ||
-        searchValue.trim().length > 0
-      ) {
+      if (!session.userId || !canReadContactsPermissionStatus(permissionStatus)) {
         return false;
       }
 
@@ -323,7 +345,45 @@ export function useAddPersonContactsSheetController({
       setContactsPermissionStatus(warmCache.contactsPermissionStatus);
       return true;
     },
-    [searchValue, session.userId, setContactsMatchingCount],
+    [session.userId, setContactsMatchingCount],
+  );
+
+  const refreshInAppBackfillContacts = useCallback(
+    async (readVersion: number) => {
+      if (!session.userId || searchValue.trim().length > 0) {
+        return;
+      }
+
+      try {
+        const result = await readContactIndex({
+          limit: CONTACT_INDEX_IN_APP_BACKFILL_READ_LIMIT,
+          searchValue: '',
+          userId: session.userId,
+        });
+        if (indexReadVersionRef.current !== readVersion) {
+          return;
+        }
+
+        setInAppBackfillContacts(result.contacts);
+        const indexedPhones = uniqueContactPhoneE164List(result.contacts);
+        if (indexedPhones.length === 0) {
+          return;
+        }
+
+        await loadCachedTargetResolutionsForPhones(scanRunIdRef.current, indexedPhones);
+        if (indexReadVersionRef.current === readVersion) {
+          hydrateAndEnqueueResolutionPhones(scanRunIdRef.current, indexedPhones, 'background');
+        }
+      } catch {
+        // Backfill only improves ranking of known HC contacts. The visible list can continue.
+      }
+    },
+    [
+      hydrateAndEnqueueResolutionPhones,
+      loadCachedTargetResolutionsForPhones,
+      searchValue,
+      session.userId,
+    ],
   );
 
   const refreshContactIndex = useCallback(async () => {
@@ -373,15 +433,21 @@ export function useAddPersonContactsSheetController({
         ? current
         : result.permissionStatus,
     );
-    writeWarmContactSnapshot({
-      contacts: result.contacts,
-      permissionStatus: result.permissionStatus,
-    });
+    if (searchValue.trim().length === 0) {
+      writeWarmContactSnapshot({
+        contacts: result.contacts,
+        permissionStatus: result.permissionStatus,
+      });
+      if (result.status === 'ready') {
+        void refreshInAppBackfillContacts(readVersion);
+      }
+    }
 
     return result;
   }, [
     contactsReadLimit,
     mergeTargetResolutions,
+    refreshInAppBackfillContacts,
     searchValue,
     session.userId,
     setContactsMatchingCount,
@@ -395,6 +461,7 @@ export function useAddPersonContactsSheetController({
   const loadContacts = useCallback(async () => {
     if (!session.userId) {
       setContacts([]);
+      setInAppBackfillContacts([]);
       setContactsLoadedCount(0);
       setContactsMatchingCount(0);
       setContactsLoading(false);
@@ -408,6 +475,7 @@ export function useAddPersonContactsSheetController({
 
       if (!canReadContactsPermissionStatus(permissionStatus)) {
         setContacts([]);
+        setInAppBackfillContacts([]);
         setContactsLoadedCount(0);
         setContactsMatchingCount(0);
         setContactsLoading(false);
@@ -498,6 +566,7 @@ export function useAddPersonContactsSheetController({
       pendingResolutionSetRef.current.clear();
       inFlightResolutionSetRef.current.clear();
       visibleResolutionPhonesRef.current.clear();
+      setInAppBackfillContacts([]);
       setContactsLoading(false);
       resetQrStateOnClose();
       resetPendingContactSelection();
@@ -523,7 +592,6 @@ export function useAddPersonContactsSheetController({
     contacts,
     hydrateAndEnqueueResolutionPhones,
     scanRunIdRef,
-    searchValue,
     visible,
     visibleResolutionPhonesRef,
   });
@@ -651,4 +719,26 @@ export function useAddPersonContactsSheetController({
     setSearchValue,
     unresolvedContacts,
   };
+}
+
+function mergeUniqueContactCandidates(
+  primaryContacts: readonly ContactCandidate[],
+  extraContacts: readonly ContactCandidate[],
+): readonly ContactCandidate[] {
+  if (extraContacts.length === 0) {
+    return primaryContacts;
+  }
+
+  const seenContactIds = new Set(primaryContacts.map((contact) => contact.contactId));
+  const mergedContacts = [...primaryContacts];
+  for (const contact of extraContacts) {
+    if (seenContactIds.has(contact.contactId)) {
+      continue;
+    }
+
+    seenContactIds.add(contact.contactId);
+    mergedContacts.push(contact);
+  }
+
+  return mergedContacts;
 }

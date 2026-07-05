@@ -12,6 +12,7 @@ export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 15 * 60 * 1000;
 export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
 export const CONTACT_INDEX_INITIAL_READ_LIMIT = 120;
 export const CONTACT_INDEX_READ_PAGE_SIZE = 120;
+export const CONTACT_INDEX_IN_APP_BACKFILL_READ_LIMIT = 10_000;
 
 export type EnrichedContact = {
   readonly contact: ContactCandidate;
