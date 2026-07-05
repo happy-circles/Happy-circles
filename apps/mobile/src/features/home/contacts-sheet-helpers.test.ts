@@ -61,6 +61,23 @@ function contact(index: number): ContactCandidate {
   };
 }
 
+function multiPhoneContact(index: number): ContactCandidate {
+  const baseContact = contact(index);
+  const suffix = String(index).padStart(3, '0');
+  const secondaryPhone = {
+    id: `phone-${suffix}-secondary`,
+    label: 'work',
+    maskedPhone: `***${suffix}`,
+    phoneE164: `+57300${suffix}111`,
+  };
+
+  return {
+    ...baseContact,
+    phoneOptions: [baseContact.primaryPhone, secondaryPhone],
+    searchKey: `${baseContact.searchKey} ${secondaryPhone.phoneE164}`.toLocaleLowerCase('es-CO'),
+  };
+}
+
 function resolution(
   phoneE164: string,
   status: PeopleTargetResolution['status'],
@@ -145,6 +162,12 @@ describe('contact section helpers', () => {
     });
     expect(actionMetaForResolution(null, true)).toEqual({
       disabled: false,
+      icon: 'search-outline',
+      label: 'Consultar',
+      tone: 'primary',
+    });
+    expect(actionMetaForResolution(resolution('+573004', 'active_user'), true)).toEqual({
+      disabled: false,
       icon: 'list-outline',
       label: 'Elegir',
       tone: 'primary',
@@ -198,11 +221,70 @@ describe('contact section helpers', () => {
       },
     });
 
-    expect(sections.unresolvedContacts.map((item) => item.contact.alias)).toEqual([
-      'Persona 001',
-    ]);
+    expect(sections.unresolvedContacts.map((item) => item.contact.alias)).toEqual(['Persona 001']);
     expect(sections.inviteContacts.map((item) => item.contact.alias)).toEqual(['Persona 002']);
     expect(sections.inAppContacts.map((item) => item.contact.alias)).toEqual(['Persona 003']);
+  });
+
+  it('keeps a contact in Happy Circles when the matching phone is secondary', () => {
+    const multiContact = multiPhoneContact(4);
+    const secondaryPhone = multiContact.phoneOptions[1];
+    expect(secondaryPhone).toBeDefined();
+
+    const sections = buildContactSectionItems({
+      contacts: [multiContact],
+      searchValue: '',
+      targetCache: {
+        [multiContact.primaryPhone.phoneE164]: resolution(
+          multiContact.primaryPhone.phoneE164,
+          'no_account',
+        ),
+        [secondaryPhone!.phoneE164]: resolution(secondaryPhone!.phoneE164, 'active_user'),
+      },
+    });
+
+    expect(sections.inAppContacts).toHaveLength(1);
+    expect(sections.inAppContacts[0].resolution?.phoneE164).toBe(secondaryPhone!.phoneE164);
+    expect(sections.unresolvedContacts).toHaveLength(0);
+    expect(sections.inviteContacts).toHaveLength(0);
+  });
+
+  it('does not invite a multi-phone contact until every phone has been checked', () => {
+    const multiContact = multiPhoneContact(5);
+    const sections = buildContactSectionItems({
+      contacts: [multiContact],
+      searchValue: '',
+      targetCache: {
+        [multiContact.primaryPhone.phoneE164]: resolution(
+          multiContact.primaryPhone.phoneE164,
+          'no_account',
+        ),
+      },
+    });
+
+    expect(sections.unresolvedContacts.map((item) => item.contact.alias)).toEqual(['Persona 005']);
+    expect(sections.inviteContacts).toHaveLength(0);
+  });
+
+  it('moves a multi-phone contact to invite only when all phones are not in Happy Circles', () => {
+    const multiContact = multiPhoneContact(6);
+    const secondaryPhone = multiContact.phoneOptions[1];
+    expect(secondaryPhone).toBeDefined();
+
+    const sections = buildContactSectionItems({
+      contacts: [multiContact],
+      searchValue: '',
+      targetCache: {
+        [multiContact.primaryPhone.phoneE164]: resolution(
+          multiContact.primaryPhone.phoneE164,
+          'no_account',
+        ),
+        [secondaryPhone!.phoneE164]: resolution(secondaryPhone!.phoneE164, 'no_account'),
+      },
+    });
+
+    expect(sections.inviteContacts.map((item) => item.contact.alias)).toEqual(['Persona 006']);
+    expect(sections.unresolvedContacts).toHaveLength(0);
   });
 
   it('filters both sections by active search', () => {

@@ -33,7 +33,10 @@ export type ContactActionIconName =
   | 'time-outline'
   | 'checkmark-outline';
 
-export function contactAvatarColor(contact: ContactCandidate, activeTheme: AppTheme = theme): string {
+export function contactAvatarColor(
+  contact: ContactCandidate,
+  activeTheme: AppTheme = theme,
+): string {
   const source = `${contact.contactId}:${contact.alias}`;
   let hash = 0;
 
@@ -56,20 +59,20 @@ export function actionMetaForResolution(
   readonly tone: 'primary' | 'invite' | 'muted';
   readonly disabled: boolean;
 } {
-  if (hasMultiplePhones) {
-    return {
-      disabled: false,
-      icon: 'list-outline',
-      label: 'Elegir',
-      tone: 'primary',
-    };
-  }
-
   if (!resolution) {
     return {
       disabled: false,
       icon: 'search-outline',
       label: 'Consultar',
+      tone: 'primary',
+    };
+  }
+
+  if (hasMultiplePhones) {
+    return {
+      disabled: false,
+      icon: 'list-outline',
+      label: 'Elegir',
       tone: 'primary',
     };
   }
@@ -132,9 +135,7 @@ export function isReusableCachedContactResolution(
   return Boolean(resolution);
 }
 
-export function contactResolutionCacheTtlMs(
-  status: PeopleTargetResolution['status'],
-): number {
+export function contactResolutionCacheTtlMs(status: PeopleTargetResolution['status']): number {
   if (status === 'no_account') {
     return CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS;
   }
@@ -182,6 +183,36 @@ export function rankContactResolution(resolution: PeopleTargetResolution | null)
   }
 
   return 5;
+}
+
+export function bestResolutionForContact(
+  contact: ContactCandidate,
+  targetCache: Readonly<Record<string, PeopleTargetResolution>>,
+): PeopleTargetResolution | null {
+  let bestResolution: PeopleTargetResolution | null = null;
+  let hasUnresolvedPhone = false;
+
+  for (const phoneOption of contact.phoneOptions) {
+    const resolution = targetCache[phoneOption.phoneE164] ?? null;
+    if (!resolution) {
+      hasUnresolvedPhone = true;
+      continue;
+    }
+
+    if (rankContactResolution(resolution) < rankContactResolution(bestResolution)) {
+      bestResolution = resolution;
+    }
+  }
+
+  if (!bestResolution) {
+    return null;
+  }
+
+  if (shouldShowInApp(bestResolution)) {
+    return bestResolution;
+  }
+
+  return hasUnresolvedPhone ? null : bestResolution;
 }
 
 export function compareEnrichedContacts(left: EnrichedContact, right: EnrichedContact): number {
@@ -279,7 +310,7 @@ export function buildContactSectionItems(input: {
       : input.contacts.filter((contact) => contact.searchKey.includes(normalizedSearch));
   const enrichedContacts = filteredContacts.map((contact) => ({
     contact,
-    resolution: input.targetCache[contact.primaryPhone.phoneE164] ?? null,
+    resolution: bestResolutionForContact(contact, input.targetCache),
   }));
 
   return {

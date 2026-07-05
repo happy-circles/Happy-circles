@@ -33,10 +33,7 @@ import { ContactRow } from '@/features/home/add-person-contact-row';
 import { useAppTheme } from '@/providers/theme-provider';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
 import { AppText } from '@/components/app-text';
-import {
-  buildManualPhoneE164,
-  formatPhonePreview,
-} from '@/features/invites/people-outreach-utils';
+import { buildManualPhoneE164, formatPhonePreview } from '@/features/invites/people-outreach-utils';
 
 const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
 const CONTACT_SCROLL_LOAD_MORE_THRESHOLD = 520;
@@ -111,7 +108,8 @@ export function AddPersonContactsSheet({
   const isSearchingContacts = searchValue.trim().length > 0;
   const displayedContactsCount =
     inAppContacts.length + unresolvedContacts.length + inviteContacts.length;
-  const searchStillIndexing = isSearchingContacts && contactsLoading && displayedContactsCount === 0;
+  const searchStillIndexing =
+    isSearchingContacts && contactsLoading && displayedContactsCount === 0;
   const compactActionsRevealY = useRef(new Animated.Value(0)).current;
   const compactActionsRevealStyle = useMemo(
     () => ({
@@ -147,13 +145,11 @@ export function AddPersonContactsSheet({
         <View style={styles.contactList}>
           {items.map(({ contact, resolution }) => (
             <ContactRow
-              busy={busyKey === contact.primaryPhone.phoneE164}
+              busy={contact.phoneOptions.some((phoneOption) => busyKey === phoneOption.phoneE164)}
               contact={contact}
               key={`${contact.contactId}:${contact.primaryPhone.id}`}
               onPress={() =>
-                resolution || contact.phoneOptions.length > 1
-                  ? void handleContactPress(contact)
-                  : void handleReviewContact(contact)
+                !resolution ? void handleReviewContact(contact) : void handleContactPress(contact)
               }
               resolution={resolution}
             />
@@ -274,7 +270,9 @@ export function AddPersonContactsSheet({
                     disabled={Boolean(busyKey)}
                     icon="refresh-outline"
                     label={
-                      busyKey === 'refresh-contacts' ? 'Actualizando agenda...' : 'Actualizar agenda'
+                      busyKey === 'refresh-contacts'
+                        ? 'Actualizando agenda...'
+                        : 'Actualizar agenda'
                     }
                     loading={busyKey === 'refresh-contacts'}
                     onPress={busyKey ? undefined : () => void handleRefreshContacts()}
@@ -317,10 +315,10 @@ export function AddPersonContactsSheet({
                         {searchStillIndexing
                           ? 'Seguimos cargando contactos guardados en este telefono.'
                           : manualInvitePhoneE164
-                          ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
-                          : isSearchingContacts
-                            ? 'Prueba con otro nombre o celular.'
-                            : 'No encontramos contactos con numero en la agenda disponible.'}
+                            ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
+                            : isSearchingContacts
+                              ? 'Prueba con otro nombre o celular.'
+                              : 'No encontramos contactos con numero en la agenda disponible.'}
                       </AppText>
                       {renderManualInviteCard()}
                     </View>
@@ -461,6 +459,17 @@ export function AddPersonContactsSheet({
             </View>
           ) : null}
 
+          <AddPersonContactOptionsModal
+            busyKey={busyKey}
+            inviteAvailableLabel={CONTACT_CAN_RECEIVE_INVITE_LABEL}
+            onCancel={() => setPendingContactSelection(null)}
+            onCreateOutreach={handleCreateOutreach}
+            onReviewPhone={handleReviewPhone}
+            pendingContactOptions={pendingContactOptions}
+            pendingContactSelection={pendingContactSelection}
+            presentation="inline"
+          />
+
           <ContactActionFeedbackOverlay
             alias={contactActionFeedback?.alias}
             message={contactActionFeedback?.message}
@@ -472,16 +481,6 @@ export function AddPersonContactsSheet({
           />
         </KeyboardAvoidingView>
       </Modal>
-
-      <AddPersonContactOptionsModal
-        busyKey={busyKey}
-        inviteAvailableLabel={CONTACT_CAN_RECEIVE_INVITE_LABEL}
-        onCancel={() => setPendingContactSelection(null)}
-        onCreateOutreach={handleCreateOutreach}
-        onReviewPhone={handleReviewPhone}
-        pendingContactOptions={pendingContactOptions}
-        pendingContactSelection={pendingContactSelection}
-      />
     </>
   );
 }

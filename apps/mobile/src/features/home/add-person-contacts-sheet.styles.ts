@@ -296,6 +296,11 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     justifyContent: 'center',
     padding: theme.spacing.lg,
   },
+  optionInlineScrim: {
+    ...StyleSheet.absoluteFillObject,
+    elevation: 20,
+    zIndex: 20,
+  },
   floatingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

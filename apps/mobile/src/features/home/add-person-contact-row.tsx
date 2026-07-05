@@ -29,7 +29,10 @@ export function ContactRow({
   const hasMultiplePhones = contact.phoneOptions.length > 1;
   const action = actionMetaForResolution(resolution, hasMultiplePhones);
   const disabled = action.disabled || busy;
-  const phoneMeta = contactMeta(contact.primaryPhone);
+  const displayPhone =
+    contact.phoneOptions.find((phoneOption) => phoneOption.phoneE164 === resolution?.phoneE164) ??
+    contact.primaryPhone;
+  const phoneMeta = contactMeta(displayPhone);
   const detailMeta = contactResolutionDetail(phoneMeta, resolution);
   const actionBackgroundColor =
     action.tone === 'invite'

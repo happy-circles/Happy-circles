@@ -27,6 +27,7 @@ export function AddPersonContactOptionsModal({
   onReviewPhone,
   pendingContactOptions,
   pendingContactSelection,
+  presentation = 'modal',
 }: {
   readonly busyKey: string | null;
   readonly inviteAvailableLabel: string;
@@ -35,102 +36,116 @@ export function AddPersonContactOptionsModal({
   readonly onReviewPhone: (input: { readonly phoneE164: string }) => Promise<void>;
   readonly pendingContactOptions: readonly EnrichedContact[];
   readonly pendingContactSelection: PendingContactSelection | null;
+  readonly presentation?: 'inline' | 'modal';
 }) {
   const activeTheme = useAppTheme();
   const pendingContactOptionsResolving = pendingContactOptions.some(
     ({ resolution }) => !resolution,
   );
 
-  return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onCancel}
-      transparent
-      visible={pendingContactSelection !== null}
-    >
-      <View style={[styles.optionScrim, { backgroundColor: activeTheme.colors.overlay }]}>
-        <Pressable onPress={onCancel} style={styles.sheetBackdrop} />
-        <View style={[styles.optionCard, { backgroundColor: activeTheme.colors.surface }]}>
-          <AppText style={styles.optionTitle}>Elige el número</AppText>
-          <AppText style={styles.emptyText}>
-            {pendingContactSelection ? `${pendingContactSelection.alias} tiene varios números.` : ''}
-          </AppText>
-          {pendingContactOptionsResolving ? (
-            <View style={styles.optionNotice}>
-              <Ionicons color={activeTheme.colors.primary} name="sync-outline" size={16} />
-              <AppText style={styles.optionNoticeText}>
-                Consultando cada número para saber si se agrega o se invita.
-              </AppText>
-            </View>
-          ) : null}
-          <View style={styles.optionList}>
-            {pendingContactOptions.map(({ contact, resolution }) => {
-              const phoneOption = contact.primaryPhone;
-              const action = actionMetaForResolution(resolution, false);
-              const isResolving = !resolution;
-              const isBusy = busyKey === phoneOption.phoneE164;
-              const disabled = (action.disabled && !isResolving) || Boolean(busyKey);
+  if (!pendingContactSelection) {
+    return null;
+  }
 
-              return (
-                <View
-                  key={phoneOption.id}
-                  style={[styles.optionRow, { backgroundColor: activeTheme.colors.surfaceMuted }]}
-                >
-                  <View style={styles.contactCopy}>
-                    <AppText style={styles.contactName}>{contactMeta(phoneOption)}</AppText>
-                    <AppText style={styles.contactPhone}>
-                      {contactOptionStatusLabel(resolution, inviteAvailableLabel)}
-                    </AppText>
-                  </View>
-                  <Pressable
-                    disabled={disabled}
-                    onPress={
-                      disabled || !pendingContactSelection
-                        ? undefined
-                        : isResolving
-                          ? () => {
-                              void onReviewPhone({ phoneE164: phoneOption.phoneE164 });
-                            }
-                          : () => {
-                              onCancel();
-                              void onCreateOutreach({
-                                alias: pendingContactSelection.alias,
-                                phoneE164: phoneOption.phoneE164,
-                                phoneLabel: phoneOption.label,
-                                sourceContext: 'home_add_contact_option',
-                              });
-                            }
-                    }
-                    style={({ pressed }) => [
-                      styles.contactActionButton,
-                      {
-                        backgroundColor:
-                          action.tone === 'invite'
-                            ? activeTheme.colors.warning
-                            : action.tone === 'muted'
-                              ? activeTheme.colors.muted
-                              : activeTheme.colors.primary,
-                      },
-                      pressed && !disabled ? styles.pressed : null,
-                      disabled ? styles.disabled : null,
-                    ]}
-                  >
-                    <Ionicons
-                      color={activeTheme.colors.white}
-                      name={isBusy ? 'sync-outline' : action.icon}
-                      size={14}
-                    />
-                    <AppText style={styles.contactActionText}>
-                      {isBusy ? 'Revisando' : action.label}
-                    </AppText>
-                  </Pressable>
-                </View>
-              );
-            })}
-            <PrimaryAction compact label="Cancelar" onPress={onCancel} variant="ghost" />
+  const content = (
+    <View
+      style={[
+        styles.optionScrim,
+        presentation === 'inline' ? styles.optionInlineScrim : null,
+        { backgroundColor: activeTheme.colors.overlay },
+      ]}
+    >
+      <Pressable onPress={onCancel} style={styles.sheetBackdrop} />
+      <View style={[styles.optionCard, { backgroundColor: activeTheme.colors.surface }]}>
+        <AppText style={styles.optionTitle}>Elige el número</AppText>
+        <AppText style={styles.emptyText}>
+          {`${pendingContactSelection.alias} tiene varios números.`}
+        </AppText>
+        {pendingContactOptionsResolving ? (
+          <View style={styles.optionNotice}>
+            <Ionicons color={activeTheme.colors.primary} name="sync-outline" size={16} />
+            <AppText style={styles.optionNoticeText}>
+              Consultando cada número para saber si se agrega o se invita.
+            </AppText>
           </View>
+        ) : null}
+        <View style={styles.optionList}>
+          {pendingContactOptions.map(({ contact, resolution }) => {
+            const phoneOption = contact.primaryPhone;
+            const action = actionMetaForResolution(resolution, false);
+            const isResolving = !resolution;
+            const isBusy = busyKey === phoneOption.phoneE164;
+            const disabled = (action.disabled && !isResolving) || Boolean(busyKey);
+
+            return (
+              <View
+                key={phoneOption.id}
+                style={[styles.optionRow, { backgroundColor: activeTheme.colors.surfaceMuted }]}
+              >
+                <View style={styles.contactCopy}>
+                  <AppText style={styles.contactName}>{contactMeta(phoneOption)}</AppText>
+                  <AppText style={styles.contactPhone}>
+                    {contactOptionStatusLabel(resolution, inviteAvailableLabel)}
+                  </AppText>
+                </View>
+                <Pressable
+                  disabled={disabled}
+                  onPress={
+                    disabled
+                      ? undefined
+                      : isResolving
+                        ? () => {
+                            void onReviewPhone({ phoneE164: phoneOption.phoneE164 });
+                          }
+                        : () => {
+                            onCancel();
+                            void onCreateOutreach({
+                              alias: pendingContactSelection.alias,
+                              phoneE164: phoneOption.phoneE164,
+                              phoneLabel: phoneOption.label,
+                              sourceContext: 'home_add_contact_option',
+                            });
+                          }
+                  }
+                  style={({ pressed }) => [
+                    styles.contactActionButton,
+                    {
+                      backgroundColor:
+                        action.tone === 'invite'
+                          ? activeTheme.colors.warning
+                          : action.tone === 'muted'
+                            ? activeTheme.colors.muted
+                            : activeTheme.colors.primary,
+                    },
+                    pressed && !disabled ? styles.pressed : null,
+                    disabled ? styles.disabled : null,
+                  ]}
+                >
+                  <Ionicons
+                    color={activeTheme.colors.white}
+                    name={isBusy ? 'sync-outline' : action.icon}
+                    size={14}
+                  />
+                  <AppText style={styles.contactActionText}>
+                    {isBusy ? 'Revisando' : action.label}
+                  </AppText>
+                </Pressable>
+              </View>
+            );
+          })}
+          <PrimaryAction compact label="Cancelar" onPress={onCancel} variant="ghost" />
         </View>
       </View>
+    </View>
+  );
+
+  if (presentation === 'inline') {
+    return content;
+  }
+
+  return (
+    <Modal animationType="fade" onRequestClose={onCancel} transparent visible>
+      {content}
     </Modal>
   );
 }
