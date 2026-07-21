@@ -1,4 +1,4 @@
-import type { Viewport } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 import {
   DEFAULT_SOCIAL_DESCRIPTION,
@@ -8,10 +8,15 @@ import {
 
 import './globals.css';
 
-export const metadata = buildSocialMetadata({
-  description: DEFAULT_SOCIAL_DESCRIPTION,
-  title: `${DEFAULT_SOCIAL_TITLE} | Finanzas entre amigos`,
-});
+export const metadata: Metadata = {
+  ...buildSocialMetadata({
+    description: DEFAULT_SOCIAL_DESCRIPTION,
+    title: `${DEFAULT_SOCIAL_TITLE} | Finanzas entre amigos`,
+  }),
+  verification: {
+    google: '99G8t0bnL9laiNacR-KCSy6zeDTM5MhxB4nBl4NVLpM',
+  },
+};
 
 export const viewport: Viewport = {
   colorScheme: 'light dark',
