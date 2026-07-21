@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-07-04.
+Ultima revision: 2026-07-21.
 
 Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera
 salida en Colombia.
@@ -108,6 +108,22 @@ Requisitos remotos:
 - EAS `preview` con variables publicas de test/demo.
 
 La promocion publica a produccion sigue siendo manual.
+
+## EU Digital Services Act: Trader Status
+
+Estado declarado en App Store Connect el 2026-07-21:
+
+- Happy Circles esta declarado como **Non-Trader** bajo la DSA porque la app se
+  distribuye actualmente como una herramienta gratuita de ayuda, sin
+  monetizacion ni actividad comercial.
+- Esta declaracion no es permanente. Debe reevaluarse **antes** de monetizar la
+  app, firmar o activar el Paid Apps Agreement, ofrecer compras o suscripciones,
+  cobrar por servicios, vender publicidad o usar la app como parte de una
+  actividad comercial o profesional.
+- Si cualquiera de esas condiciones cambia, actualizar App Store Connect >
+  Business > Digital Services Act Compliance a **Trader** y completar la
+  verificacion de direccion, telefono y correo comercial antes del siguiente
+  envio a revision o distribucion en la Union Europea.
 
 ## Supabase produccion
 
