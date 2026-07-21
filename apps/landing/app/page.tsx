@@ -39,6 +39,10 @@ export default function LandingPage() {
           <HappyCirclesMark />
           <div className="brandCopy">
             <h1 id="landing-title">Happy Circles</h1>
+            <p>
+              Happy Circles es una aplicación para organizar gastos, deudas y pagos entre amigos
+              de forma clara y segura.
+            </p>
           </div>
         </div>
 
