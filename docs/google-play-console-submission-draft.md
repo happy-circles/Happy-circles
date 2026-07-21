@@ -1,6 +1,6 @@
 # Google Play Console submission draft
 
-Ultima revision: 2026-07-04.
+Ultima revision: 2026-07-05.
 
 Valores listos para completar Play Console para `com.happycircles.app`.
 
@@ -112,8 +112,10 @@ Play Console exige antes de produccion:
 
 Pendiente tecnico antes de subir el AAB:
 
-- AAB generado con EAS: build `60d857ef-8a98-47dd-aa83-ee2909bf6592`,
-  `versionName 0.1.2`, `versionCode 19`.
+- AAB generado con EAS: build `8d476add-8025-46f1-8d7a-7f9cd5d0f19a`,
+  `versionName 0.1.2`, `versionCode 20`.
+- AAB descargado localmente:
+  `dist/mobile-builds/happy-circles-0.1.2-android-20.aab`.
 - Usar credenciales de firma correctas de EAS/Play, no un build local firmado
   con debug keystore.
 - Pendiente: configurar/asignar en EAS una Google Service Account Key con

@@ -86,13 +86,13 @@ Estado versionado:
 No tratar build IDs o artifact URLs antiguos como estado actual. Confirmar el
 ultimo build en Expo/EAS antes de citarlo en una entrega.
 
-Estado EAS observado el 2026-07-04:
+Estado EAS observado el 2026-07-05:
 
 - iOS production build `936eb1bd-a5f1-47c6-aaec-167dd3f6502a`:
   `0.1.2 (30)`, subido a App Store Connect con submission
   `4f86060c-0346-47be-9755-156a58234c48`.
-- Android production build `60d857ef-8a98-47dd-aa83-ee2909bf6592`:
-  `0.1.2 (19)`, AAB generado.
+- Android production build `8d476add-8025-46f1-8d7a-7f9cd5d0f19a`:
+  `0.1.2 (20)`, AAB generado el 2026-07-05.
 - Android submit a Play queda bloqueado hasta asignar una Google Service
   Account Key para Play Store Submissions en EAS. La key existente en EAS es de
   FCM y no esta asignada a submissions.
@@ -254,7 +254,7 @@ Notas:
 
 ## Google Play Console current status
 
-Observado en Play Console el 2026-07-04 para `com.happycircles.app`:
+Observado en Play Console el 2026-07-05 para `com.happycircles.app`:
 
 - Estado de aplicacion: Borrador.
 - Produccion: Inactivo.
@@ -262,14 +262,18 @@ Observado en Play Console el 2026-07-04 para `com.happycircles.app`:
 - Prueba cerrada: Inactivo.
 - Produccion bloqueada hasta solicitar acceso despues de una prueba cerrada.
 - Testers aceptados para el requisito de produccion: 0.
+- Declaraciones guardadas: politica de privacidad y anuncios.
 
 Tareas pendientes visibles en el panel:
 
-- Establece la politica de privacidad.
 - Datos de inicio de sesion.
-- Anuncios.
 - Clasificacion de contenido.
+- Publico objetivo.
 - Seguridad de los datos.
+- ID de publicidad.
+- Apps gubernamentales.
+- Funciones financieras.
+- Apps de salud.
 - Selecciona una categoria de la aplicacion y proporciona datos de contacto.
 - Configura la Ficha de Play Store.
 
@@ -288,12 +292,14 @@ Requisito para pedir produccion:
 - Ejecutar la prueba cerrada con 12 testers como minimo durante al menos 14
   dias.
 
-Estado EAS 2026-07-04:
+Estado EAS 2026-07-05:
 
-- AAB listo: build `60d857ef-8a98-47dd-aa83-ee2909bf6592`, version
-  `0.1.2 (19)`.
-- No se pudo enviar desde CLI porque `com.happycircles.app` no tiene Google
-  Service Account Key configurada para Play Store Submissions.
+- AAB vigente: build `8d476add-8025-46f1-8d7a-7f9cd5d0f19a`, version
+  `0.1.2 (20)`.
+- AAB descargado localmente en
+  `dist/mobile-builds/happy-circles-0.1.2-android-20.aab`.
+- `eas submit` no pudo enviar a Play porque `com.happycircles.app` no tiene
+  Google Service Account Key configurada para Play Store Submissions.
 
 ## DNS y App Links
 
