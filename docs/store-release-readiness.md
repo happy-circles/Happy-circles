@@ -334,8 +334,13 @@ Contenido validado el 2026-07-03:
 - `apple-app-site-association` incluye
   `AA75LHJ4LC.com.happycircles.app`.
 - `assetlinks.json` incluye package `com.happycircles.app`.
-- SHA256 Android actual publicado:
+- SHA256 de la clave de carga de Android:
   `CE:9F:B0:28:2F:5C:7D:0A:DC:A9:37:34:92:86:1F:59:4B:2B:82:84:EB:5A:5C:DA:0E:40:03:54:B5:94:05:EB`.
+- SHA256 de la clave de firma de Google Play (confirmado el 2026-07-21):
+  `9B:01:55:F0:D7:F0:F3:54:E0:5A:D3:B8:7E:D6:5D:D4:35:AB:80:A6:6A:6D:32:3A:94:04:C4:7B:26:0B:DC:39`.
+- `ANDROID_SHA256_CERT_FINGERPRINTS` debe contener ambos fingerprints,
+  separados por coma, para cubrir instalaciones directas y las distribuidas
+  por Google Play.
 
 Pendiente externo:
 
@@ -347,9 +352,8 @@ Pendiente externo:
   - `NEXT_PUBLIC_PLAY_STORE_URL`.
 - Provisionar `soporte@happy-circles.com` como buzon, alias o grupo real antes
   de publicar en tiendas.
-- Confirmar si Google Play App Signing genera un certificado distinto al upload
-  key de EAS. Si es distinto, agregar el fingerprint de Play Console a
-  `ANDROID_SHA256_CERT_FINGERPRINTS` en Vercel.
+- La asociación de Android se desplegó a producción el 2026-07-21 y el dominio
+  público responde con las claves de carga y de firma de Google Play.
 - Validar de nuevo antes de submit:
   - `https://app.happy-circles.com/.well-known/apple-app-site-association`
   - `https://app.happy-circles.com/.well-known/assetlinks.json`
