@@ -37,6 +37,8 @@ function buildPreviewProfile(input: {
 }): UserProfileRow {
   return {
     account_access_state: 'active',
+    account_invite_claim_expires_at: null,
+    account_invite_claimed_at: null,
     activated_at: PREVIEW_NOW,
     activated_via_account_invite_id: null,
     avatar_path: input.avatarPath ?? null,
@@ -51,10 +53,14 @@ function buildPreviewProfile(input: {
     phone_country_calling_code: input.phoneCountryCallingCode ?? null,
     phone_country_iso2: input.phoneCountryIso2 ?? null,
     phone_e164: input.phoneE164 ?? null,
+    phone_identity_legacy_at: input.phoneE164 ? PREVIEW_NOW : null,
     phone_national_number: input.phoneNationalNumber ?? null,
     phone_verified_at: input.phoneVerifiedAt ?? null,
+    pending_account_invite_delivery_id: null,
+    pending_account_invite_id: null,
     updated_at: PREVIEW_NOW,
     welcome_email_last_error: null,
+    welcome_email_lease_id: null,
     welcome_email_queued_at: null,
     welcome_email_sent_at: null,
   };
@@ -128,7 +134,7 @@ function normalizePreviewPhone(input: CompleteProfileInput) {
       ? `${input.phoneCountryCallingCode}${nationalNumber.replace(/\D/g, '')}`
       : null,
     phoneNationalNumber: nationalNumber,
-    phoneVerifiedAt: nationalNumber ? PREVIEW_NOW : null,
+    phoneVerifiedAt: null,
   };
 }
 

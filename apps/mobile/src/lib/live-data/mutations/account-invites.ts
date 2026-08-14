@@ -4,6 +4,7 @@ import {
   accountInvitePreviewSchema,
   activateAccountFromInviteSchema,
   cancelAccountInviteSchema,
+  resumeAccountInviteSchema,
   reviewAccountInviteSchema,
 } from '@happy-circles/shared';
 
@@ -23,9 +24,12 @@ export function useAccountInvitePreviewQuery(deliveryToken: string | null) {
       return invokeParsedEdgeFunction<
         ReturnType<typeof accountInvitePreviewSchema.parse>,
         AccountInvitePreviewResult
-      >('get-account-invite-preview-public', accountInvitePreviewSchema, {
-        deliveryToken,
-      });
+      >(
+        'get-account-invite-preview-public',
+        accountInvitePreviewSchema,
+        { deliveryToken },
+        userId ? undefined : { authorization: 'omit' },
+      );
     },
   });
 }
@@ -37,6 +41,7 @@ export function useActivateAccountFromInviteMutation() {
     mutationFn: async (input: {
       readonly deliveryToken: string;
       readonly currentDeviceId: string;
+      readonly idempotencyKey?: string;
     }) => {
       if (session.deviceTrustState !== 'trusted') {
         throw new Error('Este teléfono aún no es confiable. Confíalo primero desde seguridad.');
@@ -48,10 +53,48 @@ export function useActivateAccountFromInviteMutation() {
       >(
         'activate-account-from-invite',
         activateAccountFromInviteSchema,
-        withIdempotencyKey('activate_account_from_invite', {
-          deliveryToken: input.deliveryToken,
-          currentDeviceId: input.currentDeviceId,
-        }),
+        input.idempotencyKey
+          ? {
+              deliveryToken: input.deliveryToken,
+              currentDeviceId: input.currentDeviceId,
+              idempotencyKey: input.idempotencyKey,
+            }
+          : withIdempotencyKey('activate_account_from_invite', {
+              deliveryToken: input.deliveryToken,
+              currentDeviceId: input.currentDeviceId,
+            }),
+      );
+    },
+    onSuccess: invalidateAppSnapshot,
+  });
+}
+
+export function useResumeAccountInviteMutation() {
+  const session = useSession();
+
+  return useMutation({
+    mutationFn: async (input: {
+      readonly currentDeviceId: string;
+      readonly idempotencyKey?: string;
+    }) => {
+      if (session.deviceTrustState !== 'trusted') {
+        throw new Error('Este teléfono aún no es confiable. Confíalo primero desde seguridad.');
+      }
+
+      return invokeParsedEdgeFunction<
+        ReturnType<typeof resumeAccountInviteSchema.parse>,
+        AccountInviteActionResult
+      >(
+        'resume-account-invite',
+        resumeAccountInviteSchema,
+        input.idempotencyKey
+          ? {
+              currentDeviceId: input.currentDeviceId,
+              idempotencyKey: input.idempotencyKey,
+            }
+          : withIdempotencyKey('resume_account_invite', {
+              currentDeviceId: input.currentDeviceId,
+            }),
       );
     },
     onSuccess: invalidateAppSnapshot,

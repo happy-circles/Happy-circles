@@ -1,4 +1,6 @@
 export const MIN_ACCOUNT_INVITE_TOKEN_LENGTH = 12;
+export const MAX_ACCOUNT_INVITE_TOKEN_LENGTH = 256;
+const MAX_ACCOUNT_INVITE_INPUT_LENGTH = 4096;
 export const ACCOUNT_INVITE_USED_MESSAGE =
   'Esta invitación ya fue utilizada. Pídele a quien te invitó que genere una nueva desde la app.';
 export const ACCOUNT_INVITE_UNAVAILABLE_MESSAGE =
@@ -38,21 +40,30 @@ export function inviteReasonLabel(reason: string): string {
 
 export function extractAccountInviteToken(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? '';
-  if (!trimmed) {
+  if (!trimmed || trimmed.length > MAX_ACCOUNT_INVITE_INPUT_LENGTH) {
     return '';
   }
+
+  const normalizeToken = (candidate: string): string => {
+    try {
+      const decoded = decodeURIComponent(candidate).trim();
+      return decoded.length <= MAX_ACCOUNT_INVITE_TOKEN_LENGTH ? decoded : '';
+    } catch {
+      return '';
+    }
+  };
 
   try {
     const url = new URL(trimmed);
     const tokenParam = url.searchParams.get('token') ?? url.searchParams.get('invite');
     if (tokenParam?.trim()) {
-      return tokenParam.trim();
+      return normalizeToken(tokenParam);
     }
 
     const pathParts = [url.host, ...url.pathname.split('/')].filter(Boolean);
     const joinIndex = pathParts.findIndex((part) => part.toLocaleLowerCase('en-US') === 'join');
     if (joinIndex >= 0 && pathParts[joinIndex + 1]) {
-      return decodeURIComponent(pathParts[joinIndex + 1]);
+      return normalizeToken(pathParts[joinIndex + 1]);
     }
   } catch {
     // Not a URL. Fall through and treat it as a raw token or copied path.
@@ -62,10 +73,10 @@ export function extractAccountInviteToken(value: string | null | undefined): str
   const pathParts = withoutQuery.split('/').filter(Boolean);
   const joinIndex = pathParts.findIndex((part) => part.toLocaleLowerCase('en-US') === 'join');
   if (joinIndex >= 0 && pathParts[joinIndex + 1]) {
-    return decodeURIComponent(pathParts[joinIndex + 1]);
+    return normalizeToken(pathParts[joinIndex + 1]);
   }
 
-  return trimmed;
+  return normalizeToken(trimmed);
 }
 
 export function accountInviteStatusMessage(status: string, deliveryStatus: string): string | null {

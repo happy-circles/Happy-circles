@@ -15,7 +15,10 @@ import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import { clearPendingInviteIntent, writePendingInviteIntent } from '@/lib/invite-intent';
+import {
+  clearPendingInviteIntentIfMatches,
+  writePendingInviteIntent,
+} from '@/lib/invite-intent';
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
@@ -265,7 +268,10 @@ export function InviteLinkScreen() {
 
     try {
       const response = await claimInvite.mutateAsync(deliveryToken);
-      await clearPendingInviteIntent();
+      await clearPendingInviteIntentIfMatches({
+        type: 'friendship_invite',
+        token: deliveryToken,
+      });
       setMessage(
         response.status === 'accepted'
           ? 'Conexión confirmada. La amistad ya quedó creada.'
@@ -292,7 +298,12 @@ export function InviteLinkScreen() {
         inviteId: preview.inviteId,
         decision,
       });
-      await clearPendingInviteIntent();
+      if (deliveryToken) {
+        await clearPendingInviteIntentIfMatches({
+          type: 'friendship_invite',
+          token: deliveryToken,
+        });
+      }
       setMessage(
         decision === 'approve'
           ? 'Conexión confirmada. La amistad ya quedó creada.'
@@ -307,7 +318,12 @@ export function InviteLinkScreen() {
   }
 
   async function handleDismissInvite() {
-    await clearPendingInviteIntent();
+    if (deliveryToken) {
+      await clearPendingInviteIntentIfMatches({
+        type: 'friendship_invite',
+        token: deliveryToken,
+      });
+    }
     await navigateHome();
   }
 

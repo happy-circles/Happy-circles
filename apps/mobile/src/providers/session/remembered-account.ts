@@ -13,7 +13,6 @@ export function isRememberedAccountSnapshot(value: unknown): value is Remembered
     typeof snapshot.userId === 'string' &&
     snapshot.userId.length > 0 &&
     typeof snapshot.displayName === 'string' &&
-    snapshot.displayName.length > 0 &&
     (snapshot.email === null || typeof snapshot.email === 'string') &&
     (snapshot.avatarPath === null || typeof snapshot.avatarPath === 'string') &&
     (snapshot.accountAccessState === 'needs_invite' ||
@@ -22,6 +21,19 @@ export function isRememberedAccountSnapshot(value: unknown): value is Remembered
     typeof snapshot.lastUsedAt === 'string' &&
     snapshot.lastUsedAt.length > 0
   );
+}
+
+export function resolveRememberedAccountDisplayName(
+  displayName: string,
+  email: string | null,
+): string {
+  const normalizedDisplayName = displayName.trim();
+  if (normalizedDisplayName) {
+    return normalizedDisplayName;
+  }
+
+  const emailLabel = email?.split('@')[0]?.trim();
+  return emailLabel || 'Tu cuenta';
 }
 
 export async function readRememberedAccountSnapshot(): Promise<RememberedAccountSnapshot | null> {
@@ -37,7 +49,10 @@ export async function readRememberedAccountSnapshot(): Promise<RememberedAccount
       return null;
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      displayName: resolveRememberedAccountDisplayName(parsed.displayName, parsed.email),
+    };
   } catch {
     await removeStoredItem(REMEMBERED_ACCOUNT_KEY);
     return null;
@@ -55,7 +70,7 @@ export async function persistRememberedAccountSnapshot(
   const derivedAccessState = deriveAccountAccessState(profile);
   const snapshot: RememberedAccountSnapshot = {
     userId: profile.id,
-    displayName: profile.display_name,
+    displayName: resolveRememberedAccountDisplayName(profile.display_name, profile.email),
     email: profile.email,
     avatarPath: profile.avatar_path,
     accountAccessState: derivedAccessState === 'loading' ? 'needs_invite' : derivedAccessState,

@@ -1,5 +1,5 @@
 import { queryClient } from '../query-client';
-import { supabase } from '../supabase';
+import { publicEdgeSupabase, supabase } from '../supabase';
 import {
   createSupportId,
   isJwtAuthError,
@@ -8,6 +8,7 @@ import {
 } from '../support-errors';
 import {
   APP_SNAPSHOT_QUERY_KEY,
+  EDGE_FUNCTION_TIMEOUT_MS,
   LIVE_SNAPSHOT_TIMEOUT_MS,
   PEOPLE_OVERVIEW_QUERY_KEY,
 } from './constants';
@@ -57,11 +58,41 @@ export function assertSupabaseClient() {
   return supabase;
 }
 
+export interface InvokeSupabaseFunctionOptions {
+  readonly authorization?: 'session' | 'omit';
+}
+
+function assertPublicEdgeSupabaseClient() {
+  if (!publicEdgeSupabase) {
+    throw new Error('El servicio de datos no está disponible en este momento.');
+  }
+
+  return publicEdgeSupabase;
+}
+
+function isInvocationTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const record = error as { readonly context?: unknown; readonly name?: unknown };
+  const context =
+    record.context && typeof record.context === 'object'
+      ? (record.context as { readonly name?: unknown })
+      : null;
+
+  return record.name === 'AbortError' || context?.name === 'AbortError';
+}
+
 export async function invokeSupabaseFunction<TBody extends Record<string, unknown>, TResult>(
   name: string,
   body: TBody,
+  options: InvokeSupabaseFunctionOptions = {},
 ): Promise<TResult> {
-  const client = assertSupabaseClient();
+  const shouldOmitAuthorization = options.authorization === 'omit';
+  const client = shouldOmitAuthorization
+    ? assertPublicEdgeSupabaseClient()
+    : assertSupabaseClient();
   const supportId = createSupportId();
   const invoke = async () =>
     client.functions.invoke<TResult>(name, {
@@ -70,12 +101,25 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
         'x-client-info': 'happy-circles-mobile',
         'x-request-id': supportId,
       },
+      timeout: EDGE_FUNCTION_TIMEOUT_MS,
     });
   let result = await invoke();
 
   if (result.error) {
+    if (isInvocationTimeoutError(result.error)) {
+      throw reportAndCreateSupportError({
+        error: new Error('La solicitud tardó demasiado. Revisa tu conexión e intenta de nuevo.'),
+        errorCode: 'request_timeout',
+        functionName: name,
+        kind: 'edge_function',
+        metadata: { status: 'timeout' },
+        requestId: supportId,
+        supportId,
+      });
+    }
+
     const details = await readFunctionErrorDetails(result.error);
-    if (isJwtAuthError(details)) {
+    if (isJwtAuthError(details) && !shouldOmitAuthorization) {
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
       if (refreshError || !refreshData.session) {
         await client.auth.signOut();

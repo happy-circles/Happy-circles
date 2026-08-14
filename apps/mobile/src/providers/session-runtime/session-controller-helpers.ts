@@ -29,37 +29,6 @@ export function normalizeStepUpAuthInput(input?: boolean | StepUpAuthInput): Req
   };
 }
 
-export async function revokeDuplicateActiveDeviceRows(input: {
-  readonly client: SessionClient;
-  readonly currentDeviceId: string;
-  readonly deviceName: string | null;
-  readonly platform: string;
-  readonly timestamp: string;
-  readonly userId: string;
-}): Promise<void> {
-  const deviceName = input.deviceName?.trim();
-  if (!deviceName) {
-    return;
-  }
-
-  const { error } = await input.client
-    .from('trusted_devices')
-    .update({
-      trust_state: 'revoked',
-      revoked_at: input.timestamp,
-      last_seen_at: input.timestamp,
-    } as never)
-    .eq('user_id', input.userId)
-    .eq('platform', input.platform)
-    .eq('device_name', deviceName)
-    .neq('device_id', input.currentDeviceId)
-    .in('trust_state', ['pending', 'trusted']);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
 export async function resolveUserIdentities(
   client: SessionClient | null,
   currentSession: Session,

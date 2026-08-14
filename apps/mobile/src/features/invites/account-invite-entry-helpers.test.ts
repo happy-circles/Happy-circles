@@ -19,6 +19,9 @@ describe('account invite entry helpers', () => {
     expect(extractAccountInviteToken('happycircles://join/token-456')).toBe('token-456');
     expect(extractAccountInviteToken('/join/token-789?source=sms')).toBe('token-789');
     expect(extractAccountInviteToken(' raw-token ')).toBe('raw-token');
+    expect(extractAccountInviteToken('/join/%E0%A4%A')).toBe('');
+    expect(extractAccountInviteToken(`https://happy.test/join/${'x'.repeat(257)}`)).toBe('');
+    expect(extractAccountInviteToken('x'.repeat(4097))).toBe('');
   });
 
   it('derives entry mode from route params and remembered account state', () => {

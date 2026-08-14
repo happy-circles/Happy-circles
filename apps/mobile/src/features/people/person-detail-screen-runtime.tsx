@@ -101,21 +101,14 @@ import {
   pendingCaseTone,
   pendingCurrentStatusDetail,
   pendingCurrentStatusTone,
+  PERSON_DETAIL_FOCUS_HIGHLIGHT_DURATION_MS,
+  type PersonDetailBannerState,
+  type PersonDetailScreenProps,
 } from './person-detail-runtime-utils';
 import { personDetailScreenStyles as styles } from './person-detail-screen.styles';
 import { AppText } from '@/components/app-text';
 
-export interface PersonDetailScreenProps {
-  readonly focusItemId?: string;
-  readonly initialPanel?: PersonSegmentKey;
-  readonly userId: string;
-}
-interface BannerState {
-  readonly message: string;
-  readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
-}
-
-const FOCUS_HIGHLIGHT_DURATION_MS = 1800;
+export type { PersonDetailScreenProps } from './person-detail-runtime-utils';
 
 export function PersonDetailScreen({ focusItemId, initialPanel, userId }: PersonDetailScreenProps) {
   const router = useRouter();
@@ -130,7 +123,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
-  const [banner, setBanner] = useState<BannerState | null>(null);
+  const [banner, setBanner] = useState<PersonDetailBannerState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [expandedPendingItemIds, setExpandedPendingItemIds] = useState<string[]>([]);
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
@@ -441,7 +434,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
     const timeout = setTimeout(() => {
       setFocusedLandingActive(false);
-    }, FOCUS_HIGHLIGHT_DURATION_MS);
+    }, PERSON_DETAIL_FOCUS_HIGHLIGHT_DURATION_MS);
 
     return () => {
       clearTimeout(timeout);

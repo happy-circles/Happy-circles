@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Linking from 'expo-linking';
 import { AppState, Platform } from 'react-native';
 import {
@@ -13,7 +12,6 @@ import {
   registrationSchema,
 } from '@happy-circles/shared';
 
-import { getCurrentDeviceName } from '@/lib/device-trust';
 import { buildPhoneE164, normalizeCallingCode, normalizePhoneDigits } from '@/lib/phone';
 import {
   getBiometricSupport,
@@ -28,9 +26,8 @@ import {
 import { isLowQualityDisplayName } from '@/lib/setup-account';
 import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
-import { appConfig } from '@/lib/config';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
-import { getStoredItem, removeStoredItem, setStoredItem } from '@/lib/storage';
+import { removeStoredItem, setStoredItem } from '@/lib/storage';
 import {
   getLocalNotificationPermissionStatus,
   requestLocalNotificationPermissionStatus,
@@ -42,21 +39,25 @@ import {
   reportClientErrorSafe,
   withSupportCode,
 } from '@/lib/support-errors';
-import {
-  extractAuthCallbackCode,
-  extractAuthCallbackTokens,
-  isAppAuthCallbackUrl,
-  isPasswordRecoveryCallbackUrl,
-} from '../session/auth-callbacks';
 import { performNativeAppleAuth } from './apple-native-auth';
 import { traceAuthDebugEvent } from './auth-debug';
 import { performGoogleAuthFlow } from './google-auth-flow';
 import { reportSocialAuthFailure } from './social-auth-reporting';
 import { loadSessionAccountState } from './session-account-loader';
+import { readSessionBootstrapPreferences } from './session-bootstrap';
+import { applyAuthSessionFromUrl } from './session-callback';
+import { invokeSessionEdgeAction, trustCurrentSessionDevice } from './session-edge-action';
+import {
+  SESSION_ACCOUNT_LOAD_TIMEOUT_MS,
+  SESSION_AUTH_OPERATION_TIMEOUT_MS,
+  SESSION_BOOTSTRAP_TASK_TIMEOUT_MS,
+  SESSION_SOCIAL_AUTH_TIMEOUT_MS,
+  sessionOperationErrorMessage,
+  withSessionOperationTimeout,
+} from './session-operation';
 import {
   hashInviteTokenForRegistration,
   normalizeStepUpAuthInput,
-  revokeDuplicateActiveDeviceRows,
 } from './session-controller-helpers';
 import {
   isSessionEmailConfirmed,
@@ -78,7 +79,6 @@ import {
 } from '../session/constants';
 import {
   persistRememberedAccountSnapshot,
-  readRememberedAccountSnapshot,
 } from '../session/remembered-account';
 import {
   createRecentPasswordAuth,
@@ -119,6 +119,14 @@ import type {
 const ACCOUNT_INVITE_USED_OR_UNAVAILABLE_MESSAGE =
   'Esta invitación ya fue utilizada o no está disponible. Pídele a quien te invitó que genere una nueva desde la app.';
 
+interface AccountStateLoadOptions {
+  readonly biometricPreference?: boolean;
+  readonly initialLock: boolean;
+  readonly preserveLocked: boolean;
+  readonly preserveTrustedDeviceDuringLoad: boolean;
+  readonly setSessionStatusLoading?: boolean;
+}
+
 export function useSessionController(): SessionContextValue {
   const authMode: AuthMode = 'supabase';
 
@@ -152,6 +160,7 @@ export function useSessionController(): SessionContextValue {
   const [passwordRecoverySessionUserId, setPasswordRecoverySessionUserIdState] = useState<
     string | null
   >(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const backgroundedAtRef = useRef<number | null>(null);
@@ -160,12 +169,22 @@ export function useSessionController(): SessionContextValue {
   const authCallbackUrlsInFlightRef = useRef(new Map<string, Promise<boolean>>());
   const sessionRef = useRef<Session | null>(null);
   const statusRef = useRef<SessionStatus>('loading');
+  const biometricsEnabledRef = useRef(false);
+  const bootstrapStartedRef = useRef(false);
+  const bootstrapRunRef = useRef<(() => Promise<void>) | null>(null);
+  const accountLoadsInFlightRef = useRef(new Map<string, Promise<void>>());
+  const mountedRef = useRef(true);
   const passwordRecoverySessionUserIdRef = useRef<string | null>(null);
   const welcomeEmailAttemptedUserIdsRef = useRef(new Set<string>());
 
   const setSessionStatus = useCallback((nextStatus: SessionStatus) => {
     statusRef.current = nextStatus;
     setStatusState(nextStatus);
+  }, []);
+
+  const applyBiometricsEnabled = useCallback((enabled: boolean) => {
+    biometricsEnabledRef.current = enabled;
+    setBiometricsEnabledState(enabled);
   }, []);
 
   const setPasswordRecoverySessionUserId = useCallback((userId: string | null) => {
@@ -193,13 +212,25 @@ export function useSessionController(): SessionContextValue {
   }, [setPasswordRecoverySessionUserId]);
 
   const refreshNativePermissionStatuses = useCallback(async () => {
-    const [nextContactsPermissionStatus, nextNotificationsPermissionStatus] = await Promise.all([
-      getContactsPermissionStatus(),
-      getLocalNotificationPermissionStatus(),
+    const [contactsResult, notificationsResult] = await Promise.allSettled([
+      withSessionOperationTimeout(
+        'contacts-permission-status',
+        getContactsPermissionStatus(),
+        SESSION_BOOTSTRAP_TASK_TIMEOUT_MS,
+      ),
+      withSessionOperationTimeout(
+        'notifications-permission-status',
+        getLocalNotificationPermissionStatus(),
+        SESSION_BOOTSTRAP_TASK_TIMEOUT_MS,
+      ),
     ]);
 
-    setContactsPermissionStatus(nextContactsPermissionStatus);
-    setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
+    if (contactsResult.status === 'fulfilled') {
+      setContactsPermissionStatus(contactsResult.value);
+    }
+    if (notificationsResult.status === 'fulfilled') {
+      setNotificationsPermissionStatus(notificationsResult.value);
+    }
   }, []);
 
   const applySessionFromUrl = useCallback(
@@ -211,17 +242,6 @@ export function useSessionController(): SessionContextValue {
           result: 'skipped',
           source: 'session_callback',
           stage: 'callback_unavailable',
-        });
-        return false;
-      }
-
-      if (!isAppAuthCallbackUrl(url, appConfig.appWebOrigin)) {
-        traceAuthDebugEvent({
-          provider: 'supabase',
-          reason: 'not_app_auth_callback',
-          result: 'skipped',
-          source: 'session_callback',
-          stage: 'callback_ignored',
         });
         return false;
       }
@@ -249,136 +269,22 @@ export function useSessionController(): SessionContextValue {
         return inFlightCallback;
       }
 
-      const callbackPromise = (async () => {
-        const isPasswordRecoveryCallback = isPasswordRecoveryCallbackUrl(url);
-        const authCode = extractAuthCallbackCode(url);
-        if (authCode) {
-          traceAuthDebugEvent({
-            metadata: { passwordRecovery: isPasswordRecoveryCallback },
-            mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-            provider: 'supabase',
-            result: 'started',
-            source: 'session_callback',
-            stage: 'exchange_code_for_session',
-          });
-          const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
-
-          if (error) {
-            traceAuthDebugEvent({
-              message: error.message,
-              mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-              provider: 'supabase',
-              reason: 'supabase_error',
-              result: 'failed',
-              source: 'session_callback',
-              stage: 'exchange_code_for_session',
-            });
-            reportClientErrorSafe({
-              error,
-              errorCode: 'auth_callback_exchange_code',
-              errorMessage: error.message,
-              fatal: false,
-              kind: 'client_action',
-              metadata: {
-                operation: 'exchange_code_for_session',
-                reason: 'supabase_error',
-                result: 'failed',
-                source: 'auth_callback',
-              },
-            });
-            console.warn(
-              'Failed to exchange Supabase auth code from auth callback',
-              error instanceof Error ? error.message : String(error),
-            );
-            return false;
-          } else if (isPasswordRecoveryCallback && data.session) {
-            setPasswordRecoverySessionUserId(data.session.user.id);
-          }
-
-          traceAuthDebugEvent({
-            metadata: {
-              hasSession: Boolean(data.session),
-              passwordRecovery: isPasswordRecoveryCallback,
-            },
-            mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-            provider: 'supabase',
-            result: 'succeeded',
-            source: 'session_callback',
-            stage: 'exchange_code_for_session',
-          });
-          return true;
-        }
-
-        const tokens = extractAuthCallbackTokens(url);
-        if (!tokens) {
-          traceAuthDebugEvent({
-            provider: 'supabase',
-            reason: 'missing_code_or_tokens',
-            result: 'skipped',
-            source: 'session_callback',
-            stage: 'callback_without_credentials',
-          });
-          return false;
-        }
-
-        traceAuthDebugEvent({
-          metadata: { passwordRecovery: isPasswordRecoveryCallback },
-          mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-          provider: 'supabase',
-          result: 'started',
-          source: 'session_callback',
-          stage: 'set_session_from_tokens',
+      const callbackPromise = applyAuthSessionFromUrl({
+        client: supabase,
+        onPasswordRecoverySession: (nextSession) =>
+          setPasswordRecoverySessionUserId(nextSession.user.id),
+        url,
+      }).catch((error) => {
+        reportClientErrorSafe({
+          error,
+          errorCode: 'auth_callback_failed',
+          errorMessage: readErrorMessage(error),
+          fatal: false,
+          kind: 'client_action',
+          metadata: { operation: 'apply_session_from_url', source: 'auth_callback' },
         });
-        const { data, error } = await supabase.auth.setSession({
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-        });
-
-        if (error) {
-          traceAuthDebugEvent({
-            message: error.message,
-            mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-            provider: 'supabase',
-            reason: 'supabase_error',
-            result: 'failed',
-            source: 'session_callback',
-            stage: 'set_session_from_tokens',
-          });
-          reportClientErrorSafe({
-            error,
-            errorCode: 'auth_callback_set_session',
-            errorMessage: error.message,
-            fatal: false,
-            kind: 'client_action',
-            metadata: {
-              operation: 'set_session_from_callback',
-              reason: 'supabase_error',
-              result: 'failed',
-              source: 'auth_callback',
-            },
-          });
-          console.warn(
-            'Failed to restore Supabase session from auth callback',
-            error instanceof Error ? error.message : String(error),
-          );
-          return false;
-        } else if (isPasswordRecoveryCallback && data.session) {
-          setPasswordRecoverySessionUserId(data.session.user.id);
-        }
-
-        traceAuthDebugEvent({
-          metadata: {
-            hasSession: Boolean(data.session),
-            passwordRecovery: isPasswordRecoveryCallback,
-          },
-          mode: isPasswordRecoveryCallback ? 'password-recovery' : 'sign-in',
-          provider: 'supabase',
-          result: 'succeeded',
-          source: 'session_callback',
-          stage: 'set_session_from_tokens',
-        });
-        return true;
-      })();
+        return false;
+      });
 
       authCallbackUrlsInFlightRef.current.set(url, callbackPromise);
       try {
@@ -401,13 +307,7 @@ export function useSessionController(): SessionContextValue {
   const loadAccountState = useCallback(
     async (
       nextSession: Session,
-      options: {
-        readonly initialLock: boolean;
-        readonly preserveLocked: boolean;
-        readonly preserveTrustedDeviceDuringLoad: boolean;
-        readonly biometricPreference?: boolean;
-        readonly setSessionStatusLoading?: boolean;
-      },
+      options: AccountStateLoadOptions,
     ) => {
       if (!supabase) {
         return;
@@ -429,11 +329,15 @@ export function useSessionController(): SessionContextValue {
       setDeviceTrustState((current) =>
         options.preserveTrustedDeviceDuringLoad && current === 'trusted' ? 'trusted' : 'loading',
       );
-      const loadedAccountState = await loadSessionAccountState({
-        client,
-        nextSession,
-        setLoadingStage,
-      });
+      const loadedAccountState = await withSessionOperationTimeout(
+        'load-account-state',
+        loadSessionAccountState({
+          client,
+          nextSession,
+          setLoadingStage,
+        }),
+        SESSION_ACCOUNT_LOAD_TIMEOUT_MS,
+      );
 
       if (loadId !== accountLoadIdRef.current) {
         return;
@@ -450,6 +354,7 @@ export function useSessionController(): SessionContextValue {
       setTrustedDevices(loadedAccountState.trustedDevices);
       setCurrentDeviceId(loadedAccountState.currentDeviceId);
       setAuthProvider(loadedAccountState.authProvider);
+      setSessionError(null);
       void persistRememberedAccountSnapshot(loadedAccountState.profile).then((snapshot) => {
         if (loadId === accountLoadIdRef.current) {
           setRememberedAccount(
@@ -468,14 +373,41 @@ export function useSessionController(): SessionContextValue {
       setSessionStatus(
         resolveStatusAfterAccountLoad({
           hasSession: true,
-          biometricsEnabled: options.biometricPreference ?? biometricsEnabled,
+          biometricsEnabled: options.biometricPreference ?? biometricsEnabledRef.current,
           deviceTrustState: loadedAccountState.deviceTrustState,
           initialLock: options.initialLock,
           preserveLocked: options.preserveLocked && statusRef.current === 'signed_in_locked',
         }),
       );
     },
-    [biometricsEnabled, setSessionStatus],
+    [setSessionStatus],
+  );
+
+  const loadAccountStateSingleFlight = useCallback(
+    async (nextSession: Session, options: AccountStateLoadOptions) => {
+      const accountLoadKey = [
+        nextSession.user.id,
+        options.initialLock,
+        options.preserveLocked,
+        options.preserveTrustedDeviceDuringLoad,
+        options.setSessionStatusLoading ?? true,
+      ].join(':');
+      const existingLoad = accountLoadsInFlightRef.current.get(accountLoadKey);
+      if (existingLoad) {
+        return existingLoad;
+      }
+
+      const accountLoad = loadAccountState(nextSession, options);
+      accountLoadsInFlightRef.current.set(accountLoadKey, accountLoad);
+      try {
+        await accountLoad;
+      } finally {
+        if (accountLoadsInFlightRef.current.get(accountLoadKey) === accountLoad) {
+          accountLoadsInFlightRef.current.delete(accountLoadKey);
+        }
+      }
+    },
+    [loadAccountState],
   );
 
   const refreshAccountState = useCallback(
@@ -484,7 +416,14 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await withSessionOperationTimeout(
+        'refresh-session',
+        supabase.auth.getSession(),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
+      );
+      if (error) {
+        throw new Error(error.message);
+      }
       const nextSession = data.session;
 
       if (!nextSession) {
@@ -493,58 +432,46 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
-      await loadAccountState(nextSession, {
+      await loadAccountStateSingleFlight(nextSession, {
         initialLock: false,
         preserveLocked: options?.preserveLocked ?? statusRef.current === 'signed_in_locked',
         preserveTrustedDeviceDuringLoad: options?.preserveTrustedDeviceDuringLoad ?? false,
-        biometricPreference: biometricsEnabled,
+        biometricPreference: biometricsEnabledRef.current,
         setSessionStatusLoading: false,
       });
     },
-    [biometricsEnabled, clearSignedInState, loadAccountState, setSessionStatus],
+    [clearSignedInState, loadAccountStateSingleFlight, setSessionStatus],
   );
 
-  useEffect(() => {
-    let active = true;
-
-    async function hydrate() {
+  const hydrateSession = useCallback(async () => {
+      const active = () => mountedRef.current;
       setLoadingStage('starting');
+      setSessionError(null);
 
-      const [
-        biometricValue,
-        notificationValue,
-        support,
-        appleAvailable,
-        nextContactsPermissionStatus,
-        nextNotificationsPermissionStatus,
-        rememberedSnapshot,
-      ] = await Promise.all([
-        getStoredItem(BIOMETRICS_KEY),
-        getStoredItem(NOTIFICATIONS_KEY),
-        getBiometricSupport(),
-        Platform.OS === 'ios'
-          ? AppleAuthentication.isAvailableAsync().catch(() => false)
-          : Promise.resolve(false),
-        getContactsPermissionStatus(),
-        getLocalNotificationPermissionStatus(),
-        readRememberedAccountSnapshot(),
-      ]);
-
-      if (!active) {
+      let preferences: Awaited<ReturnType<typeof readSessionBootstrapPreferences>>;
+      try {
+        preferences = await readSessionBootstrapPreferences();
+      } catch (error) {
+        if (active()) {
+          setSessionError(sessionOperationErrorMessage(error));
+          setSessionStatus('loading');
+          setHydrated(true);
+        }
         return;
       }
 
-      const nextBiometricsEnabled = biometricValue === 'true';
-      const nextNotificationsEnabled = notificationValue === 'true';
+      if (!active()) {
+        return;
+      }
 
-      setBiometricsEnabledState(nextBiometricsEnabled);
-      setNotificationsEnabledState(nextNotificationsEnabled);
-      setBiometricAvailable(support.available);
-      setBiometricLabel(support.label);
-      setAppleSignInAvailable(appleAvailable);
-      setContactsPermissionStatus(nextContactsPermissionStatus);
-      setNotificationsPermissionStatus(nextNotificationsPermissionStatus);
-      setRememberedAccount(rememberedSnapshot);
+      applyBiometricsEnabled(preferences.biometricsEnabled);
+      setNotificationsEnabledState(preferences.notificationsEnabled);
+      setBiometricAvailable(preferences.biometricAvailable);
+      setBiometricLabel(preferences.biometricLabel);
+      setAppleSignInAvailable(preferences.appleSignInAvailable);
+      setContactsPermissionStatus(preferences.contactsPermissionStatus);
+      setNotificationsPermissionStatus(preferences.notificationsPermissionStatus);
+      setRememberedAccount(preferences.rememberedAccount);
 
       if (!supabase) {
         clearSignedInState();
@@ -553,27 +480,34 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
-      setLoadingStage('auth');
-      const { data } = await supabase.auth.getSession();
-      if (!active) {
-        return;
-      }
-
-      const nextSession = data.session;
-      if (!nextSession) {
-        clearSignedInState();
-        setRememberedAccount(rememberedSnapshot);
-        setSessionStatus('signed_out');
-        setHydrated(true);
-        return;
-      }
-
       try {
-        await loadAccountState(nextSession, {
-          initialLock: nextBiometricsEnabled,
+        setLoadingStage('auth');
+        const { data, error } = await withSessionOperationTimeout(
+          'bootstrap-session',
+          supabase.auth.getSession(),
+          SESSION_AUTH_OPERATION_TIMEOUT_MS,
+        );
+        if (error) {
+          throw new Error(error.message);
+        }
+        if (!active()) {
+          return;
+        }
+
+        const nextSession = data.session;
+        if (!nextSession) {
+          clearSignedInState();
+          setRememberedAccount(preferences.rememberedAccount);
+          setSessionStatus('signed_out');
+          setHydrated(true);
+          return;
+        }
+
+        await loadAccountStateSingleFlight(nextSession, {
+          initialLock: preferences.biometricsEnabled,
           preserveLocked: false,
           preserveTrustedDeviceDuringLoad: false,
-          biometricPreference: nextBiometricsEnabled,
+          biometricPreference: preferences.biometricsEnabled,
           setSessionStatusLoading: true,
         });
       } catch (error) {
@@ -581,21 +515,44 @@ export function useSessionController(): SessionContextValue {
           'Failed to hydrate account state',
           error instanceof Error ? error.message : String(error),
         );
-        clearSignedInState();
-        setSessionStatus('signed_out');
+        if (!active()) {
+          return;
+        }
+        sessionRef.current = null;
+        setSession(null);
+        setSessionError(sessionOperationErrorMessage(error));
+        setSessionStatus('loading');
       }
 
-      if (active) {
+      if (active()) {
         setHydrated(true);
       }
+    }, [applyBiometricsEnabled, clearSignedInState, loadAccountStateSingleFlight, setSessionStatus]);
+
+  bootstrapRunRef.current = hydrateSession;
+
+  const retrySession = useCallback(async () => {
+    try {
+      await bootstrapRunRef.current?.();
+    } catch (error) {
+      if (mountedRef.current) {
+        setSessionError(sessionOperationErrorMessage(error));
+        setSessionStatus('loading');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (!bootstrapStartedRef.current) {
+      bootstrapStartedRef.current = true;
+      void hydrateSession();
     }
 
-    void hydrate();
-
     return () => {
-      active = false;
+      mountedRef.current = false;
     };
-  }, [clearSignedInState, loadAccountState]);
+  }, [hydrateSession]);
 
   useEffect(() => {
     if (!supabase || !hydrated) {
@@ -620,17 +577,21 @@ export function useSessionController(): SessionContextValue {
         setPasswordRecoverySessionUserId(null);
       }
 
-      void loadAccountState(nextSession, {
+      void loadAccountStateSingleFlight(nextSession, {
         initialLock: false,
         preserveLocked: event !== 'SIGNED_IN' && statusRef.current === 'signed_in_locked',
         preserveTrustedDeviceDuringLoad: event !== 'SIGNED_IN',
-        biometricPreference: biometricsEnabled,
+        biometricPreference: biometricsEnabledRef.current,
         setSessionStatusLoading: false,
       }).catch((error) => {
         console.warn(
           'Failed to refresh account state after auth change',
           error instanceof Error ? error.message : String(error),
         );
+        if (mountedRef.current) {
+          setSessionError(sessionOperationErrorMessage(error));
+          setSessionStatus('loading');
+        }
       });
     });
 
@@ -638,10 +599,9 @@ export function useSessionController(): SessionContextValue {
       subscription.unsubscribe();
     };
   }, [
-    biometricsEnabled,
     clearSignedInState,
     hydrated,
-    loadAccountState,
+    loadAccountStateSingleFlight,
     setPasswordRecoverySessionUserId,
     setSessionStatus,
   ]);
@@ -651,7 +611,18 @@ export function useSessionController(): SessionContextValue {
       return;
     }
 
-    void Linking.getInitialURL().then((url) => applySessionFromUrl(url));
+    void Linking.getInitialURL()
+      .then((url) => applySessionFromUrl(url))
+      .catch((error) => {
+        reportClientErrorSafe({
+          error,
+          errorCode: 'auth_callback_initial_url',
+          errorMessage: readErrorMessage(error),
+          fatal: false,
+          kind: 'client_action',
+          metadata: { operation: 'get_initial_url', source: 'auth_callback' },
+        });
+      });
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
       void applySessionFromUrl(url);
@@ -728,12 +699,16 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      return performGoogleAuthFlow({
-        applySessionFromUrl,
-        client: supabase,
-        mode,
-        platform: Platform.OS,
-      });
+      return withSessionOperationTimeout(
+        `google-${mode}`,
+        performGoogleAuthFlow({
+          applySessionFromUrl,
+          client: supabase,
+          mode,
+          platform: Platform.OS,
+        }),
+        SESSION_SOCIAL_AUTH_TIMEOUT_MS,
+      );
     },
     [applySessionFromUrl],
   );
@@ -756,15 +731,19 @@ export function useSessionController(): SessionContextValue {
         };
       }
 
-      return performNativeAppleAuth({
-        client: supabase,
-        mode,
-        reportFailure: (failure) =>
-          reportSocialAuthFailure({
-            ...failure,
-            mode,
-          }),
-      });
+      return withSessionOperationTimeout(
+        `apple-${mode}`,
+        performNativeAppleAuth({
+          client: supabase,
+          mode,
+          reportFailure: (failure) =>
+            reportSocialAuthFailure({
+              ...failure,
+              mode,
+            }),
+        }),
+        SESSION_SOCIAL_AUTH_TIMEOUT_MS,
+      );
     },
     [],
   );
@@ -778,10 +757,14 @@ export function useSessionController(): SessionContextValue {
         return 'El servicio de acceso no está disponible en este momento.';
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password: parsed.password,
-      });
+      const { data, error } = await withSessionOperationTimeout(
+        'password-sign-in',
+        supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: parsed.password,
+        }),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
+      );
 
       if (error) {
         return formatSupabaseAuthErrorMessage(error.message);
@@ -794,7 +777,7 @@ export function useSessionController(): SessionContextValue {
 
       return 'Sesión iniciada.';
     } catch (error) {
-      return formatValidationMessage(error);
+      return sessionOperationErrorMessage(error, formatValidationMessage(error));
     }
   }, []);
 
@@ -816,18 +799,22 @@ export function useSessionController(): SessionContextValue {
       }
 
       const supportId = createSupportId();
-      const registrationPreview = await supabase.functions.invoke<AccountRegistrationPreviewResult>(
-        'get-account-invite-preview-public',
-        {
-          body: {
-            deliveryToken: pendingIntent.token,
-            recordAppOpen: false,
+      const registrationPreview = await withSessionOperationTimeout(
+        'registration-invite-preview',
+        supabase.functions.invoke<AccountRegistrationPreviewResult>(
+          'get-account-invite-preview-public',
+          {
+            body: {
+              deliveryToken: pendingIntent.token,
+              recordAppOpen: false,
+            },
+            headers: {
+              'x-client-info': 'happy-circles-mobile',
+              'x-request-id': supportId,
+            },
           },
-          headers: {
-            'x-client-info': 'happy-circles-mobile',
-            'x-request-id': supportId,
-          },
-        },
+        ),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
       );
 
       if (registrationPreview.error) {
@@ -852,20 +839,24 @@ export function useSessionController(): SessionContextValue {
         pendingIntent.token,
       );
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=profile');
-      const { data, error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password: parsed.password,
-        options: {
-          data: {
-            account_invite_delivery_token_hash: accountInviteDeliveryTokenHash,
-            phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
-            phone_country_calling_code: phoneCountryCallingCode,
-            phone_national_number: phoneNationalNumber,
-            phone_e164: phoneE164,
+      const { data, error } = await withSessionOperationTimeout(
+        'account-sign-up',
+        supabase.auth.signUp({
+          email: normalizedEmail,
+          password: parsed.password,
+          options: {
+            data: {
+              account_invite_delivery_token_hash: accountInviteDeliveryTokenHash,
+              phone_country_iso2: parsed.phoneCountryIso2.trim().toUpperCase(),
+              phone_country_calling_code: phoneCountryCallingCode,
+              phone_national_number: phoneNationalNumber,
+              phone_e164: phoneE164,
+            },
+            emailRedirectTo: redirectTo,
           },
-          emailRedirectTo: redirectTo,
-        },
-      });
+        }),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
+      );
 
       if (error) {
         return formatSupabaseAuthErrorMessage(error.message);
@@ -879,24 +870,32 @@ export function useSessionController(): SessionContextValue {
 
       return 'Cuenta creada. Revisa tu correo.';
     } catch (error) {
-      return formatValidationMessage(error);
+      return sessionOperationErrorMessage(error, formatValidationMessage(error));
     }
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    const result = await performGoogleAuth('sign-in');
-    if (result.userId) {
-      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+    try {
+      const result = await performGoogleAuth('sign-in');
+      if (result.userId) {
+        setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+      }
+      return result.message;
+    } catch (error) {
+      return sessionOperationErrorMessage(error, formatValidationMessage(error));
     }
-    return result.message;
   }, [performGoogleAuth]);
 
   const signInWithApple = useCallback(async () => {
-    const result = await performAppleAuth('sign-in');
-    if (result.userId) {
-      setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+    try {
+      const result = await performAppleAuth('sign-in');
+      if (result.userId) {
+        setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
+      }
+      return result.message;
+    } catch (error) {
+      return sessionOperationErrorMessage(error, formatValidationMessage(error));
     }
-    return result.message;
   }, [performAppleAuth]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
@@ -909,9 +908,11 @@ export function useSessionController(): SessionContextValue {
       }
 
       const redirectTo = buildEmailAuthRedirect('/reset-password');
-      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo,
-      });
+      const { error } = await withSessionOperationTimeout(
+        'request-password-reset',
+        supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo }),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
+      );
 
       if (error) {
         return formatSupabaseAuthErrorMessage(error.message);
@@ -919,7 +920,7 @@ export function useSessionController(): SessionContextValue {
 
       return 'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
     } catch (error) {
-      return formatValidationMessage(error);
+      return sessionOperationErrorMessage(error, formatValidationMessage(error));
     }
   }, []);
 
@@ -942,13 +943,17 @@ export function useSessionController(): SessionContextValue {
       }
 
       const redirectTo = buildEmailAuthRedirect('/setup-account?step=email');
-      const { error } = await supabase.auth.resend({
-        email,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
-        type: 'signup',
-      });
+      const { error } = await withSessionOperationTimeout(
+        'resend-email-confirmation',
+        supabase.auth.resend({
+          email,
+          options: {
+            emailRedirectTo: redirectTo,
+          },
+          type: 'signup',
+        }),
+        SESSION_AUTH_OPERATION_TIMEOUT_MS,
+      );
 
       if (error) {
         return formatSupabaseAuthErrorMessage(error.message);
@@ -970,11 +975,15 @@ export function useSessionController(): SessionContextValue {
           return 'El servicio de acceso no está disponible en este momento.';
         }
 
-        const { error } = await supabase.auth.verifyOtp({
-          email: normalizedEmail,
-          token,
-          type: 'signup',
-        });
+        const { error } = await withSessionOperationTimeout(
+          'verify-signup-otp',
+          supabase.auth.verifyOtp({
+            email: normalizedEmail,
+            token,
+            type: 'signup',
+          }),
+          SESSION_AUTH_OPERATION_TIMEOUT_MS,
+        );
 
         if (error) {
           return formatSupabaseAuthErrorMessage(error.message);
@@ -986,7 +995,7 @@ export function useSessionController(): SessionContextValue {
         });
         return 'Correo confirmado.';
       } catch (error) {
-        return formatValidationMessage(error);
+        return sessionOperationErrorMessage(error, formatValidationMessage(error));
       }
     },
     [refreshAccountState],
@@ -1003,17 +1012,29 @@ export function useSessionController(): SessionContextValue {
           return 'El servicio de acceso no está disponible en este momento.';
         }
 
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: normalizedEmail,
-          token,
-          type: 'recovery',
-        });
+        const { data, error } = await withSessionOperationTimeout(
+          'verify-recovery-otp',
+          supabase.auth.verifyOtp({
+            email: normalizedEmail,
+            token,
+            type: 'recovery',
+          }),
+          SESSION_AUTH_OPERATION_TIMEOUT_MS,
+        );
 
         if (error) {
           return formatSupabaseAuthErrorMessage(error.message);
         }
 
-        const nextSession = data.session ?? (await supabase.auth.getSession()).data.session;
+        const nextSession =
+          data.session ??
+          (
+            await withSessionOperationTimeout(
+              'get-recovery-session',
+              supabase.auth.getSession(),
+              SESSION_AUTH_OPERATION_TIMEOUT_MS,
+            )
+          ).data.session;
         if (!nextSession) {
           return 'Código verificado, pero no pudimos abrir la sesión de recuperación. Pide un enlace nuevo.';
         }
@@ -1022,7 +1043,7 @@ export function useSessionController(): SessionContextValue {
         await refreshAccountState({ preserveLocked: false });
         return 'Código verificado.';
       } catch (error) {
-        return formatValidationMessage(error);
+        return sessionOperationErrorMessage(error, formatValidationMessage(error));
       }
     },
     [refreshAccountState, setPasswordRecoverySessionUserId],
@@ -1053,7 +1074,7 @@ export function useSessionController(): SessionContextValue {
         await refreshAccountState();
         return 'Contraseña actualizada.';
       } catch (error) {
-        return formatValidationMessage(error);
+        return sessionOperationErrorMessage(error, formatValidationMessage(error));
       }
     },
     [refreshAccountState, setPasswordRecoverySessionUserId],
@@ -1210,7 +1231,7 @@ export function useSessionController(): SessionContextValue {
         }
 
         await removeStoredItem(BIOMETRICS_KEY);
-        setBiometricsEnabledState(false);
+        applyBiometricsEnabled(false);
         setStepUpFreshUntil(null);
 
         if (sessionRef.current && deviceTrustState === 'trusted') {
@@ -1250,7 +1271,7 @@ export function useSessionController(): SessionContextValue {
       }
 
       await setStoredItem(BIOMETRICS_KEY, 'true');
-      setBiometricsEnabledState(true);
+      applyBiometricsEnabled(true);
       setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
 
       return {
@@ -1258,7 +1279,7 @@ export function useSessionController(): SessionContextValue {
         message: `Happy Circles pedirá ${support.label} al abrirse y volverá a entrar apenas se valide.`,
       };
     },
-    [biometricsEnabled, deviceTrustState, setSessionStatus, stepUpAuth],
+    [applyBiometricsEnabled, biometricsEnabled, deviceTrustState, setSessionStatus, stepUpAuth],
   );
 
   const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
@@ -1389,6 +1410,18 @@ export function useSessionController(): SessionContextValue {
           );
         }
 
+        const pendingIntent = await readPendingInviteIntent();
+        if (pendingIntent?.type === 'account_invite' && accountAccessState !== 'active') {
+          const claimResult = await invokeSessionEdgeAction({
+            body: { deliveryToken: pendingIntent.token },
+            client: supabase,
+            name: 'claim-account-invite',
+          });
+          if (!claimResult.ok) {
+            return claimResult.message;
+          }
+        }
+
         await refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
         if (wasCompletingRequiredProfile) {
           recordProductEventSafe({
@@ -1399,11 +1432,12 @@ export function useSessionController(): SessionContextValue {
         }
         return 'Perfil actualizado.';
       } catch (error) {
-        return formatValidationMessage(error);
+        return sessionOperationErrorMessage(error, formatValidationMessage(error));
       }
     },
     [
       biometricLabel,
+      accountAccessState,
       deviceTrustState,
       profile,
       profileCompletionState,
@@ -1522,37 +1556,8 @@ export function useSessionController(): SessionContextValue {
         recentPasswordAuth,
         userId: expectedUserId,
       });
-      const hasFreshStepUpAuth = Boolean(stepUpFreshUntil && stepUpFreshUntil > Date.now());
-      let trustValidated = !input?.method && (hasFreshStepUpAuth || hasRecentPasswordAuth);
-
-      if (!input?.method && !trustValidated) {
-        const support = await getBiometricSupport();
-        setBiometricAvailable(support.available);
-        setBiometricLabel(support.label);
-
-        if (support.available) {
-          let biometricResult = await authenticateWithBiometricsResult();
-
-          if (
-            !biometricResult.success &&
-            (biometricResult.error === 'app_cancel' || biometricResult.error === 'system_cancel')
-          ) {
-            await wait(250);
-            biometricResult = await authenticateWithBiometricsResult();
-          }
-
-          if (!biometricResult.success) {
-            return formatStepUpErrorMessage(
-              'confiar este celular',
-              support.label,
-              biometricResult.error,
-            );
-          }
-
-          setStepUpFreshUntil(Date.now() + STEP_UP_WINDOW_MS);
-          trustValidated = true;
-        }
-      }
+      const hasFreshServerAuth = hasRecentPasswordAuth;
+      const trustValidated = !input?.method && hasFreshServerAuth;
 
       const method = trustValidated
         ? null
@@ -1581,10 +1586,14 @@ export function useSessionController(): SessionContextValue {
             return 'Escribe tu contraseña actual para confiar este teléfono.';
           }
 
-          const { error, data } = await supabase.auth.signInWithPassword({
-            email: sessionRef.current.user.email,
-            password: input.password,
-          });
+          const { error, data } = await withSessionOperationTimeout(
+            'trust-device-password-reauth',
+            supabase.auth.signInWithPassword({
+              email: sessionRef.current.user.email,
+              password: input.password,
+            }),
+            SESSION_AUTH_OPERATION_TIMEOUT_MS,
+          );
 
           if (error) {
             return formatSupabaseAuthErrorMessage(error.message);
@@ -1639,36 +1648,10 @@ export function useSessionController(): SessionContextValue {
         return 'Esta cuenta no tiene un método disponible para respaldar la confianza del teléfono.';
       }
 
-      const timestamp = new Date().toISOString();
-      const updateResult = await supabase
-        .from('trusted_devices')
-        .update({
-          trust_state: 'trusted',
-          trusted_at: timestamp,
-          revoked_at: null,
-          last_seen_at: timestamp,
-        } as never)
-        .eq('user_id', expectedUserId)
-        .eq('device_id', currentDeviceId);
+      const trustResult = await trustCurrentSessionDevice(supabase, currentDeviceId);
 
-      if (updateResult.error) {
-        return updateResult.error.message;
-      }
-
-      try {
-        await revokeDuplicateActiveDeviceRows({
-          client: supabase,
-          currentDeviceId,
-          deviceName: getCurrentDeviceName(),
-          platform: Platform.OS,
-          timestamp,
-          userId: expectedUserId,
-        });
-      } catch (error) {
-        console.warn(
-          'Failed to revoke duplicate trusted devices',
-          error instanceof Error ? error.message : String(error),
-        );
+      if (!trustResult.ok) {
+        return trustResult.message;
       }
 
       setRecentPasswordAuth(null);
@@ -1685,12 +1668,11 @@ export function useSessionController(): SessionContextValue {
       recentPasswordAuth,
       refreshAccountState,
       setSessionStatus,
-      stepUpFreshUntil,
     ],
   );
 
   const revokeTrustedDevice = useCallback(
-    async (deviceId: string) => {
+    async (deviceId: string, input?: TrustCurrentDeviceInput) => {
       if (!supabase || !sessionRef.current) {
         return 'No hay una sesión activa.';
       }
@@ -1699,24 +1681,66 @@ export function useSessionController(): SessionContextValue {
         return 'Solo puedes revocar dispositivos desde un dispositivo confiable.';
       }
 
-      const result = await stepUpAuth(true);
-      if (!result.success) {
-        return formatStepUpErrorMessage('revocar el dispositivo', biometricLabel, result.error);
+      const expectedUserId = sessionRef.current.user.id;
+      if (input?.method === 'password') {
+        if (!input.password?.trim() || !sessionRef.current.user.email) {
+          return 'Escribe tu contraseña actual para revocar el dispositivo.';
+        }
+        const { data, error } = await withSessionOperationTimeout(
+          'revoke-device-password-reauth',
+          supabase.auth.signInWithPassword({
+            email: sessionRef.current.user.email,
+            password: input.password,
+          }),
+          SESSION_AUTH_OPERATION_TIMEOUT_MS,
+        );
+        if (error) {
+          return formatSupabaseAuthErrorMessage(error.message);
+        }
+        if (data.user?.id !== expectedUserId) {
+          await supabase.auth.signOut();
+          clearSignedInState();
+          setSessionStatus('signed_out');
+          return 'La validación abrió otra cuenta. Cerramos la sesión por seguridad.';
+        }
+      } else if (input?.method === 'google' || input?.method === 'apple') {
+        const authResult =
+          input.method === 'google'
+            ? await performGoogleAuth('sign-in')
+            : await performAppleAuth('sign-in');
+        if (!authResult.userId) {
+          return authResult.message;
+        }
+        if (authResult.userId !== expectedUserId) {
+          await supabase.auth.signOut();
+          clearSignedInState();
+          setSessionStatus('signed_out');
+          return 'La validación abrió otra cuenta. Cerramos la sesión por seguridad.';
+        }
       }
 
-      const timestamp = new Date().toISOString();
-      const { error } = await supabase
-        .from('trusted_devices')
-        .update({
-          trust_state: 'revoked',
-          revoked_at: timestamp,
-          last_seen_at: timestamp,
-        } as never)
-        .eq('user_id', sessionRef.current.user.id)
-        .eq('device_id', deviceId);
+      if (!currentDeviceId) {
+        return 'No pudimos identificar este dispositivo.';
+      }
 
-      if (error) {
-        return error.message;
+      if (input?.method) {
+        const trustResult = await trustCurrentSessionDevice(supabase, currentDeviceId);
+        if (!trustResult.ok) {
+          return trustResult.message;
+        }
+      }
+
+      const revokeResult = await invokeSessionEdgeAction({
+        body: { currentDeviceId, deviceId },
+        client: supabase,
+        name: 'revoke-trusted-device',
+      });
+
+      if (!revokeResult.ok) {
+        if (revokeResult.code === 'recent_auth_required') {
+          return 'Vuelve a validar tu cuenta con contraseña, Google o Apple antes de revocar.';
+        }
+        return revokeResult.message;
       }
 
       await refreshAccountState();
@@ -1724,7 +1748,15 @@ export function useSessionController(): SessionContextValue {
         ? 'Este dispositivo fue revocado y quedo sin confianza.'
         : 'Dispositivo revocado.';
     },
-    [biometricLabel, currentDeviceId, deviceTrustState, refreshAccountState, stepUpAuth],
+    [
+      clearSignedInState,
+      currentDeviceId,
+      deviceTrustState,
+      performAppleAuth,
+      performGoogleAuth,
+      refreshAccountState,
+      setSessionStatus,
+    ],
   );
 
   const clearRememberedAccount = useCallback(async () => {
@@ -1836,6 +1868,7 @@ export function useSessionController(): SessionContextValue {
       authMode,
       status,
       loadingStage,
+      sessionError,
       userId: session?.user.id ?? null,
       email: session?.user.email ?? null,
       isEmailConfirmed,
@@ -1884,6 +1917,7 @@ export function useSessionController(): SessionContextValue {
       trustCurrentDevice,
       revokeTrustedDevice,
       refreshAccountState,
+      retrySession,
       signOut,
       unlock,
       lock,
@@ -1914,6 +1948,7 @@ export function useSessionController(): SessionContextValue {
       linkGoogle,
       linkedMethods,
       loadingStage,
+      sessionError,
       lock,
       notificationsEnabled,
       notificationsPermissionStatus,
@@ -1926,6 +1961,7 @@ export function useSessionController(): SessionContextValue {
       requestNotificationsPermission,
       rememberedAccount,
       refreshAccountState,
+      retrySession,
       registerAccount,
       revokeTrustedDevice,
       session,

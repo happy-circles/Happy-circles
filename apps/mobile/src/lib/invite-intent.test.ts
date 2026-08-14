@@ -133,4 +133,18 @@ describe('invite intent storage', () => {
       }),
     ).toBe(false);
   });
+
+  it('fails closed when secure storage get and cleanup both reject', async () => {
+    storageMocks.getStoredItem.mockRejectedValueOnce(new Error('storage unavailable'));
+    storageMocks.removeStoredItem.mockRejectedValueOnce(new Error('cleanup unavailable'));
+
+    await expect(readPendingInviteIntent()).resolves.toBeNull();
+  });
+
+  it('does not let failed cleanup turn an invalid intent into a route-guard rejection', async () => {
+    storageMocks.values.set(STORAGE_KEY, '{invalid-json');
+    storageMocks.removeStoredItem.mockRejectedValueOnce(new Error('cleanup unavailable'));
+
+    await expect(readPendingInviteIntent()).resolves.toBeNull();
+  });
 });

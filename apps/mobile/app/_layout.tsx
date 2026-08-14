@@ -50,7 +50,16 @@ import {
   type LaunchIntroTargetVisualKind,
   useLaunchIntroTargets,
 } from '@/components/launch-intro-presence';
-import { readPendingInviteIntent } from '@/lib/invite-intent';
+import { clearPendingInviteIntentIfMatches, readPendingInviteIntent } from '@/lib/invite-intent';
+import {
+  readPendingAccountVerification,
+  reconcilePendingAccountVerificationForSession,
+} from '@/lib/account-verification';
+import {
+  clearPendingNavigationIntentIfMatches,
+  readPendingNavigationIntent,
+  writePendingNavigationIntent,
+} from '@/lib/pending-navigation-intent';
 import { isAuthRouteTransitionHoldActive } from '@/lib/auth-route-transition-hold';
 import {
   beginHomeEntryHandoffAfterScrollReset,
@@ -260,6 +269,7 @@ function NotificationBridge() {
   const lastNotificationSyncSignatureRef = useRef<string | null>(null);
   const notificationSyncVersionRef = useRef(0);
   const snapshotRefetchRef = useRef(snapshotQuery.refetch);
+  const sessionRef = useRef(session);
   const pendingSection = snapshotQuery.data?.activitySections.find(
     (section) => section.key === 'pending',
   );
@@ -314,6 +324,10 @@ function NotificationBridge() {
     snapshotRefetchRef.current = snapshotQuery.refetch;
   }, [snapshotQuery.refetch]);
 
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
   useSnapshotRealtimeBridge(
     session.userId,
     session.status !== 'loading' && Boolean(session.userId),
@@ -330,6 +344,18 @@ function NotificationBridge() {
       void snapshotRefetchRef.current().catch(() => undefined);
     }
 
+    function canOpenNotificationRoute() {
+      const currentSession = sessionRef.current;
+      return (
+        currentSession.status !== 'loading' &&
+        currentSession.status !== 'signed_out' &&
+        currentSession.status !== 'signed_in_locked' &&
+        currentSession.accountAccessState === 'active' &&
+        currentSession.profileCompletionState === 'complete' &&
+        currentSession.setupState.requiredComplete
+      );
+    }
+
     function openNotificationRoute(route: NotificationRoute | null) {
       if (!route || handledNotificationIdsRef.current.has(route.id)) {
         return;
@@ -337,7 +363,12 @@ function NotificationBridge() {
 
       handledNotificationIdsRef.current.add(route.id);
       refetchSnapshotFromNotification();
-      returnToRoute(router, route.href as Href);
+      if (canOpenNotificationRoute()) {
+        returnToRoute(router, route.href as Href);
+        return;
+      }
+
+      void writePendingNavigationIntent(route).catch(() => undefined);
     }
 
     void getLastNotificationRoute().then((route) => {
@@ -2047,13 +2078,23 @@ function SetupEntryHandoffOverlay({
 }
 
 function SessionRouteGuard() {
-  const { accountAccessState, profileCompletionState, setupState, status } = useSession();
+  const {
+    accountAccessState,
+    email,
+    isEmailConfirmed,
+    profileCompletionState,
+    setupState,
+    status,
+  } = useSession();
   const rootNavigationState = useRootNavigationState();
   const params = useGlobalSearchParams<{
     auth_callback?: string | string[];
     case?: string | string[];
+    code?: string | string[];
+    mode?: string | string[];
     preview?: string | string[];
     token?: string | string[];
+    type?: string | string[];
   }>();
   const router = useRouter();
   const segments = useSegments();
@@ -2073,12 +2114,21 @@ function SessionRouteGuard() {
       const isJoinRoute = currentRootSegment === 'join';
       const hasJoinToken = isJoinRoute && segments.length > 1;
       const isResetPasswordRoute = currentRootSegment === 'reset-password';
+      const rawJoinMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
       const rawAuthCallback = Array.isArray(params.auth_callback)
         ? params.auth_callback[0]
         : params.auth_callback;
       const isGoogleAuthCallback =
         rawAuthCallback === 'google' || rawAuthCallback === 'google-link';
-      const isOAuthCallbackRoute = isSetupAccountRoute && isGoogleAuthCallback;
+      const rawCode = Array.isArray(params.code) ? params.code[0] : params.code;
+      const rawAuthType = Array.isArray(params.type) ? params.type[0] : params.type;
+      const isEmailAuthCallback =
+        (typeof rawCode === 'string' && rawCode.trim().length > 0) ||
+        rawAuthType === 'signup' ||
+        rawAuthType === 'email_change' ||
+        rawAuthType === 'magiclink';
+      const isAuthCallbackRoute =
+        isSetupAccountRoute && (isGoogleAuthCallback || isEmailAuthCallback);
       const isPublicInviteRoute = isInviteLinkRoute || isJoinRoute;
       const rawPreview = Array.isArray(params.preview) ? params.preview[0] : params.preview;
       const setupPreview = resolveSetupAccountPreviewParams(
@@ -2096,27 +2146,55 @@ function SessionRouteGuard() {
       const isAuthRouteTransitionHeld =
         isJoinRoute && !hasJoinToken && isAuthRouteTransitionHoldActive();
 
-      const pendingInviteIntent = await readPendingInviteIntent();
+      const [pendingInviteIntent, pendingNavigationIntent, pendingAccountVerification] =
+        await Promise.all([
+          readPendingInviteIntent(),
+          readPendingNavigationIntent(),
+          readPendingAccountVerification(),
+        ]);
+      await reconcilePendingAccountVerificationForSession({
+        isEmailConfirmed,
+        sessionEmail: email,
+      });
+      if (cancelled) {
+        return;
+      }
       const decision = resolvePreHomeRouteDecision({
         accountAccessState,
         hasJoinToken,
         isAuthRouteTransitionHeld,
         isInviteLinkRoute,
         isJoinRoute,
-        isOAuthCallbackRoute,
+        isAuthCallbackRoute,
         isPublicInviteRoute,
         isQaPreviewRoute,
         isResetPasswordRoute,
         isRootRoute,
         isSetupAccountRoute,
         pendingInviteIntent,
+        pendingAccountVerificationToken: pendingAccountVerification?.token ?? null,
+        pendingNavigationIntent,
         profileCompletionState,
         rawAuthCallback,
+        rawJoinMode,
         setupState,
         status,
       });
 
       if (decision.action === 'replace' && !cancelled) {
+        if (decision.clearPendingAccountInvite) {
+          if (pendingInviteIntent?.type === 'account_invite') {
+            await clearPendingInviteIntentIfMatches({
+              type: 'account_invite',
+              token: pendingInviteIntent.token,
+            }).catch(() => false);
+          }
+        }
+        if (decision.consumePendingNavigationIntentId) {
+          await clearPendingNavigationIntentIfMatches(
+            decision.consumePendingNavigationIntentId,
+          ).catch(() => false);
+        }
         if (decision.handoff === 'home') {
           await beginHomeEntryHandoffAfterScrollReset();
         }
@@ -2139,10 +2217,15 @@ function SessionRouteGuard() {
     };
   }, [
     accountAccessState,
+    email,
+    isEmailConfirmed,
     params.auth_callback,
     params.case,
+    params.code,
+    params.mode,
     params.preview,
     params.token,
+    params.type,
     profileCompletionState,
     rootNavigationState?.key,
     router,

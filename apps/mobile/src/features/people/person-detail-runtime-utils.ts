@@ -22,6 +22,19 @@ import {
 import { transactionStatusLabel } from '@/lib/transaction-presentation';
 import { pendingStatusLabel, type PersonSegmentKey } from './person-detail-helpers';
 
+export interface PersonDetailBannerState {
+  readonly message: string;
+  readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+export interface PersonDetailScreenProps {
+  readonly focusItemId?: string;
+  readonly initialPanel?: PersonSegmentKey;
+  readonly userId: string;
+}
+
+export const PERSON_DETAIL_FOCUS_HIGHLIGHT_DURATION_MS = 1800;
+
 export function fallbackCircleFeedbackParticipants(input: {
   readonly action: CircleActionFeedbackAction;
   readonly counterpartyLabel?: string | null;

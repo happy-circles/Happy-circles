@@ -7,6 +7,7 @@ import {
   getOrCreateDeviceId,
 } from '@/lib/device-trust';
 import type { supabase } from '@/lib/supabase';
+import { readFunctionErrorDetails } from '@/lib/support-errors';
 import {
   deriveAccountAccessState,
   deriveDeviceTrustState,
@@ -24,10 +25,7 @@ import type {
   TrustedDeviceRow,
   UserProfileRow,
 } from '../session/types';
-import {
-  resolveUserIdentities,
-  revokeDuplicateActiveDeviceRows,
-} from './session-controller-helpers';
+import { resolveUserIdentities } from './session-controller-helpers';
 
 type SessionClient = NonNullable<typeof supabase>;
 
@@ -52,75 +50,40 @@ interface LoadSessionAccountStateInput {
 async function persistCurrentTrustedDevice(input: {
   readonly client: SessionClient;
   readonly deviceId: string;
-  readonly timestamp: string;
   readonly userId: string;
 }): Promise<TrustedDeviceRow> {
-  const devicePatch = {
-    platform: Platform.OS,
-    device_name: getCurrentDeviceName(),
-    app_version: getCurrentAppVersion(),
-    last_seen_at: input.timestamp,
-  };
-  const devicePayload = {
-    user_id: input.userId,
-    device_id: input.deviceId,
-    ...devicePatch,
-  };
+  const touchResult = await input.client.functions.invoke<{
+    readonly deviceId: string;
+    readonly lastSeenAt: string;
+    readonly revokedAt: string | null;
+    readonly trustedAt: string | null;
+    readonly trustState: TrustedDeviceRow['trust_state'];
+  }>('touch-current-device', {
+    body: {
+      appVersion: getCurrentAppVersion(),
+      deviceId: input.deviceId,
+      deviceName: getCurrentDeviceName(),
+      platform: Platform.OS,
+    },
+  });
 
-  const existingResult = await input.client
+  if (touchResult.error) {
+    const details = await readFunctionErrorDetails(touchResult.error);
+    throw new Error(details.message);
+  }
+
+  const currentDeviceResult = await input.client
     .from('trusted_devices')
     .select('*')
     .eq('user_id', input.userId)
     .eq('device_id', input.deviceId)
-    .maybeSingle();
-
-  if (existingResult.error) {
-    throw new Error(existingResult.error.message);
-  }
-
-  const existingDevice = existingResult.data as TrustedDeviceRow | null;
-  if (existingDevice) {
-    const updateResult = await input.client
-      .from('trusted_devices')
-      .update(devicePatch as never)
-      .eq('id', existingDevice.id)
-      .select('*')
-      .single();
-
-    if (updateResult.error) {
-      throw new Error(updateResult.error.message);
-    }
-
-    return updateResult.data as TrustedDeviceRow;
-  }
-
-  const insertResult = await input.client
-    .from('trusted_devices')
-    .insert(devicePayload as never)
-    .select('*')
     .single();
 
-  if (!insertResult.error) {
-    return insertResult.data as TrustedDeviceRow;
+  if (currentDeviceResult.error) {
+    throw new Error(currentDeviceResult.error.message);
   }
 
-  if (!insertResult.error.message.includes('duplicate key')) {
-    throw new Error(insertResult.error.message);
-  }
-
-  const retryUpdateResult = await input.client
-    .from('trusted_devices')
-    .update(devicePatch as never)
-    .eq('user_id', input.userId)
-    .eq('device_id', input.deviceId)
-    .select('*')
-    .single();
-
-  if (retryUpdateResult.error) {
-    throw new Error(retryUpdateResult.error.message);
-  }
-
-  return retryUpdateResult.data as TrustedDeviceRow;
+  return currentDeviceResult.data as TrustedDeviceRow;
 }
 
 export async function loadSessionAccountState({
@@ -130,27 +93,17 @@ export async function loadSessionAccountState({
 }: LoadSessionAccountStateInput): Promise<LoadedSessionAccountState> {
   setLoadingStage('device');
   const deviceId = await getOrCreateDeviceId();
-  const timestamp = new Date().toISOString();
-
   setLoadingStage('profile');
-  const [profileResult, identities, currentDevice, authUserResult] =
-    await Promise.all([
-      client
-        .from('user_profiles')
-        .select(
-          'id, email, display_name, avatar_path, account_access_state, invited_by_user_id, activated_via_account_invite_id, activated_at, phone_country_iso2, phone_country_calling_code, phone_national_number, phone_e164, phone_verified_at, created_at, updated_at, deleted_at, deletion_requested_at, onboarding_completed_at, welcome_email_last_error, welcome_email_queued_at, welcome_email_sent_at',
-        )
-        .eq('id', nextSession.user.id)
-        .single(),
-      resolveUserIdentities(client, nextSession),
-      persistCurrentTrustedDevice({
-        client,
-        deviceId,
-        timestamp,
-        userId: nextSession.user.id,
-      }),
-      client.auth.getUser(),
-    ]);
+  const [profileResult, identities, currentDevice, authUserResult] = await Promise.all([
+    client.rpc('get_current_user_private_profile'),
+    resolveUserIdentities(client, nextSession),
+    persistCurrentTrustedDevice({
+      client,
+      deviceId,
+      userId: nextSession.user.id,
+    }),
+    client.auth.getUser(),
+  ]);
 
   if (profileResult.error) {
     throw new Error(profileResult.error.message);
@@ -160,7 +113,12 @@ export async function loadSessionAccountState({
     throw new Error(authUserResult.error.message);
   }
 
-  const profile = profileResult.data;
+  const profile = (Array.isArray(profileResult.data)
+    ? profileResult.data[0]
+    : profileResult.data) as UserProfileRow | null | undefined;
+  if (!profile) {
+    throw new Error('Current user profile was not found.');
+  }
   const emailConfirmed = isAuthUserEmailConfirmed(authUserResult.data.user ?? nextSession.user);
   const accountAccessState = deriveAccountAccessState(profile);
   const linkedMethods = deriveLinkedMethods({
@@ -170,24 +128,6 @@ export async function loadSessionAccountState({
   });
   const deviceTrustState = deriveDeviceTrustState(currentDevice);
   const profileCompletionState = deriveProfileCompletionState(profile, emailConfirmed);
-
-  if (currentDevice.trust_state === 'trusted') {
-    try {
-      await revokeDuplicateActiveDeviceRows({
-        client,
-        currentDeviceId: deviceId,
-        deviceName: currentDevice.device_name,
-        platform: currentDevice.platform,
-        timestamp,
-        userId: nextSession.user.id,
-      });
-    } catch (error) {
-      console.warn(
-        'Failed to revoke duplicate trusted devices during account load',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
 
   setLoadingStage('device');
   const devicesResult = await client

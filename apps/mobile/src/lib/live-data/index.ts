@@ -45,6 +45,7 @@ export {
   useAcceptFinancialRequestMutation,
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,
+  useResumeAccountInviteMutation,
   useAmendFinancialRequestMutation,
   useApproveSettlementMutation,
   useCancelAccountInviteMutation,

@@ -7,6 +7,7 @@ import type { Database } from '@happy-circles/shared';
 
 import { appConfig } from './config';
 import { installNativeWebCryptoShim } from './native-webcrypto';
+import { createPublicEdgeFetch } from './public-edge-fetch';
 import { authStorageAdapter } from './storage';
 
 installNativeWebCryptoShim();
@@ -25,6 +26,22 @@ export const supabase =
           autoRefreshToken: true,
           detectSessionInUrl: false,
           flowType: 'pkce',
+        },
+      })
+    : null;
+
+/**
+ * Least-privilege client for explicitly public Edge Functions. Supabase adds
+ * the project API key to every request; the fetch override prevents it from
+ * also being mirrored into `Authorization: Bearer ...`.
+ */
+export const publicEdgeSupabase =
+  appConfig.supabaseUrl && appConfig.supabaseAnonKey
+    ? createClient<Database>(appConfig.supabaseUrl, appConfig.supabaseAnonKey, {
+        // Avoid creating a second auth/session listener for this functions-only client.
+        accessToken: async () => null,
+        global: {
+          fetch: createPublicEdgeFetch(),
         },
       })
     : null;

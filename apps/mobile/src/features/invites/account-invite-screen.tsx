@@ -1,4 +1,4 @@
-import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,12 +16,16 @@ import {
 import { MessageBanner } from '@/components/message-banner';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import {
-  clearPendingInviteIntent,
   clearPendingInviteIntentIfMatches,
   writePendingInviteIntent,
 } from '@/lib/invite-intent';
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
+import { runSingleFlight } from '@/lib/single-flight';
+import {
+  resolveStableIdempotencyKey,
+  type StableIdempotencyKey,
+} from '@/lib/stable-idempotency';
 import {
   buildSetupAccountHref,
   isLowQualityDisplayName,
@@ -153,6 +157,8 @@ export function AccountInviteScreen() {
   const activateInvite = useActivateAccountFromInviteMutation();
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<'activate' | null>(null);
+  const activationFlightRef = useRef<Promise<void> | null>(null);
+  const activationIdempotencyRef = useRef<StableIdempotencyKey | null>(null);
   const refreshAccountState = session.refreshAccountState;
   const sessionStatus = session.status;
 
@@ -278,38 +284,56 @@ export function AccountInviteScreen() {
       return;
     }
 
-    setBusyAction('activate');
-    setMessage(null);
+    const currentDeviceId = session.currentDeviceId;
+    await runSingleFlight(activationFlightRef, async () => {
+      setBusyAction('activate');
+      setMessage(null);
+      const stableKey = resolveStableIdempotencyKey(
+        activationIdempotencyRef.current,
+        `${deliveryToken}:${currentDeviceId}`,
+        'activate_account_from_invite',
+      );
+      activationIdempotencyRef.current = stableKey;
 
-    try {
-      const response = await activateInvite.mutateAsync({
-        deliveryToken,
-        currentDeviceId: session.currentDeviceId,
-      });
-      await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
+      try {
+        const response = await activateInvite.mutateAsync({
+          deliveryToken,
+          currentDeviceId,
+          idempotencyKey: stableKey.key,
+        });
+        await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
 
-      if (response.status === 'accepted') {
-        await clearPendingInviteIntent();
-        setMessage('Cuenta activada. Ya puedes entrar a Happy Circles.');
-        await navigateHome();
-        return;
+        if (response.status === 'accepted') {
+          activationIdempotencyRef.current = null;
+          await clearPendingInviteIntentIfMatches({
+            type: 'account_invite',
+            token: deliveryToken,
+          });
+          setMessage('Cuenta activada. Ya puedes entrar a Happy Circles.');
+          await navigateHome();
+          return;
+        }
+
+        if (response.status === 'pending_inviter_review') {
+          activationIdempotencyRef.current = null;
+          await clearPendingInviteIntentIfMatches({
+            type: 'account_invite',
+            token: deliveryToken,
+          });
+          setMessage(
+            'Tu cuenta ya quedó lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
+          );
+          await navigateHome();
+          return;
+        }
+
+        setMessage('Terminamos este paso, pero todavía no pudimos cerrar la invitación.');
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'No se pudo activar esta cuenta.');
+      } finally {
+        setBusyAction(null);
       }
-
-      if (response.status === 'pending_inviter_review') {
-        await clearPendingInviteIntent();
-        setMessage(
-          'Tu cuenta ya quedó lista. Ahora falta que la otra persona confirme que eras el contacto esperado.',
-        );
-        await navigateHome();
-        return;
-      }
-
-      setMessage('Terminamos este paso, pero todavía no pudimos cerrar la invitación.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo activar esta cuenta.');
-    } finally {
-      setBusyAction(null);
-    }
+    });
   }
 
   async function navigateHome() {

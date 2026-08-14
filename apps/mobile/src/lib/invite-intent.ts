@@ -85,20 +85,20 @@ export function hrefForPendingInviteIntent(intent: PendingInviteIntent): Href {
 }
 
 export async function readPendingInviteIntent(): Promise<PendingInviteIntent | null> {
-  const storedValue = await getStoredItem(INVITE_INTENT_KEY);
-  if (!storedValue) {
-    return null;
-  }
-
   try {
+    const storedValue = await getStoredItem(INVITE_INTENT_KEY);
+    if (!storedValue) {
+      return null;
+    }
+
     const parsed = JSON.parse(storedValue) as unknown;
     if (!isPendingInviteIntent(parsed)) {
-      await removeStoredItem(INVITE_INTENT_KEY);
+      await removeStoredItem(INVITE_INTENT_KEY).catch(() => undefined);
       return null;
     }
 
     if (!isFreshInviteIntent(parsed)) {
-      await removeStoredItem(INVITE_INTENT_KEY);
+      await removeStoredItem(INVITE_INTENT_KEY).catch(() => undefined);
       return null;
     }
 
@@ -109,7 +109,7 @@ export async function readPendingInviteIntent(): Promise<PendingInviteIntent | n
       createdAt: parsed.createdAt,
     } as PendingInviteIntent;
   } catch {
-    await removeStoredItem(INVITE_INTENT_KEY);
+    await removeStoredItem(INVITE_INTENT_KEY).catch(() => undefined);
     return null;
   }
 }

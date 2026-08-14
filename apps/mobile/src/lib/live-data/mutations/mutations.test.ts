@@ -57,6 +57,7 @@ vi.mock('../../support-errors', () => ({
 import {
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,
+  useResumeAccountInviteMutation,
 } from './account-invites';
 import { resolveAvatarUploadMetadata, uploadAvatar } from './avatar-upload';
 import { withIdempotencyKey } from './edge-action';
@@ -197,6 +198,25 @@ describe('live-data mutation hooks', () => {
     });
   });
 
+  it('omits Authorization only for a signed-out account invite preview', async () => {
+    mocks.useSession.mockReturnValue({
+      ...trustedSession(),
+      refreshAccountState: vi.fn(),
+      userId: null,
+    });
+    const deliveryToken = 'delivery-token-public';
+
+    const query = useAccountInvitePreviewQuery(deliveryToken) as unknown as QueryOptions;
+    expect(query.queryKey).toEqual(['account-invite-preview', 'signed-out', deliveryToken]);
+    await query.queryFn();
+
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(
+      'get-account-invite-preview-public',
+      { deliveryToken },
+      { authorization: 'omit' },
+    );
+  });
+
   it('blocks account invite activation from untrusted devices before invoking Edge', async () => {
     mocks.useSession.mockReturnValue({
       ...trustedSession({ deviceTrustState: 'pending' }),
@@ -233,6 +253,49 @@ describe('live-data mutation hooks', () => {
       deliveryToken: 'delivery-token-123',
       idempotencyKey: 'activate_account_from_invite_fixed',
     });
+  });
+
+  it('preserves a caller idempotency key across activation retries', async () => {
+    const mutation = useActivateAccountFromInviteMutation() as unknown as MutationOptions<{
+      readonly currentDeviceId: string;
+      readonly deliveryToken: string;
+      readonly idempotencyKey: string;
+    }>;
+
+    const input = {
+      currentDeviceId: 'device-1',
+      deliveryToken: 'delivery-token-123',
+      idempotencyKey: 'activate_account_from_invite_same_attempt',
+    };
+    await mutation.mutationFn(input);
+    await mutation.mutationFn(input);
+
+    expect(mocks.invokeSupabaseFunction).toHaveBeenNthCalledWith(
+      1,
+      'activate-account-from-invite',
+      input,
+    );
+    expect(mocks.invokeSupabaseFunction).toHaveBeenNthCalledWith(
+      2,
+      'activate-account-from-invite',
+      input,
+    );
+    expect(mocks.createIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it('resumes a claimed invite without requiring its original delivery token', async () => {
+    const mutation = useResumeAccountInviteMutation() as unknown as MutationOptions<{
+      readonly currentDeviceId: string;
+      readonly idempotencyKey: string;
+    }>;
+    const input = {
+      currentDeviceId: 'device-1',
+      idempotencyKey: 'resume_account_invite_same_attempt',
+    };
+
+    await mutation.mutationFn(input);
+
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('resume-account-invite', input);
   });
 
   it('guards financial request creation before invoking the Edge Function', async () => {

@@ -1,15 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  ActionSheetIOS,
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  Switch,
-  View,
-} from 'react-native';
+import { ActionSheetIOS, Alert, Linking, Platform, Pressable, Switch, View } from 'react-native';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
@@ -37,26 +29,15 @@ import {
   triggerIdentitySuccessHaptic as triggerSuccessHaptic,
   triggerIdentityWarningHaptic as triggerWarningHaptic,
 } from '@/lib/identity-flow-haptics';
-import {
-  clearPendingInviteIntent,
-  hrefForPendingInviteIntent,
-  readPendingInviteIntent,
-  shouldActivateAccountInviteAfterSetup,
-  type PendingInviteIntent,
-} from '@/lib/invite-intent';
-import {
-  useActivateAccountFromInviteMutation,
-  useUpdateProfileAvatarMutation,
-} from '@/lib/live-data';
-import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
+import { useUpdateProfileAvatarMutation } from '@/lib/live-data';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
-import { returnToRoute } from '@/lib/navigation';
 import {
   hasProfilePhoto,
   isLowQualityDisplayName,
   resolveInitialSetupFullName,
 } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
+import { resolveHydratedDraftValue } from '@/lib/setup-draft';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
@@ -69,13 +50,13 @@ import {
   validateSetupProfile,
 } from './setup-account-helpers';
 import { useSetupAccountPreviewSession } from './setup-account-preview';
+import { useSetupAccountCompletionController } from './setup-account-completion-controller';
 import { SetupAccountPermissionsSection } from './setup-account-permissions-section';
 import { SetupProfilePhotoRequirement } from './setup-profile-photo-requirement';
 import { styles } from './setup-account-screen-runtime.styles';
 import { SecurityStatusRow } from './setup-security-status-row';
 
 export function SetupAccountScreen() {
-  const router = useRouter();
   const activeTheme = useAppTheme();
   const params = useLocalSearchParams<{
     case?: string | string[];
@@ -90,7 +71,6 @@ export function SetupAccountScreen() {
   const previewSession = useSetupAccountPreviewSession(liveSession, previewParams);
   const session = previewSession ?? liveSession;
   const avatarMutation = useUpdateProfileAvatarMutation();
-  const activateInvite = useActivateAccountFromInviteMutation();
   const profile = session.profile;
   const { editPhoneMode, requestedStep, returnTo } = resolveSetupAccountRouteParams(params);
   const isSetupPreviewMode = previewParams.enabled;
@@ -192,6 +172,21 @@ export function SetupAccountScreen() {
   const fullNameInputRef = useRef<AppTextInputRef | null>(null);
   const phoneInputRef = useRef<AppTextInputRef | null>(null);
   const trustPasswordInputRef = useRef<AppTextInputRef | null>(null);
+  const hydratedUserIdRef = useRef<string | null>(session.userId);
+  const fullNameDirtyRef = useRef(false);
+  const countryDirtyRef = useRef(false);
+  const phoneDirtyRef = useRef(false);
+  const {
+    finishSecurityOnly,
+    finishSetup,
+    isPending: completionPending,
+    resetCompletionState,
+  } = useSetupAccountCompletionController({
+    isSetupPreviewMode,
+    returnToProfile: returnTo === 'profile',
+    session,
+    setMessage,
+  });
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
@@ -231,15 +226,51 @@ export function SetupAccountScreen() {
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
   const fullNameIsUsable = !isLowQualityDisplayName(fullName);
   const phoneLabel = profile?.phone_e164 ?? 'Pendiente';
-  const isSaving = profileBusy || avatarMutation.isPending || activateInvite.isPending;
+  const isSaving = profileBusy || avatarMutation.isPending || completionPending;
   const initialStepWarningShownRef = useRef(false);
 
   useEffect(() => {
-    setFullName(initialFullName);
-    setCountryIso(initialCountry.iso2);
-    setPhoneNationalNumber(profile?.phone_national_number ?? '');
-    setLocalAvatarPath(null);
-  }, [initialFullName, initialCountry.iso2, profile?.avatar_path, profile?.phone_national_number]);
+    const identityChanged = hydratedUserIdRef.current !== session.userId;
+    setFullName((current) =>
+      resolveHydratedDraftValue({
+        current,
+        incoming: initialFullName,
+        isDirty: fullNameDirtyRef.current,
+        identityChanged,
+      }),
+    );
+    setCountryIso((current) =>
+      resolveHydratedDraftValue({
+        current,
+        incoming: initialCountry.iso2,
+        isDirty: countryDirtyRef.current,
+        identityChanged,
+      }),
+    );
+    setPhoneNationalNumber((current) =>
+      resolveHydratedDraftValue({
+        current,
+        incoming: profile?.phone_national_number ?? '',
+        isDirty: phoneDirtyRef.current,
+        identityChanged,
+      }),
+    );
+
+    if (identityChanged) {
+      fullNameDirtyRef.current = false;
+      countryDirtyRef.current = false;
+      phoneDirtyRef.current = false;
+      setLocalAvatarPath(null);
+      resetCompletionState();
+      hydratedUserIdRef.current = session.userId;
+    }
+  }, [
+    initialFullName,
+    initialCountry.iso2,
+    profile?.phone_national_number,
+    resetCompletionState,
+    session.userId,
+  ]);
 
   useEffect(() => {
     if (
@@ -283,115 +314,6 @@ export function SetupAccountScreen() {
     triggerWarningHaptic();
     setMessage('Confirma tu correo para poder enviar solicitudes e invitaciones.');
   }, [effectiveRequestedStep, session.isEmailConfirmed]);
-
-  async function activatePendingAccountInvite(
-    pendingIntent: Extract<PendingInviteIntent, { readonly type: 'account_invite' }>,
-  ) {
-    if (!session.currentDeviceId) {
-      setMessage('No pudimos identificar este telefono para activar la cuenta.');
-      return;
-    }
-
-    try {
-      const response = await activateInvite.mutateAsync({
-        deliveryToken: pendingIntent.token,
-        currentDeviceId: session.currentDeviceId,
-      });
-
-      await session.refreshAccountState({ preserveTrustedDeviceDuringLoad: true });
-
-      if (response.status === 'accepted' || response.status === 'pending_inviter_review') {
-        await clearPendingInviteIntent();
-        await beginHomeEntryHandoffAfterScrollReset();
-        returnToRoute(router, '/home');
-        return;
-      }
-
-      setMessage('Todavia no pudimos cerrar la invitacion.');
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : 'No pudimos activar la cuenta con esta invitacion.',
-      );
-    }
-  }
-
-  async function finishSetup() {
-    if (isSetupPreviewMode) {
-      triggerSuccessHaptic();
-      setMessage('Preview QA: onboarding completado sin crear ni actualizar una cuenta.');
-      return;
-    }
-
-    if (returnTo === 'profile') {
-      returnToRoute(router, '/profile');
-      return;
-    }
-
-    const pendingIntent = await readPendingInviteIntent();
-
-    if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
-      if (!session.isTrustedDevice) {
-        setMessage('Perfil guardado. Vuelve a la invitación para continuar.');
-        returnToRoute(router, hrefForPendingInviteIntent(pendingIntent));
-        return;
-      }
-
-      await activatePendingAccountInvite(pendingIntent);
-      return;
-    }
-
-    if (session.accountAccessState !== 'active') {
-      setMessage('Perfil guardado. Abre tu enlace de invitacion para activar la cuenta.');
-      returnToRoute(router, '/join?mode=token');
-      return;
-    }
-
-    if (!pendingIntent) {
-      await beginHomeEntryHandoffAfterScrollReset();
-    }
-    returnToRoute(router, pendingIntent ? hrefForPendingInviteIntent(pendingIntent) : '/home');
-  }
-
-  async function finishSecurityOnly() {
-    if (!session.isTrustedDevice) {
-      triggerWarningHaptic();
-      setMessage('Confía este teléfono para continuar.');
-      return;
-    }
-
-    if (isSetupPreviewMode) {
-      triggerSuccessHaptic();
-      setMessage('Preview QA: seguridad completada sin tocar el backend.');
-      return;
-    }
-
-    if (returnTo === 'profile') {
-      returnToRoute(router, '/profile');
-      return;
-    }
-
-    const pendingIntent = await readPendingInviteIntent();
-    if (shouldActivateAccountInviteAfterSetup(pendingIntent)) {
-      await activatePendingAccountInvite(pendingIntent);
-      return;
-    }
-
-    if (pendingIntent) {
-      returnToRoute(router, hrefForPendingInviteIntent(pendingIntent));
-      return;
-    }
-
-    if (session.accountAccessState !== 'active') {
-      setMessage('Abre tu enlace de invitacion para activar la cuenta.');
-      returnToRoute(router, '/join?mode=token');
-      return;
-    }
-
-    await beginHomeEntryHandoffAfterScrollReset();
-    returnToRoute(router, '/home');
-  }
 
   function clearProfileError(field: 'fullName' | 'phoneNationalNumber' | 'photo') {
     setProfileErrors((current) => {
@@ -736,9 +658,9 @@ export function SetupAccountScreen() {
   }
 
   const securityOnlyActionDisabled =
-    securityOnlyMode && (securityBusyKey !== null || !session.isTrustedDevice);
+    securityOnlyMode && (securityBusyKey !== null || isSaving || !session.isTrustedDevice);
   const primaryActionDisabled = securityOnlyMode ? securityOnlyActionDisabled : isSaving;
-  const primaryActionLoading = securityOnlyMode ? securityBusyKey !== null : isSaving;
+  const primaryActionLoading = securityOnlyMode ? securityBusyKey !== null || isSaving : isSaving;
   const primaryActionLabel = securityOnlyMode
     ? securityBusyKey !== null
       ? 'Confirmando...'
@@ -838,6 +760,7 @@ export function SetupAccountScreen() {
               <IdentityFlowTextInput
                 autoCapitalize="words"
                 onChangeText={(value) => {
+                  fullNameDirtyRef.current = true;
                   setFullName(value);
                   clearProfileError('fullName');
                 }}
@@ -882,6 +805,7 @@ export function SetupAccountScreen() {
                     <IdentityFlowTextInput
                       keyboardType="phone-pad"
                       onChangeText={(value) => {
+                        phoneDirtyRef.current = true;
                         setPhoneNationalNumber(value);
                         clearProfileError('phoneNationalNumber');
                       }}
@@ -901,6 +825,7 @@ export function SetupAccountScreen() {
                           key={country.iso2}
                           onPress={() => {
                             triggerSelectionHaptic();
+                            countryDirtyRef.current = true;
                             setCountryIso(country.iso2);
                             setCountryMenuOpen(false);
                           }}

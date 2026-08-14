@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View } from 'react-native';
 
+import { AppHeaderBackButton } from '@/components/app-header-back-button';
 import {
   IdentityFlowForm,
   IdentityFlowIdentity,
@@ -26,6 +27,11 @@ import { returnToRoute } from '@/lib/navigation';
 import { COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '@/lib/phone';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
+import { runSingleFlight } from '@/lib/single-flight';
+import {
+  clearPendingAccountVerificationIfMatches,
+  writePendingAccountVerification,
+} from '@/lib/account-verification';
 import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
 import { useSession } from '@/providers/session-provider';
 import {
@@ -49,6 +55,12 @@ import {
 import { AccountCreateAccountEmailForm } from './account-create-account-email-form';
 import { AccountCreateAccountSocialOptions } from './account-create-account-social-options';
 import { AccountCreateAccountVerificationForm } from './account-create-account-verification-form';
+import {
+  ACCOUNT_VERIFICATION_SIGN_IN_HREF,
+  emailOtpResendAvailableAt,
+  emailOtpResendSecondsRemaining,
+} from './account-create-account-verification';
+import { useAccountCreateAccountVerificationResume } from './use-account-create-account-verification-resume';
 
 export function AccountCreateAccountScreen() {
   const params = useLocalSearchParams<{ preview?: string | string[]; token?: string | string[] }>();
@@ -83,10 +95,32 @@ export function AccountCreateAccountScreen() {
   const [socialBusyProvider, setSocialBusyProvider] = useState<SocialProvider | null>(null);
   const [showEmailPasswordFallback, setShowEmailPasswordFallback] = useState(false);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+  const [pendingVerificationCreatedAt, setPendingVerificationCreatedAt] = useState<string | null>(
+    null,
+  );
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationBusy, setVerificationBusy] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const setupNavigationStartedRef = useRef(false);
+  const verificationFlightRef = useRef<Promise<void> | null>(null);
+  const resendFlightRef = useRef<Promise<void> | null>(null);
+  const lastAutoSubmittedCodeRef = useRef<string | null>(null);
+  const { refreshVerificationSession, resendCooldownSeconds, verificationHydrated } =
+    useAccountCreateAccountVerificationResume({
+      pendingVerificationEmail,
+      pendingVerificationCreatedAt,
+      resendAvailableAt,
+      router,
+      session,
+      setEmail,
+      setPendingVerificationEmail,
+      setPendingVerificationCreatedAt,
+      setResendAvailableAt,
+      setVerificationCode,
+      setupNavigationStartedRef,
+      token,
+    });
 
   const selectedCountry =
     COUNTRY_OPTIONS.find((country) => country.iso2 === countryIso) ?? DEFAULT_COUNTRY;
@@ -120,12 +154,12 @@ export function AccountCreateAccountScreen() {
             : 'idle';
   const contentTransitionKey = !shouldPreview
     ? 'create-account:no-token'
-    : previewQuery.isLoading
-      ? 'create-account:loading'
-      : previewQuery.error || blockingMessage
-        ? 'create-account:blocked'
-        : pendingVerificationEmail
-          ? 'create-account:verify-email'
+    : pendingVerificationEmail
+      ? 'create-account:verify-email'
+      : previewQuery.isLoading
+        ? 'create-account:loading'
+        : previewQuery.error || blockingMessage
+          ? 'create-account:blocked'
           : canCreateAccount
             ? 'create-account:form'
             : 'create-account:empty';
@@ -143,7 +177,13 @@ export function AccountCreateAccountScreen() {
   }
 
   useEffect(() => {
-    if (isPreviewMode || authBusy || setupNavigationStartedRef.current) {
+    if (
+      isPreviewMode ||
+      authBusy ||
+      !verificationHydrated ||
+      pendingVerificationEmail ||
+      setupNavigationStartedRef.current
+    ) {
       return;
     }
 
@@ -160,7 +200,16 @@ export function AccountCreateAccountScreen() {
     }
 
     returnToRoute(router, '/join');
-  }, [authBusy, isPreviewMode, router, session.status, shouldPreview, token]);
+  }, [
+    authBusy,
+    isPreviewMode,
+    pendingVerificationEmail,
+    router,
+    session.status,
+    shouldPreview,
+    token,
+    verificationHydrated,
+  ]);
 
   useEffect(() => {
     if (!canCreateAccount || isPreviewMode) {
@@ -224,8 +273,17 @@ export function AccountCreateAccountScreen() {
 
       if (result === ACCOUNT_CREATED_EMAIL_CONFIRMATION_MESSAGE) {
         triggerIdentitySuccessHaptic();
-        setPendingVerificationEmail(email.trim().toLocaleLowerCase('en-US'));
+        const normalizedEmail = email.trim().toLocaleLowerCase('en-US');
+        const nextResendAvailableAt = emailOtpResendAvailableAt();
+        setPendingVerificationEmail(normalizedEmail);
+        setResendAvailableAt(nextResendAvailableAt);
         setVerificationCode('');
+        const pendingVerification = await writePendingAccountVerification({
+          email: normalizedEmail,
+          resendAvailableAt: nextResendAvailableAt,
+          token,
+        }).catch(() => null);
+        setPendingVerificationCreatedAt(pendingVerification?.createdAt ?? null);
       }
     } catch (error) {
       triggerIdentityErrorHaptic();
@@ -283,7 +341,7 @@ export function AccountCreateAccountScreen() {
   }
 
   async function handleVerifyEmailCode() {
-    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+    if (!pendingVerificationEmail || resendFlightRef.current) {
       return;
     }
 
@@ -293,92 +351,107 @@ export function AccountCreateAccountScreen() {
       return;
     }
 
-    triggerIdentityImpactHaptic();
-    setVerificationBusy(true);
-    setMessage(null);
+    const code = verificationCode;
+    const verificationEmail = pendingVerificationEmail;
+    await runSingleFlight(verificationFlightRef, async () => {
+      triggerIdentityImpactHaptic();
+      setVerificationBusy(true);
+      setMessage(null);
 
-    try {
-      const result = await session.verifyEmailOtp({
-        code: verificationCode,
-        email: pendingVerificationEmail,
-      });
-      setMessage(result);
+      try {
+        const result = await session.verifyEmailOtp({
+          code,
+          email: verificationEmail,
+        });
+        setMessage(result);
 
-      if (result === 'Correo confirmado.') {
-        triggerIdentitySuccessHaptic();
-        setupNavigationStartedRef.current = true;
-        await beginSetupEntryHandoff();
-        returnToRoute(router, buildSetupAccountHref('profile'));
-      } else {
-        triggerIdentityWarningHaptic();
+        if (result === 'Correo confirmado.') {
+          triggerIdentitySuccessHaptic();
+          if (setupNavigationStartedRef.current) {
+            return;
+          }
+          setupNavigationStartedRef.current = true;
+          try {
+            if (pendingVerificationCreatedAt) {
+              await clearPendingAccountVerificationIfMatches({
+                createdAt: pendingVerificationCreatedAt,
+                email: verificationEmail,
+                token,
+              }).catch(() => undefined);
+            }
+            await beginSetupEntryHandoff();
+            returnToRoute(router, buildSetupAccountHref('profile'));
+          } catch (error) {
+            setupNavigationStartedRef.current = false;
+            throw error;
+          }
+        } else {
+          triggerIdentityWarningHaptic();
+        }
+      } catch (error) {
+        triggerIdentityErrorHaptic();
+        setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el correo.');
+      } finally {
+        setVerificationBusy(false);
       }
-    } catch (error) {
-      triggerIdentityErrorHaptic();
-      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el correo.');
-    } finally {
-      setVerificationBusy(false);
-    }
+    });
   }
 
   async function handleResendEmailCode() {
-    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+    if (
+      !pendingVerificationEmail ||
+      verificationFlightRef.current ||
+      emailOtpResendSecondsRemaining(resendAvailableAt) > 0
+    ) {
       return;
     }
 
-    triggerIdentityImpactHaptic();
-    setResendBusy(true);
-    setMessage(null);
+    const verificationEmail = pendingVerificationEmail;
+    await runSingleFlight(resendFlightRef, async () => {
+      triggerIdentityImpactHaptic();
+      setResendBusy(true);
+      setMessage(null);
 
-    try {
-      const result = await session.resendEmailConfirmation(pendingVerificationEmail);
-      setMessage(result);
+      try {
+        const result = await session.resendEmailConfirmation(verificationEmail);
+        setMessage(result);
 
-      if (result.includes('Enviamos')) {
-        triggerIdentitySuccessHaptic();
-      } else {
-        triggerIdentityWarningHaptic();
+        if (result.includes('Enviamos')) {
+          const nextResendAvailableAt = emailOtpResendAvailableAt();
+          setResendAvailableAt(nextResendAvailableAt);
+          const pendingVerification = await writePendingAccountVerification({
+            email: verificationEmail,
+            resendAvailableAt: nextResendAvailableAt,
+            token,
+          }).catch(() => null);
+          setPendingVerificationCreatedAt(pendingVerification?.createdAt ?? null);
+          triggerIdentitySuccessHaptic();
+        } else {
+          triggerIdentityWarningHaptic();
+          void refreshVerificationSession().catch(() => undefined);
+        }
+      } catch (error) {
+        triggerIdentityErrorHaptic();
+        setMessage(error instanceof Error ? error.message : 'No se pudo reenviar el correo.');
+      } finally {
+        setResendBusy(false);
       }
-    } catch (error) {
-      triggerIdentityErrorHaptic();
-      setMessage(error instanceof Error ? error.message : 'No se pudo reenviar el correo.');
-    } finally {
-      setResendBusy(false);
-    }
+    });
   }
 
-  async function handleContinueAfterEmailLink() {
-    if (!pendingVerificationEmail || verificationBusy || resendBusy) {
+  useEffect(() => {
+    if (!verificationCodeValid) {
+      lastAutoSubmittedCodeRef.current = null;
       return;
     }
 
-    triggerIdentityImpactHaptic();
-    setVerificationBusy(true);
-    setMessage(null);
-
-    try {
-      const result = await session.signInWithPassword({
-        email: pendingVerificationEmail,
-        password,
-      });
-
-      if (result === 'Sesión iniciada.') {
-        await session.refreshAccountState({ preserveLocked: false });
-        setMessage(result);
-        triggerIdentitySuccessHaptic();
-        setupNavigationStartedRef.current = true;
-        await beginSetupEntryHandoff();
-        returnToRoute(router, buildSetupAccountHref('profile'));
-      } else {
-        setMessage(result);
-        triggerIdentityWarningHaptic();
-      }
-    } catch (error) {
-      triggerIdentityErrorHaptic();
-      setMessage(error instanceof Error ? error.message : 'No se pudo validar la confirmación.');
-    } finally {
-      setVerificationBusy(false);
+    if (lastAutoSubmittedCodeRef.current === verificationCode) {
+      return;
     }
-  }
+
+    lastAutoSubmittedCodeRef.current = verificationCode;
+    void handleVerifyEmailCode();
+  }, [verificationCode, verificationCodeValid]);
 
   if (session.status === 'loading') {
     return <SessionLoadingScreen message="Preparando tu acceso" />;
@@ -386,8 +459,6 @@ export function AccountCreateAccountScreen() {
 
   const createAccountActions = !shouldPreview ? (
     <PrimaryAction href="/join" label="Volver a invitación" variant="secondary" />
-  ) : previewQuery.error || blockingMessage ? (
-    <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
   ) : pendingVerificationEmail ? (
     <IdentityFlowPrimaryAction
       disabled={verificationBusy || resendBusy}
@@ -396,6 +467,8 @@ export function AccountCreateAccountScreen() {
       loading={verificationBusy}
       onPress={verificationBusy || resendBusy ? undefined : () => void handleVerifyEmailCode()}
     />
+  ) : previewQuery.error || blockingMessage ? (
+    <PrimaryAction href="/join" label="Probar otro código" variant="secondary" />
   ) : canCreateAccount && showEmailPasswordFallback ? (
     <IdentityFlowPrimaryAction
       disabled={authBusy}
@@ -409,6 +482,13 @@ export function AccountCreateAccountScreen() {
     <IdentityFlowScreen
       actions={createAccountActions}
       contentTransitionKey={contentTransitionKey}
+      headerLeading={
+        pendingVerificationEmail ? (
+          <AppHeaderBackButton
+            onPress={() => returnToRoute(router, ACCOUNT_VERIFICATION_SIGN_IN_HREF)}
+          />
+        ) : undefined
+      }
       identity={<IdentityFlowIdentity centerFaceSize="small" state={tokenState} variant="status" />}
       identityPosition={
         canCreateAccount && !pendingVerificationEmail && !showEmailPasswordFallback && !message
@@ -418,7 +498,7 @@ export function AccountCreateAccountScreen() {
       message={
         message ? (
           <MessageBanner message={message} tone={resolveCreateAccountMessageTone(message)} />
-        ) : (
+        ) : pendingVerificationEmail ? undefined : (
           <IdentityFlowLogoCopy
             subtitle={
               preview?.inviterDisplayName
@@ -439,13 +519,13 @@ export function AccountCreateAccountScreen() {
         </View>
       ) : null}
 
-      {shouldPreview && previewQuery.error ? (
+      {shouldPreview && previewQuery.error && !pendingVerificationEmail ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={previewQuery.error.message} tone="warning" />
         </View>
       ) : null}
 
-      {blockingMessage ? (
+      {blockingMessage && !pendingVerificationEmail ? (
         <View style={styles.messageBlock}>
           <MessageBanner message={blockingMessage} tone="warning" />
         </View>
@@ -453,15 +533,10 @@ export function AccountCreateAccountScreen() {
 
       {pendingVerificationEmail ? (
         <AccountCreateAccountVerificationForm
-          onContinueAfterEmailLink={() => void handleContinueAfterEmailLink()}
-          onEditEmail={() => {
-            setPendingVerificationEmail(null);
-            setVerificationCode('');
-            setMessage(null);
-          }}
           onResendEmailCode={() => void handleResendEmailCode()}
           pendingVerificationEmail={pendingVerificationEmail}
           resendBusy={resendBusy}
+          resendCooldownSeconds={resendCooldownSeconds}
           setVerificationCode={setVerificationCode}
           verificationBusy={verificationBusy}
           verificationCode={verificationCode}

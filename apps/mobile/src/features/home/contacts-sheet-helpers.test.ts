@@ -240,12 +240,12 @@ describe('contact section helpers', () => {
           multiContact.primaryPhone.phoneE164,
           'no_account',
         ),
-        [secondaryPhone!.phoneE164]: resolution(secondaryPhone!.phoneE164, 'active_user'),
+        [secondaryPhone.phoneE164]: resolution(secondaryPhone.phoneE164, 'active_user'),
       },
     });
 
     expect(sections.inAppContacts).toHaveLength(1);
-    expect(sections.inAppContacts[0].resolution?.phoneE164).toBe(secondaryPhone!.phoneE164);
+    expect(sections.inAppContacts[0].resolution?.phoneE164).toBe(secondaryPhone.phoneE164);
     expect(sections.unresolvedContacts).toHaveLength(0);
     expect(sections.inviteContacts).toHaveLength(0);
   });
@@ -280,7 +280,7 @@ describe('contact section helpers', () => {
           multiContact.primaryPhone.phoneE164,
           'no_account',
         ),
-        [secondaryPhone!.phoneE164]: resolution(secondaryPhone!.phoneE164, 'no_account'),
+        [secondaryPhone.phoneE164]: resolution(secondaryPhone.phoneE164, 'no_account'),
       },
     });
 

@@ -8,13 +8,13 @@ import {
 } from '@/components/identity-flow';
 import { OtpCodeInput } from '@/components/otp-code-input';
 import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
+import { formatEmailOtpResendLabel } from './account-create-account-verification';
 
 interface AccountCreateAccountVerificationFormProps {
-  readonly onContinueAfterEmailLink: () => void;
-  readonly onEditEmail: () => void;
   readonly onResendEmailCode: () => void;
   readonly pendingVerificationEmail: string;
   readonly resendBusy: boolean;
+  readonly resendCooldownSeconds: number;
   readonly setVerificationCode: (value: string) => void;
   readonly verificationBusy: boolean;
   readonly verificationCode: string;
@@ -22,17 +22,17 @@ interface AccountCreateAccountVerificationFormProps {
 }
 
 export function AccountCreateAccountVerificationForm({
-  onContinueAfterEmailLink,
-  onEditEmail,
   onResendEmailCode,
   pendingVerificationEmail,
   resendBusy,
+  resendCooldownSeconds,
   setVerificationCode,
   verificationBusy,
   verificationCode,
   verificationCodeValid,
 }: AccountCreateAccountVerificationFormProps) {
-  const disabled = verificationBusy || resendBusy;
+  const formDisabled = verificationBusy || resendBusy;
+  const resendDisabled = formDisabled || resendCooldownSeconds > 0;
 
   return (
     <IdentityFlowForm>
@@ -52,7 +52,7 @@ export function AccountCreateAccountVerificationForm({
         }
       >
         <OtpCodeInput
-          disabled={disabled}
+          disabled={formDisabled}
           hasError={verificationCode.length > 0 && !verificationCodeValid}
           onChangeText={setVerificationCode}
           value={verificationCode}
@@ -61,22 +61,10 @@ export function AccountCreateAccountVerificationForm({
 
       <View style={styles.verificationActions}>
         <IdentityFlowSecondaryAction
-          disabled={disabled}
+          disabled={resendDisabled}
           icon="mail"
-          label={resendBusy ? 'Enviando...' : 'Reenviar código'}
-          onPress={disabled ? undefined : onResendEmailCode}
-        />
-        <IdentityFlowSecondaryAction
-          disabled={disabled}
-          icon="log-in-outline"
-          label="Ya confirme el enlace"
-          onPress={disabled ? undefined : onContinueAfterEmailLink}
-        />
-        <IdentityFlowSecondaryAction
-          disabled={disabled}
-          icon="create-outline"
-          label="Editar correo"
-          onPress={onEditEmail}
+          label={formatEmailOtpResendLabel({ resendBusy, resendCooldownSeconds })}
+          onPress={resendDisabled ? undefined : onResendEmailCode}
         />
       </View>
     </IdentityFlowForm>

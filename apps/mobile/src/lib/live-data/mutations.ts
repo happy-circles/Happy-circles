@@ -1,6 +1,7 @@
 export {
   useAccountInvitePreviewQuery,
   useActivateAccountFromInviteMutation,
+  useResumeAccountInviteMutation,
   useCancelAccountInviteMutation,
   useReviewAccountInviteMutation,
 } from './mutations/account-invites';

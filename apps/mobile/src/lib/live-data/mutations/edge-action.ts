@@ -1,5 +1,5 @@
 import { createIdempotencyKey } from '../../idempotency';
-import { invokeSupabaseFunction } from '../client';
+import { invokeSupabaseFunction, type InvokeSupabaseFunctionOptions } from '../client';
 
 export interface EdgePayloadSchema<TPayload extends Record<string, unknown>> {
   parse(input: unknown): TPayload;
@@ -26,8 +26,11 @@ export async function invokeParsedEdgeFunction<TPayload extends Record<string, u
   name: string,
   schema: EdgePayloadSchema<TPayload>,
   input: unknown,
+  options?: InvokeSupabaseFunctionOptions,
 ): Promise<TResult> {
   const payload = parseEdgePayload(schema, input);
 
-  return invokeSupabaseFunction<TPayload, TResult>(name, payload);
+  return options
+    ? invokeSupabaseFunction<TPayload, TResult>(name, payload, options)
+    : invokeSupabaseFunction<TPayload, TResult>(name, payload);
 }

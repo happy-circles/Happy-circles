@@ -129,6 +129,7 @@ export interface SetupState {
 export interface SessionContextValue {
   readonly authMode: AuthMode;
   readonly status: SessionStatus;
+  readonly sessionError: string | null;
   readonly loadingStage: SessionLoadingStage;
   readonly userId: string | null;
   readonly email: string | null;
@@ -171,8 +172,9 @@ export interface SessionContextValue {
   linkApple(input?: LinkSocialInput): Promise<string>;
   attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
   trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
-  revokeTrustedDevice(deviceId: string): Promise<string>;
+  revokeTrustedDevice(deviceId: string, input?: TrustCurrentDeviceInput): Promise<string>;
   readonly refreshAccountState: (options?: RefreshAccountStateOptions) => Promise<void>;
+  readonly retrySession: () => Promise<void>;
   signOut(): Promise<void>;
   unlock(): Promise<BiometricAuthResult>;
   lock(): void;

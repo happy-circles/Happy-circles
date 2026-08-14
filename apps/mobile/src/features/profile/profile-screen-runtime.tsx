@@ -2,15 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  ActionSheetIOS,
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  Switch,
-  View,
-} from 'react-native';
+import { ActionSheetIOS, Alert, Linking, Platform, Pressable, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
@@ -61,13 +53,12 @@ import {
   resolveContactsPermissionTone,
 } from './profile-helpers';
 import { ProfileAccountHeader } from './profile-account-header';
+import { useProfileDeviceRevokeController } from './profile-device-revoke-controller';
+import { ProfileDeviceRevokeModal } from './profile-device-revoke-modal';
 import { useProfileFocusController } from './profile-focus-controller';
 import { ProfileLegalDangerSection } from './profile-legal-danger-section';
 import { ProfileStatusRow } from './profile-status-row';
-import {
-  ProfileSocialStepUpModal,
-  type SocialStepUpTarget,
-} from './profile-social-step-up-modal';
+import { ProfileSocialStepUpModal, type SocialStepUpTarget } from './profile-social-step-up-modal';
 import { ProfileSetupReminderSection } from './profile-setup-reminder-section';
 import { ThemePreferenceSection } from './theme-preference-section';
 import { styles } from './profile-screen-runtime.styles';
@@ -170,6 +161,21 @@ export function ProfileScreen() {
   const busyActionRef = useRef<string | null>(null);
   const [avatarOptionsVisible, setAvatarOptionsVisible] = useState(false);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
+  const {
+    close: closeRevokeDevice,
+    confirm: confirmRevokeDevice,
+    deviceId: revokeDeviceId,
+    error: revokeError,
+    handlePasswordChange: handleRevokePasswordChange,
+    open: openRevokeDevice,
+    password: revokePassword,
+    passwordInputRef: revokePasswordInputRef,
+  } = useProfileDeviceRevokeController({
+    busy: busyAction?.startsWith('revoke-') ?? false,
+    revokeTrustedDevice: (deviceId, input) => session.revokeTrustedDevice(deviceId, input),
+    runAction,
+    showActionMessage,
+  });
 
   const baseAccountLabel =
     session.profile?.display_name ??
@@ -418,8 +424,7 @@ export function ProfileScreen() {
 
   function shouldOfferSocialPasswordStepUp(result: string): boolean {
     return (
-      session.linkedMethods.hasEmailPassword &&
-      result.startsWith('Este dispositivo no puede usar ')
+      session.linkedMethods.hasEmailPassword && result.startsWith('Este dispositivo no puede usar ')
     );
   }
 
@@ -1050,11 +1055,7 @@ export function ProfileScreen() {
               !session.linkedMethods.hasGoogle ? (
                 <Pressable
                   disabled={busyAction !== null}
-                  onPress={
-                    busyAction
-                      ? undefined
-                      : () => void handleLinkSocial('google')
-                  }
+                  onPress={busyAction ? undefined : () => void handleLinkSocial('google')}
                   style={({ pressed }) => [
                     styles.inlineButton,
                     inlineButtonThemeStyle,
@@ -1082,11 +1083,7 @@ export function ProfileScreen() {
                   !session.linkedMethods.hasApple ? (
                     <Pressable
                       disabled={busyAction !== null}
-                      onPress={
-                        busyAction
-                          ? undefined
-                          : () => void handleLinkSocial('apple')
-                      }
+                      onPress={busyAction ? undefined : () => void handleLinkSocial('apple')}
                       style={({ pressed }) => [
                         styles.inlineButton,
                         inlineButtonThemeStyle,
@@ -1294,11 +1291,7 @@ export function ProfileScreen() {
                 trailing={
                   device.trust_state !== 'revoked' ? (
                     <Pressable
-                      onPress={() =>
-                        void runAction(`revoke-${device.device_id}`, async () =>
-                          session.revokeTrustedDevice(device.device_id),
-                        )
-                      }
+                      onPress={() => openRevokeDevice(device.device_id)}
                       style={({ pressed }) => [
                         styles.inlineButtonDanger,
                         inlineDangerButtonThemeStyle,
@@ -1342,6 +1335,21 @@ export function ProfileScreen() {
         socialStepUpError={socialStepUpError}
         socialStepUpProviderLabel={socialStepUpProviderLabel}
         socialStepUpTarget={socialStepUpTarget}
+      />
+
+      <ProfileDeviceRevokeModal
+        activeTheme={activeTheme}
+        busy={busyAction?.startsWith('revoke-') ?? false}
+        deviceId={revokeDeviceId}
+        error={revokeError}
+        hasApple={session.linkedMethods.hasApple}
+        hasGoogle={session.linkedMethods.hasGoogle}
+        hasPassword={session.linkedMethods.hasEmailPassword}
+        inputRef={revokePasswordInputRef}
+        onClose={closeRevokeDevice}
+        onPasswordChange={handleRevokePasswordChange}
+        onSubmit={(method) => void confirmRevokeDevice(method)}
+        password={revokePassword}
       />
 
       <AvatarOptionsSheet

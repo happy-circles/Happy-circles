@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { BrandVerificationMark } from '@/components/brand-verification-lockup';
 import { IDENTITY_FLOW_STAGE_SIZE } from '@/components/identity-flow';
+import { PrimaryAction } from '@/components/primary-action';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -21,8 +22,9 @@ const SESSION_LOADING_MESSAGES: Record<SessionLoadingStage, string> = {
 
 export function SessionLoadingScreen({ message }: { readonly message?: string }) {
   const activeTheme = useAppTheme();
-  const { loadingStage } = useSession();
+  const { loadingStage, retrySession, sessionError } = useSession();
   const [isSlow, setIsSlow] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     if (message) {
@@ -39,7 +41,22 @@ export function SessionLoadingScreen({ message }: { readonly message?: string })
   }, [message]);
 
   const resolvedMessage =
-    message ?? (isSlow ? 'La conexión está tardando' : SESSION_LOADING_MESSAGES[loadingStage]);
+    message ??
+    sessionError ??
+    (isSlow ? 'La conexión está tardando' : SESSION_LOADING_MESSAGES[loadingStage]);
+
+  async function handleRetry() {
+    if (retrying) {
+      return;
+    }
+
+    setRetrying(true);
+    try {
+      await retrySession();
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: activeTheme.colors.background }]}>
@@ -49,6 +66,16 @@ export function SessionLoadingScreen({ message }: { readonly message?: string })
       <AppText style={[styles.message, { color: activeTheme.colors.textMuted }]}>
         {resolvedMessage}
       </AppText>
+      {!message && sessionError ? (
+        <PrimaryAction
+          compact
+          fullWidth={false}
+          icon="refresh"
+          label="Reintentar"
+          loading={retrying}
+          onPress={() => void handleRetry()}
+        />
+      ) : null}
     </View>
   );
 }
