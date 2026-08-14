@@ -6,16 +6,19 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -26,9 +29,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 2.114.0
 
       - name: Lint
         run: pnpm lint
@@ -40,7 +43,7 @@ jobs:
         run: pnpm test
 
       - name: Audit dependencies
-        run: pnpm audit --audit-level moderate
+        run: pnpm audit:dependencies
 
       - name: Build landing
         run: pnpm build:landing
