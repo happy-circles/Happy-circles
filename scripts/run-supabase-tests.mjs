@@ -168,6 +168,33 @@ function seedLocalDemoData() {
   }
 }
 
+function bootstrapLocalRealtimePolicy() {
+  const policyPath = path.join(rootDir, 'supabase', 'dev', 'bootstrap_realtime_policy.sql');
+  const policySql = fs.readFileSync(policyPath, 'utf8');
+  const dbContainer = resolveSupabaseDbContainer();
+  const result = spawnSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      dbContainer,
+      'sh',
+      '-lc',
+      'PGPASSWORD="$POSTGRES_PASSWORD" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1',
+    ],
+    {
+      cwd: rootDir,
+      encoding: 'utf8',
+      input: policySql,
+      stdio: ['pipe', 'inherit', 'inherit'],
+    },
+  );
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
 function runSqlTestFile(dbContainer, testPath) {
   const sql = fs.readFileSync(testPath, 'utf8');
   const result = spawnSync(
@@ -213,6 +240,7 @@ function runDbTestsViaPsql() {
 
 runSupabase(['db', 'start']);
 runSupabase(['db', 'reset', '--no-seed']);
+bootstrapLocalRealtimePolicy();
 seedLocalDemoData();
 const supabaseTestStatus = runSupabaseForStatus(['test', 'db']);
 if (supabaseTestStatus !== 0) {

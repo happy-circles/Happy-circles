@@ -1,4 +1,21 @@
-alter table realtime.messages enable row level security;
+-- Realtime owns this table in current Supabase images and already enables RLS.
+-- Migration runners that do not own the managed Realtime schema must not try
+-- to alter it. The local test runner installs this owner-only policy after a
+-- reset; hosted environments keep the policy applied by the owning role.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_class relation
+    join pg_namespace namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'realtime'
+      and relation.relname = 'messages'
+      and pg_get_userbyid(relation.relowner) = current_user
+  ) then
+    alter table realtime.messages enable row level security;
+  end if;
+end
+$$;
 
 drop policy if exists push_devices_client_deny_all on public.push_devices;
 create policy push_devices_client_deny_all
@@ -16,15 +33,28 @@ to anon, authenticated
 using (false)
 with check (false);
 
-drop policy if exists happy_circles_snapshot_broadcast_select on realtime.messages;
-create policy happy_circles_snapshot_broadcast_select
-on realtime.messages
-for select
-to authenticated
-using (
-  realtime.messages.extension = 'broadcast'
-  and realtime.topic() = ('user:' || (select auth.uid())::text)
-);
+do $$
+begin
+  if exists (
+    select 1
+    from pg_class relation
+    join pg_namespace namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'realtime'
+      and relation.relname = 'messages'
+      and pg_get_userbyid(relation.relowner) = current_user
+  ) then
+    drop policy if exists happy_circles_snapshot_broadcast_select on realtime.messages;
+    create policy happy_circles_snapshot_broadcast_select
+    on realtime.messages
+    for select
+    to authenticated
+    using (
+      realtime.messages.extension = 'broadcast'
+      and realtime.topic() = ('user:' || (select auth.uid())::text)
+    );
+  end if;
+end
+$$;
 
 create or replace function public.notify_user_snapshot_changed(
   p_user_id uuid,

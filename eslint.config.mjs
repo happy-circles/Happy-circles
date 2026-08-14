@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/.tmp/**',
       '**/.next/**',
       '**/.expo/**',
+      'supabase/.temp/**',
       'supabase/migrations/**/*.sql',
       'supabase/functions/**/*.ts',
       'apps/mobile/babel.config.js',
