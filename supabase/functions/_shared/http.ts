@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+import { isProjectApiKeyBearer } from './project-api-key.ts';
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -34,11 +36,13 @@ const INVITE_FUNCTIONS = new Set([
   'cancel-account-invite',
   'cancel-friendship-invite',
   'claim-external-friendship-invite',
+  'claim-account-invite',
   'create-account-invite',
   'create-external-friendship-invite',
   'create-internal-friendship-invite',
   'create-people-outreach',
   'resolve-people-targets',
+  'resume-account-invite',
   'respond-internal-friendship-invite',
   'review-account-invite',
   'review-external-friendship-invite',
@@ -56,6 +60,18 @@ interface RateLimitContext {
   readonly clientFingerprintHash: string;
   readonly functionName: string;
   readonly request: Request;
+}
+
+export interface VerifiedAuthContext {
+  readonly accessToken: string;
+  readonly actorUserId: string;
+  readonly claims: Record<string, unknown>;
+}
+
+export interface RecentAuthenticationProof {
+  readonly authenticatedAt: string;
+  readonly method: 'aal2' | 'oauth' | 'otp' | 'password';
+  readonly sessionId: string;
 }
 
 export interface RpcRateLimitOptions {
@@ -161,6 +177,38 @@ function normalizeError(error: unknown): SafeError {
       status: 403,
       code: 'device_not_trusted',
       message: 'Este dispositivo aún no es confiable. Valídalo primero desde seguridad.',
+    };
+  }
+
+  if (normalized.includes('recent_auth_required')) {
+    return {
+      status: 403,
+      code: 'recent_auth_required',
+      message: 'Vuelve a confirmar tu identidad para completar esta acción.',
+    };
+  }
+
+  if (normalized.includes('trusted_origin_required')) {
+    return {
+      status: 403,
+      code: 'trusted_origin_required',
+      message: 'Esta sesión no corresponde a un dispositivo confiable.',
+    };
+  }
+
+  if (normalized.includes('idempotency_key_reused')) {
+    return {
+      status: 409,
+      code: 'idempotency_key_reused',
+      message: 'La solicitud ya fue usada con datos diferentes.',
+    };
+  }
+
+  if (normalized.includes('account_invite_reservation_active')) {
+    return {
+      status: 409,
+      code: 'invite_reservation_active',
+      message: 'La invitación ya está reservada por una cuenta en activación.',
     };
   }
 
@@ -406,11 +454,41 @@ export async function readJsonBody(
   return parsed as Record<string, unknown>;
 }
 
-export async function getActorUserId(request: Request): Promise<string> {
+function readBearerToken(authorization: string): string {
+  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+  if (!match?.[1]) {
+    throw new Error('Missing Authorization header');
+  }
+  return match[1];
+}
+
+function decodeVerifiedJwtPayload(accessToken: string): Record<string, unknown> {
+  const encodedPayload = accessToken.split('.')[1];
+  if (!encodedPayload) {
+    throw new Error('JWT malformed');
+  }
+
+  try {
+    const normalized = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+      throw new Error('JWT malformed');
+    }
+    return decoded as Record<string, unknown>;
+  } catch {
+    throw new Error('JWT malformed');
+  }
+}
+
+export async function getVerifiedAuthContext(request: Request): Promise<VerifiedAuthContext> {
   const authorization = request.headers.get('Authorization');
   if (!authorization) {
     throw new Error('Missing Authorization header');
   }
+  const accessToken = readBearerToken(authorization);
 
   const client = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
@@ -420,17 +498,115 @@ export async function getActorUserId(request: Request): Promise<string> {
     },
   });
 
-  const { data, error } = await client.auth.getUser();
+  const [{ data, error }, claimsResult] = await Promise.all([
+    client.auth.getUser(accessToken),
+    client.auth.getClaims(accessToken),
+  ]);
   if (error || !data.user) {
     throw new Error(error?.message ?? 'Unauthorized');
   }
 
-  return data.user.id;
+  if (claimsResult.error) {
+    throw new Error(claimsResult.error.message ?? 'Invalid JWT');
+  }
+
+  const claims =
+    claimsResult.data?.claims && typeof claimsResult.data.claims === 'object'
+      ? (claimsResult.data.claims as Record<string, unknown>)
+      : decodeVerifiedJwtPayload(accessToken);
+  if (claims.sub !== data.user.id) {
+    throw new Error('Invalid JWT subject');
+  }
+
+  return { accessToken, actorUserId: data.user.id, claims };
+}
+
+export async function getActorUserId(request: Request): Promise<string> {
+  const context = await getVerifiedAuthContext(request);
+  return context.actorUserId;
+}
+
+export function requireAuthenticatedSession(
+  context: VerifiedAuthContext,
+  errorCode = 'trusted_origin_required',
+): string {
+  const sessionId =
+    typeof context.claims.session_id === 'string' ? context.claims.session_id.trim() : '';
+  if (!sessionId) {
+    throw new Error(errorCode);
+  }
+  return sessionId;
+}
+
+export function requireRecentAuthentication(
+  context: VerifiedAuthContext,
+  maxAgeSeconds = 5 * 60,
+): RecentAuthenticationProof {
+  const sessionId = requireAuthenticatedSession(context, 'recent_auth_required');
+
+  if (context.claims.aal === 'aal2') {
+    const issuedAt =
+      typeof context.claims.iat === 'number' && Number.isFinite(context.claims.iat)
+        ? context.claims.iat
+        : Math.floor(Date.now() / 1000);
+    return {
+      authenticatedAt: new Date(issuedAt * 1000).toISOString(),
+      method: 'aal2',
+      sessionId,
+    };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const allowedMethods = new Set(['password', 'oauth', 'otp'] as const);
+  const amr = Array.isArray(context.claims.amr) ? context.claims.amr : [];
+  let selected: { method: 'oauth' | 'otp' | 'password'; timestamp: number } | null = null;
+
+  for (const entry of amr) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const method = (entry as Record<string, unknown>).method;
+    const timestamp = (entry as Record<string, unknown>).timestamp;
+    if (
+      typeof method !== 'string' ||
+      !allowedMethods.has(method as 'oauth' | 'otp' | 'password') ||
+      typeof timestamp !== 'number' ||
+      !Number.isFinite(timestamp) ||
+      timestamp > nowSeconds + 60 ||
+      nowSeconds - timestamp > maxAgeSeconds
+    ) {
+      continue;
+    }
+    if (!selected || timestamp > selected.timestamp) {
+      selected = { method: method as 'oauth' | 'otp' | 'password', timestamp };
+    }
+  }
+
+  if (!selected) {
+    throw new Error('recent_auth_required');
+  }
+
+  return {
+    authenticatedAt: new Date(selected.timestamp * 1000).toISOString(),
+    method: selected.method,
+    sessionId,
+  };
 }
 
 export async function getOptionalActorUserId(request: Request): Promise<string | null> {
   const authorization = request.headers.get('Authorization');
   if (!authorization) {
+    return null;
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = readBearerToken(authorization);
+  } catch {
+    return null;
+  }
+
+  if (isProjectApiKeyBearer(accessToken, request.headers.get('apikey'), supabaseAnonKey)) {
     return null;
   }
 
@@ -554,7 +730,11 @@ async function applyRateLimits(
 
 export async function handleRpc(
   request: Request,
-  handler: (body: Record<string, unknown>, actorUserId: string) => Promise<unknown>,
+  handler: (
+    body: Record<string, unknown>,
+    actorUserId: string,
+    authContext: VerifiedAuthContext,
+  ) => Promise<unknown>,
   options?: RpcHandlerOptions,
 ): Promise<Response> {
   const requestId = createRequestId(request);
@@ -573,12 +753,13 @@ export async function handleRpc(
       );
     }
 
-    const [body, actorUserId] = await Promise.all([
+    const [body, authContext] = await Promise.all([
       readJsonBody(request, getJsonBodyLimit(functionName, options?.maxBodyBytes)),
-      getActorUserId(request),
+      getVerifiedAuthContext(request),
     ]);
+    const actorUserId = authContext.actorUserId;
     await applyRateLimits(request, body, actorUserId, functionName, options);
-    const response = await handler(body, actorUserId);
+    const response = await handler(body, actorUserId, authContext);
     return jsonResponse(200, response, requestId);
   } catch (error) {
     const safeError = normalizeError(error);

@@ -3,6 +3,7 @@ import { createServiceRoleClient, handleRpc } from '../_shared/http.ts';
 interface WelcomeEmailClaim {
   readonly email: string;
   readonly display_name: string;
+  readonly lease_id: string;
 }
 
 interface AuthUserEmailState {
@@ -187,10 +188,12 @@ function buildWelcomeText(input: {
 async function releaseClaim(
   client: ReturnType<typeof createServiceRoleClient>,
   actorUserId: string,
+  leaseId: string,
   reason: string,
 ) {
-  const { error } = await client.rpc('release_welcome_email_delivery', {
+  const { error } = await client.rpc('release_welcome_email_delivery_v2', {
     p_actor_user_id: actorUserId,
+    p_lease_id: leaseId,
     p_error: reason,
   });
 
@@ -201,6 +204,14 @@ async function releaseClaim(
 
 Deno.serve((request) =>
   handleRpc(request, async (_body, actorUserId) => {
+    const client = createServiceRoleClient();
+    const { error: completionError } = await client.rpc('mark_onboarding_completed', {
+      p_actor_user_id: actorUserId,
+    });
+    if (completionError) {
+      return { sent: false, reason: 'onboarding_not_ready' };
+    }
+
     const enabled = readOptionalEnv('WELCOME_EMAIL_ENABLED');
     if (enabled?.toLocaleLowerCase('en-US') === 'false') {
       return { sent: false, reason: 'disabled' };
@@ -211,7 +222,6 @@ Deno.serve((request) =>
       return { sent: false, reason: 'email_not_configured' };
     }
 
-    const client = createServiceRoleClient();
     const { data: userResult, error: userError } = await client.auth.admin.getUserById(actorUserId);
 
     if (userError || !userResult.user) {
@@ -225,7 +235,7 @@ Deno.serve((request) =>
       return { sent: false, reason: 'email_not_confirmed' };
     }
 
-    const { data: claims, error: claimError } = await client.rpc('claim_welcome_email_delivery', {
+    const { data: claims, error: claimError } = await client.rpc('claim_welcome_email_delivery_v2', {
       p_actor_user_id: actorUserId,
     });
 
@@ -257,25 +267,40 @@ Deno.serve((request) =>
       firstName,
     });
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${resendApiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [claim.email],
-        subject: 'Bienvenido a Happy Circles',
-        html,
-        text,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-    });
+    let resendResponse: Response;
+    try {
+      resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${resendApiKey}`,
+          'content-type': 'application/json',
+          // Stable per logical message: a provider success followed by a DB mark
+          // failure must not produce a second welcome email under a new lease.
+          'idempotency-key': `welcome/${actorUserId}/v1`,
+        },
+        body: JSON.stringify({
+          from,
+          to: [claim.email],
+          subject: 'Bienvenido a Happy Circles',
+          html,
+          text,
+          ...(replyTo ? { reply_to: replyTo } : {}),
+        }),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'provider_network_error';
+      await releaseClaim(client, actorUserId, claim.lease_id, detail);
+      return { sent: false, reason: 'provider_unavailable' };
+    }
 
     if (!resendResponse.ok) {
       const detail = (await resendResponse.text()).slice(0, 240);
-      await releaseClaim(client, actorUserId, `resend_${resendResponse.status}: ${detail}`);
+      await releaseClaim(
+        client,
+        actorUserId,
+        claim.lease_id,
+        `resend_${resendResponse.status}: ${detail}`,
+      );
       console.error('welcome_email_provider_rejected', {
         detail,
         status: resendResponse.status,
@@ -283,12 +308,15 @@ Deno.serve((request) =>
       return { sent: false, reason: 'provider_rejected' };
     }
 
-    const { error: markError } = await client.rpc('mark_welcome_email_sent', {
+    const { data: marked, error: markError } = await client.rpc('mark_welcome_email_sent_v2', {
       p_actor_user_id: actorUserId,
+      p_lease_id: claim.lease_id,
     });
 
-    if (markError) {
-      console.error('welcome_email_mark_failed', { detail: markError.message });
+    if (markError || !marked) {
+      console.error('welcome_email_mark_failed', {
+        detail: markError?.message ?? 'welcome_email_lease_lost',
+      });
       return { sent: true, reason: 'tracking_failed' };
     }
 

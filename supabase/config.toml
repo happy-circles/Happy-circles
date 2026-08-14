@@ -21,8 +21,15 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:8081"
+additional_redirect_urls = [
+  "http://localhost:8081/**",
+  "http://127.0.0.1:8081/**",
+  "happycircles://**",
+]
 
 [auth.email]
+enable_signup = true
+enable_confirmations = true
 otp_length = 8
 
 [auth.email.template.confirmation]
@@ -97,6 +104,21 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.activate-account-from-invite]
+verify_jwt = true
+
+[functions.claim-account-invite]
+verify_jwt = true
+
+[functions.resume-account-invite]
+verify_jwt = true
+
+[functions.touch-current-device]
+verify_jwt = true
+
+[functions.trust-current-device]
+verify_jwt = true
+
+[functions.revoke-trusted-device]
 verify_jwt = true
 
 [functions.review-account-invite]

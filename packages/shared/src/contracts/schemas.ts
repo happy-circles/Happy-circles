@@ -306,6 +306,11 @@ export const activateAccountFromInviteSchema = accountInviteTokenSchema.extend({
   currentDeviceId: z.string().trim().min(6).max(200),
 });
 
+export const resumeAccountInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  currentDeviceId: z.string().trim().min(6).max(200),
+});
+
 export const reviewAccountInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   inviteId: uuidSchema,
