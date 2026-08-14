@@ -44,6 +44,18 @@ export const accountCreateAccountStyles = StyleSheet.create({
     fontSize: theme.typography.callout,
     fontWeight: '800',
   },
+  legalNotice: {
+    fontSize: theme.typography.caption,
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.xs,
+    textAlign: 'center',
+  },
+  legalNoticeLink: {
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 18,
+    textDecorationLine: 'underline',
+  },
   emailPasswordFallback: {
     gap: theme.spacing.md,
     paddingTop: theme.spacing.xs,

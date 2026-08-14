@@ -69,12 +69,31 @@ export function AppOpenButton({
       return undefined;
     }
 
+    let leftPageAfterFirstAttempt = false;
+    const markPageAsLeft = () => {
+      leftPageAfterFirstAttempt = true;
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        markPageAsLeft();
+      }
+    };
+
+    window.addEventListener('pagehide', markPageAsLeft, { once: true });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const frame = window.requestAnimationFrame(() => openApp());
-    const retryTimer = window.setTimeout(() => openApp(), 700);
+    const retryTimer = window.setTimeout(() => {
+      if (!leftPageAfterFirstAttempt && document.visibilityState === 'visible') {
+        openApp();
+      }
+    }, 700);
 
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(retryTimer);
+      window.removeEventListener('pagehide', markPageAsLeft);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [autoOpen, openApp, resolveLiveHref]);
 

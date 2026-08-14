@@ -23,6 +23,13 @@ describe('app smoke checks', () => {
       '_components',
       'landing-open-app-button.tsx',
     );
+    const appOpenButton = readRepoFile(
+      'apps',
+      'landing',
+      'app',
+      '_components',
+      'app-open-button.tsx',
+    );
     const scheme = process.env.NEXT_PUBLIC_APP_SCHEME ?? 'happycircles';
 
     expect(page).toContain('Happy Circles');
@@ -30,6 +37,8 @@ describe('app smoke checks', () => {
     expect(landingOpenButton).toContain('Abrir Happy Circles');
     expect(landingOpenButton).toContain('/join?mode=sign-in');
     expect(landingOpenButton).toContain("window.location.assign('/download')");
+    expect(appOpenButton).toContain("window.addEventListener('pagehide'");
+    expect(appOpenButton).toContain("document.visibilityState === 'visible'");
     expect(page).toContain('Términos');
     expect(page).not.toContain('Terminos');
     expect(buildNativeAppUrl('/join/sample-token', '?source=email', '#open')).toBe(
@@ -47,6 +56,29 @@ describe('app smoke checks', () => {
     ]) {
       expect(existsSync(join(repoRoot, ...routePath))).toBe(true);
     }
+  });
+
+  it('keeps production terms complete and visible before account creation', () => {
+    const terms = readRepoFile('apps', 'landing', 'app', 'terms', 'page.tsx');
+    const accountCreationOptions = readRepoFile(
+      'apps',
+      'mobile',
+      'src',
+      'features',
+      'invites',
+      'account-create-account-social-options.tsx',
+    );
+
+    expect(terms).toContain('Vigentes desde el 10 de agosto de 2026');
+    expect(terms).toContain('Happy Circles no es un banco');
+    expect(terms).toContain('proyecto independiente, sin explotación');
+    expect(terms).toContain('comercial, y el Servicio se ofrece sin costo');
+    expect(terms).toContain('Derechos del consumidor');
+    expect(terms).toContain('No imponemos arbitraje obligatorio');
+    expect(terms).not.toContain('debe ser revisada y aprobada legalmente');
+    expect(accountCreationOptions).toContain('Al crear tu cuenta confirmas');
+    expect(accountCreationOptions).toContain('Términos y condiciones');
+    expect(accountCreationOptions).toContain('Política de privacidad');
   });
 
   it('keeps invitation links ready for WhatsApp previews without private payloads', () => {
@@ -213,5 +245,29 @@ describe('app smoke checks', () => {
 
     expect(amendFinancialRequest).toContain("readPayloadString(data, 'amendedRequestId')");
     expect(amendFinancialRequest).not.toContain("readPayloadString(data, 'requestId')");
+  });
+
+  it('emulates email confirmation and native callbacks in local auth', () => {
+    const supabaseConfig = readRepoFile('supabase', 'config.toml');
+    const confirmationTemplate = readRepoFile(
+      'supabase',
+      'templates',
+      'auth',
+      'confirmation.html',
+    );
+    const recoveryTemplate = readRepoFile(
+      'supabase',
+      'templates',
+      'auth',
+      'recovery.html',
+    );
+
+    expect(supabaseConfig).toContain('enable_confirmations = true');
+    expect(supabaseConfig).toContain('"happycircles://**"');
+    expect(supabaseConfig).toContain('"http://localhost:8081/**"');
+    expect(supabaseConfig).toContain('"http://127.0.0.1:8081/**"');
+    expect(confirmationTemplate).toContain('Código manual en la app');
+    expect(recoveryTemplate).toContain('Restablece tu contraseña');
+    expect(`${confirmationTemplate}\n${recoveryTemplate}`).not.toMatch(/Ã|Â|ï¿½/);
   });
 });

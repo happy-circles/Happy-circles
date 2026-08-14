@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { IdentityFlowSecondaryAction } from '@/components/identity-flow';
 import { useAppTheme } from '@/providers/theme-provider';
 import { accountCreateAccountStyles as styles } from './account-create-account-screen.styles';
 import type { SocialProvider } from './account-invite-entry-helpers';
+
+const PRIVACY_POLICY_URL = 'https://app.happy-circles.com/privacy';
+const TERMS_URL = 'https://app.happy-circles.com/terms';
 
 interface AccountCreateAccountSocialOptionsProps {
   readonly appleSignInAvailable: boolean;
@@ -48,10 +51,7 @@ export function AccountCreateAccountSocialOptions({
             ]}
           >
             <Ionicons color={activeTheme.colors.white} name="logo-apple" size={18} />
-            <AppText
-              color={activeTheme.colors.white}
-              style={styles.socialProviderButtonTextApple}
-            >
+            <AppText color={activeTheme.colors.white} style={styles.socialProviderButtonTextApple}>
               {socialBusyProvider === 'apple' ? 'Abriendo Apple...' : 'Continuar con Apple'}
             </AppText>
           </Pressable>
@@ -91,6 +91,26 @@ export function AccountCreateAccountSocialOptions({
         }
         onPress={onToggleEmailPassword}
       />
+
+      <AppText style={[styles.legalNotice, { color: activeTheme.colors.textMuted }]}>
+        Al crear tu cuenta confirmas que tienes al menos 18 años y aceptas los{' '}
+        <AppText
+          accessibilityRole="link"
+          onPress={() => void Linking.openURL(TERMS_URL)}
+          style={[styles.legalNoticeLink, { color: activeTheme.colors.brandGreen }]}
+        >
+          Términos y condiciones
+        </AppText>{' '}
+        y la{' '}
+        <AppText
+          accessibilityRole="link"
+          onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+          style={[styles.legalNoticeLink, { color: activeTheme.colors.brandGreen }]}
+        >
+          Política de privacidad
+        </AppText>
+        .
+      </AppText>
     </>
   );
 }

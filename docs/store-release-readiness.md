@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-07-21.
+Ultima revision: 2026-08-11.
 
 Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera
 salida en Colombia.
@@ -78,7 +78,7 @@ Estado versionado:
 - Perfiles `development`, `preview` y `apk` usan EAS environment `preview`.
 - Perfil `production` usa EAS environment `production`.
 - Submit `production` apunta a iOS `ascAppId=6766675014` y Android track
-  `internal`.
+  `alpha` como `draft`.
 - El workflow no corre builds si falta GitHub secret `EXPO_TOKEN`.
 - `--auto-submit` solo se agrega cuando la variable de GitHub
   `EAS_AUTO_SUBMIT` es exactamente `true`.
@@ -96,6 +96,34 @@ Estado EAS observado el 2026-07-05:
 - Android submit a Play queda bloqueado hasta asignar una Google Service
   Account Key para Play Store Submissions en EAS. La key existente en EAS es de
   FCM y no esta asignada a submissions.
+- Busqueda local 2026-08-10: no se encontro ningun JSON `type=service_account`
+  en las ubicaciones habituales del perfil. La cuenta activa de `gcloud`
+  tampoco tiene permiso IAM para listar o crear keys en `happy-cricles-auth`.
+- Avance 2026-08-10: creada la service account
+  `happy-circles-play-submit@happy-circles-493003.iam.gserviceaccount.com` en
+  el proyecto Google Cloud sin organizacion `happy-circles-493003`; el proyecto
+  con organizacion `happy-cricles-auth` bloquea la creacion de keys por policy
+  `iam.disableServiceAccountKeyCreation`.
+- Play Console ya muestra esa service account como `Activo` para
+  `com.happycircles.app`, con permisos de app para lectura, lectura de calidad,
+  lanzar a segmentos de prueba y administrar segmentos/listas de testers.
+- Bloqueo restante: Google Cloud genero dos descargas de key, pero el navegador
+  integrado no las expuso al filesystem. El JSON real debe instalarse en una
+  ruta segura fuera del repositorio antes de subirlo a EAS.
+- Cuando la key util quede cargada en EAS, revocar en Google Cloud cualquier
+  key descargada que no se conserve como fuente de verdad.
+
+Estado Play/EAS observado el 2026-08-11:
+
+- Se subio manualmente a Play Console el AAB local
+  `apps/mobile/happy-circles-1.0.1-21.aab`.
+- Manifest validado con `bundletool`: package `com.happycircles.app`,
+  `versionName 1.0.1`, `versionCode 21`, target SDK 36.
+- El manifest no declara `com.google.android.gms.permission.AD_ID`; la
+  declaracion de ID de publicidad se guardo como "No".
+- La service account para submit automatico sigue pendiente porque el JSON real
+  no esta disponible en filesystem. El submit Android actual fue manual en Play
+  Console, no por `eas submit`.
 
 Requisitos remotos:
 
@@ -103,7 +131,7 @@ Requisitos remotos:
 - Variable opcional `EAS_AUTO_SUBMIT=true` si se quiere auto-submit.
 - Credenciales remotas iOS y Android configuradas en EAS.
 - Apple App Store Connect listo para TestFlight.
-- Google Play service account configurado para internal testing.
+- Google Play service account configurado para Play Store Submissions.
 - EAS `production` con variables publicas de produccion.
 - EAS `preview` con variables publicas de test/demo.
 
@@ -270,36 +298,26 @@ Notas:
 
 ## Google Play Console current status
 
-Observado en Play Console el 2026-07-05 para `com.happycircles.app`:
+Observado en Play Console el 2026-08-11 para `com.happycircles.app`:
 
-- Estado de aplicacion: Borrador.
-- Produccion: Inactivo.
-- Prueba interna: Activo, Sin revisar.
-- Prueba cerrada: Inactivo.
-- Produccion bloqueada hasta solicitar acceso despues de una prueba cerrada.
-- Testers aceptados para el requisito de produccion: 0.
-- Declaraciones guardadas: politica de privacidad y anuncios.
-
-Tareas pendientes visibles en el panel:
-
-- Datos de inicio de sesion.
-- Clasificacion de contenido.
-- Publico objetivo.
-- Seguridad de los datos.
-- ID de publicidad.
-- Apps gubernamentales.
-- Funciones financieras.
-- Apps de salud.
-- Selecciona una categoria de la aplicacion y proporciona datos de contacto.
-- Configura la Ficha de Play Store.
-
-Prueba cerrada pendiente:
-
-- Seleccionar paises y regiones.
-- Seleccionar testers.
-- Crear un nuevo lanzamiento.
-- Revisar y confirmar la version.
-- Enviar la version a Google para revision.
+- Produccion: no lanzada.
+- Prueba cerrada `Alpha`: activa, version `21 (1.0.1)` en revision.
+- Pais/region del track Alpha: Colombia.
+- Lista de testers seleccionada: `Android_internal_testers`.
+- Testers en la lista: 7.
+- Enlace Android para testers:
+  `https://play.google.com/store/apps/details?id=com.happycircles.app`.
+- Enlace Web de opt-in:
+  `https://play.google.com/apps/testing/com.happycircles.app`.
+- Ficha de Play Store predeterminada completada y enviada a revision con
+  nombre `Happy Circles`, descripcion corta, descripcion completa, icono,
+  feature graphic y 2 screenshots de telefono.
+- Declaracion de recursos generados con IA: no se etiquetaron recursos como IA.
+- Declaracion de ID de publicidad: `No`.
+- 13 cambios enviados a Google para revision. Play Console muestra:
+  "Tus cambios estan en proceso de revision".
+- Advertencia no bloqueante de la version: falta archivo de desofuscacion para
+  R8/Proguard.
 
 Requisito para pedir produccion:
 
@@ -307,6 +325,20 @@ Requisito para pedir produccion:
 - Tener al menos 12 testers que hayan aceptado participar.
 - Ejecutar la prueba cerrada con 12 testers como minimo durante al menos 14
   dias.
+- Con 7 testers actuales faltan al menos 5 testers aceptados mas para cumplir
+  el minimo de produccion.
+
+Android developer verification revisado en Play Console el 2026-08-10:
+
+- La seccion "Verificacion de desarrolladores de Android" muestra
+  `com.happycircles.app` como `Registrada`.
+- Play Console muestra 1 clave de firma asociada al package.
+- Ultima actualizacion visible para el registro: 2026-05-21.
+- La pestana "Identidad" usa los datos legales de la cuenta de desarrollador de
+  Play Console; no aparecio una accion pendiente separada en esa pestana.
+- El recordatorio del 2026-09-30 no bloquea actualmente a Happy Circles, pero
+  conviene volver a revisarlo antes de enviar la prueba cerrada y antes del
+  despliegue de produccion.
 
 Estado EAS 2026-07-05:
 
@@ -316,6 +348,17 @@ Estado EAS 2026-07-05:
   `dist/mobile-builds/happy-circles-0.1.2-android-20.aab`.
 - `eas submit` no pudo enviar a Play porque `com.happycircles.app` no tiene
   Google Service Account Key configurada para Play Store Submissions.
+- `apps/mobile/eas.json` ya apunta el submit Android a `alpha` con
+  `releaseStatus=draft`, para dejar el AAB cargado sin publicarlo hasta revisar
+  testers y notas.
+- Play Console 2026-08-10: la service account
+  `happy-circles-play-submit@happy-circles-493003.iam.gserviceaccount.com`
+  quedo activa para la app con permisos de testing. Falta recuperar el JSON de
+  la key del navegador y cargarlo en EAS; sin ese archivo no se puede completar
+  `eas credentials --platform android` ni `eas submit`.
+- Play Console 2026-08-11: el AAB `1.0.1 (21)` ya fue subido manualmente y
+  enviado a revision en Alpha, por lo que la key de EAS ya no bloquea esta
+  prueba cerrada. Sigue bloqueando futuros submits automatizados.
 
 ## DNS y App Links
 
@@ -421,6 +464,10 @@ Antes de enviar:
   Cuentas esperadas: `apple-review@happy-circles.com`,
   `demo-ana@happy-circles.com` y `demo-bruno@happy-circles.com`. No versionar
   la contrasena en este repositorio.
+- Validacion 2026-08-10: la contrasena de seed documentada no autentica contra
+  Supabase produccion para esas cuentas. Antes de usarla en Google Play,
+  confirmar la contrasena real de App Store Connect o resetear la cuenta demo en
+  produccion.
 - Si la cuenta demo requiere pasos especiales, pegarlos directamente en App
   Review Information.
 - Review contact email: `soporte@happy-circles.com`.
@@ -428,6 +475,10 @@ Antes de enviar:
 ## Bloqueos de release
 
 - Revision/aprobacion legal de privacidad y terminos.
+- Antes de monetizar o presentar el servicio como una oferta comercial, identificar
+  al proveedor responsable en los terminos (nombre o razon social, NIT, direccion
+  de notificacion, telefono y correo). Mientras Happy Circles siga como proyecto
+  independiente gratuito, no inventar una sociedad ni datos de operador.
 - Desplegar el landing actualizado para que `/support` publicado declare
   solicitudes web de eliminacion de cuenta/datos.
 - DNS opcional de `www.happy-circles.com` si se quiere separar marketing del
