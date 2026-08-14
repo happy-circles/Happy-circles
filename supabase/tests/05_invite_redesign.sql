@@ -60,6 +60,7 @@ insert into public.user_profiles (
   phone_country_calling_code,
   phone_national_number,
   phone_e164,
+  phone_verified_at,
   account_access_state
 )
 select
@@ -74,6 +75,7 @@ select
   '+57',
   right(demo_users.phone_e164, 10),
   demo_users.phone_e164,
+  timezone('utc', now()),
   'active'
 from (
   values
@@ -89,7 +91,18 @@ set email = excluded.email,
     phone_country_calling_code = excluded.phone_country_calling_code,
     phone_national_number = excluded.phone_national_number,
     phone_e164 = excluded.phone_e164,
+    phone_verified_at = excluded.phone_verified_at,
     account_access_state = excluded.account_access_state;
+
+-- Phone proof must be recorded after the phone value itself. The production
+-- trigger deliberately clears any prior proof whenever phone_e164 changes.
+update public.user_profiles profile
+set phone_verified_at = timezone('utc', now())
+where profile.id in (
+  '00000000-0000-0000-0000-0000000000e5'::uuid,
+  '00000000-0000-0000-0000-0000000000f6'::uuid,
+  '00000000-0000-0000-0000-0000000000a7'::uuid
+);
 
 do $$
 declare
@@ -559,7 +572,8 @@ begin
       v_user_gina,
       'test-account-activation-untrusted',
       v_account_activation ->> 'deliveryToken',
-      'sql-untrusted-device'
+      'sql-untrusted-device',
+      'sql-untrusted-session'
     );
     raise exception 'expected account invite activation to require trusted device';
   exception
@@ -575,7 +589,10 @@ begin
     platform,
     trust_state,
     trusted_at,
-    last_seen_at
+    last_seen_at,
+    trusted_session_id,
+    trust_proof_method,
+    trust_proof_at
   )
   values (
     v_user_gina,
@@ -583,18 +600,25 @@ begin
     'ios',
     'trusted',
     timezone('utc', now()),
+    timezone('utc', now()),
+    'sql-trusted-session',
+    'password',
     timezone('utc', now())
   )
   on conflict (user_id, device_id) do update
   set trust_state = 'trusted',
       trusted_at = excluded.trusted_at,
-      last_seen_at = excluded.last_seen_at;
+      last_seen_at = excluded.last_seen_at,
+      trusted_session_id = excluded.trusted_session_id,
+      trust_proof_method = excluded.trust_proof_method,
+      trust_proof_at = excluded.trust_proof_at;
 
   v_account_activation_result := public.activate_account_from_invite(
     v_user_gina,
     'test-account-activation-trusted',
     v_account_activation ->> 'deliveryToken',
-    'sql-trusted-device'
+    'sql-trusted-device',
+    'sql-trusted-session'
   );
 
   if (v_account_activation_result ->> 'status') <> 'accepted' then

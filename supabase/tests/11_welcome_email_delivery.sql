@@ -99,6 +99,7 @@ declare
   v_user_id constant uuid := '00000000-0000-0000-0000-000000001101';
   v_incomplete_user_id constant uuid := '00000000-0000-0000-0000-000000001102';
   v_claim record;
+  v_lease_id uuid;
 begin
   select *
     into v_claim
@@ -158,6 +159,33 @@ begin
 
   if exists (select 1 from public.claim_welcome_email_delivery(v_incomplete_user_id)) then
     raise exception 'expected incomplete profile to be unclaimable';
+  end if;
+
+  update public.user_profiles
+  set welcome_email_sent_at = null,
+      welcome_email_queued_at = null,
+      welcome_email_lease_id = null,
+      welcome_email_last_error = null
+  where id = v_user_id;
+
+  perform public.mark_onboarding_completed(v_user_id);
+  select lease_id into v_lease_id
+  from public.claim_welcome_email_delivery_v2(v_user_id);
+
+  if v_lease_id is null then
+    raise exception 'expected v2 claim to issue a lease token';
+  end if;
+
+  if public.release_welcome_email_delivery_v2(
+    v_user_id,
+    gen_random_uuid(),
+    'wrong worker'
+  ) then
+    raise exception 'expected stale worker with wrong lease to be ignored';
+  end if;
+
+  if not public.mark_welcome_email_sent_v2(v_user_id, v_lease_id) then
+    raise exception 'expected active lease owner to mark welcome email sent';
   end if;
 end
 $$;
