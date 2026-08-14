@@ -2,6 +2,25 @@ name: EAS Mobile Testing Release
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: android
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+      auto_submit:
+        description: Submit completed builds to the configured testing tracks
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build-and-submit-testing:
@@ -9,55 +28,67 @@ jobs:
     timeout-minutes: 120
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EAS_AUTO_SUBMIT: ${{ vars.EAS_AUTO_SUBMIT }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
       - name: Enable pnpm
         run: corepack enable
 
+      - name: Validate release source and credentials
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Production testing builds must be dispatched from main."
+            exit 1
+          fi
+
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "::error::EXPO_TOKEN is not configured."
+            exit 1
+          fi
+
+          if [ "${{ inputs.auto_submit }}" = "true" ] && [ "${{ inputs.platform }}" != "ios" ]; then
+            echo "::error::Android auto-submit is disabled until a Play submission service account is configured."
+            exit 1
+          fi
+
+          conclusion="$(gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow security-ci.yml \
+            --commit "${GITHUB_SHA}" \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion // ""')"
+
+          if [ "${conclusion}" != "success" ]; then
+            echo "::error::Security CI must pass for ${GITHUB_SHA} before an EAS build."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Resolve EAS release mode
-        id: eas-release
-        shell: bash
-        run: |
-          if [ -z "${EXPO_TOKEN}" ]; then
-            echo "::warning::EXPO_TOKEN is not configured; skipping EAS production builds."
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "should_run=true" >> "$GITHUB_OUTPUT"
-
-          if [ "${EAS_AUTO_SUBMIT}" = "true" ]; then
-            echo "auto_submit=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "auto_submit=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Queue EAS production builds
-        if: steps.eas-release.outputs.should_run == 'true'
+      - name: Queue and wait for EAS production build
         working-directory: apps/mobile
         shell: bash
         run: |
-          args=(build --platform all --profile production --non-interactive --no-wait)
+          args=(
+            build
+            --platform "${{ inputs.platform }}"
+            --profile production
+            --non-interactive
+            --wait
+          )
 
-          if [ "${{ steps.eas-release.outputs.auto_submit }}" = "true" ]; then
+          if [ "${{ inputs.auto_submit }}" = "true" ]; then
             args+=(--auto-submit)
           fi
 
-          pnpm dlx eas-cli@latest "${args[@]}"
-
-      - name: Skip EAS production builds
-        if: steps.eas-release.outputs.should_run != 'true'
-        run: echo "EXPO_TOKEN is not configured; EAS production builds were skipped."
+          pnpm dlx eas-cli@21.7.1 "${args[@]}"

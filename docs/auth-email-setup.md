@@ -1,11 +1,28 @@
 # Auth Email Setup
 
+Last reviewed: 2026-08-14.
+
 This project uses `Supabase Auth` for email/password accounts and password recovery. The recommended production setup is:
 
 - App handles sign-in, sign-up, and password reset screens.
 - Supabase generates and validates auth recovery links.
 - Resend sends the emails through your domain via Supabase custom SMTP.
 - The onboarding welcome email is sent by a Supabase Edge Function through the Resend API.
+
+## Current production gate
+
+Verified on 2026-08-14:
+
+- Supabase custom SMTP is configured for Auth email; confirmation/recovery email
+  is separate from the welcome-email API call.
+- `send-welcome-email` is deployed and `ACTIVE` as part of the verified `40/40`
+  Edge Function parity.
+- `RESEND_API_KEY` is not configured. This does not block account activation or
+  store builds, but the optional welcome email will not be sent until the
+  secret is installed and a real account completes the idempotent send flow.
+- Supabase Auth Leaked Password Protection (HIBP) is disabled because the
+  current project plan does not include it. Treat it as a plan-upgrade hardening
+  item, not as a false claim that the current release can enable it.
 
 ## What the app now supports
 
@@ -134,7 +151,7 @@ The delivery is guarded by database columns on `public.user_profiles`:
 
 Required Edge Function secrets:
 
-- `RESEND_API_KEY`
+- `RESEND_API_KEY` - required only for the optional production welcome email
 - `APP_WEB_ORIGIN=https://app.happy-circles.com`
 - `WELCOME_EMAIL_FROM="Happy Circles <hola@happy-circles.com>"`
 - `WELCOME_EMAIL_REPLY_TO=` optional
@@ -143,6 +160,14 @@ Required Edge Function secrets:
 ## Email OTP length
 
 The app UI expects 8-digit email codes for confirmation and recovery. Keep Supabase Email OTP length aligned with that value in Auth settings.
+
+## Leaked password protection
+
+On Supabase Pro or above, enable Leaked Password Protection so password creation
+and reset can reject credentials found in Have I Been Pwned. The current plan
+does not expose that setting. This is an Auth security control, not a Resend
+setting: adding `RESEND_API_KEY` does not enable it, and enabling HIBP does not
+validate email delivery.
 
 ## Mobile deep link notes
 
@@ -168,6 +193,10 @@ For production email auth flows, the app uses HTTPS Universal Links / Android Ap
 6. Confirm the app opens on the reset-password screen after code verification.
 7. Set a new password.
 8. Sign out and sign back in with the new password.
+9. Complete onboarding with a fresh release-test account and confirm exactly one
+   welcome email is sent, with `welcome_email_sent_at` recorded.
+10. After a future upgrade to Supabase Pro, try a known compromised test
+    password and confirm HIBP rejects it during the supported flow.
 
 ## Failure modes to check first
 
@@ -177,3 +206,5 @@ For production email auth flows, the app uses HTTPS Universal Links / Android Ap
 - Opening the email link on a device that does not have the app or cannot resolve the custom scheme
 - Using Expo Go instead of a proper development build for auth-link testing
 - Missing `app.happy-circles.com` DNS, Apple association file, or Android asset links
+- Missing `RESEND_API_KEY` for the separate welcome-email Edge Function
+- Leaked Password Protection (HIBP) disabled in Supabase Auth

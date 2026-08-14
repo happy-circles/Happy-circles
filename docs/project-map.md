@@ -1,6 +1,6 @@
 # Mapa del proyecto
 
-Ultima revision: 2026-07-03.
+Ultima revision: 2026-08-14.
 
 Esta pagina es la capa rapida de orientacion del repo: donde vive cada cosa,
 que responsabilidad tiene cada area y que documento abrir despues.
@@ -17,6 +17,22 @@ generados por el sistema. La app movil es la superficie principal. Supabase
 maneja auth, base de datos, RLS, storage, Edge Functions, workers, analytics y
 tests SQL. La landing maneja paginas publicas, redirecciones a tiendas y
 Universal/App Links.
+
+## Estado de release actual
+
+- Candidata mobile: `1.0.2`, con siguiente `versionCode` Android `22` y
+  `buildNumber` iOS `37`.
+- Expo SDK 54 esta alineado en `expo@54.0.36`.
+- El perfil EAS `apk` esta reservado para un smoke instalable contra el
+  environment `production`; `development` y `preview` siguen usando test/demo.
+- El workflow EAS exige `main`, `EXPO_TOKEN` y Security CI exitoso para el mismo
+  commit antes de encolar un build.
+- Produccion Supabase tiene migraciones aplicadas hasta `0086` y las 40 Edge
+  Functions versionadas aparecen `ACTIVE` (paridad `40/40`) en la verificacion
+  del 2026-08-14.
+- Los bloqueos operativos vigentes viven en
+  `docs/store-release-readiness.md`; no confundir una configuracion lista con un
+  binario ya construido o enviado.
 
 ## Empieza aqui
 
@@ -84,8 +100,9 @@ Rutas landing en `apps/landing/app`:
 ## Mapa backend
 
 - Las migraciones viven en `supabase/migrations` y actualmente llegan a
-  `0072_supabase_lint_warning_cleanup.sql`, mas migraciones timestamped de
-  limpieza de Supabase Advisor.
+  `20260813051000_0086_settlement_trigger_acl.sql`.
+- El repo versiona 40 Edge Functions y la produccion verificada el 2026-08-14
+  reporta las 40 como `ACTIVE`.
 - Las Edge Functions se agrupan por proposito:
   - Solicitudes financieras: crear, aceptar, rechazar, enmendar, revertir.
   - Invitaciones y personas: friendship invites, account invites, previews,

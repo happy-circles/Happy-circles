@@ -10,14 +10,16 @@ const functionSource = readFileSync(
   'utf8',
 );
 const configSource = readFileSync(resolve(repoRoot, 'supabase/config.toml'), 'utf8');
+const snapshotConfig =
+  configSource.match(/\[functions\.get-app-snapshot\][\s\S]*?(?=\r?\n\[|$)/)?.[0] ?? '';
 const mobileFetcherSource = readFileSync(
   resolve(repoRoot, 'apps/mobile/src/lib/live-data/app-snapshot-fetcher.ts'),
   'utf8',
 );
 
 describe('get-app-snapshot contract', () => {
-  it('allows browser preflight while authenticating inside the Edge Function', () => {
-    expect(configSource).toMatch(/\[functions\.get-app-snapshot\][\s\S]*verify_jwt\s*=\s*false/);
+  it('requires gateway JWT validation and authenticates again inside the Edge Function', () => {
+    expect(snapshotConfig).toMatch(/verify_jwt\s*=\s*true/);
     expect(functionSource).toContain('handleRpc(request');
     expect(functionSource).toContain('actorUserId');
   });

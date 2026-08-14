@@ -1,9 +1,11 @@
 # ADR 0006: Supabase Production/Test Separation
 
 ## Status
-Accepted
+
+Accepted; operationally amended on 2026-08-14.
 
 ## Decision
+
 The published App Store backend is the clean production Supabase project. Demo,
 QA, internal builds, APK builds, development builds, and seeded test data use a
 separate Supabase test/demo project.
@@ -15,6 +17,7 @@ settlements, invites, analytics events, push devices, trusted devices, sessions,
 and storage objects is environment-specific and disposable outside production.
 
 ## Consequences
+
 - `production` EAS builds point at the production Supabase project.
 - `preview`, `development`, and `apk` EAS builds point at the test/demo Supabase
   project.
@@ -25,3 +28,20 @@ and storage objects is environment-specific and disposable outside production.
   before changing production.
 - Operational details live in
   `docs/supabase-prod-test-separation-runbook.md`.
+
+## Operational amendment: production smoke APK
+
+The original decision used the `apk` EAS profile for test/demo. For release
+candidate `1.0.2`, that profile is reserved instead for a controlled,
+non-store APK smoke against the production EAS environment. It uses production
+credentials, does not auto-increment the store counter, and must not create demo
+or seeded data.
+
+This amendment does not move normal QA to production:
+
+- `development` and `preview` remain on the test/demo project.
+- General QA, screenshots, demos, and seeded scenarios remain on test/demo.
+- The production APK is only for the final login/onboarding/device/OAuth smoke
+  with dedicated release-test accounts before building the production AAB.
+- The APK is never uploaded to Play Console; the store artifact remains the
+  `production` AAB.

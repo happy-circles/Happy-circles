@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-08-11.
+Ultima revision: 2026-08-14.
 
 Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera
 salida en Colombia.
@@ -56,7 +56,7 @@ Debe pasar:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm test`
-- `pnpm audit --audit-level moderate`
+- `pnpm audit:dependencies`
 - `pnpm build:landing`
 - `pnpm security:check`
 - `pnpm test:supabase`
@@ -71,22 +71,31 @@ Workflow: `.github/workflows/eas-mobile-release.yml`.
 
 Estado versionado:
 
+- Candidata de tienda: `1.0.2`; siguientes contadores previstos Android `22` e
+  iOS `37`. Confirmarlos otra vez en EAS y las consolas antes de encolar.
+- Expo SDK 54 esta alineado en `expo@54.0.36`.
 - Proyecto EAS vinculado en `apps/mobile/app.config.ts`:
   `9b63f5f3-3c81-4d3d-bc54-1a81b998d20a`.
 - `apps/mobile/eas.json` usa versionado remoto y `autoIncrement` en
   `production`.
-- Perfiles `development`, `preview` y `apk` usan EAS environment `preview`.
-- Perfil `production` usa EAS environment `production`.
+- Perfiles `development` y `preview` usan EAS environment `preview`.
+- `apk` usa EAS environment `production`, credenciales remotas, contador fijo y
+  distribucion interna. Esta reservado para el smoke Android de la candidata y
+  no se sube a Play.
+- Perfil `production` usa EAS environment `production` y auto-incremento.
 - Submit `production` apunta a iOS `ascAppId=6766675014` y Android track
   `alpha` como `draft`.
-- El workflow no corre builds si falta GitHub secret `EXPO_TOKEN`.
-- `--auto-submit` solo se agrega cuando la variable de GitHub
-  `EAS_AUTO_SUBMIT` es exactamente `true`.
+- El workflow manual permite elegir `android`, `ios` o `all`, exige ejecutarse
+  desde `main`, falla si falta `EXPO_TOKEN` y comprueba Security CI exitoso para
+  el mismo commit.
+- Usa permisos de solo lectura, Actions `v6`, EAS CLI fijado y espera el
+  resultado del build. Android auto-submit falla cerrado mientras no exista la
+  service account de Play; iOS solo auto-envia si el input explicito lo pide.
 
 No tratar build IDs o artifact URLs antiguos como estado actual. Confirmar el
 ultimo build en Expo/EAS antes de citarlo en una entrega.
 
-Estado EAS observado el 2026-07-05:
+Estado EAS historico observado el 2026-07-05 (no es la candidata actual):
 
 - iOS production build `936eb1bd-a5f1-47c6-aaec-167dd3f6502a`:
   `0.1.2 (30)`, subido a App Store Connect con submission
@@ -113,10 +122,9 @@ Estado EAS observado el 2026-07-05:
 - Cuando la key util quede cargada en EAS, revocar en Google Cloud cualquier
   key descargada que no se conserve como fuente de verdad.
 
-Estado Play/EAS observado el 2026-08-11:
+Estado Play/EAS historico observado el 2026-08-11:
 
-- Se subio manualmente a Play Console el AAB local
-  `apps/mobile/happy-circles-1.0.1-21.aab`.
+- Se subio manualmente a Play Console el AAB `1.0.1 (21)`.
 - Manifest validado con `bundletool`: package `com.happycircles.app`,
   `versionName 1.0.1`, `versionCode 21`, target SDK 36.
 - El manifest no declara `com.google.android.gms.permission.AD_ID`; la
@@ -128,7 +136,6 @@ Estado Play/EAS observado el 2026-08-11:
 Requisitos remotos:
 
 - GitHub secret `EXPO_TOKEN`.
-- Variable opcional `EAS_AUTO_SUBMIT=true` si se quiere auto-submit.
 - Credenciales remotas iOS y Android configuradas en EAS.
 - Apple App Store Connect listo para TestFlight.
 - Google Play service account configurado para Play Store Submissions.
@@ -155,10 +162,13 @@ Estado declarado en App Store Connect el 2026-07-21:
 
 ## Supabase produccion
 
-Estado versionado del repo:
+Estado verificado el 2026-08-14:
 
-- Migraciones llegan a `0072_supabase_lint_warning_cleanup.sql`, mas
-  migraciones timestamped de limpieza `0062`, `0063` y `0064`.
+- Produccion tiene aplicada
+  `20260813051000_0086_settlement_trigger_acl.sql`; el dry-run posterior no
+  reporto migraciones pendientes.
+- El repo versiona 40 Edge Functions y produccion reporta las 40 `ACTIVE`
+  (paridad `40/40`).
 - Edge Functions versionadas incluyen account deletion, graph worker, push
   worker, analytics, snapshots, people overview, invites, avatar upload y
   comandos financieros.
@@ -168,15 +178,16 @@ Estado versionado del repo:
   `scripts/update-push-notification-cron.mjs` y
   `scripts/update-analytics-cron.mjs` configuran los crons remotos.
 
-Antes de enviar a tiendas, confirmar en el proyecto Supabase remoto:
+Antes de enviar a tiendas, mantener o completar en el proyecto Supabase remoto:
 
-- Todas las migraciones estan aplicadas hasta el estado versionado.
-- Todas las Edge Functions versionadas estan desplegadas.
+- Reconfirmar el dry-run de migraciones y la paridad `40/40` justo antes del
+  build si se modifica backend despues del 2026-08-14.
 - Secrets definidos:
   - `GRAPH_CYCLE_WORKER_SECRET`
   - `PUSH_NOTIFICATION_WORKER_SECRET` o fallback controlado a
     `GRAPH_CYCLE_WORKER_SECRET`
-  - `RESEND_API_KEY` si welcome/auth email depende de Resend
+  - `RESEND_API_KEY`: pendiente para el welcome email opcional; no bloquea la
+    activacion de cuenta ni el build de tienda.
 - Cron de `process-graph-cycle-jobs` activo.
 - Cron de `send-push-notifications` activo.
 - Cron de analytics activo.
@@ -185,6 +196,9 @@ Antes de enviar a tiendas, confirmar en el proyecto Supabase remoto:
   `happycircles://...`.
 - Produccion y test/demo siguen separados segun
   `docs/supabase-prod-test-separation-runbook.md`.
+- Leaked Password Protection de Supabase Auth (HIBP) no esta disponible en el
+  plan actual. Activarla y probarla al subir a Supabase Pro; queda como
+  hardening posterior, no como gate imposible del build actual.
 
 ## Account Deletion
 
@@ -296,9 +310,20 @@ Notas:
 - No declarar ubicacion, pagos, credit score, browsing history ni advertising
   data salvo que el producto cambie.
 
-## Google Play Console current status
+## Google Play Console y candidata Android
 
-Observado en Play Console el 2026-08-11 para `com.happycircles.app`:
+Candidata preparada en repo el 2026-08-14:
+
+- Version `1.0.2`, siguiente `versionCode` previsto `22`, target SDK 36.
+- Primero generar el perfil `apk` contra el EAS environment `production` para
+  smoke instalable. Ese APK no se envia a Play y no auto-incrementa el contador.
+- Despues del smoke, generar el AAB con perfil `production` y cargarlo al track
+  `Alpha` como draft.
+- Verificar Google Sign-In con los SHA-1 OAuth de la firma EAS usada por el APK
+  y de Play App Signing. Los SHA-256 de App Links no sustituyen este requisito.
+
+Ultimo estado historico observado en Play Console el 2026-08-11 para
+`com.happycircles.app`:
 
 - Produccion: no lanzada.
 - Prueba cerrada `Alpha`: activa, version `21 (1.0.1)` en revision.
@@ -325,8 +350,9 @@ Requisito para pedir produccion:
 - Tener al menos 12 testers que hayan aceptado participar.
 - Ejecutar la prueba cerrada con 12 testers como minimo durante al menos 14
   dias.
-- Con 7 testers actuales faltan al menos 5 testers aceptados mas para cumplir
-  el minimo de produccion.
+- En la observacion del 2026-08-11 habia 7 testers; faltaban al menos 5. Volver
+  a consultar el numero aceptado actual antes de calcular la fecha de los 14
+  dias.
 
 Android developer verification revisado en Play Console el 2026-08-10:
 
@@ -340,12 +366,10 @@ Android developer verification revisado en Play Console el 2026-08-10:
   conviene volver a revisarlo antes de enviar la prueba cerrada y antes del
   despliegue de produccion.
 
-Estado EAS 2026-07-05:
+Estado EAS historico del 2026-07-05:
 
 - AAB vigente: build `8d476add-8025-46f1-8d7a-7f9cd5d0f19a`, version
   `0.1.2 (20)`.
-- AAB descargado localmente en
-  `dist/mobile-builds/happy-circles-0.1.2-android-20.aab`.
 - `eas submit` no pudo enviar a Play porque `com.happycircles.app` no tiene
   Google Service Account Key configurada para Play Store Submissions.
 - `apps/mobile/eas.json` ya apunta el submit Android a `alpha` con
@@ -474,6 +498,18 @@ Antes de enviar:
 
 ## Bloqueos de release
 
+- Si se quiere enviar el welcome email opcional desde esta version, configurar
+  `RESEND_API_KEY` y completar un smoke; Auth SMTP de confirmacion/recovery es
+  un canal separado que ya esta configurado.
+- Al subir el proyecto a Supabase Pro, habilitar Leaked Password Protection
+  (HIBP) y probar registro y cambio/recuperacion de password.
+- Configurar en EAS la Google Service Account Key de Play Store Submissions. La
+  cuenta existe en Play, pero sin su JSON EAS no puede hacer submit Android y el
+  workflow lo bloquea de forma explicita.
+- Verificar en Google Cloud los clientes OAuth Android y sus SHA-1 para la firma
+  EAS del APK y para Play App Signing; validar Google Sign-In en ambos canales.
+- Confirmar al menos 12 testers aceptados y completar 14 dias de closed testing;
+  el ultimo conteo historico fue 7 el 2026-08-11.
 - Revision/aprobacion legal de privacidad y terminos.
 - Antes de monetizar o presentar el servicio como una oferta comercial, identificar
   al proveedor responsable en los terminos (nombre o razon social, NIT, direccion
@@ -484,6 +520,9 @@ Antes de enviar:
 - DNS opcional de `www.happy-circles.com` si se quiere separar marketing del
   dominio operativo.
 - Store URLs reales en Vercel.
-- Credenciales Apple/Google para submit automatico.
+- Credenciales Apple para submit y Google para submit automatico.
 - Validar EAS `production` y `preview` antes de cada build.
+- Ejecutar APK `1.0.2` contra produccion como smoke controlado; despues QA del
+  AAB `1.0.2` con codigo superior a `21` instalado desde Play y del build iOS
+  `1.0.2 (37)` via TestFlight.
 - QA en dispositivos fisicos iOS y Android.

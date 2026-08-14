@@ -15,8 +15,8 @@
     },
     "apk": {
       "distribution": "internal",
-      "environment": "preview",
-      "autoIncrement": true,
+      "environment": "production",
+      "autoIncrement": false,
       "credentialsSource": "remote",
       "android": {
         "buildType": "apk"
