@@ -195,7 +195,7 @@ Never commit real `.env` files.
 
 - Apply migrations in order from `supabase/migrations`.
 - Use the `[db.seed]` files in `supabase/dev` and the scripts in `supabase/scripts` for demo and remote development data workflows. Demo users and demo reset helpers must not live in production migrations.
-- Keep production and test/demo Supabase projects separated as documented in `docs/supabase-prod-test-separation-runbook.md`. Production is the clean App Store backend; preview, development, APK, QA, and demo data use the separate test/demo project.
+- Keep production and test/demo Supabase projects separated as documented in `docs/supabase-prod-test-separation-runbook.md`. Production is the clean App Store backend; preview, development, general QA, and demo data use the separate test/demo project. The `apk` profile is reserved for the final controlled smoke against production before generating the store build.
 - Deploy Edge Functions from `supabase/functions`.
 - Keep `supabase/config.toml` aligned with function auth requirements.
 - Run SQL verification fixtures from `supabase/tests` after schema changes that affect ledger, invites, analytics, storage, security, or graph-cycle behavior.
