@@ -155,6 +155,20 @@ describe('resolvePreHomeRouteDecision', () => {
     ).toEqual({ action: 'stay' });
   });
 
+  it('keeps tokenized join handoff in place until invite reconciliation finishes', () => {
+    expect(
+      resolve({
+        hasJoinToken: true,
+        isAuthRouteTransitionHeld: true,
+        isJoinRoute: true,
+        setupState: {
+          pendingRequiredSteps: ['profile'],
+          requiredComplete: false,
+        },
+      }),
+    ).toEqual({ action: 'stay' });
+  });
+
   it('does not force complete but untrusted users into security setup', () => {
     expect(
       resolve({

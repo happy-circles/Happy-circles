@@ -9,8 +9,7 @@ import {
   UIManager,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import type { Href } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 
 import {
   BRAND_VERIFICATION_EASING,
@@ -56,7 +55,7 @@ import {
 import { AccountInviteEntryTokenForm } from './account-invite-entry-token-form';
 import { AuthEntryIdentity } from './account-invite-entry-identity';
 import { AccountInviteEntryAuthForm } from './account-invite-entry-auth-form';
-import { rememberPendingAccountInviteToken } from './account-invite-entry-pending-token';
+import { usePendingAccountInviteTokenPreparation } from './account-invite-entry-pending-token';
 import { accountInviteEntryStyles as styles } from './account-invite-entry-screen.styles';
 import {
   AUTH_ACTION_AFTER_KEYBOARD_DISMISS_MS,
@@ -93,16 +92,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 function isSetupAccountDestination(destination: Href) {
-  if (typeof destination === 'string') {
-    return destination.startsWith('/setup-account');
-  }
-
-  return (
-    typeof destination === 'object' &&
-    destination !== null &&
-    'pathname' in destination &&
-    destination.pathname === '/setup-account'
-  );
+  return typeof destination === 'string'
+    ? destination.startsWith('/setup-account')
+    : destination.pathname === '/setup-account';
 }
 
 export function AccountSignInEntry({
@@ -164,7 +156,17 @@ export function AccountSignInEntry({
     ? accountInviteStatusMessage(preview.status, preview.deliveryStatus)
     : null;
   const pendingToken = shouldPreview ? normalizedToken : null;
-
+  const pendingTokenPreparation = usePendingAccountInviteTokenPreparation({
+    onIgnored: () => {
+      setTokenInput('');
+      setTokenTouched(false);
+      setTokenMessage(null);
+      router.setParams({ mode: 'sign-in', token: undefined });
+    },
+    pendingToken,
+    preview,
+    refetchPreview: () => previewQuery.refetch(),
+  });
   const authRequestBusy = biometricBusy || passwordBusy || Boolean(socialBusyProvider);
   const authBusy =
     authRequestBusy || authSurfaceTransitioning || authResultState === 'success' || authSuccess;
@@ -237,6 +239,7 @@ export function AccountSignInEntry({
   );
 
   useEffect(() => {
+    pendingTokenPreparation.replaceInput(initialToken);
     setTokenInput(initialToken);
     setTokenTouched(false);
   }, [initialToken]);
@@ -347,20 +350,15 @@ export function AccountSignInEntry({
     }
 
     automaticUnlockHandledRef.current = true;
-    void rememberPendingToken()
-      .catch((error) => {
-        console.warn(
-          'Failed to persist pending invite before automatic remembered-account unlock',
-          error instanceof Error ? error.message : String(error),
-        );
-        return false;
+    void pendingTokenPreparation
+      .prepare()
+      .then(() => {
+        completeSuccessfulSignIn();
       })
-      .then((tokenReady) => {
-        if (tokenReady) {
-          completeSuccessfulSignIn();
-        } else {
-          clearAuthRouteTransitionHold();
-        }
+      .catch((error) => {
+        showRememberedReauthMode(
+          error instanceof Error ? error.message : 'No pudimos validar esta invitación.',
+        );
       });
   }, [
     account,
@@ -580,9 +578,9 @@ export function AccountSignInEntry({
     }, BRAND_VERIFICATION_RESULT_MS);
   }
 
-  function showAuthFailure(nextMessage: string) {
+  function showAuthFailure(nextMessage: string, preserveTransitionHold = false) {
     triggerIdentityErrorHaptic();
-    clearAuthRouteTransitionHold();
+    if (!preserveTransitionHold) clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
     setAuthResultState('error');
     setMessage(nextMessage);
@@ -591,11 +589,12 @@ export function AccountSignInEntry({
   function showRememberedReauthMode(
     nextMessage: string | null = null,
     reason: RememberedReauthReason = 'biometric-failed',
+    preserveTransitionHold = false,
   ) {
     if (nextMessage) {
       triggerIdentityErrorHaptic();
     }
-    clearAuthRouteTransitionHold();
+    if (!preserveTransitionHold) clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();
     transitionAuthSurface(
       () => {
@@ -789,25 +788,13 @@ export function AccountSignInEntry({
     }
   }
 
-  async function rememberPendingToken(): Promise<boolean> {
-    return rememberPendingAccountInviteToken({
-      pendingToken,
-      preview,
-      refetchPreview: () => previewQuery.refetch(),
-      onInvalidToken: (nextMessage) => {
-        setTokenMessage(nextMessage);
-        setAuthResultState('error');
-        setMessage(nextMessage);
-      },
-    });
-  }
-
   async function handleContinue(options?: { readonly automatic?: boolean }) {
     if (authBusy || !account) {
       return;
     }
 
     const isAutomatic = options?.automatic ?? false;
+    let authenticationSucceeded = false;
 
     if (!isAutomatic) {
       triggerIdentityImpactHaptic();
@@ -828,7 +815,13 @@ export function AccountSignInEntry({
     setMessage(null);
 
     try {
+      const attempt = await pendingTokenPreparation.prepare();
       const result = await session.unlock();
+      if (result.success) {
+        authenticationSucceeded = true;
+        beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+      }
+      await pendingTokenPreparation.reconcile(attempt);
       if (!result.success) {
         if (
           isAutomatic &&
@@ -846,11 +839,13 @@ export function AccountSignInEntry({
         return;
       }
 
-      if (!(await rememberPendingToken())) {
-        clearAuthRouteTransitionHold();
-        return;
-      }
       completeSuccessfulSignIn();
+    } catch (error) {
+      showRememberedReauthMode(
+        error instanceof Error ? error.message : 'No pudimos validar esta invitación.',
+        'biometric-failed',
+        authenticationSucceeded,
+      );
     } finally {
       setBiometricBusy(false);
     }
@@ -909,24 +904,32 @@ export function AccountSignInEntry({
     setAuthResultState(null);
     setMessage(null);
     setSocialBusyProvider(provider);
+    let authenticationSucceeded = false;
 
     try {
-      if (!(await rememberPendingToken())) {
-        clearAuthRouteTransitionHold();
-        return;
-      }
+      const attempt = await pendingTokenPreparation.prepare();
       const result =
         provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
+      const signInSucceeded = result === 'Sesión iniciada.';
+      if (signInSucceeded) {
+        authenticationSucceeded = true;
+        beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+      }
+      const reconciledAttempt = await pendingTokenPreparation.reconcile(attempt);
 
-      if (result === 'Sesión iniciada.') {
+      if (signInSucceeded) {
         await session.refreshAccountState({ preserveLocked: false });
+        await pendingTokenPreparation.reconcile(reconciledAttempt);
         completeSuccessfulSignIn();
         return;
       }
 
       showAuthFailure(result);
     } catch (error) {
-      showAuthFailure(error instanceof Error ? error.message : 'No pudimos validar tu sesion.');
+      showAuthFailure(
+        error instanceof Error ? error.message : 'No pudimos validar tu sesion.',
+        authenticationSucceeded,
+      );
     } finally {
       setSocialBusyProvider(null);
     }
@@ -948,25 +951,33 @@ export function AccountSignInEntry({
     setAuthResultState(null);
     setMessage(null);
     setPasswordBusy(true);
+    let authenticationSucceeded = false;
 
     try {
-      if (!(await rememberPendingToken())) {
-        clearAuthRouteTransitionHold();
-        return;
-      }
+      const attempt = await pendingTokenPreparation.prepare();
       const result = await session.signInWithPassword({
         email: locksRememberedEmail ? (account?.email ?? email) : email,
         password,
       });
-      if (result === 'Sesión iniciada.') {
+      const signInSucceeded = result === 'Sesión iniciada.';
+      if (signInSucceeded) {
+        authenticationSucceeded = true;
+        beginAuthRouteTransitionHold(AUTH_ROUTE_TRANSITION_HOLD_MS);
+      }
+      const reconciledAttempt = await pendingTokenPreparation.reconcile(attempt);
+      if (signInSucceeded) {
         await session.refreshAccountState({ preserveLocked: false });
+        await pendingTokenPreparation.reconcile(reconciledAttempt);
         completeSuccessfulSignIn();
         return;
       }
 
       showAuthFailure(result);
     } catch (error) {
-      showAuthFailure(error instanceof Error ? error.message : 'No pudimos validar tu sesion.');
+      showAuthFailure(
+        error instanceof Error ? error.message : 'No pudimos validar tu sesion.',
+        authenticationSucceeded,
+      );
     } finally {
       setPasswordBusy(false);
     }
@@ -1314,6 +1325,7 @@ export function AccountSignInEntry({
         onBlurToken={() => setTokenTouched(true)}
         onChangeToken={(value) => {
           setTokenMessage(null);
+          pendingTokenPreparation.replaceInput(value);
           setTokenInput(value);
         }}
         status={tokenFieldError ? 'danger' : preview ? 'success' : 'idle'}
@@ -1335,11 +1347,7 @@ export function AccountSignInEntry({
     : showPasswordFields
       ? AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE
       : undefined;
-  const activeFooterAction = (
-    <>
-      {isTokenFooterSurface ? tokenFooterAction : authFooterAction}
-    </>
-  );
+  const activeFooterAction = <>{isTokenFooterSurface ? tokenFooterAction : authFooterAction}</>;
   const activeContentTransitionKey = isTokenSurface
     ? 'invite-entry:token-form'
     : shouldRevealAuthPrimaryAction

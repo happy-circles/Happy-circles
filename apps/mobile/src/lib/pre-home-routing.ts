@@ -98,7 +98,7 @@ function nextRequiredSetupStep(input: PreHomeRouteInput): SetupStep {
 }
 
 function shouldWaitForAuthHandoff(input: PreHomeRouteInput) {
-  return input.isJoinRoute && !input.hasJoinToken && input.isAuthRouteTransitionHeld;
+  return input.isJoinRoute && input.isAuthRouteTransitionHeld;
 }
 
 export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRouteDecision {

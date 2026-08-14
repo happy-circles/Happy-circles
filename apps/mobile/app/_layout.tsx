@@ -1571,9 +1571,7 @@ function HomeEntryHandoffOverlay({
           />
         </Animated.View>
       ) : null}
-      <Animated.View
-        style={[styles.launchHomeCenterLayer, { opacity: homeHeaderCenterOpacity }]}
-      >
+      <Animated.View style={[styles.launchHomeCenterLayer, { opacity: homeHeaderCenterOpacity }]}>
         <HappyCirclesCenterSvg palette={homeHeaderPalette} size={LAUNCH_LOGO_SIZE} />
       </Animated.View>
     </View>
@@ -2143,8 +2141,7 @@ function SessionRouteGuard() {
         __DEV__ &&
         rawPreview === 'true' &&
         (isPublicInviteRoute || (isSetupAccountRoute && setupPreview.enabled));
-      const isAuthRouteTransitionHeld =
-        isJoinRoute && !hasJoinToken && isAuthRouteTransitionHoldActive();
+      const isAuthRouteTransitionHeld = isJoinRoute && isAuthRouteTransitionHoldActive();
 
       const [pendingInviteIntent, pendingNavigationIntent, pendingAccountVerification] =
         await Promise.all([
