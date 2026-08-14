@@ -3,6 +3,22 @@
 \pset tuples_only on
 
 do $$
+begin
+  if has_function_privilege(
+    'anon',
+    'public.tg_release_settlement_reservations_on_status()'::regprocedure,
+    'EXECUTE'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.tg_release_settlement_reservations_on_status()'::regprocedure,
+    'EXECUTE'
+  ) then
+    raise exception 'settlement reservation trigger function must not be executable by API roles';
+  end if;
+end;
+$$;
+
+do $$
 declare
   v_a uuid := '00000000-0000-0000-0000-0000000000a1';
   v_b uuid := '00000000-0000-0000-0000-0000000000b2';
