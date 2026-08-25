@@ -184,7 +184,9 @@ Backend email and worker variables:
 Operational Supabase script variables:
 
 - `SUPABASE_PROJECT_REF`
-- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_ACCESS_TOKEN` — Personal Access Token created in
+  [Supabase account settings](https://supabase.com/dashboard/account/tokens); keep it only in the
+  local `.env` and rotate it if the Management API returns `401 Unauthorized`.
 - `SUPABASE_SERVICE_ROLE_KEY` only for deleting orphaned Storage objects with `--apply`
 
 Production deployments must set `GRAPH_CYCLE_WORKER_SECRET`. Push workers may use `PUSH_NOTIFICATION_WORKER_SECRET` or fall back to `GRAPH_CYCLE_WORKER_SECRET`. Public workers intentionally return operational errors and process no jobs when their required secret is missing.

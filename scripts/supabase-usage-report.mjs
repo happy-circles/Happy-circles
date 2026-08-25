@@ -78,16 +78,16 @@ async function loadStorageHotPaths(startIso, endIso) {
   return runLogsQuery(
     `
     select
-      regexp_replace(r.url, r'\\?.*$', '') as path,
-      count(*) as request_count,
-      coalesce(sum(safe_cast(response.headers[safe_offset(0)].content_length as int64)), 0) as egress_bytes
-    from storage_logs
-      cross join unnest(metadata) as m
-      cross join unnest(m.req) as r
-      cross join unnest(m.res) as response
-    where starts_with(r.url, "/object")
-       or starts_with(r.url, "/render")
-       or starts_with(r.url, "/storage/v1/object")
+      arrayElement(splitByChar('?', log_attributes['req.url']), 1) as path,
+      count() as request_count,
+      sum(toUInt64OrZero(log_attributes['res.headers.content_length'])) as egress_bytes
+    from logs
+    where source = 'storage_logs'
+      and (
+        startsWith(log_attributes['req.url'], '/object')
+        or startsWith(log_attributes['req.url'], '/render')
+        or startsWith(log_attributes['req.url'], '/storage/v1/object')
+      )
     group by path
     order by egress_bytes desc, request_count desc
     limit 10
@@ -101,15 +101,15 @@ async function loadStorageEgress(startIso, endIso) {
   return runLogsQuery(
     `
     select
-      coalesce(sum(safe_cast(response.headers[safe_offset(0)].content_length as int64)), 0) as egress_bytes,
-      count(*) as request_count
-    from storage_logs
-      cross join unnest(metadata) as m
-      cross join unnest(m.req) as r
-      cross join unnest(m.res) as response
-    where starts_with(r.url, "/object")
-       or starts_with(r.url, "/render")
-       or starts_with(r.url, "/storage/v1/object")
+      sum(toUInt64OrZero(log_attributes['res.headers.content_length'])) as egress_bytes,
+      count() as request_count
+    from logs
+    where source = 'storage_logs'
+      and (
+        startsWith(log_attributes['req.url'], '/object')
+        or startsWith(log_attributes['req.url'], '/render')
+        or startsWith(log_attributes['req.url'], '/storage/v1/object')
+      )
     `,
     startIso,
     endIso,
@@ -120,12 +120,11 @@ async function loadFunctionHotPaths(startIso, endIso) {
   return runLogsQuery(
     `
     select
-      regexp_extract(r.url, r'/functions/v1/([^/?]+)') as function_name,
-      count(*) as request_count
-    from function_edge_logs
-      cross join unnest(metadata) as m
-      cross join unnest(m.req) as r
-    where starts_with(r.url, "/functions/v1/")
+      extract(log_attributes['request.pathname'], '^/functions/v1/([^/?]+)') as function_name,
+      count() as request_count
+    from logs
+    where source = 'function_edge_logs'
+      and startsWith(log_attributes['request.pathname'], '/functions/v1/')
     group by function_name
     order by request_count desc
     limit 10

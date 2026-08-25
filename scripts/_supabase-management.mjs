@@ -135,7 +135,7 @@ export async function runLogsQuery(sql, startIso, endIso) {
     sql,
   });
   const body = await requestJson(
-    `${MANAGEMENT_API_URL}/projects/${projectRef}/analytics/endpoints/logs.all?${params}`,
+    `${MANAGEMENT_API_URL}/projects/${projectRef}/analytics/endpoints/logs?${params}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
