@@ -67,6 +67,9 @@ verify_jwt = true
 [functions.create-internal-friendship-invite]
 verify_jwt = true
 
+[functions.remind-friendship-invite]
+verify_jwt = true
+
 [functions.create-account-invite]
 verify_jwt = true
 
@@ -98,6 +101,9 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.resolve-people-targets]
+verify_jwt = true
+
+[functions.manage-contact-discovery]
 verify_jwt = true
 
 [functions.get-account-invite-preview-public]

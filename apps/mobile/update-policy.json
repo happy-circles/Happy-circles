@@ -1,0 +1,24 @@
+{
+  "runtimeVersion": "hc-sdk54-20260928-1",
+  "projectId": "9b63f5f3-3c81-4d3d-bc54-1a81b998d20a",
+  "targets": {
+    "preview": {
+      "environment": "preview",
+      "channel": "preview",
+      "buildProfile": "preview",
+      "supabaseProjectRef": "ciozrkhwekzbhsvgfqdg"
+    },
+    "production-smoke": {
+      "environment": "production",
+      "channel": "production-smoke",
+      "buildProfile": "apk",
+      "supabaseProjectRef": "vknfhyfdtlvvfzptpqpj"
+    },
+    "production": {
+      "environment": "production",
+      "channel": "production",
+      "buildProfile": "production",
+      "supabaseProjectRef": "vknfhyfdtlvvfzptpqpj"
+    }
+  }
+}

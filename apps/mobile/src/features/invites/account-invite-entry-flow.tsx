@@ -39,6 +39,7 @@ import {
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { pushRoute, returnToRoute } from '@/lib/navigation';
+import { resolveRequiredSetupStep } from '@/lib/pre-home-routing';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { useSession } from '@/providers/session-provider';
@@ -426,18 +427,17 @@ export function AccountSignInEntry({
     }
 
     let cancelled = false;
-    const destination = !session.setupState.requiredComplete
-      ? buildSetupAccountHref(session.setupState.pendingRequiredSteps[0] ?? 'profile')
-      : session.setupState.securityPending
-        ? buildSetupAccountHref('security')
-        : pendingToken
-          ? ({
-              pathname: '/join/[token]',
-              params: { token: pendingToken },
-            } as unknown as Href)
-          : session.accountAccessState === 'active'
-            ? ('/home' as Href)
-            : ('/join' as Href);
+    const setupStep = resolveRequiredSetupStep(session.setupState);
+    const destination = setupStep
+      ? buildSetupAccountHref(setupStep)
+      : pendingToken
+        ? ({
+            pathname: '/join/[token]',
+            params: { token: pendingToken },
+          } as unknown as Href)
+        : session.accountAccessState === 'active'
+          ? ('/home' as Href)
+          : ('/join' as Href);
 
     successNavigationTimerRef.current = setTimeout(() => {
       successNavigationTimerRef.current = null;
@@ -470,7 +470,6 @@ export function AccountSignInEntry({
     session.profileCompletionState,
     session.setupState.pendingRequiredSteps,
     session.setupState.requiredComplete,
-    session.setupState.securityPending,
     session.status,
   ]);
 

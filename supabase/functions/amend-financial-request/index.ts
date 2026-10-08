@@ -1,4 +1,10 @@
-import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
+import { requireAuthorizedDeviceSession } from '../_shared/authorized-device-session.ts';
+import {
+  handleRpc,
+  requireString,
+  createServiceRoleClient,
+  createVerifiedUserClient,
+} from '../_shared/http.ts';
 import { notifyFinancialRequestPending, readPayloadString } from '../_shared/push-notifications.ts';
 
 const TRANSACTION_CATEGORIES = new Set([
@@ -23,7 +29,8 @@ function readTransactionCategory(value: unknown) {
 }
 
 Deno.serve((request) =>
-  handleRpc(request, async (body, actorUserId) => {
+  handleRpc(request, async (body, actorUserId, authContext) => {
+    await requireAuthorizedDeviceSession(createVerifiedUserClient(authContext), authContext);
     const client = createServiceRoleClient();
     const amountMinor = Number(body.amountMinor);
     if (!Number.isInteger(amountMinor) || amountMinor <= 0) {

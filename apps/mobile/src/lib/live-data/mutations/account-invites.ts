@@ -10,7 +10,7 @@ import {
 
 import { useSession } from '@/providers/session-provider';
 
-import { invalidateAppSnapshot } from '../client';
+import { invalidateInvitationState } from './contact-invalidation';
 import type { AccountInviteActionResult, AccountInvitePreviewResult } from '../types';
 import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 
@@ -65,7 +65,7 @@ export function useActivateAccountFromInviteMutation() {
             }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }
 
@@ -97,7 +97,7 @@ export function useResumeAccountInviteMutation() {
             }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }
 
@@ -119,7 +119,7 @@ export function useReviewAccountInviteMutation() {
         }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }
 
@@ -137,6 +137,6 @@ export function useCancelAccountInviteMutation() {
         }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }

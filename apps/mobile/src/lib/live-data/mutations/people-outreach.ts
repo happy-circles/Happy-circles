@@ -1,20 +1,20 @@
 import { useMutation } from '@tanstack/react-query';
 
-import { createPeopleOutreachSchema, resolvePeopleTargetsSchema } from '@happy-circles/shared';
+import { createPeopleOutreachSchema } from '@happy-circles/shared';
 
-import { invalidateAppSnapshot } from '../client';
-import type { PeopleOutreachResult, PeopleTargetResolution } from '../types';
+import { resolveContactPhones } from '@/features/home/contact-resolution-service';
+import { useSession } from '@/providers/session-provider';
+
+import { invalidateInvitationState } from './contact-invalidation';
+import type { PeopleOutreachResult } from '../types';
 import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 
 export function useResolvePeopleTargetsMutation() {
+  const { userId } = useSession();
   return useMutation({
     mutationFn: async (phoneE164List: readonly string[]) => {
-      return invokeParsedEdgeFunction<
-        ReturnType<typeof resolvePeopleTargetsSchema.parse>,
-        PeopleTargetResolution[]
-      >('resolve-people-targets', resolvePeopleTargetsSchema, {
-        phoneE164List,
-      });
+      if (!userId) throw new Error('Inicia sesión para consultar tus contactos.');
+      return resolveContactPhones(userId, phoneE164List, 'interactive', true);
     },
   });
 }
@@ -43,6 +43,10 @@ export function useCreatePeopleOutreachMutation() {
         }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data, input) =>
+      invalidateInvitationState(
+        { phoneE164: input.intendedRecipientPhoneE164 },
+        data.result?.status ?? data.status,
+      ),
   });
 }

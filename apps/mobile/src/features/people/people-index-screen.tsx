@@ -1184,6 +1184,7 @@ export function PeopleIndexScreen() {
 
   useEffect(() => {
     if (params.requests !== '1') {
+      handledRequestParamRef.current = null;
       return;
     }
 
@@ -1194,7 +1195,8 @@ export function PeopleIndexScreen() {
 
     handledRequestParamRef.current = requestKey;
     openInviteRequests(parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab);
-  }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab]);
+    router.setParams({ requests: undefined, requestTab: undefined });
+  }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab, router]);
 
   if (
     !hasPeopleScreenData &&

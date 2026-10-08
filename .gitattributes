@@ -1,0 +1,2 @@
+# Keep security patch hashes identical across Windows and Linux checkouts.
+patches/*.patch text eol=lf

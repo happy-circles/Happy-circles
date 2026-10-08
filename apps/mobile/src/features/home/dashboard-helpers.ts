@@ -155,7 +155,8 @@ export function canResendInviteRequest(item: InviteRequestItem): boolean {
       return (
         Boolean(item.profileUserId) &&
         (item.actionState === 'waiting_other_side' ||
-          (item.actionState === 'history' && item.status === 'expired'))
+          (item.actionState === 'history' &&
+            ['expired', 'canceled', 'rejected'].includes(item.status)))
       );
     }
 
@@ -163,7 +164,8 @@ export function canResendInviteRequest(item: InviteRequestItem): boolean {
       item.originChannel === 'remote' &&
       Boolean(item.intendedRecipientAlias && item.intendedRecipientPhoneE164) &&
       (item.actionState === 'pending_claim' ||
-        (item.actionState === 'history' && item.status === 'expired'))
+        (item.actionState === 'history' &&
+          ['expired', 'canceled', 'rejected'].includes(item.status)))
     );
   }
 
@@ -172,12 +174,12 @@ export function canResendInviteRequest(item: InviteRequestItem): boolean {
     item.originChannel === 'remote' &&
     Boolean(item.intendedRecipientAlias && item.intendedRecipientPhoneE164) &&
     ((item.actionState === 'pending_activation' && !item.activatedUserId) ||
-      (item.actionState === 'history' && item.status === 'expired'))
+      (item.actionState === 'history' && ['expired', 'canceled', 'rejected'].includes(item.status)))
   );
 }
 
 export function inviteRequestResendLabel(item: InviteRequestItem): string {
-  if (item.actionState === 'history' && item.status === 'expired') {
+  if (item.actionState === 'history' && ['expired', 'canceled', 'rejected'].includes(item.status)) {
     return 'Enviar de nuevo';
   }
 

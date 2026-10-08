@@ -70,6 +70,11 @@ import {
 import { requestLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
 import { markSplashHidden, subscribeFirstScreenReady } from '@/lib/performance-metrics';
 import { subscribeSetupEntryHandoff } from '@/lib/setup-entry-handoff';
+import {
+  createVisualTransition,
+  scheduleAfterVisualFrame,
+  type VisualTransition,
+} from '@/lib/visual-transition';
 import { PrimaryAction } from '@/components/primary-action';
 import { ProductAnalyticsBridge } from '@/components/product-analytics-bridge';
 import { SurfaceCard } from '@/components/surface-card';
@@ -99,6 +104,7 @@ import { supabase } from '@/lib/supabase';
 import { theme } from '@/lib/theme';
 import { AppProviders } from '@/providers/app-providers';
 import { useSession } from '@/providers/session-provider';
+import { IdentityConfirmationProvider } from '@/providers/identity-confirmation-provider';
 import { useAppTheme, useThemeScheme } from '@/providers/theme-provider';
 import { AppText } from '@/components/app-text';
 
@@ -118,6 +124,7 @@ const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
 const LAUNCH_TARGET_WAIT_MS = 540;
 const LAUNCH_HOME_TARGET_WAIT_MS = 1400;
 const LAUNCH_SESSION_MAX_WAIT_MS = 3200;
+const LAUNCH_VISUAL_MAX_MS = 6500;
 const LAUNCH_TARGET_STABLE_SAMPLES = 4;
 const LAUNCH_TARGET_STABLE_THRESHOLD = 1.25;
 const LAUNCH_LOGO_SIZE = IDENTITY_FLOW_STAGE_SIZE;
@@ -132,6 +139,7 @@ const HOME_ENTRY_LAND_MS = 720;
 const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
 const HOME_ENTRY_FADE_MS = 120;
 const HOME_ENTRY_READY_WAIT_MS = 2400;
+const HOME_ENTRY_VISUAL_MAX_MS = 6500;
 const SETUP_ENTRY_SPIN_MS = 420;
 const SETUP_ENTRY_SUCCESS_MS = 220;
 const SETUP_ENTRY_ROUTE_SETTLE_MS = 120;
@@ -139,45 +147,7 @@ const SETUP_ENTRY_LAND_MS = 760;
 const SETUP_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
 const SETUP_ENTRY_FADE_MS = 140;
 const SETUP_ENTRY_TARGET_WAIT_MS = 1200;
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function waitForNextFrame() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function waitForHomeEntryReadyAfter(readyVersionAtStart: number) {
-  if (getHomeEntryReadyVersion() > readyVersionAtStart) {
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    let settled = false;
-    const timeout = setTimeout(finish, HOME_ENTRY_READY_WAIT_MS);
-    const unsubscribe = subscribeHomeEntryReady((version) => {
-      if (version > readyVersionAtStart) {
-        finish();
-      }
-    });
-
-    function finish() {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timeout);
-      unsubscribe();
-      resolve();
-    }
-  });
-}
+const SETUP_ENTRY_VISUAL_MAX_MS = 4000;
 
 function useReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -674,6 +644,7 @@ function LaunchIntroOverlay({
   const [landingTargetLocked, setLandingTargetLocked] = useState(false);
   const [lockupState, setLockupState] = useState<BrandVerificationState>('loading');
   const mountedAtRef = useRef(Date.now());
+  const finishDeadlineRef = useRef<number | null>(null);
   const homeReadyVersionAtStartRef = useRef(getHomeEntryReadyVersion());
   const latestTargetRef = useRef<LaunchIntroTargetSnapshot | null>(target);
   const latestTargetPreferenceRef = useRef(targetPreference);
@@ -724,7 +695,7 @@ function LaunchIntroOverlay({
   }, [finishRequested, session.status]);
 
   useEffect(() => {
-    if (!finishRequested) {
+    if (!finishRequested || !visible) {
       return undefined;
     }
 
@@ -732,10 +703,28 @@ function LaunchIntroOverlay({
     const completionTimers = new Set<ReturnType<typeof setTimeout>>();
     let completing = false;
 
+    finishDeadlineRef.current ??= Date.now() + LAUNCH_VISUAL_MAX_MS;
+    const transition = createVisualTransition(Math.max(0, finishDeadlineRef.current - Date.now()));
+    const unsubscribeFallback = transition.subscribeFallback(finishIntroVisibility);
+
+    function finishIntroVisibility() {
+      if (!active) return;
+      active = false;
+      transition.cancel();
+      completionTimers.forEach((timer) => clearTimeout(timer));
+      completionTimers.clear();
+      introMotion.stopAnimation();
+      landMotion.stopAnimation();
+      reducedExitMotion.stopAnimation();
+      handoffMotion.stopAnimation();
+      setVisible(false);
+      onVisibleChange(false);
+    }
+
     async function finishIntro() {
       const elapsed = Date.now() - mountedAtRef.current;
       if (!reducedMotion && elapsed < LAUNCH_INTRO_MIN_MS) {
-        await wait(LAUNCH_INTRO_MIN_MS - elapsed);
+        await transition.wait(LAUNCH_INTRO_MIN_MS - elapsed);
       }
 
       if (!active) {
@@ -750,43 +739,43 @@ function LaunchIntroOverlay({
         completing = true;
 
         if (options?.immediate) {
-          setVisible(false);
-          onVisibleChange(false);
+          finishIntroVisibility();
           return;
         }
 
-        void waitForNextFrame().then(() => {
-          if (!active) {
-            return;
-          }
-
-          const fadeDuration = reducedMotion ? 90 : 140;
-          const fadeFallbackTimer = setTimeout(() => {
-            completionTimers.delete(fadeFallbackTimer);
+        void transition
+          .waitForFrame()
+          .then(() => {
             if (!active) {
               return;
             }
 
-            setVisible(false);
-            onVisibleChange(false);
-          }, fadeDuration + 220);
-          completionTimers.add(fadeFallbackTimer);
-          Animated.timing(handoffMotion, {
-            duration: fadeDuration,
-            easing: Easing.out(Easing.quad),
-            toValue: 1,
-            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-          }).start(() => {
-            clearTimeout(fadeFallbackTimer);
-            completionTimers.delete(fadeFallbackTimer);
-            if (!active) {
-              return;
-            }
+            const fadeDuration = reducedMotion ? 90 : 140;
+            const fadeFallbackTimer = setTimeout(() => {
+              completionTimers.delete(fadeFallbackTimer);
+              if (!active) {
+                return;
+              }
 
-            setVisible(false);
-            onVisibleChange(false);
-          });
-        });
+              finishIntroVisibility();
+            }, fadeDuration + 220);
+            completionTimers.add(fadeFallbackTimer);
+            Animated.timing(handoffMotion, {
+              duration: fadeDuration,
+              easing: Easing.out(Easing.quad),
+              toValue: 1,
+              useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+            }).start(() => {
+              clearTimeout(fadeFallbackTimer);
+              completionTimers.delete(fadeFallbackTimer);
+              if (!active) {
+                return;
+              }
+
+              finishIntroVisibility();
+            });
+          })
+          .catch(() => transition.fallback());
       }
 
       function scheduleCompletionFallback(
@@ -807,10 +796,19 @@ function LaunchIntroOverlay({
           return;
         }
 
-        await waitForHomeEntryReadyAfter(homeReadyVersionAtStartRef.current);
+        const readyVersionAtStart = homeReadyVersionAtStartRef.current;
+        if (getHomeEntryReadyVersion() > readyVersionAtStart || !active) return;
+        await transition.waitForSignal(
+          (complete) =>
+            subscribeHomeEntryReady((version) => {
+              if (version > readyVersionAtStart) complete();
+            }),
+          HOME_ENTRY_READY_WAIT_MS,
+        );
       }
 
       async function waitForLandingTarget(minimumStableAt = 0) {
+        if (!active) return null;
         requestLaunchTargetRemeasure();
         const startedAt = Date.now();
         const waitMs =
@@ -837,7 +835,7 @@ function LaunchIntroOverlay({
             }
           }
 
-          await waitForNextFrame();
+          await transition.waitForFrame();
         }
 
         const fallbackTarget = latestTargetRef.current;
@@ -845,7 +843,7 @@ function LaunchIntroOverlay({
       }
 
       if (reducedMotion) {
-        await wait(LAUNCH_ROUTE_SETTLE_MS);
+        await transition.wait(LAUNCH_ROUTE_SETTLE_MS);
 
         if (!active) {
           return;
@@ -866,7 +864,7 @@ function LaunchIntroOverlay({
         setLandingTarget(nextLandingTarget);
         setLandingTargetLocked(true);
         setLockupState(nextLandingTarget?.visualState ?? 'idle');
-        await waitForNextFrame();
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -892,7 +890,7 @@ function LaunchIntroOverlay({
         return;
       }
 
-      await wait(LAUNCH_ROUTE_SETTLE_MS);
+      await transition.wait(LAUNCH_ROUTE_SETTLE_MS);
 
       if (!active) {
         return;
@@ -912,14 +910,14 @@ function LaunchIntroOverlay({
 
       setLandingTarget(nextLandingTarget);
       setLandingTargetLocked(true);
-      await waitForNextFrame();
+      await transition.waitForFrame();
 
       if (!active) {
         return;
       }
 
       setLockupState('idle');
-      await waitForNextFrame();
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -942,20 +940,28 @@ function LaunchIntroOverlay({
       });
     }
 
-    void finishIntro();
+    void finishIntro().catch(() => transition.fallback());
 
     return () => {
       active = false;
+      unsubscribeFallback();
+      transition.cancel();
+      introMotion.stopAnimation();
+      landMotion.stopAnimation();
+      reducedExitMotion.stopAnimation();
+      handoffMotion.stopAnimation();
       completionTimers.forEach((timer) => clearTimeout(timer));
       completionTimers.clear();
     };
   }, [
     finishRequested,
     handoffMotion,
+    introMotion,
     landMotion,
     onVisibleChange,
     reducedExitMotion,
     reducedMotion,
+    visible,
   ]);
 
   if (!visible) {
@@ -1143,6 +1149,8 @@ function HomeEntryHandoffOverlay({
   const landMotion = useRef(new Animated.Value(0)).current;
   const handoffMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
+  const visualTransitionRef = useRef<VisualTransition | null>(null);
+  const preparationUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     latestHomeTargetRef.current = homeTarget;
@@ -1156,6 +1164,8 @@ function HomeEntryHandoffOverlay({
           return;
         }
 
+        visualTransitionRef.current?.fallback();
+        preparationUnsubscribeRef.current?.();
         entryMotion.stopAnimation();
         sourceCenterMotion.stopAnimation();
         landMotion.stopAnimation();
@@ -1176,6 +1186,16 @@ function HomeEntryHandoffOverlay({
         setRequestReadyVersionAtStart(request.readyVersionAtStart);
         setRequestStartedAt(request.startedAt);
         setRequestId(request.id);
+        preparationUnsubscribeRef.current = request.subscribePreparationFallback(() => {
+          visualTransitionRef.current?.fallback();
+          entryMotion.stopAnimation();
+          sourceCenterMotion.stopAnimation();
+          landMotion.stopAnimation();
+          handoffMotion.stopAnimation();
+          reducedExitMotion.stopAnimation();
+          setVisible(false);
+          onVisibleChange(false);
+        });
 
         const sourceCenterX = nextSourceTarget
           ? nextSourceTarget.x + nextSourceTarget.width / 2
@@ -1237,6 +1257,29 @@ function HomeEntryHandoffOverlay({
     let active = true;
     const completionTimers = new Set<ReturnType<typeof setTimeout>>();
     let completing = false;
+    const transition = createVisualTransition(HOME_ENTRY_VISUAL_MAX_MS);
+    visualTransitionRef.current = transition;
+    const preparationUnsubscribe = preparationUnsubscribeRef.current;
+    const unsubscribeFallback = transition.subscribeFallback(finishHandoffVisibility);
+
+    function finishHandoffVisibility() {
+      if (!active) return;
+      active = false;
+      transition.cancel();
+      preparationUnsubscribe?.();
+      if (preparationUnsubscribeRef.current === preparationUnsubscribe) {
+        preparationUnsubscribeRef.current = null;
+      }
+      completionTimers.forEach((timer) => clearTimeout(timer));
+      completionTimers.clear();
+      entryMotion.stopAnimation();
+      sourceCenterMotion.stopAnimation();
+      landMotion.stopAnimation();
+      handoffMotion.stopAnimation();
+      reducedExitMotion.stopAnimation();
+      setVisible(false);
+      onVisibleChange(false);
+    }
 
     function completeHandoff(options?: { readonly immediate?: boolean }) {
       if (!active || completing) {
@@ -1245,42 +1288,35 @@ function HomeEntryHandoffOverlay({
 
       completing = true;
 
-      void waitForNextFrame().then(() => {
-        if (!active) {
-          return;
-        }
+      if (options?.immediate) {
+        finishHandoffVisibility();
+        return;
+      }
 
-        if (options?.immediate) {
-          setVisible(false);
-          onVisibleChange(false);
-          return;
-        }
-
-        function finishHandoffVisibility() {
+      void transition
+        .waitForFrame()
+        .then(() => {
           if (!active) {
             return;
           }
 
-          setVisible(false);
-          onVisibleChange(false);
-        }
-
-        const fadeFallbackTimer = setTimeout(() => {
-          completionTimers.delete(fadeFallbackTimer);
-          finishHandoffVisibility();
-        }, HOME_ENTRY_FADE_MS + 220);
-        completionTimers.add(fadeFallbackTimer);
-        Animated.timing(handoffMotion, {
-          duration: HOME_ENTRY_FADE_MS,
-          easing: Easing.out(Easing.quad),
-          toValue: 1,
-          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-        }).start(() => {
-          clearTimeout(fadeFallbackTimer);
-          completionTimers.delete(fadeFallbackTimer);
-          finishHandoffVisibility();
-        });
-      });
+          const fadeFallbackTimer = setTimeout(() => {
+            completionTimers.delete(fadeFallbackTimer);
+            finishHandoffVisibility();
+          }, HOME_ENTRY_FADE_MS + 220);
+          completionTimers.add(fadeFallbackTimer);
+          Animated.timing(handoffMotion, {
+            duration: HOME_ENTRY_FADE_MS,
+            easing: Easing.out(Easing.quad),
+            toValue: 1,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+          }).start(() => {
+            clearTimeout(fadeFallbackTimer);
+            completionTimers.delete(fadeFallbackTimer);
+            finishHandoffVisibility();
+          });
+        })
+        .catch(() => transition.fallback());
     }
 
     function scheduleCompletionFallback(
@@ -1297,6 +1333,7 @@ function HomeEntryHandoffOverlay({
     }
 
     async function waitForHomeTarget(minimumStableAt: number) {
+      if (!active) return null;
       requestLaunchTargetRemeasure();
       const startedAt = Date.now();
       let previousTarget: LaunchIntroTargetSnapshot | null = null;
@@ -1319,22 +1356,33 @@ function HomeEntryHandoffOverlay({
           }
         }
 
-        await waitForNextFrame();
+        await transition.waitForFrame();
       }
 
       const fallbackTarget = latestHomeTargetRef.current;
       return fallbackTarget && fallbackTarget.stableAt >= minimumStableAt ? fallbackTarget : null;
     }
 
+    async function waitForHomeReady() {
+      if (getHomeEntryReadyVersion() > requestReadyVersionAtStart || !active) return;
+      await transition.waitForSignal(
+        (complete) =>
+          subscribeHomeEntryReady((version) => {
+            if (version > requestReadyVersionAtStart) complete();
+          }),
+        HOME_ENTRY_READY_WAIT_MS,
+      );
+    }
+
     async function runHandoff() {
       if (reducedMotion) {
-        await wait(HOME_ENTRY_ROUTE_SETTLE_MS);
+        await transition.wait(HOME_ENTRY_ROUTE_SETTLE_MS);
 
         if (!active) {
           return;
         }
 
-        await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
+        await waitForHomeReady();
         const nextTarget = await waitForHomeTarget(Math.max(requestStartedAt, Date.now()));
         if (!active) {
           return;
@@ -1343,7 +1391,7 @@ function HomeEntryHandoffOverlay({
         setLandingTarget(nextTarget);
         setLandingTargetLocked(true);
         setLockupState('idle');
-        await waitForNextFrame();
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -1369,19 +1417,19 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      await wait(HOME_ENTRY_SPIN_MS);
+      await transition.wait(HOME_ENTRY_SPIN_MS);
 
       if (!active) {
         return;
       }
 
-      await wait(HOME_ENTRY_ROUTE_SETTLE_MS);
+      await transition.wait(HOME_ENTRY_ROUTE_SETTLE_MS);
 
       if (!active) {
         return;
       }
 
-      await waitForHomeEntryReadyAfter(requestReadyVersionAtStart);
+      await waitForHomeReady();
       const nextTarget = await waitForHomeTarget(Math.max(requestStartedAt, Date.now()));
       if (!active) {
         return;
@@ -1389,14 +1437,14 @@ function HomeEntryHandoffOverlay({
 
       setLandingTarget(nextTarget);
       setLandingTargetLocked(true);
-      await waitForNextFrame();
+      await transition.waitForFrame();
 
       if (!active) {
         return;
       }
 
       setLockupState('idle');
-      await waitForNextFrame();
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -1419,14 +1467,22 @@ function HomeEntryHandoffOverlay({
       });
     }
 
-    void runHandoff();
+    void runHandoff().catch(() => transition.fallback());
 
     return () => {
       active = false;
+      unsubscribeFallback();
+      transition.cancel();
+      if (visualTransitionRef.current === transition) visualTransitionRef.current = null;
+      preparationUnsubscribe?.();
+      if (preparationUnsubscribeRef.current === preparationUnsubscribe) {
+        preparationUnsubscribeRef.current = null;
+      }
       completionTimers.forEach((timer) => clearTimeout(timer));
       completionTimers.clear();
     };
   }, [
+    entryMotion,
     handoffMotion,
     landMotion,
     onVisibleChange,
@@ -1435,6 +1491,7 @@ function HomeEntryHandoffOverlay({
     requestId,
     requestReadyVersionAtStart,
     requestStartedAt,
+    sourceCenterMotion,
     visible,
   ]);
 
@@ -1665,6 +1722,8 @@ function SetupEntryHandoffOverlay({
   const landMotion = useRef(new Animated.Value(0)).current;
   const handoffMotion = useRef(new Animated.Value(0)).current;
   const reducedExitMotion = useRef(new Animated.Value(0)).current;
+  const visualTransitionRef = useRef<VisualTransition | null>(null);
+  const preparationUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     latestSetupTargetRef.current = setupTarget;
@@ -1678,6 +1737,8 @@ function SetupEntryHandoffOverlay({
           return;
         }
 
+        visualTransitionRef.current?.fallback();
+        preparationUnsubscribeRef.current?.();
         entryMotion.stopAnimation();
         landMotion.stopAnimation();
         handoffMotion.stopAnimation();
@@ -1694,6 +1755,15 @@ function SetupEntryHandoffOverlay({
         setVisible(true);
         onVisibleChange(true);
         setRequestId(request.id);
+        preparationUnsubscribeRef.current = request.subscribePreparationFallback(() => {
+          visualTransitionRef.current?.fallback();
+          entryMotion.stopAnimation();
+          landMotion.stopAnimation();
+          handoffMotion.stopAnimation();
+          reducedExitMotion.stopAnimation();
+          setVisible(false);
+          onVisibleChange(false);
+        });
 
         if (!nextSourceTarget) {
           Animated.timing(entryMotion, {
@@ -1723,6 +1793,28 @@ function SetupEntryHandoffOverlay({
     let active = true;
     const completionTimers = new Set<ReturnType<typeof setTimeout>>();
     let completing = false;
+    const transition = createVisualTransition(SETUP_ENTRY_VISUAL_MAX_MS);
+    visualTransitionRef.current = transition;
+    const preparationUnsubscribe = preparationUnsubscribeRef.current;
+    const unsubscribeFallback = transition.subscribeFallback(finishHandoffVisibility);
+
+    function finishHandoffVisibility() {
+      if (!active) return;
+      active = false;
+      transition.cancel();
+      preparationUnsubscribe?.();
+      if (preparationUnsubscribeRef.current === preparationUnsubscribe) {
+        preparationUnsubscribeRef.current = null;
+      }
+      completionTimers.forEach((timer) => clearTimeout(timer));
+      completionTimers.clear();
+      entryMotion.stopAnimation();
+      landMotion.stopAnimation();
+      handoffMotion.stopAnimation();
+      reducedExitMotion.stopAnimation();
+      setVisible(false);
+      onVisibleChange(false);
+    }
 
     function completeHandoff(options?: { readonly immediate?: boolean }) {
       if (!active || completing) {
@@ -1732,38 +1824,34 @@ function SetupEntryHandoffOverlay({
       completing = true;
 
       if (options?.immediate) {
-        setVisible(false);
-        onVisibleChange(false);
+        finishHandoffVisibility();
         return;
       }
 
-      void waitForNextFrame().then(() => {
-        if (!active) {
-          return;
-        }
+      void transition
+        .waitForFrame()
+        .then(() => {
+          if (!active) {
+            return;
+          }
 
-        const fadeFallbackTimer = setTimeout(() => {
-          completionTimers.delete(fadeFallbackTimer);
-          if (active) {
-            setVisible(false);
-            onVisibleChange(false);
-          }
-        }, SETUP_ENTRY_FADE_MS + 220);
-        completionTimers.add(fadeFallbackTimer);
-        Animated.timing(handoffMotion, {
-          duration: SETUP_ENTRY_FADE_MS,
-          easing: Easing.out(Easing.quad),
-          toValue: 1,
-          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-        }).start(() => {
-          clearTimeout(fadeFallbackTimer);
-          completionTimers.delete(fadeFallbackTimer);
-          if (active) {
-            setVisible(false);
-            onVisibleChange(false);
-          }
-        });
-      });
+          const fadeFallbackTimer = setTimeout(() => {
+            completionTimers.delete(fadeFallbackTimer);
+            finishHandoffVisibility();
+          }, SETUP_ENTRY_FADE_MS + 220);
+          completionTimers.add(fadeFallbackTimer);
+          Animated.timing(handoffMotion, {
+            duration: SETUP_ENTRY_FADE_MS,
+            easing: Easing.out(Easing.quad),
+            toValue: 1,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+          }).start(() => {
+            clearTimeout(fadeFallbackTimer);
+            completionTimers.delete(fadeFallbackTimer);
+            finishHandoffVisibility();
+          });
+        })
+        .catch(() => transition.fallback());
     }
 
     function scheduleCompletionFallback(
@@ -1780,6 +1868,7 @@ function SetupEntryHandoffOverlay({
     }
 
     async function waitForSetupTarget() {
+      if (!active) return null;
       const startedAt = Date.now();
       let previousTarget: LaunchIntroTargetSnapshot | null = null;
       let stableSamples = 0;
@@ -1801,7 +1890,7 @@ function SetupEntryHandoffOverlay({
           }
         }
 
-        await waitForNextFrame();
+        await transition.waitForFrame();
       }
 
       const fallbackTarget = latestSetupTargetRef.current;
@@ -1810,7 +1899,7 @@ function SetupEntryHandoffOverlay({
 
     async function runHandoff() {
       if (reducedMotion) {
-        await wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
+        await transition.wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
 
         if (!active) {
           return;
@@ -1824,7 +1913,7 @@ function SetupEntryHandoffOverlay({
         setLandingTarget(nextTarget);
         setLandingTargetLocked(true);
         setLockupState(nextTarget?.visualState ?? 'idle');
-        await waitForNextFrame();
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -1850,16 +1939,17 @@ function SetupEntryHandoffOverlay({
         return;
       }
 
-      await wait(SETUP_ENTRY_SPIN_MS);
+      await transition.wait(SETUP_ENTRY_SPIN_MS);
 
       if (!active) {
         return;
       }
 
       setLockupState('success');
-      await wait(SETUP_ENTRY_SUCCESS_MS);
+      await transition.wait(SETUP_ENTRY_SUCCESS_MS);
+      if (!active) return;
       setLockupState('idle');
-      await wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
+      await transition.wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
 
       if (!active) {
         return;
@@ -1872,7 +1962,7 @@ function SetupEntryHandoffOverlay({
 
       setLandingTarget(nextTarget);
       setLandingTargetLocked(true);
-      await waitForNextFrame();
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -1895,14 +1985,22 @@ function SetupEntryHandoffOverlay({
       });
     }
 
-    void runHandoff();
+    void runHandoff().catch(() => transition.fallback());
 
     return () => {
       active = false;
+      unsubscribeFallback();
+      transition.cancel();
+      if (visualTransitionRef.current === transition) visualTransitionRef.current = null;
+      preparationUnsubscribe?.();
+      if (preparationUnsubscribeRef.current === preparationUnsubscribe) {
+        preparationUnsubscribeRef.current = null;
+      }
       completionTimers.forEach((timer) => clearTimeout(timer));
       completionTimers.clear();
     };
   }, [
+    entryMotion,
     handoffMotion,
     landMotion,
     onVisibleChange,
@@ -2242,17 +2340,14 @@ function RootNavigator() {
   const [setupEntryHandoffVisible, setSetupEntryHandoffVisible] = useState(false);
   const [deferredStartupWorkReady, setDeferredStartupWorkReady] = useState(false);
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      void SplashScreen.hideAsync()
-        .then(() => {
-          markSplashHidden();
-        })
-        .catch(() => undefined);
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  useEffect(
+    () =>
+      scheduleAfterVisualFrame(async () => {
+        await SplashScreen.hideAsync();
+        markSplashHidden();
+      }),
+    [],
+  );
 
   useEffect(() => subscribeFirstScreenReady(() => setDeferredStartupWorkReady(true)), []);
 
@@ -2350,7 +2445,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AppProviders>
-      <RootNavigator />
+      <IdentityConfirmationProvider>
+        <RootNavigator />
+      </IdentityConfirmationProvider>
     </AppProviders>
   );
 }

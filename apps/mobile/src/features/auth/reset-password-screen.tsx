@@ -24,6 +24,7 @@ import {
 import { returnToRoute } from '@/lib/navigation';
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
+import { resolvePasswordRecoveryScreenState } from './password-recovery-state';
 
 const RESET_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
@@ -39,7 +40,9 @@ export function ResetPasswordScreen() {
   }>({});
   const [busy, setBusy] = useState(false);
 
-  const hasRecoverySession = session.status !== 'loading' && session.isPasswordRecoverySession;
+  const recoveryState = resolvePasswordRecoveryScreenState(session);
+  const hasRecoverySession = recoveryState === 'ready';
+  const recoveryLoading = recoveryState === 'loading';
 
   async function handleSubmit() {
     if (busy) {
@@ -83,13 +86,15 @@ export function ResetPasswordScreen() {
     }
   }
 
-  const visualState = !hasRecoverySession
-    ? 'error'
-    : busy
-      ? 'loading'
-      : message === 'Contraseña actualizada.'
-        ? 'success'
-        : 'idle';
+  const visualState = recoveryLoading
+    ? 'loading'
+    : !hasRecoverySession
+      ? 'error'
+      : busy
+        ? 'loading'
+        : message === 'Contraseña actualizada.'
+          ? 'success'
+          : 'idle';
   const resetPasswordActions = (
     <>
       {hasRecoverySession ? (
@@ -101,11 +106,13 @@ export function ResetPasswordScreen() {
           onPress={busy ? undefined : () => void handleSubmit()}
         />
       ) : null}
-      <IdentityFlowSecondaryAction
-        icon="mail-outline"
-        label="Pedir otro enlace"
-        onPress={() => returnToRoute(router, '/join?mode=recover')}
-      />
+      {recoveryState === 'unavailable' ? (
+        <IdentityFlowSecondaryAction
+          icon="mail-outline"
+          label="Pedir otro enlace"
+          onPress={() => returnToRoute(router, '/join?mode=recover')}
+        />
+      ) : null}
     </>
   );
 
@@ -113,9 +120,7 @@ export function ResetPasswordScreen() {
     <IdentityFlowScreen
       actions={resetPasswordActions}
       bodyStyle={styles.body}
-      contentTransitionKey={
-        hasRecoverySession ? 'reset-password:form' : 'reset-password:unavailable'
-      }
+      contentTransitionKey={`reset-password:${recoveryState}`}
       identity={<IdentityFlowIdentity state={visualState} variant="status" />}
       identityCenterLayout="balanced"
       identityPosition="top"
@@ -125,11 +130,19 @@ export function ResetPasswordScreen() {
       message={
         <IdentityFlowLogoCopy
           subtitle={
-            hasRecoverySession
-              ? 'Elige una contraseña segura para tu cuenta.'
-              : 'Pide un enlace nuevo para continuar.'
+            recoveryLoading
+              ? 'Estamos comprobando tu acceso para restablecer la contraseña.'
+              : hasRecoverySession
+                ? 'Elige una contraseña segura para tu cuenta.'
+                : 'Pide un enlace nuevo para continuar.'
           }
-          title={hasRecoverySession ? 'Restablece tu contraseña' : 'Enlace no disponible'}
+          title={
+            recoveryLoading
+              ? 'Validando enlace'
+              : hasRecoverySession
+                ? 'Restablece tu contraseña'
+                : 'Enlace no disponible'
+          }
         />
       }
       scrollEnabled
@@ -137,7 +150,7 @@ export function ResetPasswordScreen() {
     >
       <View style={styles.main}>
         <IdentityFlowMessageSlot>
-          {!hasRecoverySession ? (
+          {recoveryState === 'unavailable' ? (
             <MessageBanner
               message="Este enlace ya no es válido o no se pudo abrir en la app. Pide uno nuevo desde Ingresar."
               tone="warning"
@@ -213,7 +226,6 @@ export function ResetPasswordScreen() {
                 />
               </IdentityFlowField>
             </View>
-
           </IdentityFlowForm>
         ) : null}
       </View>

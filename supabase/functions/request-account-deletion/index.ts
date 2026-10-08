@@ -1,4 +1,10 @@
-import { createServiceRoleClient, handleRpc, requireString } from '../_shared/http.ts';
+import { requireAuthorizedDeviceSession } from '../_shared/authorized-device-session.ts';
+import {
+  createServiceRoleClient,
+  createVerifiedUserClient,
+  handleRpc,
+  requireString,
+} from '../_shared/http.ts';
 
 const AVATAR_BUCKET = 'avatars';
 
@@ -40,7 +46,8 @@ async function removeAvatarObjects(
 }
 
 Deno.serve((request) =>
-  handleRpc(request, async (body, actorUserId) => {
+  handleRpc(request, async (body, actorUserId, authContext) => {
+    await requireAuthorizedDeviceSession(createVerifiedUserClient(authContext), authContext);
     const client = createServiceRoleClient();
     const idempotencyKey = requireString(body.idempotencyKey, 'idempotencyKey');
 

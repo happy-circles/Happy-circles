@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ActionSheetIOS, Alert, Linking, Platform, Pressable, Switch, View } from 'react-native';
+import { ActionSheetIOS, Alert, Linking, Platform, Pressable, View } from 'react-native';
 
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
@@ -38,7 +38,9 @@ import {
 } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { resolveHydratedDraftValue } from '@/lib/setup-draft';
+import { formatStepUpErrorMessage } from '@/providers/session/step-up';
 import { useSession } from '@/providers/session-provider';
+import { useIdentityConfirmation } from '@/providers/identity-confirmation-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
 import {
@@ -51,8 +53,10 @@ import {
 } from './setup-account-helpers';
 import { useSetupAccountPreviewSession } from './setup-account-preview';
 import { useSetupAccountCompletionController } from './setup-account-completion-controller';
+import { SetupAccountSecurityOptions } from './setup-account-security-options';
 import { SetupAccountPermissionsSection } from './setup-account-permissions-section';
 import { SetupProfilePhotoRequirement } from './setup-profile-photo-requirement';
+import { prepareSetupProfileSave } from './setup-profile-save';
 import { styles } from './setup-account-screen-runtime.styles';
 import { SecurityStatusRow } from './setup-security-status-row';
 
@@ -63,10 +67,12 @@ export function SetupAccountScreen() {
     editPhone?: string | string[];
     preview?: string | string[];
     returnTo?: string | string[];
+    reason?: string | string[];
     step?: string | string[];
     token?: string | string[];
   }>();
   const liveSession = useSession();
+  const { confirmIdentity } = useIdentityConfirmation();
   const previewParams = resolveSetupAccountPreviewParams(params, __DEV__);
   const previewSession = useSetupAccountPreviewSession(liveSession, previewParams);
   const session = previewSession ?? liveSession;
@@ -82,6 +88,13 @@ export function SetupAccountScreen() {
     requiredComplete: session.setupState.requiredComplete,
   });
   const securityOnlyMode = setupMode === 'security_only';
+  const [profileIdentityRequired, setProfileIdentityRequired] = useState(false);
+  const identityRequired =
+    profileIdentityRequired ||
+    (Array.isArray(params.reason) ? params.reason[0] : params.reason) === 'identity';
+  const identityConfirmed = Boolean(
+    session.stepUpFreshUntil && session.stepUpFreshUntil > Date.now(),
+  );
   const dynamicStyles = useMemo(
     () => ({
       callingCodeBox: {
@@ -158,6 +171,8 @@ export function SetupAccountScreen() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [emailConfirmationCode, setEmailConfirmationCode] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
+  const [identityPassword, setIdentityPassword] = useState('');
+  const [identityPasswordOpen, setIdentityPasswordOpen] = useState(false);
   const [trustMethodPickerOpen, setTrustMethodPickerOpen] = useState(false);
   const [trustPasswordFallbackOpen, setTrustPasswordFallbackOpen] = useState(false);
   const [securityBusyKey, setSecurityBusyKey] = useState<string | null>(null);
@@ -172,6 +187,7 @@ export function SetupAccountScreen() {
   const fullNameInputRef = useRef<AppTextInputRef | null>(null);
   const phoneInputRef = useRef<AppTextInputRef | null>(null);
   const trustPasswordInputRef = useRef<AppTextInputRef | null>(null);
+  const securityActionBusyRef = useRef(false);
   const hydratedUserIdRef = useRef<string | null>(session.userId);
   const fullNameDirtyRef = useRef(false);
   const countryDirtyRef = useRef(false);
@@ -184,6 +200,7 @@ export function SetupAccountScreen() {
   } = useSetupAccountCompletionController({
     isSetupPreviewMode,
     returnToProfile: returnTo === 'profile',
+    returnToPrevious: returnTo === 'previous',
     session,
     setMessage,
   });
@@ -201,33 +218,40 @@ export function SetupAccountScreen() {
   const emailConfirmationCodeValid = /^\d{8}$/.test(emailConfirmationCode);
   const trustMethods = resolveTrustedDeviceAuthMethods({
     canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
-    hasApple: session.linkedMethods.hasApple,
+    hasApple: session.linkedMethods.hasApple && session.appleSignInAvailable,
     hasEmailPassword: session.linkedMethods.hasEmailPassword,
     hasGoogle: session.linkedMethods.hasGoogle,
   });
-  const socialTrustMethods = trustMethods.filter((method) => method !== 'password');
+  const socialTrustMethods = trustMethods.filter(
+    (method) => method === 'google' || method === 'apple',
+  );
+  const hasRecentTrustMethod = trustMethods.includes('recent_auth');
   const hasPasswordTrustMethod = trustMethods.includes('password');
-  const canUseBiometricTrust = session.biometricAvailable;
-  const trustFallbackOpen = trustMethodPickerOpen || !canUseBiometricTrust;
+  const trustFallbackOpen = trustMethodPickerOpen;
   const hasTrustFallbackMethods = trustMethods.length > 0;
   const showTrustPasswordFallback =
     trustFallbackOpen &&
     hasPasswordTrustMethod &&
-    !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
-  const biometricTrustLabel = canUseBiometricTrust
-    ? `Usar ${session.biometricLabel}`
-    : 'Confiar este celular';
-  const trustFallbackIntro = canUseBiometricTrust
-    ? `Si ${session.biometricLabel} no funciona, elige otra forma de confirmar tu identidad.`
-    : 'Este dispositivo no tiene biometría disponible. Elige otra forma de confirmar tu identidad.';
+  const trustFallbackIntro = 'Confirma tu cuenta para guardar este teléfono.';
   const hasSavedPhoto = hasProfilePhoto(profile) || Boolean(localAvatarPath);
   const needsPhoneInput =
     editPhoneMode || !profile?.phone_e164 || phoneNationalNumber.trim().length === 0;
   const fullNameIsUsable = !isLowQualityDisplayName(fullName);
   const phoneLabel = profile?.phone_e164 ?? 'Pendiente';
-  const isSaving = profileBusy || avatarMutation.isPending || completionPending;
+  const isSaving =
+    profileBusy || avatarMutation.isPending || completionPending || securityBusyKey !== null;
   const initialStepWarningShownRef = useRef(false);
+
+  useEffect(() => {
+    void session.refreshBiometricSupport();
+  }, [session.refreshBiometricSupport]);
+
+  useEffect(() => {
+    setIdentityPassword('');
+    setProfileIdentityRequired(false);
+    setIdentityPasswordOpen(false);
+  }, [session.userId]);
 
   useEffect(() => {
     const identityChanged = hydratedUserIdRef.current !== session.userId;
@@ -393,12 +417,21 @@ export function SetupAccountScreen() {
     setMessage(null);
 
     try {
-      const result = await session.completeProfile({
-        fullName,
-        phoneCountryIso2: selectedCountry.iso2,
-        phoneCountryCallingCode: selectedCountry.callingCode,
-        phoneNationalNumber,
+      const input = await prepareSetupProfileSave({
+        draft: {
+          fullName,
+          phoneCountryIso2: selectedCountry.iso2,
+          phoneCountryCallingCode: selectedCountry.callingCode,
+          phoneNationalNumber,
+        },
+        currentPhone: profile?.phone_e164,
+        profileComplete: session.profileCompletionState === 'complete',
+        preview: isSetupPreviewMode,
+        confirmIdentity,
+        onValidationError: setMessage,
       });
+      if (!input) return;
+      const result = await session.completeProfile(input);
 
       if (result !== 'Perfil actualizado.') {
         setMessage(result);
@@ -527,6 +560,10 @@ export function SetupAccountScreen() {
   }
 
   async function runSecurityAction(actionKey: string, action: () => Promise<string>) {
+    if (securityActionBusyRef.current || profileBusy || avatarMutation.isPending) {
+      return 'Espera a que termine la validación actual.';
+    }
+    securityActionBusyRef.current = true;
     setSecurityBusyKey(actionKey);
     setMessage(null);
 
@@ -534,7 +571,12 @@ export function SetupAccountScreen() {
       const result = await action();
       setMessage(result);
       return result;
+    } catch (error) {
+      const result = error instanceof Error ? error.message : 'No pudimos completar la validación.';
+      setMessage(result);
+      return result;
     } finally {
+      securityActionBusyRef.current = false;
       setSecurityBusyKey(null);
     }
   }
@@ -603,7 +645,7 @@ export function SetupAccountScreen() {
       session.trustCurrentDevice(
         method === undefined
           ? undefined
-          : method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
+          : method === 'password'
             ? { method, password: trustPassword }
             : { method },
       ),
@@ -616,10 +658,10 @@ export function SetupAccountScreen() {
       setTrustPasswordFallbackOpen(false);
     }
 
-    if (result.startsWith('Escribe tu contrase')) {
+    if (result.startsWith('Escribe tu contrase') || result.startsWith('Confirma tu cuenta')) {
       triggerWarningHaptic();
       setTrustMethodPickerOpen(true);
-      setTrustPasswordFallbackOpen(true);
+      setTrustPasswordFallbackOpen(result.startsWith('Escribe tu contrase'));
     }
 
     if (
@@ -636,36 +678,71 @@ export function SetupAccountScreen() {
 
   function handleTrustEntryPress() {
     triggerSelectionHaptic();
-
-    if (!canUseBiometricTrust) {
-      setTrustMethodPickerOpen(true);
-      setMessage(
-        hasTrustFallbackMethods
-          ? 'Este dispositivo no tiene biometría disponible. Elige otro método.'
-          : 'Este dispositivo no tiene biometría ni otro método disponible para confiarlo.',
-      );
-      return;
-    }
-
     void handleTrustDevice();
   }
 
   async function handleBiometricToggle(nextValue: boolean) {
     triggerSelectionHaptic();
 
-    const result = await session.setBiometricsEnabled(nextValue);
-    setMessage(result.message);
+    await runSecurityAction('biometrics', async () => {
+      const result = await session.setBiometricsEnabled(nextValue);
+      if (!result.ok && !nextValue && session.isTrustedDevice) {
+        setProfileIdentityRequired(true);
+      }
+      return result.message;
+    });
+  }
+
+  async function handleConfirmIdentity(method: 'biometric' | 'password' | 'google' | 'apple') {
+    triggerImpactHaptic();
+    await runSecurityAction(`identity-${method}`, async () => {
+      const result = await session.stepUpAuth(
+        method === 'password'
+          ? { force: true, method, password: identityPassword }
+          : { force: method !== 'biometric', method },
+      );
+      if (!result.success) {
+        triggerWarningHaptic();
+        return (
+          result.message ??
+          formatStepUpErrorMessage('continuar', session.biometricLabel, result.error)
+        );
+      }
+      setIdentityPassword('');
+      triggerSuccessHaptic();
+      return editPhoneMode
+        ? 'Identidad confirmada. Puedes guardar tu celular.'
+        : 'Identidad confirmada. Puedes volver y continuar.';
+    });
+  }
+
+  async function handleCheckBiometrics() {
+    await runSecurityAction('check-biometrics', async () => {
+      const result = await session.refreshBiometricSupport();
+      if (result.error) return result.error;
+      return result.available
+        ? `${result.label} está disponible.`
+        : 'No pudimos usar biometría ahora. Comprueba que tengas una huella o rostro configurado en Seguridad del teléfono. También puedes confirmar tu cuenta con otro método.';
+    });
   }
 
   const securityOnlyActionDisabled =
-    securityOnlyMode && (securityBusyKey !== null || isSaving || !session.isTrustedDevice);
+    securityOnlyMode &&
+    (securityBusyKey !== null ||
+      isSaving ||
+      !session.isTrustedDevice ||
+      (identityRequired && !identityConfirmed));
   const primaryActionDisabled = securityOnlyMode ? securityOnlyActionDisabled : isSaving;
   const primaryActionLoading = securityOnlyMode ? securityBusyKey !== null || isSaving : isSaving;
   const primaryActionLabel = securityOnlyMode
     ? securityBusyKey !== null
       ? 'Confirmando...'
       : session.isTrustedDevice
-        ? 'Listo'
+        ? identityRequired && !identityConfirmed
+          ? 'Confirmación pendiente'
+          : returnTo === 'previous'
+            ? 'Volver y continuar'
+            : 'Listo'
         : 'Confianza pendiente'
     : isSaving
       ? 'Guardando...'
@@ -718,10 +795,18 @@ export function SetupAccountScreen() {
           <IdentityFlowLogoCopy
             subtitle={
               session.isTrustedDevice
-                ? 'Ya puedes volver al flujo que estabas completando.'
-                : 'Confiar o rechazar.'
+                ? identityRequired && !identityConfirmed
+                  ? 'Elige cómo confirmar tu identidad para continuar.'
+                  : 'Ya puedes volver al flujo que estabas completando.'
+                : 'Guarda este teléfono usando el acceso de tu cuenta.'
             }
-            title={session.isTrustedDevice ? 'Celular confiable' : 'Confiar este celular'}
+            title={
+              identityRequired
+                ? 'Confirma tu identidad'
+                : session.isTrustedDevice
+                  ? 'Celular confiable'
+                  : 'Confiar este celular'
+            }
           />
         ) : undefined
       }
@@ -957,11 +1042,11 @@ export function SetupAccountScreen() {
                         compact
                         disabled={securityBusyKey !== null}
                         fullWidth={false}
-                        icon="finger-print"
+                        icon="lock-closed"
                         label={
                           securityBusyKey === 'trust-device-auto'
                             ? 'Validando...'
-                            : biometricTrustLabel
+                            : 'Confiar este teléfono'
                         }
                         loading={securityBusyKey === 'trust-device-auto'}
                         onPress={securityBusyKey ? undefined : handleTrustEntryPress}
@@ -1013,27 +1098,29 @@ export function SetupAccountScreen() {
                           }
                         />
                       ))}
-                      {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                      {hasRecentTrustMethod ? (
                         <PrimaryAction
                           compact
                           disabled={securityBusyKey !== null}
                           fullWidth={false}
                           label={
-                            securityBusyKey === 'trust-device-password'
+                            securityBusyKey === 'trust-device-recent_auth'
                               ? 'Confirmando...'
                               : resolveTrustMethodLabel({
                                   canTrustCurrentDeviceWithoutPassword:
                                     session.canTrustCurrentDeviceWithoutPassword,
-                                  method: 'password',
+                                  method: 'recent_auth',
                                 })
                           }
                           onPress={
-                            securityBusyKey ? undefined : () => void handleTrustDevice('password')
+                            securityBusyKey
+                              ? undefined
+                              : () => void handleTrustDevice('recent_auth')
                           }
                         />
                       ) : null}
                     </View>
-                    {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
+                    {hasPasswordTrustMethod ? (
                       <Pressable
                         disabled={securityBusyKey !== null}
                         onPress={() => {
@@ -1092,43 +1179,28 @@ export function SetupAccountScreen() {
                 ) : null}
               </View>
             ) : null}
-            {!securityOnlyMode ? (
-              <>
-                <View style={[styles.separator, dynamicStyles.separator]} />
-
-                <SecurityStatusRow
-                  icon="finger-print"
-                  subtitle={
-                    session.setupState.biometricsEligible
-                      ? session.biometricLabel
-                      : session.biometricAvailable
-                        ? 'Primero confía este teléfono'
-                        : 'No disponible'
-                  }
-                  title="Biometría"
-                  tone={session.biometricsEnabled ? 'success' : 'muted'}
-                  trailing={
-                    <Switch
-                      disabled={
-                        !session.setupState.biometricsEligible && !session.biometricsEnabled
-                      }
-                      onValueChange={(nextValue) => void handleBiometricToggle(nextValue)}
-                      trackColor={{
-                        false: activeTheme.colors.surfaceSoft,
-                        true: activeTheme.colors.primarySoft,
-                      }}
-                      value={session.biometricsEnabled}
-                    />
-                  }
-                />
-              </>
-            ) : null}
+            <SetupAccountSecurityOptions
+              session={session}
+              identityRequired={identityRequired}
+              identityConfirmed={identityConfirmed}
+              securityBusyKey={securityBusyKey ?? (isSaving ? 'save-profile' : null)}
+              identityPassword={identityPassword}
+              identityPasswordOpen={identityPasswordOpen}
+              setIdentityPassword={setIdentityPassword}
+              setIdentityPasswordOpen={setIdentityPasswordOpen}
+              socialTrustMethods={socialTrustMethods}
+              handleConfirmIdentity={handleConfirmIdentity}
+              handleBiometricToggle={handleBiometricToggle}
+              handleCheckBiometrics={handleCheckBiometrics}
+            />
           </View>
         </View>
         {!securityOnlyMode && !editPhoneMode ? (
           <SetupAccountPermissionsSection
             contactsPermissionStatus={session.setupState.contactsPermissionStatus}
             notificationsPermissionStatus={session.setupState.notificationsPermissionStatus}
+            notificationsEnabled={session.notificationsEnabled}
+            onOpenNotificationSettings={() => session.beginNotificationEnableFromSettings()}
             onMessage={setMessage}
             requestContactsPermission={() => session.requestContactsPermission()}
             requestNotificationsPermission={() => session.requestNotificationsPermission()}

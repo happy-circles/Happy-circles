@@ -2,7 +2,8 @@ import type { Session } from '@supabase/supabase-js';
 import * as Crypto from 'expo-crypto';
 
 import type { supabase } from '@/lib/supabase';
-import type { AuthIdentity, StepUpAuthInput } from '../session/types';
+import type { AuthIdentity } from '../session/types';
+export { normalizeStepUpAuthInput } from './session-step-up-input';
 
 type SessionClient = NonNullable<typeof supabase>;
 
@@ -13,20 +14,6 @@ export async function hashInviteTokenForRegistration(deliveryToken: string): Pro
   );
 
   return digest.toLocaleLowerCase('en-US');
-}
-
-export function normalizeStepUpAuthInput(input?: boolean | StepUpAuthInput): Required<
-  Pick<StepUpAuthInput, 'force'>
-> &
-  Pick<StepUpAuthInput, 'password'> {
-  if (typeof input === 'boolean') {
-    return { force: input };
-  }
-
-  return {
-    force: input?.force ?? false,
-    password: input?.password,
-  };
 }
 
 export async function resolveUserIdentities(

@@ -1,6 +1,7 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
+import { queryBiometricSupport } from './biometric-support-query';
 
 export interface BiometricSupport {
   readonly available: boolean;
@@ -9,6 +10,12 @@ export interface BiometricSupport {
 
 export interface BiometricAuthResult {
   readonly success: boolean;
+  readonly error: string | null;
+  readonly message?: string;
+}
+
+export interface BiometricSupportRefreshResult extends BiometricSupport {
+  /** A failed status query is different from confirmed lack of enrolled biometrics. */
   readonly error: string | null;
 }
 
@@ -37,22 +44,26 @@ export async function getBiometricSupport(): Promise<BiometricSupport> {
     return { available: false, label: 'biometría' };
   }
 
-  const [hasHardware, isEnrolled, types] = await Promise.all([
-    LocalAuthentication.hasHardwareAsync(),
-    LocalAuthentication.isEnrolledAsync(),
-    LocalAuthentication.supportedAuthenticationTypesAsync(),
-  ]);
-
-  const label = resolveBiometricLabel(types);
-
-  return {
-    available: hasHardware && isEnrolled,
-    label,
-  };
+  return queryBiometricSupport({
+    hasHardware: LocalAuthentication.hasHardwareAsync,
+    isEnrolled: LocalAuthentication.isEnrolledAsync,
+    supportedTypes: LocalAuthentication.supportedAuthenticationTypesAsync,
+    labelForTypes: resolveBiometricLabel,
+  });
 }
 
 export async function authenticateWithBiometricsResult(): Promise<BiometricAuthResult> {
-  const support = await getBiometricSupport();
+  let support: BiometricSupport;
+  try {
+    support = await getBiometricSupport();
+  } catch {
+    return {
+      success: false,
+      error: 'biometric_status_failed',
+      message:
+        'No pudimos consultar la biometría del teléfono. Inténtalo de nuevo o usa otro método.',
+    };
+  }
   if (!support.available) {
     return {
       success: false,
@@ -62,12 +73,21 @@ export async function authenticateWithBiometricsResult(): Promise<BiometricAuthR
 
   const allowDeviceFallback = shouldAllowDeviceFallback();
 
-  const result = await LocalAuthentication.authenticateAsync({
-    promptMessage: 'Desbloquea Happy Circles',
-    cancelLabel: 'Cancelar',
-    disableDeviceFallback: !allowDeviceFallback,
-    fallbackLabel: allowDeviceFallback ? 'Usar código' : '',
-  });
+  let result: LocalAuthentication.LocalAuthenticationResult;
+  try {
+    result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Desbloquea Happy Circles',
+      cancelLabel: 'Cancelar',
+      disableDeviceFallback: !allowDeviceFallback,
+      fallbackLabel: allowDeviceFallback ? 'Usar código' : '',
+    });
+  } catch {
+    return {
+      success: false,
+      error: 'authentication_failed',
+      message: 'No pudimos abrir la validación del teléfono. Inténtalo de nuevo o usa otro método.',
+    };
+  }
 
   if (result.success) {
     return {

@@ -72,8 +72,6 @@ export function useApproveSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('aprobar el Happy Circle');
-
       const payload = parseEdgePayload(
         cycleSettlementDecisionSchema,
         withIdempotencyKey('approve_settlement', {
@@ -81,7 +79,9 @@ export function useApproveSettlementMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('approve-cycle-settlement', payload);
+      return guardSensitiveAction('aprobar el Happy Circle', (expectedUserId) =>
+        invokeSupabaseFunction('approve-cycle-settlement', payload, { expectedUserId }),
+      );
     },
     onSuccess: async () => {
       recordSettlementApproved();
@@ -95,8 +95,6 @@ export function useRejectSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('no aprobar el Happy Circle');
-
       const payload = parseEdgePayload(
         cycleSettlementDecisionSchema,
         withIdempotencyKey('reject_settlement', {
@@ -104,7 +102,9 @@ export function useRejectSettlementMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('reject-cycle-settlement', payload);
+      return guardSensitiveAction('no aprobar el Happy Circle', (expectedUserId) =>
+        invokeSupabaseFunction('reject-cycle-settlement', payload, { expectedUserId }),
+      );
     },
     onSuccess: invalidateAppSnapshot,
   });
@@ -115,8 +115,6 @@ export function useExecuteSettlementMutation() {
 
   return useMutation({
     mutationFn: async (proposalId: string) => {
-      await guardSensitiveAction('completar el Happy Circle');
-
       const payload = parseEdgePayload(
         cycleSettlementExecutionSchema,
         withIdempotencyKey('execute_settlement', {
@@ -124,7 +122,9 @@ export function useExecuteSettlementMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('execute-approved-cycle-settlement', payload);
+      return guardSensitiveAction('completar el Happy Circle', (expectedUserId) =>
+        invokeSupabaseFunction('execute-approved-cycle-settlement', payload, { expectedUserId }),
+      );
     },
     onSuccess: async () => {
       recordSettlementExecuted();

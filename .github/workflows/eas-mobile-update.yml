@@ -1,0 +1,147 @@
+name: EAS Mobile Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Update channel and matching backend environment
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production-smoke
+          - production
+      platform:
+        description: Platforms with an installed build matching this runtime
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+      expected_runtime:
+        description: Runtime verified on the installed build (see update-policy.json)
+        required: true
+        type: string
+      message:
+        description: Description of the compatible JavaScript or asset change
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: eas-update-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      UPDATE_TARGET: ${{ inputs.target }}
+      UPDATE_PLATFORM: ${{ inputs.platform }}
+      EXPECTED_RUNTIME: ${{ inputs.expected_runtime }}
+      UPDATE_MESSAGE: ${{ inputs.message }}
+      EXPO_NO_DOTENV: '1'
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Validate source and completed CI
+        shell: bash
+        run: |
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "::error::EXPO_TOKEN is not configured."
+            exit 1
+          fi
+          if [ "${UPDATE_TARGET}" != "preview" ] && [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Updates using production must be dispatched from main."
+            exit 1
+          fi
+          conclusion="$(gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow security-ci.yml \
+            --commit "${GITHUB_SHA}" \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion // ""')"
+          if [ "${conclusion}" != "success" ]; then
+            echo "::error::Security CI must pass for ${GITHUB_SHA} before publication."
+            exit 1
+          fi
+          if [ -z "${UPDATE_MESSAGE}" ]; then
+            echo "::error::An update message is required."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify static update configuration
+        run: pnpm check:eas-update
+
+      - name: Resolve and validate the target
+        id: target
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const policy = JSON.parse(readFileSync('apps/mobile/update-policy.json', 'utf8'));
+          const target = policy.targets[process.env.UPDATE_TARGET];
+          if (!target || process.env.EXPECTED_RUNTIME !== policy.runtimeVersion) {
+            throw new Error('Target or runtime differs from the checked-out update policy.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `environment=${target.environment}\nchannel=${target.channel}\n`);
+          NODE
+
+      - name: Check the actual EAS environment
+        working-directory: apps/mobile
+        env:
+          UPDATE_ENVIRONMENT: ${{ steps.target.outputs.environment }}
+        run: >-
+          pnpm dlx eas-cli@21.7.1 env:exec "$UPDATE_ENVIRONMENT"
+          'node ../../scripts/check-eas-update.mjs --target "$UPDATE_TARGET" --environment "$UPDATE_ENVIRONMENT" --expected-runtime "$EXPECTED_RUNTIME"'
+          --non-interactive
+
+      - name: Export from this commit and publish with the verified environment
+        working-directory: apps/mobile
+        env:
+          UPDATE_ENVIRONMENT: ${{ steps.target.outputs.environment }}
+          UPDATE_CHANNEL: ${{ steps.target.outputs.channel }}
+        run: |
+          pnpm dlx eas-cli@21.7.1 update \
+            --channel "$UPDATE_CHANNEL" \
+            --environment "$UPDATE_ENVIRONMENT" \
+            --platform "$UPDATE_PLATFORM" \
+            --message "$UPDATE_MESSAGE (${GITHUB_SHA})" \
+            --emit-metadata \
+            --non-interactive \
+            --json > ota-result.json
+
+      - name: Preserve the published update identifiers
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-update-${{ inputs.target }}-${{ github.sha }}
+          path: apps/mobile/ota-result.json
+          if-no-files-found: error
+
+      - name: Record the release context
+        shell: bash
+        run: |
+          printf 'Commit: `%s`\n\nTarget: `%s`\n\nRuntime: `%s`\n' \
+            "$GITHUB_SHA" "$UPDATE_TARGET" "$EXPECTED_RUNTIME" >> "$GITHUB_STEP_SUMMARY"

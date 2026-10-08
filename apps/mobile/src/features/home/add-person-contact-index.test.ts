@@ -328,4 +328,115 @@ describe('contact index', () => {
 
     expect(paused.contacts.map((contact) => contact.alias)).toEqual(['Ana Ruiz']);
   });
+
+  it('reindexes newly shared contacts even when the limited index is fresh', async () => {
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [nativeContact('contact-ana', 'Ana Ruiz', '3001234567')],
+      hasNextPage: false,
+    });
+    await startContactIndexing({
+      permissionStatus: 'limited',
+      reason: 'sheet_open',
+      userId: 'user-a',
+    });
+    await waitForIndexStatus('ready');
+    const previousGeneration = sqliteMock.meta.get('user-a')?.scan_generation;
+
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [
+        nativeContact('contact-ana', 'Ana Ruiz', '3001234567'),
+        nativeContact('contact-ben', 'Ben Mora', '3011234567'),
+      ],
+      hasNextPage: false,
+    });
+    await startContactIndexing({
+      permissionStatus: 'limited',
+      reason: 'permission_granted',
+      userId: 'user-a',
+    });
+    const result = await waitForIndexStatus('ready');
+
+    expect(result.contacts.map((contact) => contact.alias)).toEqual(['Ana Ruiz', 'Ben Mora']);
+    expect(sqliteMock.meta.get('user-a')?.scan_generation).toBeGreaterThan(previousGeneration!);
+    expect(contactsMock.getContactsAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        pageOffset: 0,
+      }),
+    );
+  });
+
+  it('restarts at the first page after permissions change during a paused scan', async () => {
+    sqliteMock.meta.set('user-a', {
+      contact_count: null,
+      error_message: null,
+      last_completed_at: null,
+      last_started_at: Date.now() - 10,
+      loaded_count: 250,
+      next_page_offset: 250,
+      permission_status: 'limited',
+      scan_generation: Date.now() - 10,
+      scan_status: 'paused',
+      schema_version: 1,
+      user_id: 'user-a',
+    });
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [nativeContact('contact-ben', 'Ben Mora', '3011234567')],
+      hasNextPage: false,
+    });
+
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'permission_granted',
+      userId: 'user-a',
+    });
+    const result = await waitForIndexStatus('ready');
+
+    expect(contactsMock.getContactsAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageOffset: 0,
+      }),
+    );
+    expect(result.loadedCount).toBe(1);
+  });
+
+  it('ignores a delayed old page after replacing a scan for changed permissions', async () => {
+    let resolveOldPage!: (value: unknown) => void;
+    contactsMock.getContactsAsync
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOldPage = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: [nativeContact('contact-ben', 'Ben Mora', '3011234567')],
+        hasNextPage: false,
+      });
+    await startContactIndexing({
+      permissionStatus: 'limited',
+      reason: 'manual_refresh',
+      userId: 'user-a',
+    });
+    await vi.waitFor(() => expect(contactsMock.getContactsAsync).toHaveBeenCalledOnce());
+
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'permission_granted',
+      userId: 'user-a',
+    });
+    const fresh = await waitForIndexStatus('ready');
+    const generation = sqliteMock.meta.get('user-a')?.scan_generation;
+    resolveOldPage({
+      data: [nativeContact('contact-ana', 'Ana Ruiz', '3001234567')],
+      hasNextPage: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const afterOldPage = await readContactIndex({ limit: 10, userId: 'user-a' });
+
+    expect(fresh.contacts.map((contact) => contact.alias)).toEqual(['Ben Mora']);
+    expect(afterOldPage.contacts.map((contact) => contact.alias)).toEqual(['Ben Mora']);
+    expect(afterOldPage.status).toBe('ready');
+    expect(afterOldPage.permissionStatus).toBe('granted');
+    expect(sqliteMock.meta.get('user-a')?.scan_generation).toBe(generation);
+  });
 });

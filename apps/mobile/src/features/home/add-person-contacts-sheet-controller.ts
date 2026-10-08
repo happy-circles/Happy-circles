@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 
 import {
   type ContactIndexReadResult,
+  type ContactIndexStartReason,
   readContactIndex,
   startContactIndexing,
 } from '@/features/home/add-person-contact-index';
@@ -79,7 +80,6 @@ export function useAddPersonContactsSheetController({
     handleReviewPhone,
     hydrateAndEnqueueResolutionPhones,
     loadCachedTargetResolutionsForPhones,
-    mergeAndPersistTargetResolutions,
     mergeTargetResolutions,
     resetResolutionState,
     resolvePhoneStatusesNow,
@@ -93,6 +93,7 @@ export function useAddPersonContactsSheetController({
     setBusyKey,
     setMessage,
     userId: session.userId,
+    visible,
   });
 
   const canReadContacts = canReadContactsPermissionStatus(contactsPermissionStatus);
@@ -158,10 +159,10 @@ export function useAddPersonContactsSheetController({
     resetPendingContactSelection,
     setPendingContactSelection,
   } = useAddPersonOutreachActions({
+    onClose,
     busyKey,
     createPeopleOutreach,
     ensurePhoneStatuses,
-    mergeAndPersistTargetResolutions,
     resolvePhoneStatusesNow,
     router,
     setBusyKey,
@@ -204,7 +205,6 @@ export function useAddPersonContactsSheetController({
         return false;
       }
 
-      targetCacheRef.current = warmCache.targetCache;
       setTargetCache(warmCache.targetCache);
       setContacts(warmCache.contacts);
       setContactsLoadedCount(warmCache.contacts.length);
@@ -327,49 +327,52 @@ export function useAddPersonContactsSheetController({
     refreshContactIndexRef.current = refreshContactIndex;
   }, [refreshContactIndex]);
 
-  const loadContacts = useCallback(async () => {
-    if (!session.userId) {
-      setContacts([]);
-      setInAppBackfillContacts([]);
-      setContactsLoadedCount(0);
-      setContactsMatchingCount(0);
-      setContactsLoading(false);
-      setContactsScanComplete(false);
-      return;
-    }
-
-    try {
-      const permissionStatus = await getContactsPermissionStatus();
-      setContactsPermissionStatus(permissionStatus);
-
-      if (!canReadContactsPermissionStatus(permissionStatus)) {
+  const loadContacts = useCallback(
+    async (reason: ContactIndexStartReason = 'sheet_open') => {
+      if (!session.userId) {
         setContacts([]);
         setInAppBackfillContacts([]);
         setContactsLoadedCount(0);
         setContactsMatchingCount(0);
         setContactsLoading(false);
-        setContactsScanComplete(true);
+        setContactsScanComplete(false);
         return;
       }
 
-      const usedWarmSnapshot = applyWarmContactSnapshot(permissionStatus);
-      const cachedResult = await refreshContactIndexRef.current();
-      setContactsLoading(
-        cachedResult
-          ? cachedResult.status === 'indexing' ||
-              (cachedResult.status !== 'ready' && cachedResult.contacts.length === 0)
-          : !usedWarmSnapshot,
-      );
-      void startContactIndexing({
-        permissionStatus,
-        reason: 'sheet_open',
-        userId: session.userId,
-      }).catch(() => undefined);
-    } catch (error) {
-      setContactsLoading(false);
-      setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
-    }
-  }, [applyWarmContactSnapshot, session.userId, setContactsMatchingCount]);
+      try {
+        const permissionStatus = await getContactsPermissionStatus();
+        setContactsPermissionStatus(permissionStatus);
+
+        if (!canReadContactsPermissionStatus(permissionStatus)) {
+          setContacts([]);
+          setInAppBackfillContacts([]);
+          setContactsLoadedCount(0);
+          setContactsMatchingCount(0);
+          setContactsLoading(false);
+          setContactsScanComplete(true);
+          return;
+        }
+
+        const usedWarmSnapshot = applyWarmContactSnapshot(permissionStatus);
+        const cachedResult = await refreshContactIndexRef.current();
+        setContactsLoading(
+          cachedResult
+            ? cachedResult.status === 'indexing' ||
+                (cachedResult.status !== 'ready' && cachedResult.contacts.length === 0)
+            : !usedWarmSnapshot,
+        );
+        void startContactIndexing({
+          permissionStatus,
+          reason,
+          userId: session.userId,
+        }).catch(() => undefined);
+      } catch (error) {
+        setContactsLoading(false);
+        setMessage(error instanceof Error ? error.message : 'No se pudo leer la agenda.');
+      }
+    },
+    [applyWarmContactSnapshot, session.userId, setContactsMatchingCount],
+  );
 
   const { handleExpandLimitedContactsAccess, requestContactsAccess } =
     useAddPersonContactPermissionActions({
@@ -388,7 +391,7 @@ export function useAddPersonContactsSheetController({
     }
 
     setBusyKey('refresh-contacts');
-    setMessage('Actualizando agenda. Mantendremos lo que ya estaba consultado.');
+    setMessage('Actualizando agenda y estados de Happy Circles.');
 
     try {
       const permissionStatus = await getContactsPermissionStatus();
@@ -412,6 +415,7 @@ export function useAddPersonContactsSheetController({
         userId: session.userId,
       });
       await refreshContactIndexRef.current();
+      await resolvePhoneStatusesNow(uniqueContactPhoneE164List(sectionContacts));
       setMessage('Agenda actualizándose en segundo plano.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo actualizar la agenda.');

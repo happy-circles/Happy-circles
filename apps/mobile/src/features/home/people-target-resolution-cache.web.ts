@@ -37,6 +37,10 @@ export function stripPhoneFromPeopleTargetResolution(
     matchedUserId: resolution.matchedUserId,
     relationshipId: resolution.relationshipId,
     status: resolution.status,
+    resolvedAt: resolution.resolvedAt,
+    generation: resolution.generation,
+    friendshipDirection: resolution.friendshipDirection,
+    availableActions: resolution.availableActions,
   };
 }
 
@@ -61,5 +65,10 @@ export async function savePeopleTargetResolutionsToCache(): Promise<void> {
 }
 
 export async function pruneExpiredPeopleTargetResolutionCache(): Promise<void> {
+  return undefined;
+}
+
+export async function invalidatePeopleTargetResolutionCache(_userId: string): Promise<void> {
+  void _userId;
   return undefined;
 }

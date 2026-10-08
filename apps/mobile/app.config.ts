@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import process from 'node:process';
 import type { ExpoConfig } from 'expo/config';
+import updatePolicy from './update-policy.json';
 
 function firstNonEmpty(...values: readonly (string | undefined)[]): string {
   const value = values.find((candidate) => candidate?.trim());
@@ -12,9 +13,9 @@ const appWebOrigin = env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circle
 const authRedirectMode = env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
 const authDebugEnabled = firstNonEmpty(env.EXPO_PUBLIC_AUTH_DEBUG);
 const appLinkPathPrefixes = ['/invite/', '/join', '/reset-password', '/setup-account'];
-const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '1.0.2';
-const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '37';
-const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '22', 10);
+const appVersion = env.EXPO_PUBLIC_APP_VERSION ?? '1.0.3';
+const iosBuildNumber = env.IOS_BUILD_NUMBER ?? '38';
+const androidVersionCode = Number.parseInt(env.ANDROID_VERSION_CODE ?? '23', 10);
 const includeDevClient =
   env.EXPO_PUBLIC_INCLUDE_DEV_CLIENT === '1' || env.EAS_BUILD_PROFILE === 'development';
 const splashBackgroundColor = '#fbfcff';
@@ -64,6 +65,16 @@ const config: ExpoConfig = {
   owner: 'happy-circles',
   scheme: 'happycircles',
   version: appVersion,
+  // Increment this explicit runtime whenever the native modules/configuration change.
+  // Android's checked-in expo_runtime_version is validated by check:eas-update.
+  runtimeVersion: updatePolicy.runtimeVersion,
+  updates: {
+    enabled: true,
+    url: `https://u.expo.dev/${updatePolicy.projectId}`,
+    checkAutomatically: 'ON_LOAD',
+    fallbackToCacheTimeout: 0,
+    useEmbeddedUpdate: true,
+  },
   icon: './assets/app-icon.png',
   orientation: 'portrait',
   splash: {
@@ -163,7 +174,7 @@ const config: ExpoConfig = {
   },
   extra: {
     eas: {
-      projectId: '9b63f5f3-3c81-4d3d-bc54-1a81b998d20a',
+      projectId: updatePolicy.projectId,
     },
     supabaseUrl,
     supabaseAnonKey,

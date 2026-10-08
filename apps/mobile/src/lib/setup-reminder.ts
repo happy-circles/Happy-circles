@@ -144,7 +144,6 @@ export function buildPendingSetupReminderItems(
     accountSetupEligible && input.appleSignInAvailable && !input.linkedMethods.hasApple;
 
   return [
-    accountSetupEligible && !input.isTrustedDevice ? buildDeviceTrustReminderItem() : null,
     accountSetupEligible && input.biometricAvailable && !input.biometricsEnabled
       ? buildBiometricsReminderItem()
       : null,

@@ -5,6 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { ActionSheetIOS, Alert, Linking, Platform, Pressable, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { attachEmailPasswordSchema } from '@happy-circles/shared';
+
 import { AvatarOptionsSheet } from '@/components/avatar-options-sheet';
 import { AvatarViewerModal } from '@/components/avatar-viewer-modal';
 import { AccountActionFeedbackOverlay } from '@/components/account-action-feedback-overlay';
@@ -24,6 +26,7 @@ import {
   triggerAppWarningHaptic as triggerWarningHaptic,
 } from '@/lib/app-haptics';
 import { useActionFeedbackOverlay } from '@/lib/action-feedback';
+import { isIdentityConfirmationCancelled } from '@/lib/live-data/mutations/sensitive-action-check';
 import {
   notificationViewedKeysWithLocalCache,
   useAppSnapshot,
@@ -31,6 +34,7 @@ import {
   useUpdateProfileAvatarMutation,
 } from '@/lib/live-data';
 import { backOrReturnTo, pushRoute } from '@/lib/navigation';
+import { showBlockedActionAlert } from '@/lib/action-feedback';
 import { buildNotificationSummary } from '@/lib/notification-summary';
 import { buildSetupAccountHref, isLowQualityDisplayName } from '@/lib/setup-account';
 import { buildPendingSetupReminderItems } from '@/lib/setup-reminder';
@@ -40,6 +44,8 @@ import {
   resolveTrustMethodLabel,
 } from '@/lib/trusted-device-auth';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
+import { useIdentityConfirmation } from '@/providers/identity-confirmation-provider';
+import { formatValidationMessage } from '@/providers/session/auth-errors';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
 import type { TrustedDeviceAuthMethod } from '@/providers/session/types';
@@ -48,7 +54,6 @@ import {
   formatContactsPermissionSubtitle,
   formatDeviceStateLabel,
   formatDeviceTitle,
-  formatStepUpFailure,
   resolveContactsPermissionActionLabel,
   resolveContactsPermissionTone,
 } from './profile-helpers';
@@ -58,7 +63,7 @@ import { ProfileDeviceRevokeModal } from './profile-device-revoke-modal';
 import { useProfileFocusController } from './profile-focus-controller';
 import { ProfileLegalDangerSection } from './profile-legal-danger-section';
 import { ProfileStatusRow } from './profile-status-row';
-import { ProfileSocialStepUpModal, type SocialStepUpTarget } from './profile-social-step-up-modal';
+
 import { ProfileSetupReminderSection } from './profile-setup-reminder-section';
 import { ThemePreferenceSection } from './theme-preference-section';
 import { styles } from './profile-screen-runtime.styles';
@@ -68,6 +73,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const session = useSession();
+  const { confirmIdentity } = useIdentityConfirmation();
   const activeTheme = useAppTheme();
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
@@ -103,7 +109,6 @@ export function ProfileScreen() {
   const accountDeletionMutation = useRequestAccountDeletionMutation();
   const actionFeedback = useActionFeedbackOverlay();
   const displayNameInputRef = useRef<AppTextInputRef | null>(null);
-  const socialStepUpInputRef = useRef<AppTextInputRef | null>(null);
   const headerSignOutButtonThemeStyle = useMemo(
     () => ({
       backgroundColor: activeTheme.colors.dangerSoft,
@@ -153,9 +158,6 @@ export function ProfileScreen() {
   const [attachPassword, setAttachPassword] = useState('');
   const [attachPasswordConfirm, setAttachPasswordConfirm] = useState('');
   const [trustPassword, setTrustPassword] = useState('');
-  const [socialStepUpPassword, setSocialStepUpPassword] = useState('');
-  const [socialStepUpError, setSocialStepUpError] = useState<string | null>(null);
-  const [socialStepUpTarget, setSocialStepUpTarget] = useState<SocialStepUpTarget | null>(null);
   const [trustMethodPickerOpen, setTrustMethodPickerOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const busyActionRef = useRef<string | null>(null);
@@ -203,11 +205,14 @@ export function ProfileScreen() {
   const phoneLabel = session.profile?.phone_e164 ?? 'Falta completar';
   const trustMethods = resolveTrustedDeviceAuthMethods({
     canTrustCurrentDeviceWithoutPassword: session.canTrustCurrentDeviceWithoutPassword,
-    hasApple: session.linkedMethods.hasApple,
+    hasApple: session.linkedMethods.hasApple && session.appleSignInAvailable,
     hasEmailPassword: session.linkedMethods.hasEmailPassword,
     hasGoogle: session.linkedMethods.hasGoogle,
   });
-  const socialTrustMethods = trustMethods.filter((method) => method !== 'password');
+  const socialTrustMethods = trustMethods.filter(
+    (method) => method === 'google' || method === 'apple',
+  );
+  const hasRecentTrustMethod = trustMethods.includes('recent_auth');
   const hasPasswordTrustMethod = trustMethods.includes('password');
   const setupEntryStep = session.setupState.pendingRequiredSteps[0] ?? 'security';
   const completeProfileHref = buildSetupAccountHref(setupEntryStep);
@@ -234,37 +239,17 @@ export function ProfileScreen() {
   const showTrustPasswordFallback =
     trustMethodPickerOpen &&
     hasPasswordTrustMethod &&
-    !session.canTrustCurrentDeviceWithoutPassword &&
     (trustPasswordFallbackOpen || socialTrustMethods.length === 0);
+
+  useEffect(() => {
+    void session.refreshBiometricSupport();
+  }, [session.refreshBiometricSupport]);
 
   useEffect(() => {
     if (trustPasswordFallbackOpen) {
       setTrustMethodPickerOpen(true);
     }
   }, [trustPasswordFallbackOpen]);
-
-  useEffect(() => {
-    if (
-      (socialStepUpTarget === 'google' && session.linkedMethods.hasGoogle) ||
-      (socialStepUpTarget === 'apple' && session.linkedMethods.hasApple)
-    ) {
-      setSocialStepUpPassword('');
-      setSocialStepUpError(null);
-      setSocialStepUpTarget(null);
-    }
-  }, [session.linkedMethods.hasApple, session.linkedMethods.hasGoogle, socialStepUpTarget]);
-
-  useEffect(() => {
-    if (!socialStepUpTarget) {
-      return;
-    }
-
-    const focusTimer = setTimeout(() => {
-      socialStepUpInputRef.current?.focus();
-    }, 180);
-
-    return () => clearTimeout(focusTimer);
-  }, [socialStepUpTarget]);
 
   useEffect(() => {
     if (!displayNameEditing) {
@@ -402,7 +387,7 @@ export function ProfileScreen() {
       session.trustCurrentDevice(
         method === undefined
           ? undefined
-          : method === 'password' && !session.canTrustCurrentDeviceWithoutPassword
+          : method === 'password'
             ? { method, password: trustPassword }
             : { method },
       ),
@@ -415,77 +400,43 @@ export function ProfileScreen() {
       setTrustPasswordFallbackOpen(false);
     }
 
-    if (result.startsWith('Escribe tu contrase')) {
+    if (result.startsWith('Escribe tu contrase') || result.startsWith('Confirma tu cuenta')) {
       triggerWarningHaptic();
       setTrustMethodPickerOpen(true);
-      setTrustPasswordFallbackOpen(true);
+      setTrustPasswordFallbackOpen(result.startsWith('Escribe tu contrase'));
     }
   }
 
-  function shouldOfferSocialPasswordStepUp(result: string): boolean {
-    return (
-      session.linkedMethods.hasEmailPassword && result.startsWith('Este dispositivo no puede usar ')
-    );
-  }
-
-  function closeSocialStepUpPrompt() {
-    triggerSelectionHaptic();
-    setSocialStepUpPassword('');
-    setSocialStepUpError(null);
-    setSocialStepUpTarget(null);
-  }
-
-  function handleSocialStepUpPasswordChange(nextPassword: string) {
-    setSocialStepUpPassword(nextPassword);
-    if (socialStepUpError) {
-      setSocialStepUpError(null);
-    }
-  }
-
-  async function handleLinkSocial(target: SocialStepUpTarget, password?: string) {
+  async function handleLinkSocial(target: 'google' | 'apple') {
+    if (busyActionRef.current) return;
     const providerLabel = target === 'google' ? 'Google' : 'Apple';
-    const actionKey = password === undefined ? `link-${target}` : `link-${target}-password`;
-
-    if (password !== undefined && !password.trim()) {
-      triggerWarningHaptic();
-      setSocialStepUpError(`Escribe tu contraseña para añadir ${providerLabel} Auth.`);
-      return;
-    }
-
-    setSocialStepUpError(null);
-    const result = await runAction(
-      actionKey,
-      () =>
-        target === 'google'
-          ? session.linkGoogle(password === undefined ? undefined : { password })
-          : session.linkApple(password === undefined ? undefined : { password }),
-      { showMessage: false },
+    const confirmed = await confirmIdentity({
+      actionLabel: `añadir ${providerLabel}`,
+      purpose: 'sensitive',
+      force: true,
+    });
+    if (!confirmed) return;
+    const result = await runAction(`link-${target}`, () =>
+      target === 'google' ? session.linkGoogle() : session.linkApple(),
     );
+    if (result === `${providerLabel} vinculado.`) triggerSuccessHaptic();
+  }
 
-    if (result === `${providerLabel} vinculado.`) {
-      triggerSuccessHaptic();
-      setSocialStepUpPassword('');
-      setSocialStepUpError(null);
-      setSocialStepUpTarget(null);
-      showActionMessage(result);
+  async function handleAttachPassword() {
+    if (busyActionRef.current) return;
+    const input = { password: attachPassword, confirmPassword: attachPasswordConfirm };
+    const validation = attachEmailPasswordSchema.safeParse(input);
+    if (!validation.success) {
+      showActionMessage(formatValidationMessage(validation.error));
       return;
     }
-
-    if (shouldOfferSocialPasswordStepUp(result)) {
-      triggerWarningHaptic();
-      setSocialStepUpPassword('');
-      setSocialStepUpError(null);
-      setSocialStepUpTarget(target);
-      return;
-    }
-
-    triggerWarningHaptic();
-    if (password === undefined) {
-      showActionMessage(result);
-      return;
-    }
-
-    setSocialStepUpError(result);
+    const confirmed = await confirmIdentity({
+      actionLabel: 'agregar una contraseña',
+      purpose: 'sensitive',
+      force: true,
+    });
+    if (!confirmed) return;
+    await runAction('attach-password', () => session.attachEmailPassword(validation.data));
   }
 
   function handleTrustEntryPress() {
@@ -525,8 +476,13 @@ export function ProfileScreen() {
 
   async function handleBiometrics(nextValue: boolean) {
     triggerSelectionHaptic();
-    const result = await session.setBiometricsEnabled(nextValue);
-    setMessage(result.message);
+    await runAction('biometrics', async () => {
+      const result = await session.setBiometricsEnabled(nextValue);
+      if (!result.ok && !nextValue) {
+        showBlockedActionAlert(result.message, { push: (href) => pushRoute(router, href) });
+      }
+      return result.message;
+    });
   }
 
   async function handleNotifications(nextValue: boolean) {
@@ -536,6 +492,7 @@ export function ProfileScreen() {
         openAppSettings(
           'Notificaciones bloqueadas',
           'Abre Ajustes y permite notificaciones para activar recordatorios.',
+          () => session.beginNotificationEnableFromSettings(),
         );
         return;
       }
@@ -547,6 +504,7 @@ export function ProfileScreen() {
           openAppSettings(
             'Notificaciones bloqueadas',
             'Abre Ajustes y permite notificaciones para activar recordatorios.',
+            () => session.beginNotificationEnableFromSettings(),
           );
         }
         return;
@@ -631,10 +589,16 @@ export function ProfileScreen() {
     }
   }
 
-  function openAppSettings(title: string, message: string) {
+  function openAppSettings(title: string, message: string, beforeOpen?: () => void) {
     Alert.alert(title, message, [
       { style: 'cancel', text: 'Ahora no' },
-      { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+      {
+        text: 'Abrir ajustes',
+        onPress: () => {
+          beforeOpen?.();
+          void Linking.openSettings();
+        },
+      },
     ]);
   }
 
@@ -747,21 +711,21 @@ export function ProfileScreen() {
     actionFeedback.clear();
 
     try {
+      if (
+        !(await confirmIdentity({
+          actionLabel: 'eliminar tu cuenta',
+          purpose: 'sensitive',
+          force: true,
+        }))
+      )
+        return;
       await actionFeedback.runBlockingAction('requestAccountDeletion', async () => {
-        if (!session.isTrustedDevice) {
-          throw new Error('Confía este teléfono antes de eliminar tu cuenta.');
-        }
-
-        const authResult = await session.stepUpAuth(true);
-        if (!authResult.success) {
-          throw new Error(formatStepUpFailure(authResult.error, session.biometricLabel));
-        }
-
         await accountDeletionMutation.mutateAsync();
         triggerSuccessHaptic();
         await session.signOut();
       });
     } catch (error) {
+      if (isIdentityConfirmationCancelled(error)) return;
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo eliminar tu cuenta.';
       setMessage(failureMessage);
@@ -806,10 +770,6 @@ export function ProfileScreen() {
       ],
     );
   }
-
-  const socialStepUpProviderLabel = socialStepUpTarget === 'google' ? 'Google' : 'Apple';
-  const socialStepUpBusyAction =
-    socialStepUpTarget === null ? null : `link-${socialStepUpTarget}-password`;
 
   return (
     <ScreenShell
@@ -921,13 +881,15 @@ export function ProfileScreen() {
                 ? session.biometricLabel
                 : session.biometricAvailable
                   ? 'Primero confía este teléfono'
-                  : 'No disponible'
+                  : 'Comprueba la huella o rostro del teléfono'
             }
             title="Biometría"
             tone={session.biometricsEnabled ? 'success' : 'muted'}
             trailing={
               <Switch
-                disabled={!session.setupState.biometricsEligible && !session.biometricsEnabled}
+                disabled={
+                  busyAction !== null || (!session.isTrustedDevice && !session.biometricsEnabled)
+                }
                 onValueChange={(nextValue) => void handleBiometrics(nextValue)}
                 trackColor={{ false: theme.colors.surfaceSoft, true: theme.colors.primarySoft }}
                 value={session.biometricsEnabled}
@@ -1028,17 +990,7 @@ export function ProfileScreen() {
                   compact
                   fullWidth={false}
                   label={busyAction === 'attach-password' ? 'Guardando...' : 'Agregar contraseña'}
-                  onPress={
-                    busyAction
-                      ? undefined
-                      : () =>
-                          void runAction('attach-password', async () =>
-                            session.attachEmailPassword({
-                              password: attachPassword,
-                              confirmPassword: attachPasswordConfirm,
-                            }),
-                          )
-                  }
+                  onPress={busyAction ? undefined : () => void handleAttachPassword()}
                 />
               </View>
             </View>
@@ -1194,25 +1146,27 @@ export function ProfileScreen() {
                         onPress={busyAction ? undefined : () => void handleTrustDevice(method)}
                       />
                     ))}
-                    {hasPasswordTrustMethod && session.canTrustCurrentDeviceWithoutPassword ? (
+                    {hasRecentTrustMethod ? (
                       <PrimaryAction
                         compact
                         disabled={busyAction !== null}
                         fullWidth={false}
                         label={
-                          busyAction === 'trust-device-password'
+                          busyAction === 'trust-device-recent_auth'
                             ? 'Confirmando...'
                             : resolveTrustMethodLabel({
                                 canTrustCurrentDeviceWithoutPassword:
                                   session.canTrustCurrentDeviceWithoutPassword,
-                                method: 'password',
+                                method: 'recent_auth',
                               })
                         }
-                        onPress={busyAction ? undefined : () => void handleTrustDevice('password')}
+                        onPress={
+                          busyAction ? undefined : () => void handleTrustDevice('recent_auth')
+                        }
                       />
                     ) : null}
                   </View>
-                  {hasPasswordTrustMethod && !session.canTrustCurrentDeviceWithoutPassword ? (
+                  {hasPasswordTrustMethod ? (
                     <Pressable
                       disabled={busyAction !== null}
                       onPress={() => {
@@ -1322,27 +1276,12 @@ export function ProfileScreen() {
         onOpenExternalUrl={(url, failureMessage) => void openExternalUrl(url, failureMessage)}
       />
 
-      <ProfileSocialStepUpModal
-        activeTheme={activeTheme}
-        biometricLabel={session.biometricLabel}
-        busyAction={busyAction}
-        inputRef={socialStepUpInputRef}
-        onClose={closeSocialStepUpPrompt}
-        onPasswordChange={handleSocialStepUpPasswordChange}
-        onSubmit={(target, passwordValue) => void handleLinkSocial(target, passwordValue)}
-        password={socialStepUpPassword}
-        socialStepUpBusyAction={socialStepUpBusyAction}
-        socialStepUpError={socialStepUpError}
-        socialStepUpProviderLabel={socialStepUpProviderLabel}
-        socialStepUpTarget={socialStepUpTarget}
-      />
-
       <ProfileDeviceRevokeModal
         activeTheme={activeTheme}
         busy={busyAction?.startsWith('revoke-') ?? false}
         deviceId={revokeDeviceId}
         error={revokeError}
-        hasApple={session.linkedMethods.hasApple}
+        hasApple={session.linkedMethods.hasApple && session.appleSignInAvailable}
         hasGoogle={session.linkedMethods.hasGoogle}
         hasPassword={session.linkedMethods.hasEmailPassword}
         inputRef={revokePasswordInputRef}

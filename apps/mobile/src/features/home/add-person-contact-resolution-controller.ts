@@ -2,288 +2,225 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
+  useSyncExternalStore,
   type Dispatch,
   type SetStateAction,
 } from 'react';
-
-import { pumpAddPersonResolutionQueue } from '@/features/home/add-person-contact-resolution-queue';
-import { updateWarmContactScanTargetCache } from '@/features/home/add-person-contact-scan-cache';
+import { AppState } from 'react-native';
+import * as Crypto from 'expo-crypto';
+import { onlineManager } from '@tanstack/react-query';
+import { updateWarmContactScanTargetCache } from './add-person-contact-scan-cache';
+import { uniqueContactPhoneE164List } from './contacts-sheet-helpers';
+import { loadPeopleTargetResolutionCache } from './people-target-resolution-cache';
 import {
-  getUnresolvedContactPhoneE164List,
-  uniqueContactPhoneE164List,
-} from '@/features/home/contacts-sheet-helpers';
-import {
-  loadPeopleTargetResolutionCache,
-  savePeopleTargetResolutionsToCache,
-} from '@/features/home/people-target-resolution-cache';
+  manageContactDiscovery,
+  resolveContactPhones,
+  setContactDiscoverySession,
+} from './contact-resolution-service';
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
-import { type PeopleTargetResolution, useResolvePeopleTargetsMutation } from '@/lib/live-data';
-
-type ResolutionPriority = 'visible' | 'background';
+import type { PeopleTargetResolution } from '@/lib/live-data/types-runtime';
+import {
+  contactResolutionEpoch,
+  invalidateContactResolutions,
+  isContactRealtimeReady,
+  mergeContactResolutions,
+  readContactResolutions,
+  subscribeContactRealtime,
+  subscribeContactResolutions,
+} from '@/lib/contact-resolution-state';
 
 export function useAddPersonContactResolutionController(input: {
   readonly busyKey: string | null;
   readonly setBusyKey: Dispatch<SetStateAction<string | null>>;
   readonly setMessage: Dispatch<SetStateAction<string | null>>;
   readonly userId: string | null;
+  readonly visible: boolean;
 }) {
-  const resolvePeopleTargets = useResolvePeopleTargetsMutation();
-  const [targetCache, setTargetCache] = useState<Record<string, PeopleTargetResolution>>({});
+  const { userId, setMessage, visible } = input;
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      userId ? subscribeContactResolutions(userId, listener) : () => undefined,
+    [userId],
+  );
+  const getSnapshot = useCallback(() => readContactResolutions(userId), [userId]);
+  const targetCache = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const targetCacheRef = useRef(targetCache);
+  targetCacheRef.current = targetCache;
   const scanRunIdRef = useRef(0);
-  const targetCacheRef = useRef<Record<string, PeopleTargetResolution>>({});
-  const pendingResolutionQueueRef = useRef<string[]>([]);
-  const pendingResolutionSetRef = useRef(new Set<string>());
-  const inFlightResolutionSetRef = useRef(new Set<string>());
   const visibleResolutionPhonesRef = useRef(new Set<string>());
-  const resolutionPumpRunningRef = useRef(false);
-  const resolvePeopleTargetsMutateRef = useRef(resolvePeopleTargets.mutateAsync);
+  const knownPhonesRef = useRef(new Set<string>());
+  const activeRef = useRef(false);
 
   const mergeTargetResolutions = useCallback(
-    (resolutions: readonly PeopleTargetResolution[]) => {
-      if (resolutions.length === 0) {
-        return;
-      }
-
-      const next = { ...targetCacheRef.current };
-      for (const resolution of resolutions) {
-        next[resolution.phoneE164] = resolution;
-      }
-
-      targetCacheRef.current = next;
-      setTargetCache(next);
-      updateWarmContactScanTargetCache(input.userId, next);
+    (rows: readonly PeopleTargetResolution[]) => {
+      if (userId) mergeContactResolutions(userId, rows, { fromCache: true });
     },
-    [input.userId],
+    [userId],
   );
-
-  const persistTargetResolutions = useCallback(
-    (resolutions: readonly PeopleTargetResolution[]) => {
-      if (!input.userId || resolutions.length === 0) {
-        return;
-      }
-
-      void savePeopleTargetResolutionsToCache(input.userId, resolutions).catch(() => undefined);
+  const setTargetCache = useCallback(
+    (rows: Record<string, PeopleTargetResolution>) => {
+      mergeTargetResolutions(Object.values(rows));
     },
-    [input.userId],
-  );
-
-  const mergeAndPersistTargetResolutions = useCallback(
-    (resolutions: readonly PeopleTargetResolution[]) => {
-      mergeTargetResolutions(resolutions);
-      persistTargetResolutions(resolutions);
-    },
-    [mergeTargetResolutions, persistTargetResolutions],
-  );
-
-  useEffect(() => {
-    resolvePeopleTargetsMutateRef.current = resolvePeopleTargets.mutateAsync;
-  }, [resolvePeopleTargets.mutateAsync]);
-
-  const pumpResolutionQueue = useCallback(
-    () =>
-      pumpAddPersonResolutionQueue({
-        inFlightResolutionSetRef,
-        mergeAndPersistTargetResolutions,
-        pendingResolutionQueueRef,
-        pendingResolutionSetRef,
-        resolutionPumpRunningRef,
-        resolvePeopleTargetsMutateRef,
-        scanRunIdRef,
-        setMessage: input.setMessage,
-        targetCacheRef,
-        visibleResolutionPhonesRef,
-      }),
-    [input.setMessage, mergeAndPersistTargetResolutions],
-  );
-
-  const enqueueResolutionPhones = useCallback(
-    (phoneE164List: readonly string[], priority: ResolutionPriority) => {
-      const missingPhones = getUnresolvedContactPhoneE164List({
-        inFlightPhoneE164Set: inFlightResolutionSetRef.current,
-        pendingPhoneE164Set: pendingResolutionSetRef.current,
-        phoneE164List,
-        targetCache: targetCacheRef.current,
-      });
-
-      if (missingPhones.length === 0) {
-        return;
-      }
-
-      for (const phoneE164 of missingPhones) {
-        pendingResolutionSetRef.current.add(phoneE164);
-      }
-
-      if (priority === 'visible') {
-        pendingResolutionQueueRef.current = [
-          ...missingPhones,
-          ...pendingResolutionQueueRef.current,
-        ];
-      } else {
-        pendingResolutionQueueRef.current.push(...missingPhones);
-      }
-
-      void pumpResolutionQueue();
-    },
-    [pumpResolutionQueue],
+    [mergeTargetResolutions],
   );
 
   const loadCachedTargetResolutionsForPhones = useCallback(
-    async (runId: number, phoneE164List: readonly string[]) => {
-      if (!input.userId || phoneE164List.length === 0) {
-        return;
-      }
+    async (runId: number, phones: readonly string[]) => {
+      if (!userId || !phones.length) return;
+      const expectedEpoch = contactResolutionEpoch(userId);
+      const cached = await loadPeopleTargetResolutionCache(userId, phones).catch(() => ({}));
+      if (scanRunIdRef.current === runId)
+        mergeContactResolutions(userId, Object.values(cached), { fromCache: true, expectedEpoch });
+    },
+    [userId],
+  );
 
+  const refreshPhones = useCallback(
+    async (
+      phones: readonly string[],
+      priority: 'visible' | 'background' | 'event',
+      force = false,
+    ) => {
+      if (!userId || !activeRef.current || !onlineManager.isOnline()) return;
       try {
-        const cachedResolutions = await loadPeopleTargetResolutionCache(
-          input.userId,
-          phoneE164List,
-        );
-        if (scanRunIdRef.current !== runId) {
-          return;
-        }
-
-        mergeTargetResolutions(Object.values(cachedResolutions));
+        await resolveContactPhones(userId, phones, priority, force);
       } catch {
-        // Persistent cache is an optimization. Contact loading should continue without it.
+        if (priority === 'visible')
+          setMessage(
+            'Mostramos la última información disponible. Volveremos a consultar al recuperar la conexión.',
+          );
       }
     },
-    [input.userId, mergeTargetResolutions],
+    [setMessage, userId],
   );
 
   const hydrateAndEnqueueResolutionPhones = useCallback(
-    (runId: number, phoneE164List: readonly string[], priority: ResolutionPriority) => {
-      if (phoneE164List.length === 0) {
-        return;
-      }
-
-      const unresolvedPhones = getUnresolvedContactPhoneE164List({
-        inFlightPhoneE164Set: inFlightResolutionSetRef.current,
-        pendingPhoneE164Set: pendingResolutionSetRef.current,
-        phoneE164List,
-        targetCache: targetCacheRef.current,
-      });
-      if (unresolvedPhones.length === 0) {
-        return;
-      }
-
-      void loadCachedTargetResolutionsForPhones(runId, unresolvedPhones).finally(() => {
-        if (scanRunIdRef.current === runId) {
-          enqueueResolutionPhones(unresolvedPhones, priority);
-        }
+    (runId: number, phones: readonly string[], priority: 'visible' | 'background') => {
+      for (const phone of phones) knownPhonesRef.current.add(phone);
+      void loadCachedTargetResolutionsForPhones(runId, phones).then(() => {
+        if (scanRunIdRef.current === runId) void refreshPhones(phones, priority);
       });
     },
-    [enqueueResolutionPhones, loadCachedTargetResolutionsForPhones],
-  );
-
-  const ensurePhoneStatuses = useCallback(
-    async (phoneE164List: readonly string[]) => {
-      const cachedResolutions = await loadPeopleTargetResolutionCache(input.userId, phoneE164List);
-      mergeTargetResolutions(Object.values(cachedResolutions));
-
-      const missingPhones = getUnresolvedContactPhoneE164List({
-        inFlightPhoneE164Set: inFlightResolutionSetRef.current,
-        pendingPhoneE164Set: pendingResolutionSetRef.current,
-        phoneE164List,
-        targetCache: targetCacheRef.current,
-      });
-      if (missingPhones.length === 0) {
-        return;
-      }
-
-      for (const phoneE164 of missingPhones) {
-        visibleResolutionPhonesRef.current.add(phoneE164);
-      }
-      enqueueResolutionPhones(missingPhones, 'visible');
-
-      const waitUntil = Date.now() + 6_000;
-      while (
-        Date.now() < waitUntil &&
-        missingPhones.some(
-          (phoneE164) =>
-            !targetCacheRef.current[phoneE164] &&
-            (pendingResolutionSetRef.current.has(phoneE164) ||
-              inFlightResolutionSetRef.current.has(phoneE164)),
-        )
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-      }
-    },
-    [enqueueResolutionPhones, input.userId, mergeTargetResolutions],
+    [loadCachedTargetResolutionsForPhones, refreshPhones],
   );
 
   const resolvePhoneStatusesNow = useCallback(
-    async (phoneE164List: readonly string[]): Promise<readonly PeopleTargetResolution[]> => {
-      const uniquePhones = [...new Set(phoneE164List)].slice(0, 60);
-      if (uniquePhones.length === 0) {
-        return [];
-      }
-
-      const resolutions = await resolvePeopleTargets.mutateAsync(uniquePhones);
-      mergeAndPersistTargetResolutions(resolutions);
-      return resolutions;
+    async (phones: readonly string[]) => {
+      if (!userId) return [];
+      if (!onlineManager.isOnline())
+        throw new Error('Necesitas conexión para confirmar el estado de este contacto.');
+      return resolveContactPhones(userId, phones, 'interactive', true);
     },
-    [mergeAndPersistTargetResolutions, resolvePeopleTargets.mutateAsync],
+    [userId],
   );
-
+  const ensurePhoneStatuses = useCallback(
+    async (phones: readonly string[]) => {
+      if (!userId) return;
+      for (const phone of phones) knownPhonesRef.current.add(phone);
+      await resolveContactPhones(userId, phones, 'interactive');
+    },
+    [userId],
+  );
   const forceResolvePhones = useCallback(
-    async (forceInput: { readonly busyKey: string; readonly phoneE164List: readonly string[] }) => {
-      if (input.busyKey || forceInput.phoneE164List.length === 0) {
-        return;
-      }
-
-      const uniquePhones = [...new Set(forceInput.phoneE164List)].slice(0, 60);
-      input.setBusyKey(forceInput.busyKey);
-      input.setMessage('Consultando este contacto en Happy Circles.');
-
+    async (phones: readonly string[], busyKey: string) => {
+      if (input.busyKey) return;
+      input.setBusyKey(busyKey);
       try {
-        const resolutions = await resolvePeopleTargets.mutateAsync(uniquePhones);
-        mergeAndPersistTargetResolutions(resolutions);
-        input.setMessage('Contacto consultado.');
+        await resolvePhoneStatusesNow(phones);
+        setMessage('Contacto actualizado.');
       } catch (error) {
-        input.setMessage(
-          error instanceof Error ? error.message : 'No se pudo revisar este contacto.',
-        );
+        setMessage(error instanceof Error ? error.message : 'No se pudo consultar el contacto.');
       } finally {
         input.setBusyKey(null);
       }
     },
-    [
-      input.busyKey,
-      input.setBusyKey,
-      input.setMessage,
-      mergeAndPersistTargetResolutions,
-      resolvePeopleTargets.mutateAsync,
-    ],
+    [input.busyKey, input.setBusyKey, resolvePhoneStatusesNow, setMessage],
   );
-
   const handleReviewContact = useCallback(
-    async (contact: ContactCandidate) => {
-      await forceResolvePhones({
-        busyKey: contact.primaryPhone.phoneE164,
-        phoneE164List: uniqueContactPhoneE164List([contact]),
-      });
-    },
+    (contact: ContactCandidate) =>
+      forceResolvePhones(uniqueContactPhoneE164List([contact]), contact.primaryPhone.phoneE164),
     [forceResolvePhones],
   );
-
   const handleReviewPhone = useCallback(
-    async (reviewInput: { readonly phoneE164: string }) => {
-      await forceResolvePhones({
-        busyKey: reviewInput.phoneE164,
-        phoneE164List: [reviewInput.phoneE164],
-      });
-    },
+    (value: { readonly phoneE164: string }) =>
+      forceResolvePhones([value.phoneE164], value.phoneE164),
     [forceResolvePhones],
   );
-
   const resetResolutionState = useCallback(() => {
     scanRunIdRef.current += 1;
-    pendingResolutionQueueRef.current = [];
-    pendingResolutionSetRef.current.clear();
-    inFlightResolutionSetRef.current.clear();
     visibleResolutionPhonesRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    knownPhonesRef.current.clear();
+    scanRunIdRef.current += 1;
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !visible) return;
+    const sessionId = Crypto.randomUUID();
+    let lastRenewedAt = Date.now();
+    let registered = false;
+    const registerKnown = () => {
+      if (!activeRef.current || !isContactRealtimeReady(userId) || !knownPhonesRef.current.size)
+        return;
+      registered = true;
+      void refreshPhones([...knownPhonesRef.current], 'background', true);
+    };
+    const activate = () => {
+      activeRef.current = AppState.currentState === 'active';
+      setContactDiscoverySession(userId, activeRef.current ? sessionId : null);
+      if (activeRef.current) {
+        invalidateContactResolutions({ userId });
+        registerKnown();
+      }
+    };
+    activeRef.current = AppState.currentState === 'active';
+    setContactDiscoverySession(userId, activeRef.current ? sessionId : null);
+    const unsubscribe = subscribeContactResolutions(userId, ({ invalidatedPhones, priority }) => {
+      updateWarmContactScanTargetCache(userId, readContactResolutions(userId));
+      if (!invalidatedPhones.length) return;
+      if (priority === 'event') {
+        void refreshPhones(invalidatedPhones, 'event', true);
+      } else {
+        const visiblePhones = invalidatedPhones.filter((phone) =>
+          visibleResolutionPhonesRef.current.has(phone),
+        );
+        void refreshPhones(visiblePhones, 'visible', true);
+        void refreshPhones(invalidatedPhones, 'background', true);
+      }
+    });
+    const unsubscribeRealtime = subscribeContactRealtime(userId, registerKnown);
+    const unsubscribeOnline = onlineManager.subscribe((online) => {
+      if (online) activate();
+    });
+    const appState = AppState.addEventListener('change', activate);
+    const interval = setInterval(() => {
+      if (!activeRef.current || !onlineManager.isOnline()) return;
+      void refreshPhones([...visibleResolutionPhonesRef.current], 'visible');
+      if (!registered && isContactRealtimeReady(userId)) registerKnown();
+      if (Date.now() - lastRenewedAt >= 5 * 60_000 && isContactRealtimeReady(userId)) {
+        lastRenewedAt = Date.now();
+        void manageContactDiscovery(sessionId, 'renew')
+          .then((result) => {
+            if (result.status === 'expired') registerKnown();
+          })
+          .catch(() => {
+            lastRenewedAt = 0;
+          });
+      }
+    }, 15_000);
+    return () => {
+      activeRef.current = false;
+      clearInterval(interval);
+      unsubscribe();
+      unsubscribeRealtime();
+      unsubscribeOnline();
+      appState.remove();
+      setContactDiscoverySession(userId, null);
+      void manageContactDiscovery(sessionId, 'stop').catch(() => undefined);
+    };
+  }, [refreshPhones, userId, visible]);
 
   return {
     ensurePhoneStatuses,
@@ -291,7 +228,6 @@ export function useAddPersonContactResolutionController(input: {
     handleReviewPhone,
     hydrateAndEnqueueResolutionPhones,
     loadCachedTargetResolutionsForPhones,
-    mergeAndPersistTargetResolutions,
     mergeTargetResolutions,
     resetResolutionState,
     resolvePhoneStatusesNow,

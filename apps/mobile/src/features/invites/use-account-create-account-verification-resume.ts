@@ -12,6 +12,7 @@ import type { Router } from 'expo-router';
 import { AppState } from 'react-native';
 
 import { returnToRoute } from '@/lib/navigation';
+import { resolveRequiredSetupStep } from '@/lib/pre-home-routing';
 import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { runSingleFlight } from '@/lib/single-flight';
@@ -172,11 +173,7 @@ export function useAccountCreateAccountVerificationResume(input: VerificationRes
         return;
       }
 
-      const setupStep = !session.setupState.requiredComplete
-        ? (session.setupState.pendingRequiredSteps[0] ?? 'profile')
-        : session.setupState.securityPending
-          ? 'security'
-          : null;
+      const setupStep = resolveRequiredSetupStep(session.setupState);
       input.setupNavigationStartedRef.current = true;
       try {
         if (setupStep) {

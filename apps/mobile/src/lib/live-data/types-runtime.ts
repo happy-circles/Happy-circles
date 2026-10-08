@@ -283,11 +283,15 @@ export interface FriendshipInviteActionResult {
   readonly status: string;
   readonly resolvedAt?: string | null;
   readonly relationshipId?: string | null;
+  readonly reminderStatus?: 'queued' | 'cooldown' | 'resolved';
+  readonly reminderId?: string;
+  readonly nextAllowedAt?: string;
 }
 
 export interface FriendshipInvitePreviewResult {
   readonly inviteId: string;
   readonly deliveryId: string;
+  readonly deliveryStatus?: string;
   readonly flow: 'internal' | 'external';
   readonly status: string;
   readonly channel: 'remote' | 'qr';
@@ -310,6 +314,12 @@ export interface FriendshipInvitePreviewResult {
 }
 
 export interface PeopleTargetResolution {
+  readonly resolvedAt?: number;
+  readonly generation?: number;
+  readonly discoveryWatchId?: string | null;
+  readonly discoverySessionId?: string;
+  readonly friendshipDirection?: 'incoming' | 'outgoing' | null;
+  readonly availableActions?: readonly string[];
   readonly phoneE164: string;
   readonly status:
     | 'active_user'

@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import type { ActivityItemDto } from '@happy-circles/application';
 
 import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
@@ -30,6 +29,7 @@ import {
   useFeedbackSnackbar,
 } from '@/lib/action-feedback';
 import * as appHaptics from '@/lib/app-haptics';
+import { isIdentityConfirmationCancelled } from '@/lib/live-data/mutations/sensitive-action-check';
 import { formatCop } from '@/lib/data';
 import {
   buildHistoryCases,
@@ -544,6 +544,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         });
       }
     } catch (error) {
+      if (isIdentityConfirmationCancelled(error)) return;
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la acción.';
       if (

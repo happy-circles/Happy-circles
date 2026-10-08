@@ -11,7 +11,7 @@ import {
   useActivateAccountFromInviteMutation,
   useResumeAccountInviteMutation,
 } from '@/lib/live-data';
-import { returnToRoute } from '@/lib/navigation';
+import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
 import {
   clearPendingNavigationIntentIfMatches,
   readPendingNavigationIntent,
@@ -28,6 +28,7 @@ import type { SessionContextValue } from '@/providers/session/types';
 export function useSetupAccountCompletionController(input: {
   readonly isSetupPreviewMode: boolean;
   readonly returnToProfile: boolean;
+  readonly returnToPrevious?: boolean;
   readonly session: SessionContextValue;
   readonly setMessage: Dispatch<SetStateAction<string | null>>;
 }) {
@@ -104,7 +105,13 @@ export function useSetupAccountCompletionController(input: {
       pendingInviteIntent,
       pendingNavigationIntent,
       returnToProfile: input.returnToProfile,
+      returnToPrevious: input.returnToPrevious,
     });
+
+    if (decision.action === 'return_to_previous') {
+      backOrReturnTo(router, '/home');
+      return;
+    }
 
     if (decision.action === 'activate_account_invite') {
       await activatePendingAccountInvite(decision.intent);

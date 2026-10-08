@@ -17,6 +17,7 @@ const PREVIEW_DEVICE_ID = 'qa-onboarding-device';
 const PREVIEW_NOW = '2026-01-01T00:00:00.000Z';
 
 interface SetupAccountPreviewState {
+  readonly stepUpFreshUntil: number | null;
   readonly biometricsEnabled: boolean;
   readonly contactsPermissionStatus: SetupPermissionStatus;
   readonly emailConfirmed: boolean;
@@ -92,6 +93,7 @@ function createInitialPreviewState(previewCase: SetupAccountPreviewCase): SetupA
   const permissionsGranted = previewCase === 'complete';
 
   return {
+    stepUpFreshUntil: null,
     biometricsEnabled: trustedDevice,
     contactsPermissionStatus: permissionsGranted ? 'granted' : 'undetermined',
     emailConfirmed,
@@ -173,6 +175,7 @@ export function useSetupAccountPreviewSession(
       email: PREVIEW_EMAIL,
       isEmailConfirmed: previewState.emailConfirmed,
       isLocked: false,
+      isAuthorizedDeviceSession: previewState.trustedDevice,
       isPasswordRecoverySession: false,
       isSignedIn: true,
       isTrustedDevice: previewState.trustedDevice,
@@ -184,13 +187,14 @@ export function useSetupAccountPreviewSession(
         providers: ['email', 'google'],
       },
       loadingStage: 'account',
-      notificationsEnabled: false,
+      notificationsEnabled: previewState.notificationsPermissionStatus === 'granted',
       profile: previewState.profile,
       profileCompletionState: previewState.profileComplete ? 'complete' : 'incomplete',
       requiresAccountActivation: false,
       requiresInvite: false,
       requiresProfileCompletion: !setupState.requiredComplete,
       setupState,
+      stepUpFreshUntil: previewState.stepUpFreshUntil,
       status: 'signed_in_unlocked',
       trustedDevices: [],
       userId: PREVIEW_USER_ID,
@@ -211,6 +215,25 @@ export function useSetupAccountPreviewSession(
       },
       async refreshAccountState() {
         return undefined;
+      },
+      async authorizeCurrentDeviceSession() {
+        setPreviewState((current) => ({ ...current, trustedDevice: true }));
+        return { success: true, error: null };
+      },
+      async refreshBiometricSupport() {
+        return {
+          available: true,
+          label: Platform.OS === 'ios' ? 'Face ID' : 'biometría',
+          error: null,
+        };
+      },
+      beginNotificationEnableFromSettings() {},
+      async stepUpAuth() {
+        setPreviewState((current) => ({
+          ...current,
+          stepUpFreshUntil: Date.now() + 5 * 60 * 1000,
+        }));
+        return { success: true, error: null };
       },
       async requestContactsPermission() {
         setPreviewState((current) => ({
@@ -235,6 +258,7 @@ export function useSetupAccountPreviewSession(
         setPreviewState((current) => ({
           ...current,
           biometricsEnabled: enabled,
+          stepUpFreshUntil: enabled ? Date.now() + 5 * 60 * 1000 : null,
         }));
 
         return {
@@ -246,9 +270,10 @@ export function useSetupAccountPreviewSession(
         setPreviewState((current) => ({
           ...current,
           trustedDevice: true,
+          stepUpFreshUntil: Date.now() + 5 * 60 * 1000,
         }));
 
-        return 'Este telefono ahora es confiable.';
+        return 'Este teléfono ahora es confiable.';
       },
       async verifyEmailOtp() {
         setPreviewState((current) => ({

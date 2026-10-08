@@ -7,9 +7,11 @@ import {
   isReusableCachedContactResolution,
 } from '@/features/home/contacts-sheet-helpers';
 import type { PeopleTargetResolution } from '@/lib/live-data';
+import { readContactResolutions } from '@/lib/contact-resolution-state';
 
 const DATABASE_NAME = 'happy-circles-people-target-resolution-cache.db';
-const TABLE_NAME = 'people_target_resolution_cache';
+// Versioned separately: pre-v2 rows had no usable in-memory freshness metadata.
+const TABLE_NAME = 'people_target_resolution_cache_v2';
 const QUERY_CHUNK_SIZE = 250;
 
 type StoredPeopleTargetResolution = Omit<PeopleTargetResolution, 'phoneE164'>;
@@ -18,9 +20,17 @@ type PeopleTargetResolutionCacheRow = {
   readonly phone_hash: string;
   readonly resolution_json: string;
   readonly resolved_at: number;
+  readonly generation: number;
 };
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let writes: Promise<void> = Promise.resolve();
+
+function serializeWrite(work: () => Promise<void>): Promise<void> {
+  const next = writes.catch(() => undefined).then(work);
+  writes = next;
+  return next;
+}
 
 function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync(DATABASE_NAME).then(async (database) => {
@@ -30,9 +40,10 @@ function getDatabase(): Promise<SQLite.SQLiteDatabase> {
         phone_hash TEXT NOT NULL,
         resolution_json TEXT NOT NULL,
         resolved_at INTEGER NOT NULL,
+        generation INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, phone_hash)
       );
-      CREATE INDEX IF NOT EXISTS idx_people_target_resolution_cache_expiry
+      CREATE INDEX IF NOT EXISTS idx_people_target_resolution_cache_v2_expiry
         ON ${TABLE_NAME} (user_id, resolved_at);
     `);
 
@@ -83,6 +94,10 @@ export function stripPhoneFromPeopleTargetResolution(
     matchedUserId: resolution.matchedUserId,
     relationshipId: resolution.relationshipId,
     status: resolution.status,
+    resolvedAt: resolution.resolvedAt,
+    generation: resolution.generation,
+    friendshipDirection: resolution.friendshipDirection,
+    availableActions: resolution.availableActions,
   };
 }
 
@@ -141,7 +156,8 @@ export async function loadPeopleTargetResolutionCache(
   const uniquePhones = [...new Set(phoneE164List)];
   const hashPhonePairs = await buildHashPhonePairs(userId, uniquePhones);
   const phoneByHash = new Map(hashPhonePairs.map((pair) => [pair.phoneHash, pair.phoneE164]));
-  const freshAfter = Date.now() - CONTACT_RESOLUTION_CACHE_TTL_MS;
+  // Retain stale display data offline; the shared store decides when to revalidate it.
+  const freshAfter = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const database = await getDatabase();
   const result: Record<string, PeopleTargetResolution> = {};
 
@@ -149,7 +165,7 @@ export async function loadPeopleTargetResolutionCache(
     const chunk = hashPhonePairs.slice(index, index + QUERY_CHUNK_SIZE);
     const placeholders = chunk.map(() => '?').join(', ');
     const rows = await database.getAllAsync<PeopleTargetResolutionCacheRow>(
-      `SELECT phone_hash, resolution_json, resolved_at
+      `SELECT phone_hash, resolution_json, resolved_at, generation
        FROM ${TABLE_NAME}
        WHERE user_id = ?
          AND resolved_at >= ?
@@ -163,18 +179,13 @@ export async function loadPeopleTargetResolutionCache(
       if (!phoneE164 || !storedResolution) {
         continue;
       }
-      if (
-        !isPeopleTargetResolutionCacheEntryFresh({
-          resolvedAt: row.resolved_at,
-          status: storedResolution.status,
-        })
-      ) {
-        continue;
-      }
-
       const restoredResolution = restorePhoneOnPeopleTargetResolution({
         phoneE164,
-        storedResolution,
+        storedResolution: {
+          ...storedResolution,
+          resolvedAt: row.resolved_at,
+          generation: row.generation,
+        },
       });
       if (!isReusableCachedContactResolution(restoredResolution)) {
         continue;
@@ -197,28 +208,54 @@ export async function savePeopleTargetResolutionsToCache(
     return;
   }
 
-  const database = await getDatabase();
-  const now = Date.now();
-  const hashPhonePairs = await buildHashPhonePairs(
-    userId,
-    reusableResolutions.map((resolution) => resolution.phoneE164),
-  );
-  const hashByPhone = new Map(hashPhonePairs.map((pair) => [pair.phoneE164, pair.phoneHash]));
+  await serializeWrite(async () => {
+    const database = await getDatabase();
+    const now = Date.now();
+    const hashPhonePairs = await buildHashPhonePairs(
+      userId,
+      reusableResolutions.map((resolution) => resolution.phoneE164),
+    );
+    const hashByPhone = new Map(hashPhonePairs.map((pair) => [pair.phoneE164, pair.phoneHash]));
+    await database.withTransactionAsync(async () => {
+      for (const resolution of reusableResolutions) {
+        const current = readContactResolutions(userId)[resolution.phoneE164];
+        if (
+          !current ||
+          current.generation !== resolution.generation ||
+          current.resolvedAt !== resolution.resolvedAt
+        )
+          continue;
+        const phoneHash = hashByPhone.get(resolution.phoneE164);
+        if (!phoneHash) {
+          continue;
+        }
 
-  await database.withTransactionAsync(async () => {
-    for (const resolution of reusableResolutions) {
-      const phoneHash = hashByPhone.get(resolution.phoneE164);
-      if (!phoneHash) {
-        continue;
+        await database.runAsync(
+          `INSERT INTO ${TABLE_NAME}
+          (user_id, phone_hash, resolution_json, resolved_at, generation)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, phone_hash) DO UPDATE SET
+           resolution_json = excluded.resolution_json,
+           resolved_at = excluded.resolved_at,
+           generation = excluded.generation
+         WHERE excluded.generation >= ${TABLE_NAME}.generation`,
+          [
+            userId,
+            phoneHash,
+            JSON.stringify(stripPhoneFromPeopleTargetResolution(resolution)),
+            resolution.resolvedAt ?? now,
+            resolution.generation ?? now,
+          ],
+        );
       }
+    });
+  });
+}
 
-      await database.runAsync(
-        `INSERT OR REPLACE INTO ${TABLE_NAME}
-          (user_id, phone_hash, resolution_json, resolved_at)
-         VALUES (?, ?, ?, ?)`,
-        [userId, phoneHash, JSON.stringify(stripPhoneFromPeopleTargetResolution(resolution)), now],
-      );
-    }
+export async function invalidatePeopleTargetResolutionCache(userId: string): Promise<void> {
+  await serializeWrite(async () => {
+    const database = await getDatabase();
+    await database.runAsync(`DELETE FROM ${TABLE_NAME} WHERE user_id = ?`, [userId]);
   });
 }
 
@@ -229,11 +266,13 @@ export async function pruneExpiredPeopleTargetResolutionCache(
     return;
   }
 
-  const database = await getDatabase();
-  await database.runAsync(
-    `DELETE FROM ${TABLE_NAME}
+  await serializeWrite(async () => {
+    const database = await getDatabase();
+    await database.runAsync(
+      `DELETE FROM ${TABLE_NAME}
      WHERE user_id = ?
        AND resolved_at < ?`,
-    [userId, Date.now() - CONTACT_RESOLUTION_CACHE_TTL_MS],
-  );
+      [userId, Date.now() - 30 * 24 * 60 * 60 * 1000],
+    );
+  });
 }

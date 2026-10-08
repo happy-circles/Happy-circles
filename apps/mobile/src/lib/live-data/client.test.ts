@@ -8,6 +8,7 @@ interface FunctionErrorDetails {
 
 const mocks = vi.hoisted(() => ({
   createSupportId: vi.fn(() => 'HC-TEST-0000-0000'),
+  getSession: vi.fn(),
   invoke: vi.fn(),
   isJwtAuthError: vi.fn(() => false),
   publicInvoke: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../supabase', () => ({
   },
   supabase: {
     auth: {
+      getSession: mocks.getSession,
       refreshSession: mocks.refreshSession,
       signOut: mocks.signOut,
     },
@@ -50,6 +52,7 @@ describe('live-data client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isJwtAuthError.mockReturnValue(false);
+    mocks.getSession.mockReset();
     mocks.readFunctionErrorDetails.mockImplementation((error: Error) =>
       Promise.resolve({ message: error.message }),
     );
@@ -131,5 +134,86 @@ describe('live-data client', () => {
         functionName: 'slow-action',
       }),
     );
+  });
+
+  it('binds contact requests to the actor token instead of the mutable global session', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-a' }, access_token: 'actor-a-token' } },
+    });
+    mocks.invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    await expect(
+      invokeSupabaseFunction('resolve-people-targets', {}, { expectedUserId: 'actor-a' }),
+    ).resolves.toEqual({ ok: true });
+    const invocation = mocks.invoke.mock.calls[0]?.[1] as { headers: Record<string, string> };
+    expect(invocation.headers.Authorization).toBe('Bearer actor-a-token');
+  });
+
+  it('refuses queued work from a previous account before sending it', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-b' }, access_token: 'actor-b-token' } },
+    });
+    await expect(
+      invokeSupabaseFunction('create-people-outreach', {}, { expectedUserId: 'actor-a' }),
+    ).rejects.toThrow('La sesión cambió');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('does not return a previous account response to the newly signed in account', async () => {
+    mocks.getSession
+      .mockResolvedValueOnce({
+        data: { session: { user: { id: 'actor-a' }, access_token: 'actor-a-token' } },
+      })
+      .mockResolvedValueOnce({
+        data: { session: { user: { id: 'actor-b' }, access_token: 'actor-b-token' } },
+      });
+    mocks.invoke.mockResolvedValue({ data: { status: 'accepted' }, error: null });
+    await expect(
+      invokeSupabaseFunction(
+        'respond-internal-friendship-invite',
+        {},
+        { expectedUserId: 'actor-a' },
+      ),
+    ).rejects.toThrow('La sesión cambió');
+    expect(mocks.refreshSession).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an old account command with a different refreshed account', async () => {
+    const actorSession = {
+      data: { session: { user: { id: 'actor-a' }, access_token: 'actor-a-token' } },
+    };
+    mocks.getSession
+      .mockResolvedValueOnce(actorSession)
+      .mockResolvedValueOnce(actorSession)
+      .mockResolvedValueOnce(actorSession)
+      .mockResolvedValue({
+        data: { session: { user: { id: 'actor-b' }, access_token: 'actor-b-token' } },
+      });
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('jwt expired') });
+    mocks.isJwtAuthError.mockReturnValue(true);
+    mocks.refreshSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-b' } } },
+      error: null,
+    });
+    await expect(
+      invokeSupabaseFunction('cancel-friendship-invite', {}, { expectedUserId: 'actor-a' }),
+    ).rejects.toThrow('La sesión cambió');
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it('does not sign out a new account when token renewal of an old command fails', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-a' }, access_token: 'actor-a-token' } },
+    });
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('jwt expired') });
+    mocks.isJwtAuthError.mockReturnValue(true);
+    mocks.refreshSession.mockResolvedValue({
+      data: { session: null },
+      error: new Error('refresh failed'),
+    });
+    await expect(
+      invokeSupabaseFunction('cancel-friendship-invite', {}, { expectedUserId: 'actor-a' }),
+    ).rejects.toThrow('Tu sesión ya no es válida');
+    expect(mocks.signOut).not.toHaveBeenCalled();
   });
 });

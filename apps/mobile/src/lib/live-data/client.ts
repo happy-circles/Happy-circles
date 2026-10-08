@@ -60,6 +60,7 @@ export function assertSupabaseClient() {
 
 export interface InvokeSupabaseFunctionOptions {
   readonly authorization?: 'session' | 'omit';
+  readonly expectedUserId?: string;
 }
 
 function assertPublicEdgeSupabaseClient() {
@@ -90,19 +91,37 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
   options: InvokeSupabaseFunctionOptions = {},
 ): Promise<TResult> {
   const shouldOmitAuthorization = options.authorization === 'omit';
+  if (shouldOmitAuthorization && options.expectedUserId) {
+    throw new Error('Una acción de cuenta requiere una sesión autenticada.');
+  }
   const client = shouldOmitAuthorization
     ? assertPublicEdgeSupabaseClient()
     : assertSupabaseClient();
   const supportId = createSupportId();
-  const invoke = async () =>
-    client.functions.invoke<TResult>(name, {
+  const invoke = async () => {
+    let accessToken: string | undefined;
+    if (options.expectedUserId) {
+      const { data } = await client.auth.getSession();
+      if (data.session?.user.id !== options.expectedUserId)
+        throw new Error('La sesión cambió. Vuelve a intentar la acción.');
+      accessToken = data.session.access_token;
+    }
+    const response = await client.functions.invoke<TResult>(name, {
       body,
       headers: {
         'x-client-info': 'happy-circles-mobile',
         'x-request-id': supportId,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       timeout: EDGE_FUNCTION_TIMEOUT_MS,
     });
+    if (options.expectedUserId) {
+      const { data } = await client.auth.getSession();
+      if (data.session?.user.id !== options.expectedUserId)
+        throw new Error('La sesión cambió. Vuelve a consultar el estado.');
+    }
+    return response;
+  };
   let result = await invoke();
 
   if (result.error) {
@@ -120,9 +139,17 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
 
     const details = await readFunctionErrorDetails(result.error);
     if (isJwtAuthError(details) && !shouldOmitAuthorization) {
+      if (options.expectedUserId) {
+        const { data } = await client.auth.getSession();
+        if (data.session?.user.id !== options.expectedUserId) {
+          throw new Error('La sesión cambió. Vuelve a consultar el estado.');
+        }
+      }
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
       if (refreshError || !refreshData.session) {
-        await client.auth.signOut();
+        // An account switch can race token renewal. Never sign out the new
+        // account because a request that belonged to the previous one failed.
+        if (!options.expectedUserId) await client.auth.signOut();
         throw new Error('Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.');
       }
 

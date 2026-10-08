@@ -1205,8 +1205,10 @@ export type Database = {
           intended_recipient_phone_e164: string | null;
           intended_recipient_phone_label: string | null;
           inviter_user_id: string;
+          last_reminded_at: string | null;
           origin_channel: Database['public']['Enums']['friendship_invite_channel'];
           relationship_id: string | null;
+          reminder_sequence: number;
           resolution_actor:
             | Database['public']['Enums']['friendship_invite_resolution_actor']
             | null;
@@ -1228,8 +1230,10 @@ export type Database = {
           intended_recipient_phone_e164?: string | null;
           intended_recipient_phone_label?: string | null;
           inviter_user_id: string;
+          last_reminded_at?: string | null;
           origin_channel: Database['public']['Enums']['friendship_invite_channel'];
           relationship_id?: string | null;
+          reminder_sequence?: number;
           resolution_actor?:
             | Database['public']['Enums']['friendship_invite_resolution_actor']
             | null;
@@ -1251,8 +1255,10 @@ export type Database = {
           intended_recipient_phone_e164?: string | null;
           intended_recipient_phone_label?: string | null;
           inviter_user_id?: string;
+          last_reminded_at?: string | null;
           origin_channel?: Database['public']['Enums']['friendship_invite_channel'];
           relationship_id?: string | null;
+          reminder_sequence?: number;
           resolution_actor?:
             | Database['public']['Enums']['friendship_invite_resolution_actor']
             | null;
@@ -4356,6 +4362,34 @@ export type Database = {
       };
     };
     Functions: {
+      friendship_push_event_is_current: {
+        Args: { p_event_id: string };
+        Returns: boolean;
+      };
+      manage_contact_discovery: {
+        Args: {
+          p_action: string;
+          p_actor_user_id: string;
+          p_discovery_session_id: string;
+        };
+        Returns: Json;
+      };
+      remind_friendship_invite: {
+        Args: {
+          p_actor_user_id: string;
+          p_idempotency_key: string;
+          p_invite_id: string;
+        };
+        Returns: Json;
+      };
+      resolve_people_targets_observed: {
+        Args: {
+          p_actor_user_id: string;
+          p_discovery_session_id?: string;
+          p_phone_e164_list: string[];
+        };
+        Returns: Json;
+      };
       accept_financial_request: {
         Args: {
           p_actor_user_id: string;

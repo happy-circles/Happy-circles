@@ -1,3 +1,4 @@
+import { isIdentityConfirmationCancelled } from '@/lib/live-data/mutations/sensitive-action-check';
 import { Ionicons } from '@expo/vector-icons';
 import { usePreventRemove } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -663,6 +664,7 @@ export function RegisterFlowScreen() {
         });
       }, 220);
     } catch (error) {
+      if (isIdentityConfirmationCancelled(error)) return;
       const nextMessage =
         error instanceof Error
           ? error.message

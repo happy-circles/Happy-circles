@@ -93,8 +93,8 @@ function buildPendingAccountVerificationHref(token: string): Href {
   } as Href;
 }
 
-function nextRequiredSetupStep(input: PreHomeRouteInput): SetupStep {
-  return input.setupState.pendingRequiredSteps[0] ?? 'profile';
+export function resolveRequiredSetupStep(setupState: PreHomeSetupState): SetupStep | null {
+  return setupState.requiredComplete ? null : (setupState.pendingRequiredSteps[0] ?? 'profile');
 }
 
 function shouldWaitForAuthHandoff(input: PreHomeRouteInput) {
@@ -156,7 +156,9 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
       return stay();
     }
 
-    return replace(buildPreHomeSetupAccountHref(nextRequiredSetupStep(input)));
+    return replace(
+      buildPreHomeSetupAccountHref(resolveRequiredSetupStep(input.setupState) ?? 'profile'),
+    );
   }
 
   const pendingAccountInvite =
@@ -237,6 +239,7 @@ export function resolvePreHomeRouteDecision(input: PreHomeRouteInput): PreHomeRo
 }
 
 export type SetupCompletionRouteDecision =
+  | { readonly action: 'return_to_previous' }
   | {
       readonly action: 'activate_account_invite';
       readonly intent: Extract<PendingInviteIntent, { readonly type: 'account_invite' }>;
@@ -258,6 +261,7 @@ export interface SetupCompletionRouteInput {
   readonly pendingInviteIntent: PendingInviteIntent | null;
   readonly pendingNavigationIntent: PendingNavigationIntent | null;
   readonly returnToProfile: boolean;
+  readonly returnToPrevious?: boolean;
 }
 
 export function resolveSetupCompletionRouteDecision(
@@ -265,6 +269,10 @@ export function resolveSetupCompletionRouteDecision(
 ): SetupCompletionRouteDecision {
   if (input.returnToProfile) {
     return { action: 'navigate', href: '/profile' };
+  }
+
+  if (input.returnToPrevious && input.accountAccessState === 'active' && input.isTrustedDevice) {
+    return { action: 'return_to_previous' };
   }
 
   if (input.pendingInviteIntent?.type === 'account_invite') {

@@ -8,11 +8,12 @@ import {
   friendshipInviteDecisionSchema,
   friendshipInvitePreviewSchema,
   reviewExternalFriendshipInviteSchema,
+  remindFriendshipInviteSchema,
 } from '@happy-circles/shared';
 
 import { useSession } from '@/providers/session-provider';
 
-import { invalidateAppSnapshot } from '../client';
+import { invalidateInvitationState } from './contact-invalidation';
 import type {
   FriendshipInviteActionResult,
   FriendshipInviteDeliveryResult,
@@ -39,12 +40,12 @@ export function useCreateInternalFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: async (_data, input) => {
+    onSuccess: async (data, input) => {
       recordFriendshipInviteCreated({
         flow: 'internal',
         source: input.sourceContext ?? 'direct',
       });
-      await invalidateAppSnapshot();
+      await invalidateInvitationState({ matchedUserId: input.targetUserId }, data.status);
     },
   });
 }
@@ -73,13 +74,13 @@ export function useCreateExternalFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: async (_data, input) => {
+    onSuccess: async (data, input) => {
       recordFriendshipInviteCreated({
         channel: input.channel,
         flow: 'external',
         source: input.sourceContext ?? 'share',
       });
-      await invalidateAppSnapshot();
+      await invalidateInvitationState({ phoneE164: input.intendedRecipientPhoneE164 }, data.status);
     },
   });
 }
@@ -115,7 +116,7 @@ export function useClaimExternalFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }
 
@@ -137,14 +138,14 @@ export function useReviewExternalFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: async (_data, input) => {
-      if (input.decision === 'approve') {
+    onSuccess: async (data, input) => {
+      if (input.decision === 'approve' && data.status === 'accepted') {
         recordFriendshipInviteAccepted({
           flow: 'external',
           decision: input.decision,
         });
       }
-      await invalidateAppSnapshot();
+      await invalidateInvitationState({ inviteId: input.inviteId }, data.status);
     },
   });
 }
@@ -167,14 +168,14 @@ export function useRespondInternalFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: async (_data, input) => {
-      if (input.decision === 'accept') {
+    onSuccess: async (data, input) => {
+      if (input.decision === 'accept' && data.status === 'accepted') {
         recordFriendshipInviteAccepted({
           flow: 'internal',
           decision: input.decision,
         });
       }
-      await invalidateAppSnapshot();
+      await invalidateInvitationState({ inviteId: input.inviteId }, data.status);
     },
   });
 }
@@ -193,6 +194,21 @@ export function useCancelFriendshipInviteMutation() {
         }),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
+  });
+}
+
+export function useRemindFriendshipInviteMutation() {
+  return useMutation({
+    mutationFn: (inviteId: string) =>
+      invokeParsedEdgeFunction<
+        ReturnType<typeof remindFriendshipInviteSchema.parse>,
+        FriendshipInviteActionResult
+      >(
+        'remind-friendship-invite',
+        remindFriendshipInviteSchema,
+        withIdempotencyKey('remind_friendship_invite', { inviteId }),
+      ),
+    onSuccess: (data) => invalidateInvitationState({ inviteId: data.inviteId }, data.status),
   });
 }

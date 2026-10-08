@@ -90,4 +90,184 @@ describe('home entry handoff coordinator', () => {
     expect(handoff.getHomeEntryReadyVersion()).toBe(initialVersion + 2);
     unsubscribe();
   });
+
+  it('still informs a waiting layer when another home-ready subscriber throws', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    handoff.subscribeHomeEntryReady(() => {
+      throw new Error('broken visual subscriber');
+    });
+    const onReady = vi.fn();
+    handoff.subscribeHomeEntryReady(onReady);
+    expect(() => handoff.markHomeEntryReady()).not.toThrow();
+    expect(onReady).toHaveBeenCalledWith(1);
+  });
+
+  it('unblocks navigation and releases the layer when iOS stops delivering frames', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const releaseLayer = vi.fn();
+    const unsubscribe = handoff.subscribeHomeEntryHandoff((request) => {
+      request.subscribePreparationFallback(releaseLayer);
+      request.completeSourceCentering();
+    });
+    let navigated = false;
+    const navigation = handoff.beginHomeEntryHandoffAfterScrollReset().then(() => {
+      navigated = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+    await navigation;
+
+    expect(navigated).toBe(true);
+    expect(releaseLayer).toHaveBeenCalledOnce();
+    unsubscribe();
+  });
+
+  it('allows navigation when keyboard preparation never finishes', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    const { registerIdentityFlowKeyboardResetForHandoff } = await import('./identity-flow-scroll');
+    const unregisterKeyboard = registerIdentityFlowKeyboardResetForHandoff(
+      () => new Promise<void>(() => undefined),
+    );
+    const releaseLayer = vi.fn();
+    const unsubscribe = handoff.subscribeHomeEntryHandoff((request) => {
+      request.subscribePreparationFallback(releaseLayer);
+      request.completeSourceCentering();
+    });
+    let navigated = false;
+    const navigation = handoff.beginHomeEntryHandoffAfterScrollReset().then(() => {
+      navigated = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(1599);
+    expect(navigated).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await navigation;
+
+    expect(navigated).toBe(true);
+    expect(releaseLayer).toHaveBeenCalledOnce();
+    unregisterKeyboard();
+    unsubscribe();
+  });
+
+  it('continues navigation and dismisses the layer when animation frames never arrive', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    const { handoff } = await loadHomeEntryHandoff();
+    const dismissLayer = vi.fn();
+    handoff.subscribeHomeEntryHandoff((request) => {
+      request.completeSourceCentering();
+      request.subscribePreparationFallback(dismissLayer);
+    });
+    const request = handoff.beginHomeEntryHandoffAfterScrollReset();
+    await vi.advanceTimersByTimeAsync(1600);
+    await request;
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds a stuck keyboard reset and never resumes scrolling after it settles late', async () => {
+    const { handoff, remeasure } = await loadHomeEntryHandoff();
+    const scroll = await import('@/lib/identity-flow-scroll');
+    let releaseKeyboard: (() => void) | undefined;
+    scroll.registerIdentityFlowKeyboardResetForHandoff(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseKeyboard = resolve;
+        }),
+    );
+    const remeasureListener = vi.fn();
+    remeasure.subscribeLaunchTargetRemeasure(remeasureListener);
+    const dismissLayer = vi.fn();
+    handoff.subscribeHomeEntryHandoff((request) => {
+      request.completeSourceCentering();
+      request.subscribePreparationFallback(dismissLayer);
+    });
+    const request = handoff.beginHomeEntryHandoffAfterScrollReset();
+    await vi.advanceTimersByTimeAsync(1600);
+    await request;
+    releaseKeyboard?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(remeasureListener).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('releases failed visual listeners and allows a subsequent handoff', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    const dismissLayer = vi.fn();
+    handoff.subscribeHomeEntryHandoff((request) => {
+      request.completeSourceCentering();
+      request.subscribePreparationFallback(dismissLayer);
+    });
+    const unsubscribeBroken = handoff.subscribeHomeEntryHandoff(() => {
+      throw new Error('broken overlay');
+    });
+    await handoff.beginHomeEntryHandoffAfterScrollReset();
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    unsubscribeBroken();
+    const nextRequest = handoff.beginHomeEntryHandoffAfterScrollReset();
+    await vi.advanceTimersByTimeAsync(1000);
+    await nextRequest;
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('continues navigation when keyboard preparation rejects asynchronously', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    const scroll = await import('@/lib/identity-flow-scroll');
+    scroll.registerIdentityFlowKeyboardResetForHandoff(() =>
+      Promise.reject(new Error('keyboard failure')),
+    );
+    const dismissLayer = vi.fn();
+    handoff.subscribeHomeEntryHandoff((request) => {
+      request.completeSourceCentering();
+      request.subscribePreparationFallback(dismissLayer);
+    });
+    const request = handoff.beginHomeEntryHandoffAfterScrollReset();
+    await vi.advanceTimersByTimeAsync(1000);
+    await request;
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not scroll a newly mounted screen after a delayed keyboard reset', async () => {
+    const { handoff } = await loadHomeEntryHandoff();
+    const scroll = await import('@/lib/identity-flow-scroll');
+    const originalScroll = vi.fn();
+    const nextScroll = vi.fn();
+    const removeOriginal = scroll.registerIdentityFlowScrollView(
+      {
+        current: { scrollTo: originalScroll } as never,
+      },
+      { viewportHeight: 800 },
+    );
+    let releaseKeyboard: (() => void) | undefined;
+    scroll.registerIdentityFlowKeyboardResetForHandoff(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseKeyboard = resolve;
+        }),
+    );
+    const dismissLayer = vi.fn();
+    handoff.subscribeHomeEntryHandoff((request) => {
+      request.completeSourceCentering();
+      request.subscribePreparationFallback(dismissLayer);
+    });
+    const request = handoff.beginHomeEntryHandoffAfterScrollReset();
+    await vi.advanceTimersByTimeAsync(10);
+    removeOriginal();
+    scroll.registerIdentityFlowScrollView(
+      { current: { scrollTo: nextScroll } as never },
+      { viewportHeight: 800 },
+    );
+    releaseKeyboard?.();
+    await request;
+    expect(nextScroll).not.toHaveBeenCalled();
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

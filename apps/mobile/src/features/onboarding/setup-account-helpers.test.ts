@@ -70,7 +70,7 @@ describe('setup account helpers', () => {
         hasEmailPassword: true,
         hasGoogle: true,
       }),
-    ).toEqual(['password', 'google', 'apple']);
+    ).toEqual(['recent_auth', 'google', 'apple', 'password']);
   });
 
   it('normalizes route params from Expo arrays and strings', () => {

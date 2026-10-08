@@ -116,7 +116,7 @@ describe('contact resolution queue helpers', () => {
         pendingPhoneE164Set: new Set(['+573003']),
         phoneE164List: ['+573001', '+573002', '+573002', '+573003', '+573004'],
         targetCache: {
-          '+573001': resolution('+573001', 'active_user'),
+          '+573001': { ...resolution('+573001', 'active_user'), resolvedAt: Date.now() },
         },
       }),
     ).toEqual(['+573002']);
@@ -359,49 +359,49 @@ describe('people target resolution cache helpers', () => {
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 23 * 60 * 60 * 1000,
+        resolvedAt: now - 23_000,
         status: 'active_user',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 29 * 24 * 60 * 60 * 1000,
+        resolvedAt: now - 59_000,
         status: 'already_related',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 31 * 24 * 60 * 60 * 1000,
+        resolvedAt: now - 61_000,
         status: 'already_related',
       }),
     ).toBe(false);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 29 * 24 * 60 * 60 * 1000,
+        resolvedAt: now - 59_000,
         status: 'no_account',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 31 * 24 * 60 * 60 * 1000,
+        resolvedAt: now - 61_000,
         status: 'no_account',
       }),
     ).toBe(false);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 10 * 60 * 1000,
+        resolvedAt: now - 20_000,
         status: 'pending_friendship',
       }),
     ).toBe(true);
     expect(
       isPeopleTargetResolutionCacheEntryFresh({
         now,
-        resolvedAt: now - 20 * 60 * 1000,
+        resolvedAt: now - 31_000,
         status: 'pending_activation',
       }),
     ).toBe(false);

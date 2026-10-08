@@ -45,6 +45,9 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit:dependencies
 
+      - name: Check EAS Update configuration
+        run: pnpm check:eas-update
+
       - name: Build landing
         run: pnpm build:landing
 

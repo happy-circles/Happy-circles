@@ -27,6 +27,8 @@ import {
 } from '@/features/invites/people-outreach-utils';
 import { showBlockedActionAlert, type ActionFeedbackVariant } from '@/lib/action-feedback';
 import { showGlobalFeedback } from '@/lib/global-feedback';
+import { pushRoute } from '@/lib/navigation';
+import { assertAccountDeliveryCurrent } from '@/features/invites/invite-delivery-validation';
 import type {
   AccountInviteDeliveryResult,
   PeopleOutreachResult,
@@ -52,10 +54,10 @@ export interface AddPersonContactActionFeedback {
 }
 
 export function useAddPersonOutreachActions({
+  onClose,
   busyKey,
   createPeopleOutreach,
   ensurePhoneStatuses,
-  mergeAndPersistTargetResolutions,
   resolvePhoneStatusesNow,
   router,
   setBusyKey,
@@ -63,12 +65,10 @@ export function useAddPersonOutreachActions({
   targetCache,
   transactionContext,
 }: {
+  readonly onClose: () => void;
   readonly busyKey: string | null;
   readonly createPeopleOutreach: CreatePeopleOutreachMutation;
   readonly ensurePhoneStatuses: (phoneE164List: readonly string[]) => Promise<void>;
-  readonly mergeAndPersistTargetResolutions: (
-    resolutions: readonly PeopleTargetResolution[],
-  ) => void;
   readonly resolvePhoneStatusesNow: (
     phoneE164List: readonly string[],
   ) => Promise<readonly PeopleTargetResolution[]>;
@@ -84,6 +84,7 @@ export function useAddPersonOutreachActions({
     useState<AddPersonContactActionFeedback | null>(null);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackResolveRef = useRef<(() => void) | null>(null);
+  const actionInFlightRef = useRef(false);
 
   const pendingContactOptions = useMemo<readonly EnrichedContact[]>(
     () =>
@@ -182,6 +183,7 @@ export function useAddPersonOutreachActions({
   }, []);
 
   async function shareAccountInviteLink(alias: string, delivery: AccountInviteDeliveryResult) {
+    await assertAccountDeliveryCurrent(delivery);
     const inviteLink = buildAppInviteLink(delivery.deliveryToken);
     const shareMessage = buildAccountInviteShareMessage({
       amountMinor: transactionContext?.amountMinor ?? null,
@@ -232,64 +234,6 @@ export function useAddPersonOutreachActions({
         tone: 'neutral',
       });
     }
-  }
-
-  function updateCacheFromOutreach(
-    phoneE164: string,
-    alias: string,
-    response: PeopleOutreachResult,
-  ) {
-    let resolution: PeopleTargetResolution;
-
-    if (response.kind === 'already_related') {
-      resolution = {
-        accountInviteId: null,
-        accountInviteStatus: null,
-        avatarPath: null,
-        displayName: response.displayName ?? alias,
-        friendshipInviteId: null,
-        matchedUserId: response.matchedUserId,
-        phoneE164,
-        relationshipId: response.relationshipId ?? null,
-        status: 'already_related',
-      };
-      mergeAndPersistTargetResolutions([resolution]);
-      return;
-    }
-
-    if (response.kind === 'friendship') {
-      resolution = {
-        accountInviteId: null,
-        accountInviteStatus: null,
-        avatarPath: null,
-        displayName: response.displayName ?? alias,
-        friendshipInviteId: response.inviteId ?? null,
-        matchedUserId: response.matchedUserId,
-        phoneE164,
-        relationshipId: response.relationshipId ?? null,
-        status: 'pending_friendship',
-      };
-      mergeAndPersistTargetResolutions([resolution]);
-      return;
-    }
-
-    const accountInviteId =
-      isAccountInviteDeliveryResult(response.result) && typeof response.result.inviteId === 'string'
-        ? response.result.inviteId
-        : (response.inviteId ?? null);
-
-    resolution = {
-      accountInviteId,
-      accountInviteStatus: 'pending_activation',
-      avatarPath: null,
-      displayName: response.displayName ?? alias,
-      friendshipInviteId: null,
-      matchedUserId: response.matchedUserId,
-      phoneE164,
-      relationshipId: null,
-      status: 'pending_activation',
-    };
-    mergeAndPersistTargetResolutions([resolution]);
   }
 
   function confirmHappyCirclesFriendship(alias: string): Promise<boolean> {
@@ -360,11 +304,14 @@ export function useAddPersonOutreachActions({
     }
 
     if (action === 'block_pending_friendship') {
-      setMessage(`${input.alias} ya tiene una solicitud pendiente.`);
-      await showContactActionResult({
-        alias: input.alias,
-        message: 'No enviamos otra solicitud para el mismo contacto.',
-        title: 'Solicitud pendiente',
+      hideContactActionFeedback();
+      onClose();
+      pushRoute(router, {
+        pathname: '/people',
+        params: {
+          requests: '1',
+          requestTab: resolution.friendshipDirection === 'incoming' ? 'received' : 'sent',
+        },
       });
       return false;
     }
@@ -394,10 +341,11 @@ export function useAddPersonOutreachActions({
     readonly phoneLabel?: string | null;
     readonly sourceContext: string;
   }) {
-    if (busyKey) {
+    if (busyKey || actionInFlightRef.current) {
       return;
     }
 
+    actionInFlightRef.current = true;
     setBusyKey(input.phoneE164);
     setMessage(`Preparando invitación para ${input.alias}.`);
     showContactActionLoading({
@@ -424,7 +372,30 @@ export function useAddPersonOutreachActions({
         sourceContext: input.sourceContext,
       });
 
-      updateCacheFromOutreach(input.phoneE164, input.alias, response);
+      const current = (await resolvePhoneStatusesNow([input.phoneE164]).catch(() => [])).find(
+        (row) => row.phoneE164 === input.phoneE164,
+      );
+      if (!current) {
+        setMessage(
+          'La operación fue procesada. Consulta el contacto para confirmar su estado actual.',
+        );
+        return;
+      }
+      if (current.status === 'already_related') {
+        setMessage(`${input.alias} ya aparece en tus personas.`);
+        return;
+      }
+      if (response.kind === 'friendship' && current.status !== 'pending_friendship') {
+        setMessage('La solicitud ya fue cerrada. Puedes enviar una nueva.');
+        return;
+      }
+      if (
+        response.kind === 'account_invite' &&
+        current.accountInviteId !== response.result?.inviteId
+      ) {
+        setMessage('Este acceso ya cambió de estado. Vuelve a consultar para continuar.');
+        return;
+      }
 
       if (response.kind === 'already_related') {
         setMessage(`${input.alias} ya aparece en tus personas.`);
@@ -482,12 +453,14 @@ export function useAddPersonOutreachActions({
       });
       showBlockedActionAlert(failureMessage, router);
     } finally {
+      actionInFlightRef.current = false;
+      hideContactActionFeedback();
       setBusyKey(null);
     }
   }
 
   async function handleContactPress(contact: ContactCandidate) {
-    if (busyKey) {
+    if (busyKey || actionInFlightRef.current) {
       return;
     }
 

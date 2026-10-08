@@ -15,10 +15,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { SurfaceCard } from '@/components/surface-card';
 import type { BrandVerificationState } from '@/components/brand-verification-lockup';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import {
-  clearPendingInviteIntentIfMatches,
-  writePendingInviteIntent,
-} from '@/lib/invite-intent';
+import { clearPendingInviteIntentIfMatches, writePendingInviteIntent } from '@/lib/invite-intent';
 import { beginHomeEntryHandoffAfterScrollReset } from '@/lib/home-entry-handoff';
 import { returnToRoute } from '@/lib/navigation';
 import { buildSetupAccountHref } from '@/lib/setup-account';
@@ -30,6 +27,7 @@ import {
 import { theme } from '@/lib/theme';
 import { useSession } from '@/providers/session-provider';
 import { AppText } from '@/components/app-text';
+import { inviteActionResult } from '@/features/people/invite-action-result';
 
 const USED_FRIENDSHIP_INVITE_MESSAGE =
   'Esta invitación ya fue utilizada. Pídele a quien te invitó que genere una nueva desde la app.';
@@ -275,7 +273,9 @@ export function InviteLinkScreen() {
       setMessage(
         response.status === 'accepted'
           ? 'Conexión confirmada. La amistad ya quedó creada.'
-          : 'Reclamaste esta invitación. Ahora falta la validación final del otro lado.',
+          : response.status === 'pending_sender_review'
+            ? 'Reclamaste esta invitación. Ahora falta la validación final del otro lado.'
+            : inviteActionResult(response.status).message,
       );
       await previewQuery.refetch();
     } catch (error) {
@@ -294,7 +294,7 @@ export function InviteLinkScreen() {
     setMessage(null);
 
     try {
-      await reviewInvite.mutateAsync({
+      const response = await reviewInvite.mutateAsync({
         inviteId: preview.inviteId,
         decision,
       });
@@ -304,11 +304,7 @@ export function InviteLinkScreen() {
           token: deliveryToken,
         });
       }
-      setMessage(
-        decision === 'approve'
-          ? 'Conexión confirmada. La amistad ya quedó creada.'
-          : 'Invitación cerrada. Puedes generar otra si lo necesitas.',
-      );
+      setMessage(inviteActionResult(response.status).message);
       await previewQuery.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo completar la validación.');
@@ -344,7 +340,7 @@ export function InviteLinkScreen() {
       <InviteDecisionButton
         disabled={Boolean(busyAction)}
         icon="close-circle-outline"
-        label="No aceptar"
+        label="Ahora no"
         onPress={() => void handleDismissInvite()}
         tone="danger"
       />
@@ -360,14 +356,20 @@ export function InviteLinkScreen() {
       />
       <InviteDecisionButton
         disabled={Boolean(busyAction)}
-        icon={busyAction === 'reject' ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
+        icon={
+          busyAction === 'reject' ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'
+        }
         label={busyAction === 'reject' ? 'Enviando' : 'No aceptar'}
         onPress={() => void handleReview('reject')}
         tone="danger"
       />
     </View>
   ) : preview ? (
-    <PrimaryAction label="Volver al inicio" onPress={() => void navigateHome()} variant="secondary" />
+    <PrimaryAction
+      label="Volver al inicio"
+      onPress={() => void navigateHome()}
+      variant="secondary"
+    />
   ) : undefined;
 
   return (
@@ -400,7 +402,6 @@ export function InviteLinkScreen() {
               ) : null}
             </View>
           </View>
-
         </SurfaceCard>
       ) : null}
     </IdentityFlowScreen>

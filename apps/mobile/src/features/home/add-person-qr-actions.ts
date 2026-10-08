@@ -1,8 +1,16 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import * as Clipboard from 'expo-clipboard';
-import type { BarcodeScanningResult } from 'expo-camera';
+import { Camera, type BarcodeScanningResult } from 'expo-camera';
 import type { Router } from 'expo-router';
-import { Share } from 'react-native';
+import { Alert, AppState, Linking, Share } from 'react-native';
 
 import { isFreshQrDelivery } from '@/features/home/contacts-sheet-helpers';
 import {
@@ -13,13 +21,16 @@ import {
 import { showBlockedActionAlert } from '@/lib/action-feedback';
 import type { FriendshipInviteDeliveryResult } from '@/lib/live-data';
 import { pushRoute } from '@/lib/navigation';
+import { assertFriendshipDeliveryCurrent } from '@/features/invites/invite-delivery-validation';
 
 type CameraPermissionState = {
   readonly granted?: boolean;
+  readonly canAskAgain?: boolean;
 } | null;
 
 type RequestCameraPermission = () => Promise<{
   readonly granted: boolean;
+  readonly canAskAgain?: boolean;
 }>;
 
 type CreateExternalFriendshipInviteMutation = {
@@ -52,6 +63,45 @@ export function useAddPersonQrActions({
   const [myQrVisible, setMyQrVisible] = useState(false);
   const [myQrDelivery, setMyQrDelivery] = useState<FriendshipInviteDeliveryResult | null>(null);
   const [myQrMessage, setMyQrMessage] = useState<string | null>(null);
+  const resumeScannerAfterSettingsRef = useRef(false);
+  const cameraSettingsAttemptRef = useRef(0);
+
+  useEffect(() => {
+    let disposed = false;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' || !resumeScannerAfterSettingsRef.current) {
+        return;
+      }
+
+      resumeScannerAfterSettingsRef.current = false;
+      const attempt = cameraSettingsAttemptRef.current;
+      void Camera.getCameraPermissionsAsync()
+        .then((permission) => {
+          if (disposed || cameraSettingsAttemptRef.current !== attempt) {
+            return;
+          }
+
+          if (!permission.granted) {
+            setMessage('La cámara sigue bloqueada. Puedes mostrar tu QR para conectar.');
+            return;
+          }
+
+          setMessage(null);
+          setScannerLocked(false);
+          setScannerOpen(true);
+        })
+        .catch(() => {
+          if (!disposed && cameraSettingsAttemptRef.current === attempt) {
+            setMessage('No pudimos comprobar la cámara. Vuelve a tocar Escanear QR.');
+          }
+        });
+    });
+
+    return () => {
+      disposed = true;
+      subscription.remove();
+    };
+  }, [setMessage]);
 
   const myQrLink = useMemo(
     () =>
@@ -62,12 +112,41 @@ export function useAddPersonQrActions({
   );
 
   const resetQrStateOnClose = useCallback(() => {
+    resumeScannerAfterSettingsRef.current = false;
+    cameraSettingsAttemptRef.current += 1;
     setScannerOpen(false);
     setScannerLocked(false);
     setScannerMessage(null);
     setMyQrVisible(false);
+    setMyQrDelivery(null);
     setMyQrMessage(null);
   }, []);
+
+  function openCameraSettings() {
+    Alert.alert(
+      'Permiso de cámara bloqueado',
+      'Permite la cámara en Ajustes para escanear QR. También puedes mostrar tu QR para conectar.',
+      [
+        { style: 'cancel', text: 'Ahora no' },
+        {
+          text: 'Abrir ajustes',
+          onPress: () => {
+            const attempt = cameraSettingsAttemptRef.current + 1;
+            cameraSettingsAttemptRef.current = attempt;
+            resumeScannerAfterSettingsRef.current = true;
+            void Linking.openSettings().catch(() => {
+              if (cameraSettingsAttemptRef.current === attempt) {
+                resumeScannerAfterSettingsRef.current = false;
+                setMessage(
+                  'No pudimos abrir Ajustes. Permite la cámara desde los ajustes del teléfono.',
+                );
+              }
+            });
+          },
+        },
+      ],
+    );
+  }
 
   function navigateToInviteToken(rawValue: string) {
     const token = extractInviteToken(rawValue);
@@ -95,14 +174,26 @@ export function useAddPersonQrActions({
       return;
     }
 
-    const permission = await requestCameraPermission();
-    if (!permission.granted) {
-      setMessage('Necesitamos permiso de cámara para escanear QR.');
+    if (cameraPermission?.canAskAgain === false) {
+      openCameraSettings();
       return;
     }
 
-    setScannerLocked(false);
-    setScannerOpen(true);
+    try {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        setMessage('Necesitamos permiso de cámara para escanear QR.');
+        if (permission.canAskAgain === false) {
+          openCameraSettings();
+        }
+        return;
+      }
+
+      setScannerLocked(false);
+      setScannerOpen(true);
+    } catch {
+      setMessage('No pudimos abrir la cámara. Vuelve a intentar o muestra tu QR.');
+    }
   }
 
   async function handleRefreshMyQr() {
@@ -116,6 +207,7 @@ export function useAddPersonQrActions({
       if (!delivery.deliveryToken) {
         throw new Error('No pudimos preparar tu QR.');
       }
+      await assertFriendshipDeliveryCurrent(delivery);
       setMyQrDelivery(delivery);
     } catch (error) {
       const failureMessage = error instanceof Error ? error.message : 'No se pudo crear tu QR.';

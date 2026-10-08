@@ -1,7 +1,14 @@
-import { handleRpc, requireString, createServiceRoleClient } from '../_shared/http.ts';
+import { requireAuthorizedDeviceSession } from '../_shared/authorized-device-session.ts';
+import {
+  handleRpc,
+  requireString,
+  createServiceRoleClient,
+  createVerifiedUserClient,
+} from '../_shared/http.ts';
 
 Deno.serve((request) =>
-  handleRpc(request, async (body, actorUserId) => {
+  handleRpc(request, async (body, actorUserId, authContext) => {
+    await requireAuthorizedDeviceSession(createVerifiedUserClient(authContext), authContext);
     const client = createServiceRoleClient();
     const { data, error } = await client.rpc('decide_cycle_settlement', {
       p_actor_user_id: actorUserId,

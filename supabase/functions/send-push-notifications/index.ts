@@ -1,4 +1,5 @@
 import { createServiceRoleClient, handlePublicRpc, jsonResponse } from '../_shared/http.ts';
+import { isPushEventCurrent } from './eligibility.ts';
 
 const pushWorkerSecret =
   readEnvSecret('PUSH_NOTIFICATION_WORKER_SECRET') ??
@@ -128,7 +129,10 @@ async function updateEventStatus(
   const { error } = await client
     .from('push_notification_events')
     .update(payload)
-    .eq('id', event.id);
+    .eq('id', event.id)
+    // A cancellation can retire an event while its worker awaits the network.
+    // Never resurrect that terminal event on a failed send or a late retry.
+    .in('status', ['pending', 'processing']);
 
   if (error) {
     throw error;
@@ -239,6 +243,15 @@ Deno.serve((request) => {
 
           if (devices.length === 0) {
             await updateEventStatus(client, event, 'skipped', 'no_active_push_devices');
+            results.push({ eventId: event.id, status: 'skipped' });
+            continue;
+          }
+
+          const current = await isPushEventCurrent(event, async (eventId) =>
+            client.rpc('friendship_push_event_is_current', { p_event_id: eventId }),
+          );
+          if (!current) {
+            await updateEventStatus(client, event, 'skipped', 'friendship_invite_resolved');
             results.push({ eventId: event.id, status: 'skipped' });
             continue;
           }

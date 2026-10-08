@@ -87,4 +87,53 @@ describe('setup entry handoff coordinator', () => {
     expect(settled).toBe(true);
     unsubscribeHandoff();
   });
+
+  it('skips publishing a late setup layer when frames never arrive', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    const { handoff } = await loadSetupEntryHandoff();
+    const publishLayer = vi.fn();
+    handoff.subscribeSetupEntryHandoff(publishLayer);
+    const request = handoff.beginSetupEntryHandoff();
+    await vi.advanceTimersByTimeAsync(1600);
+    await request;
+    expect(publishLayer).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('skips the layer when keyboard reset times out or settles after navigation', async () => {
+    const { handoff } = await loadSetupEntryHandoff();
+    const scroll = await import('@/lib/identity-flow-scroll');
+    let releaseKeyboard: (() => void) | undefined;
+    scroll.registerIdentityFlowKeyboardResetForHandoff(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseKeyboard = resolve;
+        }),
+    );
+    const publishLayer = vi.fn();
+    handoff.subscribeSetupEntryHandoff(publishLayer);
+    const request = handoff.beginSetupEntryHandoff();
+    await vi.advanceTimersByTimeAsync(1600);
+    await request;
+    releaseKeyboard?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(publishLayer).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('dismisses the published layer when another visual listener throws', async () => {
+    const { handoff } = await loadSetupEntryHandoff();
+    const dismissLayer = vi.fn();
+    handoff.subscribeSetupEntryHandoff((request) =>
+      request.subscribePreparationFallback(dismissLayer),
+    );
+    handoff.subscribeSetupEntryHandoff(() => {
+      throw new Error('broken overlay');
+    });
+    const request = handoff.beginSetupEntryHandoff();
+    await vi.advanceTimersByTimeAsync(1000);
+    await request;
+    expect(dismissLayer).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

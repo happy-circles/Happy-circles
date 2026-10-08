@@ -54,11 +54,6 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ inputs.auto_submit }}" = "true" ] && [ "${{ inputs.platform }}" != "ios" ]; then
-            echo "::error::Android auto-submit is disabled until a Play submission service account is configured."
-            exit 1
-          fi
-
           conclusion="$(gh run list \
             --repo "${GITHUB_REPOSITORY}" \
             --workflow security-ci.yml \
@@ -74,6 +69,51 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify production update configuration and backend
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_DOTENV: '1'
+        run: |
+          runtime="$(node -p "require('./update-policy.json').runtimeVersion")"
+          pnpm dlx eas-cli@21.7.1 env:exec production \
+            "node ../../scripts/check-eas-update.mjs --target production --environment production --expected-runtime ${runtime}" \
+            --non-interactive
+
+      - name: Verify Android submission credentials
+        if: ${{ inputs.auto_submit && inputs.platform != 'ios' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const { projectId } = JSON.parse(readFileSync('apps/mobile/update-policy.json', 'utf8'));
+          const response = await fetch('https://api.expo.dev/graphql', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: `Bearer ${process.env.EXPO_TOKEN}`,
+            },
+            body: JSON.stringify({
+              query: `query AndroidSubmissionCredentials($appId: String!) {
+                app { byId(appId: $appId) {
+                  androidAppCredentials(filter: { applicationIdentifier: "com.happycircles.app" }) {
+                    googleServiceAccountKeyForSubmissions { id }
+                  }
+                } }
+              }`,
+              variables: { appId: projectId },
+            }),
+            signal: AbortSignal.timeout(30_000),
+          });
+          const result = await response.json();
+          if (!response.ok || result.errors) {
+            throw new Error('Unable to verify Android submission credentials in EAS.');
+          }
+          const credentials = result.data?.app?.byId?.androidAppCredentials;
+          if (!credentials?.some((entry) => entry.googleServiceAccountKeyForSubmissions?.id)) {
+            throw new Error('A Play Store submission service account must be configured in EAS.');
+          }
+          console.log('Android submission credentials verified in EAS.');
+          NODE
 
       - name: Queue and wait for EAS production build
         working-directory: apps/mobile

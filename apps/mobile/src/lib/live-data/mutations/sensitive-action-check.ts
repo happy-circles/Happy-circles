@@ -1,58 +1,108 @@
-interface SensitiveStepUpResult {
-  readonly success: boolean;
-  readonly error?: string | null;
+export interface ActionIdentityConfirmationInput {
+  readonly actionLabel: string;
+  readonly purpose: 'device' | 'sensitive';
+  readonly force?: boolean;
 }
 
+export type ConfirmActionIdentity = (input: ActionIdentityConfirmationInput) => Promise<boolean>;
+
 export interface SensitiveMutationSession {
-  readonly biometricLabel: string;
-  readonly deviceTrustState: string;
+  readonly userId: string | null;
   readonly isEmailConfirmed: boolean;
   readonly profileCompletionState: string;
-  stepUpAuth(): Promise<SensitiveStepUpResult>;
+  readonly isAuthorizedDeviceSession: boolean;
+  readonly isLocked: boolean;
+}
+
+export class IdentityConfirmationCancelledError extends Error {
+  constructor() {
+    super('Acción cancelada.');
+    this.name = 'IdentityConfirmationCancelledError';
+  }
+}
+
+export function isIdentityConfirmationCancelled(error: unknown): boolean {
+  return error instanceof Error && error.name === 'IdentityConfirmationCancelledError';
+}
+
+export function isDeviceAuthorizationRequired(error: unknown): boolean {
+  return (
+    Boolean(error) &&
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'device_authorization_required'
+  );
+}
+
+function assertAccountReady(
+  session: SensitiveMutationSession,
+): asserts session is SensitiveMutationSession & { readonly userId: string } {
+  if (!session.userId) {
+    throw new Error('Inicia sesión para continuar.');
+  }
+  if (!session.isEmailConfirmed) {
+    throw new Error('Confirma tu correo antes de mover dinero o aprobar cambios sensibles.');
+  }
+  if (session.profileCompletionState !== 'complete') {
+    throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
+  }
 }
 
 export async function guardSensitiveMutationAction(
   session: SensitiveMutationSession,
   actionLabel: string,
+  confirmIdentity: ConfirmActionIdentity,
 ): Promise<void> {
-  if (!session.isEmailConfirmed) {
-    throw new Error('Confirma tu correo antes de mover dinero o aprobar cambios sensibles.');
+  assertAccountReady(session);
+  if (session.isAuthorizedDeviceSession && !session.isLocked) {
+    return;
   }
 
-  if (session.profileCompletionState !== 'complete') {
-    throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
+  const confirmed = await confirmIdentity({
+    actionLabel,
+    purpose: session.isAuthorizedDeviceSession ? 'sensitive' : 'device',
+    force: session.isLocked,
+  });
+  if (!confirmed) {
+    throw new IdentityConfirmationCancelledError();
+  }
+}
+
+export async function runAuthorizedMutationAction<T>(input: {
+  readonly actionLabel: string;
+  readonly readSession: () => SensitiveMutationSession;
+  readonly confirmIdentity: ConfirmActionIdentity;
+  readonly action: (expectedUserId: string) => Promise<T>;
+}): Promise<T> {
+  const originalSession = input.readSession();
+  assertAccountReady(originalSession);
+  const expectedUserId = originalSession.userId;
+  await guardSensitiveMutationAction(originalSession, input.actionLabel, input.confirmIdentity);
+
+  function assertSameAccount() {
+    if (input.readSession().userId !== expectedUserId) {
+      throw new Error('La sesión cambió. Vuelve a intentar la acción.');
+    }
   }
 
-  if (session.deviceTrustState !== 'trusted') {
-    throw new Error('Este teléfono aún no es confiable. Confíalo primero desde seguridad.');
-  }
-
-  const result = await session.stepUpAuth();
-  if (!result.success) {
-    if (
-      result.error === 'not_available' ||
-      result.error === 'not_enrolled' ||
-      result.error === 'passcode_not_set'
-    ) {
-      throw new Error(
-        `Este dispositivo no puede usar ${session.biometricLabel} para ${actionLabel}.`,
-      );
+  assertSameAccount();
+  try {
+    return await input.action(expectedUserId);
+  } catch (error) {
+    if (!isDeviceAuthorizationRequired(error)) {
+      throw error;
     }
-
-    if (result.error === 'lockout') {
-      throw new Error(
-        `${session.biometricLabel} está bloqueado temporalmente. Desbloquea el dispositivo y vuelve a intentar.`,
-      );
+    assertSameAccount();
+    const confirmed = await input.confirmIdentity({
+      actionLabel: input.actionLabel,
+      purpose: 'device',
+      force: true,
+    });
+    if (!confirmed) {
+      throw new IdentityConfirmationCancelledError();
     }
-
-    if (result.error === 'user_cancel') {
-      throw new Error(`Cancelaste ${session.biometricLabel}.`);
-    }
-
-    if (result.error === 'authentication_failed') {
-      throw new Error(`No se pudo validar ${session.biometricLabel} para ${actionLabel}.`);
-    }
-
-    throw new Error(`No se pudo validar tu identidad para ${actionLabel}.`);
+    assertSameAccount();
+    return input.action(expectedUserId);
   }
 }

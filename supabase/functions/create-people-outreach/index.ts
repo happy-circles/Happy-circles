@@ -1,4 +1,5 @@
 import { createServiceRoleClient, handleRpc, requireString } from '../_shared/http.ts';
+import { readPayloadString, triggerPushNotificationWorker } from '../_shared/push-notifications.ts';
 
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId) => {
@@ -32,6 +33,10 @@ Deno.serve((request) =>
       throw error;
     }
 
+    if (readPayloadString(data, 'kind') === 'friendship') {
+      // The invitation RPC commits its outbox event atomically with creation.
+      triggerPushNotificationWorker(10);
+    }
     return data;
   }),
 );

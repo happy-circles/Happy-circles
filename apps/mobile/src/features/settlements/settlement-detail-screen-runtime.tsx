@@ -1,3 +1,4 @@
+import { isIdentityConfirmationCancelled } from '@/lib/live-data/mutations/sensitive-action-check';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -194,6 +195,7 @@ export function SettlementDetailScreen({ proposalId }: SettlementDetailScreenPro
         showSnackbar('Happy Circle no aprobado.', 'neutral');
       }
     } catch (error) {
+      if (isIdentityConfirmationCancelled(error)) return;
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la acción.';
       if (

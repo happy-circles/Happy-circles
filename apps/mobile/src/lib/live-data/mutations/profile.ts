@@ -16,6 +16,7 @@ import type { AppSnapshot } from '../types';
 import { prefetchAvatarPaths } from '../../avatar-prefetch';
 import { uploadAvatar } from './avatar-upload';
 import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
+import { useSensitiveMutationGuard } from './sensitive-action-guard';
 
 export function useUpdateProfileAvatarMutation() {
   const session = useSession();
@@ -50,15 +51,15 @@ export function useUpdateProfileAvatarMutation() {
 }
 
 export function useRequestAccountDeletionMutation() {
+  const guardSensitiveAction = useSensitiveMutationGuard();
   return useMutation({
     mutationFn: async () => {
-      return invokeParsedEdgeFunction<
-        ReturnType<typeof requestAccountDeletionSchema.parse>,
-        AccountDeletionRequestResult
-      >(
-        'request-account-deletion',
-        requestAccountDeletionSchema,
-        withIdempotencyKey('request_account_deletion', {}),
+      const payload = withIdempotencyKey('request_account_deletion', {});
+      return guardSensitiveAction('eliminar tu cuenta', (expectedUserId) =>
+        invokeParsedEdgeFunction<
+          ReturnType<typeof requestAccountDeletionSchema.parse>,
+          AccountDeletionRequestResult
+        >('request-account-deletion', requestAccountDeletionSchema, payload, { expectedUserId }),
       );
     },
     onSuccess: async () => {

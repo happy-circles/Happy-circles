@@ -60,7 +60,7 @@ type CountRow = {
 
 type ActiveContactIndexRun = {
   cancelled: boolean;
-  readonly generation: number;
+  generation: number;
   promise: Promise<void>;
 };
 
@@ -72,8 +72,32 @@ const USERLESS_CACHE_KEY = '__anonymous__';
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const activeRunsByUser = new Map<string, ActiveContactIndexRun>();
+const contactIndexWritesByUser = new Map<string, Promise<void>>();
 const listenersByUser = new Map<string, Set<ContactIndexListener>>();
 const migratedLegacyCacheUsers = new Set<string>();
+
+async function writeForContactIndexRun(
+  userKey: string,
+  run: ActiveContactIndexRun,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const previous = contactIndexWritesByUser.get(userKey) ?? Promise.resolve();
+  const pending = previous
+    .catch(() => undefined)
+    .then(async () => {
+      if (activeRunsByUser.get(userKey) === run) {
+        await operation();
+      }
+    });
+  contactIndexWritesByUser.set(userKey, pending);
+  try {
+    await pending;
+  } finally {
+    if (contactIndexWritesByUser.get(userKey) === pending) {
+      contactIndexWritesByUser.delete(userKey);
+    }
+  }
+}
 
 function cacheUserKey(userId: string | null | undefined): string {
   return userId ?? USERLESS_CACHE_KEY;
@@ -404,8 +428,8 @@ async function removeOldContactGenerations(input: {
 function shouldResumeMeta(meta: ContactIndexMetaRow | null): boolean {
   return Boolean(
     meta &&
-      (meta.scan_status === 'paused' || meta.scan_status === 'indexing') &&
-      meta.scan_generation > 0,
+    (meta.scan_status === 'paused' || meta.scan_status === 'indexing') &&
+    meta.scan_generation > 0,
   );
 }
 
@@ -421,49 +445,18 @@ async function runContactIndex(input: {
   readonly userKey: string;
 }) {
   const database = await getDatabase();
+  const isCurrentRun = () => activeRunsByUser.get(input.userKey) === input.run;
+  const write = (operation: () => Promise<void>) =>
+    writeForContactIndexRun(input.userKey, input.run, operation);
   let loadedCount = input.initialLoadedCount;
   let pageOffset = input.initialPageOffset;
 
   try {
-    await writeContactIndexMeta({
-      contactCount: null,
-      database,
-      generation: input.generation,
-      lastCompletedAt: input.lastCompletedAt,
-      lastStartedAt: input.startedAt,
-      loadedCount,
-      nextPageOffset: pageOffset,
-      permissionStatus: input.permissionStatus,
-      status: 'indexing',
-      userKey: input.userKey,
-    });
-    notifyContactIndexSubscribers(input.userId);
-
-    let hasNextPage = true;
-    while (hasNextPage && !input.run.cancelled && AppState.currentState === 'active') {
-      const page = await readContactsPageFromDevice({
-        pageOffset,
-        pageSize: CONTACTS_PAGE_SIZE,
-      });
-
-      if (input.run.cancelled || AppState.currentState !== 'active') {
-        break;
-      }
-
-      const now = Date.now();
-      await persistContactPage({
-        contacts: page.contacts,
-        database,
-        generation: input.generation,
-        now,
-        userKey: input.userKey,
-      });
-
-      loadedCount += page.contacts.length;
-      pageOffset = page.nextPageOffset;
-      hasNextPage = page.hasNextPage;
-
-      await writeContactIndexMeta({
+    if (!isCurrentRun()) {
+      return;
+    }
+    await write(() =>
+      writeContactIndexMeta({
         contactCount: null,
         database,
         generation: input.generation,
@@ -474,66 +467,138 @@ async function runContactIndex(input: {
         permissionStatus: input.permissionStatus,
         status: 'indexing',
         userKey: input.userKey,
+      }),
+    );
+    if (!isCurrentRun()) {
+      return;
+    }
+    notifyContactIndexSubscribers(input.userId);
+
+    let hasNextPage = true;
+    while (hasNextPage && !input.run.cancelled && AppState.currentState === 'active') {
+      const page = await readContactsPageFromDevice({
+        pageOffset,
+        pageSize: CONTACTS_PAGE_SIZE,
       });
+
+      if (input.run.cancelled || !isCurrentRun() || AppState.currentState !== 'active') {
+        break;
+      }
+
+      const now = Date.now();
+      await write(() =>
+        persistContactPage({
+          contacts: page.contacts,
+          database,
+          generation: input.generation,
+          now,
+          userKey: input.userKey,
+        }),
+      );
+      if (!isCurrentRun()) {
+        return;
+      }
+
+      loadedCount += page.contacts.length;
+      pageOffset = page.nextPageOffset;
+      hasNextPage = page.hasNextPage;
+
+      await write(() =>
+        writeContactIndexMeta({
+          contactCount: null,
+          database,
+          generation: input.generation,
+          lastCompletedAt: input.lastCompletedAt,
+          lastStartedAt: input.startedAt,
+          loadedCount,
+          nextPageOffset: pageOffset,
+          permissionStatus: input.permissionStatus,
+          status: 'indexing',
+          userKey: input.userKey,
+        }),
+      );
+      if (!isCurrentRun()) {
+        return;
+      }
       notifyContactIndexSubscribers(input.userId);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
+    if (!isCurrentRun()) {
+      return;
+    }
     if (input.run.cancelled || AppState.currentState !== 'active') {
-      await writeContactIndexMeta({
+      await write(() =>
+        writeContactIndexMeta({
+          contactCount: null,
+          database,
+          generation: input.generation,
+          lastCompletedAt: input.lastCompletedAt,
+          lastStartedAt: input.startedAt,
+          loadedCount,
+          nextPageOffset: pageOffset,
+          permissionStatus: input.permissionStatus,
+          status: 'paused',
+          userKey: input.userKey,
+        }),
+      );
+      if (isCurrentRun()) {
+        notifyContactIndexSubscribers(input.userId);
+      }
+      return;
+    }
+
+    await write(() =>
+      removeOldContactGenerations({
+        database,
+        generation: input.generation,
+        userKey: input.userKey,
+      }),
+    );
+    if (!isCurrentRun()) {
+      return;
+    }
+    const contactCount = await countIndexedContacts(database, input.userKey);
+    await write(() =>
+      writeContactIndexMeta({
+        contactCount,
+        database,
+        generation: input.generation,
+        lastCompletedAt: Date.now(),
+        lastStartedAt: input.startedAt,
+        loadedCount: contactCount,
+        nextPageOffset: pageOffset,
+        permissionStatus: input.permissionStatus,
+        status: 'ready',
+        userKey: input.userKey,
+      }),
+    );
+    if (isCurrentRun()) {
+      notifyContactIndexSubscribers(input.userId);
+    }
+  } catch (error) {
+    if (input.run.cancelled || !isCurrentRun()) {
+      return;
+    }
+
+    await write(() =>
+      writeContactIndexMeta({
         contactCount: null,
         database,
+        errorMessage: error instanceof Error ? error.message : 'contact_index_failed',
         generation: input.generation,
         lastCompletedAt: input.lastCompletedAt,
         lastStartedAt: input.startedAt,
         loadedCount,
         nextPageOffset: pageOffset,
         permissionStatus: input.permissionStatus,
-        status: 'paused',
+        status: 'error',
         userKey: input.userKey,
-      });
+      }),
+    );
+    if (isCurrentRun()) {
       notifyContactIndexSubscribers(input.userId);
-      return;
     }
-
-    await removeOldContactGenerations({
-      database,
-      generation: input.generation,
-      userKey: input.userKey,
-    });
-    const contactCount = await countIndexedContacts(database, input.userKey);
-    await writeContactIndexMeta({
-      contactCount,
-      database,
-      generation: input.generation,
-      lastCompletedAt: Date.now(),
-      lastStartedAt: input.startedAt,
-      loadedCount: contactCount,
-      nextPageOffset: pageOffset,
-      permissionStatus: input.permissionStatus,
-      status: 'ready',
-      userKey: input.userKey,
-    });
-    notifyContactIndexSubscribers(input.userId);
-  } catch (error) {
-    if (input.run.cancelled) {
-      return;
-    }
-
-    await writeContactIndexMeta({
-      contactCount: null,
-      database,
-      errorMessage: error instanceof Error ? error.message : 'contact_index_failed',
-      generation: input.generation,
-      lastCompletedAt: input.lastCompletedAt,
-      lastStartedAt: input.startedAt,
-      loadedCount,
-      nextPageOffset: pageOffset,
-      permissionStatus: input.permissionStatus,
-      status: 'error',
-      userKey: input.userKey,
-    });
-    notifyContactIndexSubscribers(input.userId);
   } finally {
     if (activeRunsByUser.get(input.userKey) === input.run) {
       activeRunsByUser.delete(input.userKey);
@@ -602,12 +667,7 @@ export async function readContactIndex(input: {
              AND search_key LIKE ? ESCAPE '\\'
            ORDER BY alias COLLATE NOCASE ASC, primary_phone_e164 ASC
            LIMIT ?`,
-          [
-            userKey,
-            CONTACT_INDEX_SCHEMA_VERSION,
-            `%${escapeLikeValue(normalizedSearch)}%`,
-            limit,
-          ],
+          [userKey, CONTACT_INDEX_SCHEMA_VERSION, `%${escapeLikeValue(normalizedSearch)}%`, limit],
         )
       : await database.getAllAsync<ContactIndexRow>(
           `SELECT contact_json
@@ -646,50 +706,77 @@ export async function startContactIndexing(input: {
   const userKey = cacheUserKey(input.userId);
   const activeRun = activeRunsByUser.get(userKey);
   if (activeRun && !activeRun.cancelled) {
-    return;
+    if (input.reason !== 'permission_granted') {
+      return;
+    }
+    activeRun.cancelled = true;
   }
 
-  const permissionStatus = input.permissionStatus ?? (await getContactsPermissionStatus());
-  const database = await getDatabase();
-  await migrateLegacyContactCacheIfNeeded({ database, userId: input.userId, userKey });
-
-  if (!canReadContactsPermissionStatus(permissionStatus)) {
-    await markContactIndexPermissionBlocked({ database, permissionStatus, userKey });
-    notifyContactIndexSubscribers(input.userId);
-    return;
-  }
-
-  const meta = await readContactIndexMeta(database, userKey);
-  if (input.reason === 'sheet_open' && meta?.scan_status === 'ready') {
-    notifyContactIndexSubscribers(input.userId);
-    return;
-  }
-
-  if (input.reason === 'app_active' && meta?.scan_status === 'ready') {
-    notifyContactIndexSubscribers(input.userId);
-    return;
-  }
-
-  const resume = shouldResumeMeta(meta);
-  const generation = resume ? meta!.scan_generation : Date.now();
-  const startedAt = resume ? (meta!.last_started_at ?? Date.now()) : Date.now();
   const run: ActiveContactIndexRun = {
     cancelled: false,
-    generation,
+    generation: Math.max(Date.now(), (activeRun?.generation ?? 0) + 1),
     promise: Promise.resolve(),
   };
   activeRunsByUser.set(userKey, run);
-  run.promise = runContactIndex({
-    generation,
-    initialLoadedCount: resume ? meta!.loaded_count : 0,
-    initialPageOffset: resume ? meta!.next_page_offset : 0,
-    lastCompletedAt: meta?.last_completed_at ?? null,
-    permissionStatus,
-    run,
-    startedAt,
-    userId: input.userId,
-    userKey,
-  });
+  let started = false;
+  try {
+    const permissionStatus = input.permissionStatus ?? (await getContactsPermissionStatus());
+    const database = await getDatabase();
+    await writeForContactIndexRun(userKey, run, () =>
+      migrateLegacyContactCacheIfNeeded({ database, userId: input.userId, userKey }),
+    );
+    if (activeRunsByUser.get(userKey) !== run || run.cancelled) {
+      return;
+    }
+
+    if (!canReadContactsPermissionStatus(permissionStatus)) {
+      await writeForContactIndexRun(userKey, run, () =>
+        markContactIndexPermissionBlocked({ database, permissionStatus, userKey }),
+      );
+      if (activeRunsByUser.get(userKey) === run) {
+        notifyContactIndexSubscribers(input.userId);
+      }
+      return;
+    }
+
+    const meta = await readContactIndexMeta(database, userKey);
+    if (activeRunsByUser.get(userKey) !== run || run.cancelled) {
+      return;
+    }
+    const indexIsFresh =
+      meta?.last_completed_at && Date.now() - meta.last_completed_at < 5 * 60_000;
+    if (
+      (input.reason === 'sheet_open' || input.reason === 'app_active') &&
+      meta?.scan_status === 'ready' &&
+      indexIsFresh
+    ) {
+      notifyContactIndexSubscribers(input.userId);
+      return;
+    }
+
+    const resume = input.reason !== 'permission_granted' && shouldResumeMeta(meta);
+    const generation = resume
+      ? meta!.scan_generation
+      : Math.max(run.generation, (meta?.scan_generation ?? 0) + 1);
+    const startedAt = resume ? (meta!.last_started_at ?? Date.now()) : Date.now();
+    run.generation = generation;
+    run.promise = runContactIndex({
+      generation,
+      initialLoadedCount: resume ? meta!.loaded_count : 0,
+      initialPageOffset: resume ? meta!.next_page_offset : 0,
+      lastCompletedAt: meta?.last_completed_at ?? null,
+      permissionStatus,
+      run,
+      startedAt,
+      userId: input.userId,
+      userKey,
+    });
+    started = true;
+  } finally {
+    if (!started && activeRunsByUser.get(userKey) === run) {
+      activeRunsByUser.delete(userKey);
+    }
+  }
 }
 
 export function pauseContactIndexing(userId: string | null | undefined): void {
@@ -706,25 +793,35 @@ export function pauseContactIndexing(userId: string | null | undefined): void {
   void getDatabase()
     .then(async (database) => {
       const meta = await readContactIndexMeta(database, userKey);
-      if (!meta || meta.scan_status !== 'indexing') {
+      if (
+        !meta ||
+        meta.scan_status !== 'indexing' ||
+        !activeRun ||
+        activeRunsByUser.get(userKey) !== activeRun ||
+        meta.scan_generation !== activeRun.generation
+      ) {
         return;
       }
 
-      await writeContactIndexMeta({
-        contactCount: meta.contact_count,
-        database,
-        generation: meta.scan_generation,
-        lastCompletedAt: meta.last_completed_at,
-        lastStartedAt: meta.last_started_at,
-        loadedCount: meta.loaded_count,
-        nextPageOffset: meta.next_page_offset,
-        permissionStatus: isContactsPermissionStatus(meta.permission_status)
-          ? meta.permission_status
-          : 'undetermined',
-        status: 'paused',
-        userKey,
-      });
-      notifyContactIndexSubscribers(userId);
+      await writeForContactIndexRun(userKey, activeRun, () =>
+        writeContactIndexMeta({
+          contactCount: meta.contact_count,
+          database,
+          generation: meta.scan_generation,
+          lastCompletedAt: meta.last_completed_at,
+          lastStartedAt: meta.last_started_at,
+          loadedCount: meta.loaded_count,
+          nextPageOffset: meta.next_page_offset,
+          permissionStatus: isContactsPermissionStatus(meta.permission_status)
+            ? meta.permission_status
+            : 'undetermined',
+          status: 'paused',
+          userKey,
+        }),
+      );
+      if (activeRunsByUser.get(userKey) === activeRun) {
+        notifyContactIndexSubscribers(userId);
+      }
     })
     .catch(() => undefined);
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { Share } from 'react-native';
 
@@ -23,6 +23,7 @@ import {
   useRespondInternalFriendshipInviteMutation,
   useReviewAccountInviteMutation,
   useReviewExternalFriendshipInviteMutation,
+  useRemindFriendshipInviteMutation,
   type AccountInviteDeliveryResult,
   type AccountInviteListItem,
   type FriendshipInviteDeliveryResult,
@@ -36,6 +37,11 @@ import {
   isAccountInviteDeliveryResult,
 } from '@/features/invites/people-outreach-utils';
 import { showGlobalFeedback } from '@/lib/global-feedback';
+import { inviteActionResult } from './invite-action-result';
+import {
+  assertAccountDeliveryCurrent,
+  assertFriendshipDeliveryCurrent,
+} from '@/features/invites/invite-delivery-validation';
 import {
   triggerIdentityErrorHaptic,
   triggerIdentitySuccessHaptic,
@@ -49,6 +55,7 @@ async function shareFriendshipInviteDelivery(
   delivery: FriendshipInviteDeliveryResult,
   setMessage: InviteRequestMessageSetter,
 ) {
+  await assertFriendshipDeliveryCurrent(delivery);
   const inviteLink = buildFriendshipInviteLink(delivery.deliveryToken);
   const shareMessage = buildFriendshipInviteShareMessage({
     inviteLink,
@@ -73,10 +80,10 @@ async function shareFriendshipInviteDelivery(
       return;
     }
 
-    setMessage(`Invitación reenviada a ${alias}.`);
+    setMessage(`Enlace listo para compartir con ${alias}.`);
     showGlobalFeedback({
       message: `Pendiente de respuesta con ${alias}.`,
-      title: 'Invitación reenviada',
+      title: 'Enlace preparado',
       tone: 'success',
     });
   } catch {
@@ -95,6 +102,7 @@ async function shareAccountInviteDelivery(
   delivery: AccountInviteDeliveryResult,
   setMessage: InviteRequestMessageSetter,
 ) {
+  await assertAccountDeliveryCurrent(delivery);
   const inviteLink = buildAppInviteLink(delivery.deliveryToken);
   const shareMessage = buildAccountInviteShareMessage({
     amountMinor: null,
@@ -122,10 +130,10 @@ async function shareAccountInviteDelivery(
       return;
     }
 
-    setMessage(`Acceso privado reenviado a ${alias}.`);
+    setMessage(`Acceso privado listo para compartir con ${alias}.`);
     showGlobalFeedback({
       message: `Pendiente de abrir con ${alias}.`,
-      title: 'Acceso reenviado',
+      title: 'Acceso preparado',
       tone: 'success',
     });
   } catch {
@@ -164,12 +172,14 @@ export function usePeopleInviteRequestsController({
   const cancelAccountInvite = useCancelAccountInviteMutation();
   const cancelFriendshipInvite = useCancelFriendshipInviteMutation();
   const createInternalInvite = useCreateInternalFriendshipInviteMutation();
+  const remindInvite = useRemindFriendshipInviteMutation();
   const createExternalInvite = useCreateExternalFriendshipInviteMutation();
   const createPeopleOutreach = useCreatePeopleOutreachMutation();
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<InviteRequestsTab>('received');
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const actionInFlight = useRef(false);
   const pendingItems = useMemo(
     () => sortInviteRequestItems([...friendshipPendingItems, ...accountInvitePendingItems]),
     [accountInvitePendingItems, friendshipPendingItems],
@@ -201,6 +211,8 @@ export function usePeopleInviteRequestsController({
 
   const handleAction = useCallback(
     async (item: InviteRequestItem, action: InviteRequestAction) => {
+      if (actionInFlight.current) return false;
+      actionInFlight.current = true;
       const key = `${item.kind}:${item.inviteId}:${action}`;
       setBusyKey(key);
       setMessage(null);
@@ -223,20 +235,28 @@ export function usePeopleInviteRequestsController({
                 throw new Error('No encontramos la persona para reenviar esta solicitud.');
               }
 
-              await createInternalInvite.mutateAsync({
-                sourceContext,
-                targetUserId: item.profileUserId,
-              });
-              triggerIdentitySuccessHaptic();
-              setMessage(
+              const response =
                 item.actionState === 'history'
-                  ? `Solicitud enviada de nuevo a ${fallbackAlias}.`
-                  : `Recordatorio enviado a ${fallbackAlias}.`,
-              );
+                  ? await createInternalInvite.mutateAsync({
+                      sourceContext,
+                      targetUserId: item.profileUserId,
+                    })
+                  : await remindInvite.mutateAsync(item.inviteId);
+              triggerIdentitySuccessHaptic();
+              const nextMessage =
+                response.status === 'accepted'
+                  ? `${fallbackAlias} ya aparece en tus personas.`
+                  : response.reminderStatus === 'cooldown'
+                    ? 'Ya solicitaste un recordatorio recientemente. Podrás solicitar otro en un minuto.'
+                    : response.reminderStatus === 'resolved'
+                      ? 'La solicitud ya cambió de estado. Actualizamos la lista.'
+                      : item.actionState === 'history'
+                        ? `Solicitud enviada de nuevo a ${fallbackAlias}.`
+                        : `Recordatorio solicitado para ${fallbackAlias}.`;
+              setMessage(nextMessage);
               showGlobalFeedback({
-                message: `Para ${fallbackAlias}.`,
-                title:
-                  item.actionState === 'history' ? 'Solicitud reenviada' : 'Recordatorio enviado',
+                message: nextMessage,
+                title: item.actionState === 'history' ? 'Solicitud actualizada' : 'Recordatorio',
                 tone: 'success',
               });
               return false;
@@ -318,17 +338,18 @@ export function usePeopleInviteRequestsController({
           item.actionState === 'requires_you_response' &&
           (action === 'accept' || action === 'reject')
         ) {
-          await respondInternalInvite.mutateAsync({
+          const response = await respondInternalInvite.mutateAsync({
             inviteId: item.inviteId,
             decision: action === 'accept' ? 'accept' : 'reject',
           });
-          if (action === 'accept') {
+          const outcome = inviteActionResult(response.status);
+          if (outcome.connected) {
             triggerIdentitySuccessHaptic();
           } else {
             triggerIdentityWarningHaptic();
           }
-          setMessage(action === 'accept' ? 'Invitación aceptada.' : 'Invitación rechazada.');
-          return action === 'accept';
+          setMessage(outcome.message);
+          return outcome.connected;
         }
 
         if (
@@ -336,17 +357,18 @@ export function usePeopleInviteRequestsController({
           item.actionState === 'requires_you_review' &&
           (action === 'approve' || action === 'reject')
         ) {
-          await reviewExternalInvite.mutateAsync({
+          const response = await reviewExternalInvite.mutateAsync({
             inviteId: item.inviteId,
             decision: action === 'approve' ? 'approve' : 'reject',
           });
-          if (action === 'approve') {
+          const outcome = inviteActionResult(response.status);
+          if (outcome.connected) {
             triggerIdentitySuccessHaptic();
           } else {
             triggerIdentityWarningHaptic();
           }
-          setMessage(action === 'approve' ? 'Conexión confirmada.' : 'Invitación cerrada.');
-          return action === 'approve';
+          setMessage(outcome.message);
+          return outcome.connected;
         }
 
         if (
@@ -354,17 +376,18 @@ export function usePeopleInviteRequestsController({
           item.actionState === 'requires_you_review' &&
           (action === 'approve' || action === 'reject')
         ) {
-          await reviewAccountInvite.mutateAsync({
+          const response = await reviewAccountInvite.mutateAsync({
             inviteId: item.inviteId,
             decision: action === 'approve' ? 'approve' : 'reject',
           });
-          if (action === 'approve') {
+          const outcome = inviteActionResult(response.status, 'account');
+          if (outcome.connected) {
             triggerIdentitySuccessHaptic();
           } else {
             triggerIdentityWarningHaptic();
           }
-          setMessage(action === 'approve' ? 'Acceso confirmado.' : 'Invitación de acceso cerrada.');
-          return action === 'approve';
+          setMessage(outcome.message);
+          return outcome.connected;
         }
 
         if (
@@ -372,9 +395,15 @@ export function usePeopleInviteRequestsController({
           (item.actionState === 'pending_claim' || item.actionState === 'waiting_other_side') &&
           action === 'cancel'
         ) {
-          await cancelFriendshipInvite.mutateAsync(item.inviteId);
+          const response = await cancelFriendshipInvite.mutateAsync(item.inviteId);
           triggerIdentityWarningHaptic();
-          setMessage('Invitación cancelada.');
+          setMessage(
+            response.status === 'accepted'
+              ? 'La invitación ya fue aceptada. La amistad sigue activa.'
+              : response.status === 'canceled'
+                ? 'Invitación cancelada.'
+                : 'La invitación ya cambió de estado. Actualizamos la lista.',
+          );
           return false;
         }
 
@@ -384,9 +413,13 @@ export function usePeopleInviteRequestsController({
           !item.activatedUserId &&
           action === 'cancel'
         ) {
-          await cancelAccountInvite.mutateAsync(item.inviteId);
+          const response = await cancelAccountInvite.mutateAsync(item.inviteId);
           triggerIdentityWarningHaptic();
-          setMessage('Invitación de acceso cancelada.');
+          setMessage(
+            response.status === 'canceled'
+              ? 'Invitación de acceso cancelada.'
+              : 'El acceso ya cambió de estado. Actualizamos la lista.',
+          );
         }
         return false;
       } catch (error) {
@@ -394,6 +427,7 @@ export function usePeopleInviteRequestsController({
         setMessage(error instanceof Error ? error.message : 'No se pudo completar la acción.');
         return false;
       } finally {
+        actionInFlight.current = false;
         setBusyKey(null);
       }
     },
@@ -406,6 +440,7 @@ export function usePeopleInviteRequestsController({
       respondInternalInvite,
       reviewAccountInvite,
       reviewExternalInvite,
+      remindInvite,
     ],
   );
 

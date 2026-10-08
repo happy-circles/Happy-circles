@@ -1,11 +1,7 @@
 import type { supabase } from '@/lib/supabase';
 import { getCurrentAppVersion, getCurrentDeviceName } from '@/lib/device-trust';
 import { Platform } from 'react-native';
-import {
-  createSupportId,
-  readFunctionErrorDetails,
-  withSupportCode,
-} from '@/lib/support-errors';
+import { createSupportId, readFunctionErrorDetails, withSupportCode } from '@/lib/support-errors';
 import { readErrorMessage } from '../session/auth-errors';
 import {
   SESSION_AUTH_OPERATION_TIMEOUT_MS,
@@ -20,6 +16,7 @@ export type SessionEdgeActionResult<T> =
   | { readonly code?: string; readonly message: string; readonly ok: false };
 
 export async function invokeSessionEdgeAction<T>(input: {
+  readonly accessToken?: string;
   readonly body: Record<string, unknown>;
   readonly client: SessionClient;
   readonly name: string;
@@ -32,6 +29,7 @@ export async function invokeSessionEdgeAction<T>(input: {
       input.client.functions.invoke<T>(input.name, {
         body: input.body,
         headers: {
+          ...(input.accessToken ? { Authorization: `Bearer ${input.accessToken}` } : {}),
           'x-client-info': 'happy-circles-mobile',
           'x-request-id': supportId,
         },
@@ -59,8 +57,13 @@ export async function invokeSessionEdgeAction<T>(input: {
   }
 }
 
-export function trustCurrentSessionDevice(client: SessionClient, deviceId: string) {
+export function trustCurrentSessionDevice(
+  client: SessionClient,
+  deviceId: string,
+  accessToken?: string,
+) {
   return invokeSessionEdgeAction({
+    accessToken,
     body: {
       appVersion: getCurrentAppVersion(),
       deviceId,

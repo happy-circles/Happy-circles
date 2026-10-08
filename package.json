@@ -21,7 +21,8 @@
     "dev:landing": "pnpm --dir apps/landing run dev",
     "build:landing": "pnpm --dir apps/landing run build",
     "typecheck:landing": "pnpm --dir apps/landing run typecheck",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit:dependencies && pnpm build:landing && pnpm security:check && pnpm test:supabase",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit:dependencies && pnpm check:eas-update && pnpm build:landing && pnpm security:check && pnpm test:supabase",
+    "check:eas-update": "node --test ./scripts/check-eas-update.test.mjs && node ./scripts/check-eas-update.mjs",
     "lint": "pnpm exec eslint .",
     "audit:dependencies": "node ./scripts/audit-dependencies.mjs",
     "format": "pnpm exec prettier --write .",
@@ -45,6 +46,6 @@
     "prettier": "^3.4.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.58.0",
-    "vitest": "^3.2.6"
+    "vitest": "4.1.11"
   }
 }

@@ -263,18 +263,19 @@ export async function notifyInternalFriendshipInvite(
     client,
     'friendship_invites',
     inviteId,
-    'id, inviter_user_id, target_user_id, flow, status',
+    'id, inviter_user_id, target_user_id, flow, status, expires_at',
   );
 
   if (
     readString(invite, 'flow') !== 'internal' ||
-    readString(invite, 'status') !== 'pending_recipient'
+    readString(invite, 'status') !== 'pending_recipient' ||
+    Date.parse(readString(invite, 'expires_at') ?? '') <= Date.now()
   ) {
     return;
   }
 
   const actor = await findProfile(client, actorUserId);
-  const created = await enqueuePushNotification(client, {
+  await enqueuePushNotification(client, {
     body: `${displayName(actor)} quiere conectar contigo en Happy Circles.`,
     href: '/activity?category=friends',
     metadata: { actorUserId },
@@ -285,9 +286,9 @@ export async function notifyInternalFriendshipInvite(
     title: 'Nueva invitacion',
   });
 
-  if (created) {
-    triggerPushNotificationWorker(10);
-  }
+  // New backends have already enqueued transactionally. Keep the insert for
+  // backward-compatible deployments, and wake the worker even after a duplicate.
+  triggerPushNotificationWorker(10);
 }
 
 export async function notifyFriendshipInviteReview(

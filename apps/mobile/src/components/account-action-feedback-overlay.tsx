@@ -5,6 +5,7 @@ import { Animated, Easing, Modal, Platform, StyleSheet, View } from 'react-nativ
 import { AppText } from '@/components/app-text';
 import type { ActionFeedbackVariant } from '@/lib/action-feedback';
 import { theme } from '@/lib/theme';
+import { useFeedbackModalCoordination } from '@/lib/use-feedback-modal-coordination';
 import { useAppTheme } from '@/providers/theme-provider';
 
 export interface AccountActionFeedbackOverlayProps {
@@ -85,6 +86,8 @@ export function AccountActionFeedbackOverlay({
 }: AccountActionFeedbackOverlayProps) {
   const activeTheme = useAppTheme();
   const [mounted, setMounted] = useState(visible);
+  const modal = useFeedbackModalCoordination(mounted);
+  const feedbackVisible = visible && !modal.suspended;
   const [phaseIndex, setPhaseIndex] = useState(0);
   const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const cardScale = useRef(new Animated.Value(visible ? 1 : 0.96)).current;
@@ -100,7 +103,7 @@ export function AccountActionFeedbackOverlay({
         : activeTheme.colors.primary;
 
   useEffect(() => {
-    if (!visible || variant !== 'loading') {
+    if (!feedbackVisible || variant !== 'loading') {
       return;
     }
 
@@ -112,10 +115,10 @@ export function AccountActionFeedbackOverlay({
     return () => {
       clearInterval(interval);
     };
-  }, [variant, visible]);
+  }, [feedbackVisible, variant]);
 
   useEffect(() => {
-    if (!visible || variant !== 'loading') {
+    if (!feedbackVisible || variant !== 'loading') {
       pulse.stopAnimation();
       return;
     }
@@ -142,10 +145,10 @@ export function AccountActionFeedbackOverlay({
     return () => {
       pulseAnimation.stop();
     };
-  }, [pulse, variant, visible]);
+  }, [feedbackVisible, pulse, variant]);
 
   useEffect(() => {
-    if (visible) {
+    if (feedbackVisible) {
       setMounted(true);
       opacity.setValue(0);
       cardScale.setValue(0.96);
@@ -198,14 +201,21 @@ export function AccountActionFeedbackOverlay({
         setMounted(false);
       }
     });
-  }, [cardScale, cardTranslateY, opacity, visible]);
+  }, [cardScale, cardTranslateY, feedbackVisible, opacity]);
 
-  if (!mounted || !copy) {
+  if (!copy) {
     return null;
   }
 
   return (
-    <Modal animationType="none" statusBarTranslucent transparent visible={mounted}>
+    <Modal
+      animationType="none"
+      onDismiss={modal.onDismiss}
+      onShow={modal.onShow}
+      statusBarTranslucent
+      transparent
+      visible={modal.nativeVisible}
+    >
       <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
           style={[

@@ -1,4 +1,5 @@
 import type { FriendshipInviteDeliveryResult, PeopleTargetResolution } from '@/lib/live-data';
+import { isContactResolutionFresh } from '@/lib/contact-resolution-state';
 import { theme, type AppTheme } from '@/lib/theme';
 import type {
   ContactCandidate,
@@ -6,9 +7,9 @@ import type {
 } from '@/features/invites/people-outreach-utils';
 
 export const CONTACT_TARGET_RESOLUTION_LIMIT = 60;
-export const CONTACT_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 15 * 60 * 1000;
+export const CONTACT_RESOLUTION_CACHE_TTL_MS = 60_000;
+export const CONTACT_NEGATIVE_RESOLUTION_CACHE_TTL_MS = 60_000;
+export const CONTACT_PENDING_RESOLUTION_CACHE_TTL_MS = 30_000;
 export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
 export const CONTACT_INDEX_INITIAL_READ_LIMIT = 120;
 export const CONTACT_INDEX_READ_PAGE_SIZE = 120;
@@ -107,10 +108,10 @@ export function actionMetaForResolution(
 
   if (resolution.status === 'pending_friendship') {
     return {
-      disabled: true,
+      disabled: false,
       icon: 'time-outline',
-      label: 'Pendiente',
-      tone: 'muted',
+      label: resolution.friendshipDirection === 'incoming' ? 'Responder' : 'Ver solicitud',
+      tone: 'primary',
     };
   }
 
@@ -303,7 +304,7 @@ export function getUnresolvedContactPhoneE164List(input: {
   for (const phoneE164 of input.phoneE164List) {
     if (
       seen.has(phoneE164) ||
-      input.targetCache[phoneE164] ||
+      isContactResolutionFresh(input.targetCache[phoneE164]) ||
       input.pendingPhoneE164Set?.has(phoneE164) ||
       input.inFlightPhoneE164Set?.has(phoneE164)
     ) {

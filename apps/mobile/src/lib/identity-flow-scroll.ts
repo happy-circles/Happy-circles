@@ -2,6 +2,11 @@ import type { RefObject } from 'react';
 import type { ScrollView } from 'react-native';
 
 import { requestLaunchTargetRemeasure } from '@/lib/launch-target-remeasure';
+import {
+  createVisualTransition,
+  IDENTITY_HANDOFF_PREPARATION_TIMEOUT_MS,
+  type VisualTransition,
+} from '@/lib/visual-transition';
 
 let nextRegistrationId = 0;
 let activeRegistrationId = 0;
@@ -38,16 +43,11 @@ export interface IdentityFlowCenteredScrollInput {
   readonly viewportHeight: number;
 }
 
-function waitForNextFrame() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function waitForFrames(frameCount: number) {
+async function waitForFrames(transition: VisualTransition, frameCount: number) {
   for (let frame = 0; frame < frameCount; frame += 1) {
-    await waitForNextFrame();
+    if (!(await transition.waitForFrame())) return false;
   }
+  return transition.isActive();
 }
 
 function isIdentityTarget(target: IdentityFlowScrollTargetSnapshot) {
@@ -146,7 +146,9 @@ export function clearIdentityFlowScrollTarget(id: string) {
   activeTargets.delete(id);
 }
 
-export function scrollIdentityFlowToTop({ animated = false }: { readonly animated?: boolean } = {}) {
+export function scrollIdentityFlowToTop({
+  animated = false,
+}: { readonly animated?: boolean } = {}) {
   const scrollView = activeScrollViewRef?.current;
   if (!scrollView) {
     return false;
@@ -184,25 +186,48 @@ export function centerIdentityFlowTargetForHandoff({
 
 export async function prepareIdentityFlowTargetForHandoff({
   animated = true,
-}: { readonly animated?: boolean } = {}) {
-  if (activeKeyboardResetForHandoff) {
-    await activeKeyboardResetForHandoff();
+  transition: suppliedTransition,
+}: { readonly animated?: boolean; readonly transition?: VisualTransition } = {}) {
+  const transition =
+    suppliedTransition ?? createVisualTransition(IDENTITY_HANDOFF_PREPARATION_TIMEOUT_MS);
+  const registrationId = activeRegistrationId;
+  const keyboardReset = activeKeyboardResetForHandoff;
+  const isCurrent = () => {
+    if (registrationId !== activeRegistrationId) transition.fallback();
+    return transition.isActive();
+  };
+
+  try {
+    if (keyboardReset) {
+      await transition.waitFor(Promise.resolve(keyboardReset()));
+      if (!isCurrent()) return;
+      requestLaunchTargetRemeasure();
+      if (!(await waitForFrames(transition, IDENTITY_FLOW_TARGET_REMEASURE_FRAMES))) return;
+    }
+    if (!isCurrent()) return;
+    const didRequestScroll = centerIdentityFlowTargetForHandoff({ animated });
+    if (didRequestScroll) {
+      if (
+        !(await waitForFrames(
+          transition,
+          animated
+            ? IDENTITY_FLOW_SCROLL_ANIMATED_SETTLE_FRAMES
+            : IDENTITY_FLOW_SCROLL_SETTLE_FRAMES,
+        ))
+      )
+        return;
+    }
+    if (!isCurrent()) return;
     requestLaunchTargetRemeasure();
-    await waitForFrames(IDENTITY_FLOW_TARGET_REMEASURE_FRAMES);
+    if (!(await waitForFrames(transition, IDENTITY_FLOW_TARGET_REMEASURE_FRAMES))) return;
+    if (!isCurrent()) return;
+    centerIdentityFlowTargetForHandoff({ animated: false });
+    await waitForFrames(transition, IDENTITY_FLOW_SCROLL_SETTLE_FRAMES);
+  } catch {
+    transition.fallback();
+  } finally {
+    if (!suppliedTransition) transition.cancel();
   }
-
-  const didRequestScroll = centerIdentityFlowTargetForHandoff({ animated });
-
-  if (didRequestScroll) {
-    await waitForFrames(
-      animated ? IDENTITY_FLOW_SCROLL_ANIMATED_SETTLE_FRAMES : IDENTITY_FLOW_SCROLL_SETTLE_FRAMES,
-    );
-  }
-
-  requestLaunchTargetRemeasure();
-  await waitForFrames(IDENTITY_FLOW_TARGET_REMEASURE_FRAMES);
-  centerIdentityFlowTargetForHandoff({ animated: false });
-  await waitForFrames(IDENTITY_FLOW_SCROLL_SETTLE_FRAMES);
 }
 
 export function resetIdentityFlowScrollPosition() {

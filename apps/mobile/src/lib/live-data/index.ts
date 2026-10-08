@@ -58,6 +58,7 @@ export {
   useCreateRequestMutation,
   useExecuteSettlementMutation,
   useFriendshipInvitePreviewQuery,
+  useRemindFriendshipInviteMutation,
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
   useRequestAccountDeletionMutation,

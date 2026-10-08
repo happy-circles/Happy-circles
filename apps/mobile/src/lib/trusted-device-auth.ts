@@ -13,7 +13,7 @@ export function resolveTrustedDeviceAuthMethods(
   const methods: TrustedDeviceAuthMethod[] = [];
 
   if (input.canTrustCurrentDeviceWithoutPassword) {
-    methods.push('password');
+    methods.push('recent_auth');
   }
 
   if (input.hasGoogle) {
@@ -24,7 +24,7 @@ export function resolveTrustedDeviceAuthMethods(
     methods.push('apple');
   }
 
-  if (!input.canTrustCurrentDeviceWithoutPassword && input.hasEmailPassword) {
+  if (input.hasEmailPassword) {
     methods.push('password');
   }
 
@@ -43,6 +43,9 @@ export function resolveTrustMethodLabel(input: {
   readonly canTrustCurrentDeviceWithoutPassword: boolean;
   readonly method: TrustedDeviceAuthMethod;
 }): string {
+  if (input.method === 'recent_auth') {
+    return 'Confiar este teléfono';
+  }
   if (input.method === 'google') {
     return 'Continuar con Google';
   }
@@ -51,5 +54,5 @@ export function resolveTrustMethodLabel(input: {
     return 'Continuar con Apple';
   }
 
-  return input.canTrustCurrentDeviceWithoutPassword ? 'Confiar este teléfono' : 'Usar contraseña';
+  return 'Usar contraseña';
 }

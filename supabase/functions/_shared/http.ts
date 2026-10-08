@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+import type { AuthorizedDeviceReadClient } from './authorized-device-session.ts';
 import { isProjectApiKeyBearer } from './project-api-key.ts';
+import { readRpcErrorMessage } from './rpc-error-message.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -41,7 +43,7 @@ const INVITE_FUNCTIONS = new Set([
   'create-external-friendship-invite',
   'create-internal-friendship-invite',
   'create-people-outreach',
-  'resolve-people-targets',
+  'remind-friendship-invite',
   'resume-account-invite',
   'respond-internal-friendship-invite',
   'review-account-invite',
@@ -98,7 +100,7 @@ function createRequestId(request: Request): string {
 }
 
 function normalizeError(error: unknown): SafeError {
-  const message = error instanceof Error ? error.message : 'Unexpected error';
+  const message = readRpcErrorMessage(error);
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
   if (
@@ -148,7 +150,12 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
-  if (normalized.startsWith('invalid ')) {
+  if (
+    normalized.startsWith('invalid ') ||
+    normalized.includes('invalid_idempotency_key') ||
+    normalized.includes('contact_batch_too_large') ||
+    normalized.includes('target_user_required')
+  ) {
     return {
       status: 400,
       code: 'validation_failed',
@@ -185,6 +192,14 @@ function normalizeError(error: unknown): SafeError {
       status: 403,
       code: 'recent_auth_required',
       message: 'Vuelve a confirmar tu identidad para completar esta acción.',
+    };
+  }
+
+  if (normalized.includes('device_authorization_required')) {
+    return {
+      status: 403,
+      code: 'device_authorization_required',
+      message: 'Confirma tu identidad para autorizar este dispositivo y continuar.',
     };
   }
 
@@ -225,6 +240,29 @@ function normalizeError(error: unknown): SafeError {
       status: 409,
       code: 'relationship_already_exists',
       message: 'Ya tienes a esta persona en tus contactos.',
+    };
+  }
+
+  if (
+    normalized.includes('invite_not_visible_to_actor') ||
+    normalized.includes('invite_not_owned_by_actor')
+  ) {
+    return {
+      status: 403,
+      code: 'forbidden',
+      message: 'No tienes permisos para realizar esta acción.',
+    };
+  }
+
+  if (
+    normalized.includes('invite_not_cancelable') ||
+    normalized.includes('invite_not_respondable') ||
+    normalized.includes('invite_not_open')
+  ) {
+    return {
+      status: 409,
+      code: 'invite_resolved',
+      message: 'Esta solicitud ya cambió. Actualiza su estado.',
     };
   }
 
@@ -298,7 +336,7 @@ function normalizeError(error: unknown): SafeError {
 }
 
 function normalizePublicError(error: unknown): SafeError {
-  const message = error instanceof Error ? error.message : 'Unexpected error';
+  const message = readRpcErrorMessage(error);
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
   if (normalized.includes('payload too large')) {
@@ -621,6 +659,14 @@ export function createServiceRoleClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
 }
 
+export function createVerifiedUserClient(context: VerifiedAuthContext): AuthorizedDeviceReadClient {
+  // Keep this actor client read-only at its call sites; state changes use service-role RPCs.
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${context.accessToken}` } },
+  }) as unknown as AuthorizedDeviceReadClient;
+}
+
 export async function createClientFingerprintHash(request: Request): Promise<string> {
   const forwardedFor = request.headers.get('x-forwarded-for') ?? '';
   const ipHint =
@@ -655,7 +701,7 @@ function normalizeRateLimitOptions(
   }
 
   if (options?.rateLimit) {
-    return Array.isArray(options.rateLimit) ? options.rateLimit : [options.rateLimit];
+    return 'scope' in options.rateLimit ? [options.rateLimit] : options.rateLimit;
   }
 
   if (READ_FUNCTIONS.has(functionName) || ANALYTICS_FUNCTIONS.has(functionName)) {

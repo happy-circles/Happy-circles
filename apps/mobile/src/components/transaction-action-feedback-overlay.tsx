@@ -6,6 +6,7 @@ import { AppText } from '@/components/app-text';
 import type { ActionFeedbackVariant } from '@/lib/action-feedback';
 import { directionVisual, type LedgerDirection } from '@/lib/direction-ui';
 import { theme } from '@/lib/theme';
+import { useFeedbackModalCoordination } from '@/lib/use-feedback-modal-coordination';
 import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
@@ -126,6 +127,8 @@ export function TransactionActionFeedbackOverlay({
 }: TransactionActionFeedbackOverlayProps) {
   const activeTheme = useAppTheme();
   const [mounted, setMounted] = useState(visible);
+  const modal = useFeedbackModalCoordination(mounted);
+  const feedbackVisible = visible && !modal.suspended;
   const [phaseIndex, setPhaseIndex] = useState(0);
   const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const cardScale = useRef(new Animated.Value(visible ? 1 : 0.96)).current;
@@ -146,7 +149,7 @@ export function TransactionActionFeedbackOverlay({
         : directionCopy.accentColor;
 
   useEffect(() => {
-    if (!visible || variant !== 'loading') {
+    if (!feedbackVisible || variant !== 'loading') {
       return;
     }
 
@@ -158,10 +161,10 @@ export function TransactionActionFeedbackOverlay({
     return () => {
       clearInterval(interval);
     };
-  }, [isCorrection, phases.length, variant, visible]);
+  }, [feedbackVisible, isCorrection, phases.length, variant]);
 
   useEffect(() => {
-    if (!visible || variant !== 'loading') {
+    if (!feedbackVisible || variant !== 'loading') {
       pulse.stopAnimation();
       return;
     }
@@ -188,10 +191,10 @@ export function TransactionActionFeedbackOverlay({
     return () => {
       pulseAnimation.stop();
     };
-  }, [pulse, variant, visible]);
+  }, [feedbackVisible, pulse, variant]);
 
   useEffect(() => {
-    if (visible) {
+    if (feedbackVisible) {
       setMounted(true);
       opacity.setValue(0);
       cardScale.setValue(0.96);
@@ -244,14 +247,17 @@ export function TransactionActionFeedbackOverlay({
         setMounted(false);
       }
     });
-  }, [cardScale, cardTranslateY, opacity, visible]);
-
-  if (!mounted) {
-    return null;
-  }
+  }, [cardScale, cardTranslateY, feedbackVisible, opacity]);
 
   return (
-    <Modal animationType="none" statusBarTranslucent transparent visible={mounted}>
+    <Modal
+      animationType="none"
+      onDismiss={modal.onDismiss}
+      onShow={modal.onShow}
+      statusBarTranslucent
+      transparent
+      visible={modal.nativeVisible}
+    >
       <Animated.View style={[styles.scrim, { backgroundColor: activeTheme.colors.scrim, opacity }]}>
         <Animated.View
           style={[

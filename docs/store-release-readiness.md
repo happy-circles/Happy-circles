@@ -71,8 +71,8 @@ Workflow: `.github/workflows/eas-mobile-release.yml`.
 
 Estado versionado:
 
-- Candidata de tienda: `1.0.2`; siguientes contadores previstos Android `22` e
-  iOS `37`. Confirmarlos otra vez en EAS y las consolas antes de encolar.
+- Candidata de tienda: `1.0.3`; siguientes contadores previstos Android `23` e
+  iOS `38`. EAS mantiene los contadores remotos; confirmarlos antes de encolar.
 - Expo SDK 54 esta alineado en `expo@54.0.36`.
 - Proyecto EAS vinculado en `apps/mobile/app.config.ts`:
   `9b63f5f3-3c81-4d3d-bc54-1a81b998d20a`.
@@ -83,17 +83,55 @@ Estado versionado:
   distribucion interna. Esta reservado para el smoke Android de la candidata y
   no se sube a Play.
 - Perfil `production` usa EAS environment `production` y auto-incremento.
+- Esta candidata incorpora `expo-updates` y el runtime
+  `hc-sdk54-20260928-1`. Los binarios existentes necesitan una nueva
+  instalacion Android/iOS para recibir actualizaciones OTA posteriores.
+- Los canales previstos son `preview`, `production-smoke` y `production`,
+  separados por entorno conforme a `apps/mobile/update-policy.json`.
 - Submit `production` apunta a iOS `ascAppId=6766675014` y Android track
   `alpha` como `draft`.
 - El workflow manual permite elegir `android`, `ios` o `all`, exige ejecutarse
   desde `main`, falla si falta `EXPO_TOKEN` y comprueba Security CI exitoso para
   el mismo commit.
 - Usa permisos de solo lectura, Actions `v6`, EAS CLI fijado y espera el
-  resultado del build. Android auto-submit falla cerrado mientras no exista la
-  service account de Play; iOS solo auto-envia si el input explicito lo pide.
+  resultado del build. Android auto-submit verifica en EAS la credencial
+  asignada; ambos sistemas solo auto-envian si el input explicito lo pide.
 
 No tratar build IDs o artifact URLs antiguos como estado actual. Confirmar el
 ultimo build en Expo/EAS antes de citarlo en una entrega.
+
+Estado EAS confirmado el 2026-10-07, antes de generar la candidata `1.0.3`:
+
+- Ultimo iOS production: `48cc4042-b06a-4d13-aa98-d0ba9848d627`,
+  `1.0.2 (37)`, `FINISHED`, generado el 2026-08-14 desde `eb188514`.
+  Submission `8ece9fef-ce82-4a3f-950a-958a4844da76`: `FINISHED`.
+- Ultimo Android production: `0167e338-e4aa-4eb7-9a93-3a8a21f8e184`,
+  `1.0.2 (22)`, `FINISHED`, generado el 2026-08-14 desde `eb188514`.
+  No tiene submissions EAS asociadas; esto no determina si se cargo
+  manualmente en Play Console.
+- Esos builds no declaran runtime ni canal OTA. Se prepararon los canales
+  EAS `production` y `production-smoke`, con ramas homonimas y sin updates
+  publicados; los binarios nuevos incorporaran el canal de su perfil.
+- Produccion tiene la URL y clave publicas de Supabase del proyecto
+  `vknfhyfdtlvvfzptpqpj`. El entorno `preview` carece de URL y clave Supabase
+  tanto en el proyecto como en el scope compartido de cuenta; completar
+  esas variables con un backend de pruebas accesible antes de usarlo.
+- Se asigno en EAS la credencial de Play Store Submissions de la service
+  account existente `happy-circles-play-submit@happy-circles-493003.iam.gserviceaccount.com`.
+  El JSON se conserva fuera del repositorio en un directorio privado. Las
+  claves anteriores no se revocaron al desconocer sus consumidores.
+- Se habilito Android Publisher API en `happy-circles-493003`. Una consulta
+  autenticada de tracks confirma acceso real: `alpha` tiene `1.0.2 (22)`
+  completada, `internal` tiene `0.1.2 (20)` completada y `production` no tiene
+  releases. La transaccion temporal de consulta se descarto sin publicar.
+- Los contadores EAS actuales son Android `22` e iOS `37`; no reutilizarlos
+  para el siguiente build de tienda. La version publica iOS `1.0.2` ya fue
+  publicada, por lo que la nueva candidata usa `1.0.3`.
+- La unica API key de App Store Connect asignada en EAS conserva metadata
+  `APP_MANAGER`, pero la consulta remota de apps devuelve
+  `APP_STORE_CONNECT_AUTHENTICATION_ERROR` (`403`). El profile de build
+  App Store sigue activo hasta 2027-05-05; restaurar la autorizacion Apple
+  antes de dar por confirmado el submit de la candidata.
 
 Estado EAS historico observado el 2026-07-05 (no es la candidata actual):
 

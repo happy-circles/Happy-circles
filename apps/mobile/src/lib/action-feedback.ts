@@ -307,7 +307,7 @@ function resolveBlockedAction(
         ? 'Reenvía el correo desde tu perfil y abre el enlace de confirmación.'
         : 'Antes de mover dinero necesitamos nombre usable y celular único en tu cuenta.',
       ctaLabel: missingEmail ? 'Abrir perfil' : 'Completar ahora',
-      route: buildSetupAccountHref(nextRequiredStep),
+      route: buildSetupAccountHref(nextRequiredStep, { returnTo: 'previous' }),
     };
   }
 
@@ -327,7 +327,7 @@ function resolveBlockedAction(
       title: 'Confía este teléfono para continuar',
       message: 'Esta acción requiere un teléfono confiable. Puedes hacerlo en seguridad.',
       ctaLabel: 'Abrir seguridad',
-      route: buildSetupAccountHref('security'),
+      route: buildSetupAccountHref('security', { returnTo: 'previous' }),
     };
   }
 
@@ -342,7 +342,10 @@ function resolveBlockedAction(
       title: 'Valida tu identidad para continuar',
       message,
       ctaLabel: 'Abrir seguridad',
-      route: buildSetupAccountHref('security'),
+      route: buildSetupAccountHref('security', {
+        returnTo: 'previous',
+        reason: 'identity',
+      }),
     };
   }
 

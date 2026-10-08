@@ -25,8 +25,6 @@ export function useCreateRequestMutation() {
     mutationFn: async (input: CreateRequestInput) => {
       const category = input.category ?? DEFAULT_TRANSACTION_CATEGORY;
       recordFinancialRequestStarted(category);
-      await guardSensitiveAction('crear el movimiento');
-
       const payload = parseEdgePayload(
         createBalanceRequestSchema,
         withIdempotencyKey('mobile_balance_increase', {
@@ -40,7 +38,9 @@ export function useCreateRequestMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('create-balance-request', payload);
+      return guardSensitiveAction('crear el movimiento', (expectedUserId) =>
+        invokeSupabaseFunction('create-balance-request', payload, { expectedUserId }),
+      );
     },
     onSuccess: async () => {
       recordFinancialRequestCreated();
@@ -54,8 +54,6 @@ export function useAcceptFinancialRequestMutation() {
 
   return useMutation({
     mutationFn: async (requestId: string) => {
-      await guardSensitiveAction('aceptar la solicitud');
-
       const payload = parseEdgePayload(
         requestDecisionSchema,
         withIdempotencyKey('accept_request', {
@@ -63,7 +61,9 @@ export function useAcceptFinancialRequestMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('accept-financial-request', payload);
+      return guardSensitiveAction('aceptar la solicitud', (expectedUserId) =>
+        invokeSupabaseFunction('accept-financial-request', payload, { expectedUserId }),
+      );
     },
     onSuccess: async () => {
       recordFinancialRequestAccepted();
@@ -77,8 +77,6 @@ export function useRejectFinancialRequestMutation() {
 
   return useMutation({
     mutationFn: async (requestId: string) => {
-      await guardSensitiveAction('rechazar la solicitud');
-
       const payload = parseEdgePayload(
         requestDecisionSchema,
         withIdempotencyKey('reject_request', {
@@ -86,7 +84,9 @@ export function useRejectFinancialRequestMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('reject-financial-request', payload);
+      return guardSensitiveAction('rechazar la solicitud', (expectedUserId) =>
+        invokeSupabaseFunction('reject-financial-request', payload, { expectedUserId }),
+      );
     },
     onSuccess: invalidateAppSnapshot,
   });
@@ -102,8 +102,6 @@ export function useAmendFinancialRequestMutation() {
       readonly description: string;
       readonly category?: TransactionCategory;
     }) => {
-      await guardSensitiveAction('proponer un nuevo monto');
-
       const payload = parseEdgePayload(
         amendFinancialRequestSchema,
         withIdempotencyKey('amend_request', {
@@ -114,7 +112,9 @@ export function useAmendFinancialRequestMutation() {
         }),
       );
 
-      return invokeSupabaseFunction('amend-financial-request', payload);
+      return guardSensitiveAction('proponer un nuevo monto', (expectedUserId) =>
+        invokeSupabaseFunction('amend-financial-request', payload, { expectedUserId }),
+      );
     },
     onSuccess: invalidateAppSnapshot,
   });

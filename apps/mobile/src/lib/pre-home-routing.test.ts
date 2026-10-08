@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolvePreHomeRouteDecision,
   resolveSetupCompletionRouteDecision,
+  resolveRequiredSetupStep,
   type PreHomeRouteInput,
 } from './pre-home-routing';
 
@@ -48,6 +49,36 @@ function resolve(
 }
 
 describe('resolvePreHomeRouteDecision', () => {
+  it('treats email and profile as setup requirements while device recovery stays contextual', () => {
+    expect(
+      resolveRequiredSetupStep({
+        requiredComplete: true,
+        pendingRequiredSteps: [],
+        securityPending: true,
+      }),
+    ).toBeNull();
+    expect(
+      resolveRequiredSetupStep({
+        requiredComplete: false,
+        pendingRequiredSteps: ['email', 'profile'],
+        securityPending: true,
+      }),
+    ).toBe('email');
+    expect(
+      resolveRequiredSetupStep({
+        requiredComplete: false,
+        pendingRequiredSteps: [],
+        securityPending: false,
+      }),
+    ).toBe('profile');
+    expect(
+      resolve({
+        isRootRoute: true,
+        status: 'signed_in_untrusted',
+        setupState: { securityPending: true },
+      }),
+    ).toEqual({ action: 'replace', href: '/home', handoff: 'home' });
+  });
   it('keeps public auth routes available while signed out', () => {
     expect(
       resolve({
@@ -434,6 +465,45 @@ describe('resolvePreHomeRouteDecision', () => {
 });
 
 describe('resolveSetupCompletionRouteDecision', () => {
+  it('resumes the original action after security rather than returning home', () => {
+    expect(
+      resolveSetupCompletionRouteDecision({
+        accountAccessState: 'active',
+        isTrustedDevice: true,
+        pendingInviteIntent: null,
+        pendingNavigationIntent: null,
+        returnToProfile: false,
+        returnToPrevious: true,
+      }),
+    ).toEqual({ action: 'return_to_previous' });
+  });
+
+  it('does not resume a protected action before activating the account', () => {
+    expect(
+      resolveSetupCompletionRouteDecision({
+        accountAccessState: 'needs_activation',
+        isTrustedDevice: false,
+        pendingInviteIntent: null,
+        pendingNavigationIntent: null,
+        returnToProfile: false,
+        returnToPrevious: true,
+      }),
+    ).toEqual({ action: 'navigate', href: '/join?mode=token' });
+  });
+
+  it('keeps explicit profile completion returning to profile', () => {
+    expect(
+      resolveSetupCompletionRouteDecision({
+        accountAccessState: 'active',
+        isTrustedDevice: true,
+        pendingInviteIntent: null,
+        pendingNavigationIntent: null,
+        returnToProfile: true,
+        returnToPrevious: true,
+      }),
+    ).toEqual({ action: 'navigate', href: '/profile' });
+  });
+
   const accountIntent = {
     createdAt: new Date().toISOString(),
     source: 'account_invite_signup' as const,

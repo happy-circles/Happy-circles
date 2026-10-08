@@ -9,6 +9,7 @@ import {
   type ContactsPermissionStatus,
 } from '@/lib/contacts-permissions';
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
+import type { ContactIndexStartReason } from './add-person-contact-index';
 
 function openContactsSettings() {
   Alert.alert(
@@ -32,7 +33,7 @@ export function useAddPersonContactPermissionActions({
 }: {
   readonly busyKey: string | null;
   readonly contactsPermissionStatus: ContactsPermissionStatus;
-  readonly loadContacts: () => Promise<void>;
+  readonly loadContacts: (reason?: ContactIndexStartReason) => Promise<void>;
   readonly setBusyKey: Dispatch<SetStateAction<string | null>>;
   readonly setContacts: Dispatch<SetStateAction<readonly ContactCandidate[]>>;
   readonly setContactsPermissionStatus: Dispatch<SetStateAction<ContactsPermissionStatus>>;
@@ -68,7 +69,7 @@ export function useAddPersonContactPermissionActions({
           ? 'Tu teléfono compartió contactos limitados. Los estamos cargando.'
           : 'Tu agenda se está cargando.',
       );
-      void loadContacts();
+      await loadContacts('permission_granted');
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo abrir el permiso de contactos.',
@@ -98,7 +99,7 @@ export function useAddPersonContactPermissionActions({
       }
 
       setMessage('Actualizando la agenda compartida.');
-      void loadContacts();
+      await loadContacts('permission_granted');
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'No se pudo ampliar el acceso a tus contactos.',

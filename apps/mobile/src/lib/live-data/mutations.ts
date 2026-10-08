@@ -17,6 +17,7 @@ export {
   useCreateExternalFriendshipInviteMutation,
   useCreateInternalFriendshipInviteMutation,
   useFriendshipInvitePreviewQuery,
+  useRemindFriendshipInviteMutation,
   useRespondInternalFriendshipInviteMutation,
   useReviewExternalFriendshipInviteMutation,
 } from './mutations/friendship-invites';

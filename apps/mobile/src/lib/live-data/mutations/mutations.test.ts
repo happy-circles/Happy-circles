@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   assertSupabaseClient: vi.fn(),
   createIdempotencyKey: vi.fn((prefix: string) => `${prefix}_fixed`),
   createSupportId: vi.fn(() => 'HC-TEST-0000-0000'),
+  confirmIdentity: vi.fn(),
   invalidateAppSnapshot: vi.fn(),
   invokeSupabaseFunction: vi.fn(),
   readFunctionErrorDetails: vi.fn(),
@@ -19,6 +20,12 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: mocks.useQuery,
 }));
 
+vi.mock('react', () => ({ useRef: (current: unknown) => ({ current }) }));
+
+vi.mock('@/providers/identity-confirmation-provider', () => ({
+  useIdentityConfirmation: () => ({ confirmIdentity: mocks.confirmIdentity }),
+}));
+
 vi.mock('react-native', () => ({
   Platform: {
     OS: 'web',
@@ -28,6 +35,14 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-constants', () => ({
   default: { expoConfig: { extra: {} } },
+}));
+
+vi.mock('@/features/home/people-target-resolution-cache', () => ({
+  invalidatePeopleTargetResolutionCache: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/lib/query-client', () => ({
+  queryClient: { invalidateQueries: vi.fn(async () => undefined) },
 }));
 
 vi.mock('@/providers/session-provider', () => ({
@@ -42,6 +57,12 @@ vi.mock('../client', () => ({
 
 vi.mock('../../analytics-client', () => ({
   recordProductEventSafe: mocks.recordProductEventSafe,
+}));
+
+vi.mock('../../avatar-prefetch', () => ({ prefetchAvatarPaths: vi.fn() }));
+vi.mock('../snapshot-cache', () => ({
+  replaceCurrentUserAvatarInSnapshot: vi.fn(),
+  updateCachedSnapshotCurrentUserAvatar: vi.fn(),
 }));
 
 vi.mock('../../idempotency', () => ({
@@ -61,9 +82,19 @@ import {
 } from './account-invites';
 import { resolveAvatarUploadMetadata, uploadAvatar } from './avatar-upload';
 import { withIdempotencyKey } from './edge-action';
-import { useCreateRequestMutation } from './financial-requests';
+import {
+  useAcceptFinancialRequestMutation,
+  useAmendFinancialRequestMutation,
+  useCreateRequestMutation,
+  useRejectFinancialRequestMutation,
+} from './financial-requests';
 import { markNotificationItemsViewed, markNotificationViewsViewed } from './notifications';
-import { useApproveSettlementMutation } from './settlements';
+import { useRequestAccountDeletionMutation } from './profile';
+import {
+  useApproveSettlementMutation,
+  useExecuteSettlementMutation,
+  useRejectSettlementMutation,
+} from './settlements';
 import {
   guardSensitiveMutationAction,
   type SensitiveMutationSession,
@@ -80,15 +111,20 @@ interface QueryOptions {
   readonly queryKey: readonly unknown[];
 }
 
-function trustedSession(overrides: Partial<SensitiveMutationSession> = {}) {
+function trustedSession(
+  overrides: Partial<SensitiveMutationSession> & { readonly deviceTrustState?: string } = {},
+) {
   return {
     biometricLabel: 'Face ID',
     deviceTrustState: 'trusted',
     isEmailConfirmed: true,
     profileCompletionState: 'complete',
+    userId: 'user-1',
+    isAuthorizedDeviceSession: true,
+    isLocked: false,
     stepUpAuth: vi.fn().mockResolvedValue({ success: true }),
     ...overrides,
-  } satisfies SensitiveMutationSession;
+  };
 }
 
 describe('live-data mutation helpers', () => {
@@ -96,6 +132,7 @@ describe('live-data mutation helpers', () => {
     vi.clearAllMocks();
     mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_fixed`);
     mocks.invokeSupabaseFunction.mockResolvedValue({});
+    mocks.confirmIdentity.mockResolvedValue(true);
     mocks.readFunctionErrorDetails.mockResolvedValue({
       code: 'edge_failed',
       message: 'Edge failed',
@@ -154,20 +191,20 @@ describe('live-data mutation helpers', () => {
   it('blocks sensitive actions before step-up when account state is incomplete', async () => {
     const session = trustedSession({ isEmailConfirmed: false });
 
-    await expect(guardSensitiveMutationAction(session, 'crear el movimiento')).rejects.toThrow(
-      'Confirma tu correo antes de mover dinero o aprobar cambios sensibles.',
-    );
+    await expect(
+      guardSensitiveMutationAction(session, 'crear el movimiento', mocks.confirmIdentity),
+    ).rejects.toThrow('Confirma tu correo antes de mover dinero o aprobar cambios sensibles.');
     expect(session.stepUpAuth).not.toHaveBeenCalled();
+    expect(mocks.confirmIdentity).not.toHaveBeenCalled();
   });
 
-  it('preserves step-up failure messages for sensitive actions', async () => {
-    const session = trustedSession({
-      stepUpAuth: vi.fn().mockResolvedValue({ success: false, error: 'authentication_failed' }),
-    });
+  it('reports a declined inline confirmation as cancellation', async () => {
+    const session = trustedSession({ isAuthorizedDeviceSession: false });
+    mocks.confirmIdentity.mockResolvedValue(false);
 
-    await expect(guardSensitiveMutationAction(session, 'aprobar el Happy Circle')).rejects.toThrow(
-      'No se pudo validar Face ID para aprobar el Happy Circle.',
-    );
+    await expect(
+      guardSensitiveMutationAction(session, 'aprobar el Happy Circle', mocks.confirmIdentity),
+    ).rejects.toMatchObject({ name: 'IdentityConfirmationCancelledError' });
   });
 });
 
@@ -176,6 +213,7 @@ describe('live-data mutation hooks', () => {
     vi.clearAllMocks();
     mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_fixed`);
     mocks.invokeSupabaseFunction.mockResolvedValue({});
+    mocks.confirmIdentity.mockResolvedValue(true);
     mocks.useSession.mockReturnValue({
       ...trustedSession(),
       refreshAccountState: vi.fn(),
@@ -319,7 +357,8 @@ describe('live-data mutation hooks', () => {
       responderUserId: '11111111-1111-4111-8111-111111111111',
     });
 
-    expect(session.stepUpAuth).toHaveBeenCalledTimes(1);
+    expect(session.stepUpAuth).not.toHaveBeenCalled();
+    expect(mocks.confirmIdentity).not.toHaveBeenCalled();
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(
       'create-balance-request',
       expect.objectContaining({
@@ -328,6 +367,7 @@ describe('live-data mutation hooks', () => {
         idempotencyKey: 'mobile_balance_increase_fixed',
         requestKind: 'balance_increase',
       }),
+      { expectedUserId: 'user-1' },
     );
 
     await mutation.onSuccess?.();
@@ -345,11 +385,16 @@ describe('live-data mutation hooks', () => {
 
     await mutation.mutationFn('44444444-4444-4444-8444-444444444444');
 
-    expect(session.stepUpAuth).toHaveBeenCalledTimes(1);
-    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith('approve-cycle-settlement', {
-      idempotencyKey: 'approve_settlement_fixed',
-      proposalId: '44444444-4444-4444-8444-444444444444',
-    });
+    expect(session.stepUpAuth).not.toHaveBeenCalled();
+    expect(mocks.confirmIdentity).not.toHaveBeenCalled();
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(
+      'approve-cycle-settlement',
+      {
+        idempotencyKey: 'approve_settlement_fixed',
+        proposalId: '44444444-4444-4444-8444-444444444444',
+      },
+      { expectedUserId: 'user-1' },
+    );
 
     await mutation.onSuccess?.();
     expect(mocks.recordProductEventSafe).toHaveBeenCalledWith({
@@ -357,6 +402,115 @@ describe('live-data mutation hooks', () => {
       screenName: 'settlement_detail',
     });
     expect(mocks.invalidateAppSnapshot).toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'accept-financial-request',
+      useAcceptFinancialRequestMutation,
+      '55555555-5555-4555-8555-555555555555',
+    ],
+    [
+      'reject-financial-request',
+      useRejectFinancialRequestMutation,
+      '55555555-5555-4555-8555-555555555555',
+    ],
+    [
+      'amend-financial-request',
+      useAmendFinancialRequestMutation,
+      {
+        requestId: '55555555-5555-4555-8555-555555555555',
+        amountMinor: 1400,
+        description: 'Updated lunch',
+        category: 'food_drinks',
+      },
+    ],
+    [
+      'reject-cycle-settlement',
+      useRejectSettlementMutation,
+      '44444444-4444-4444-8444-444444444444',
+    ],
+    [
+      'execute-approved-cycle-settlement',
+      useExecuteSettlementMutation,
+      '44444444-4444-4444-8444-444444444444',
+    ],
+  ] as const)(
+    'binds %s to the initiating account and keeps cancellation from sending',
+    async (functionName, hook, input) => {
+      const mutation = hook() as unknown as MutationOptions;
+      await mutation.mutationFn(input);
+      expect(mocks.invokeSupabaseFunction).toHaveBeenCalledWith(functionName, expect.any(Object), {
+        expectedUserId: 'user-1',
+      });
+
+      mocks.invokeSupabaseFunction.mockClear();
+      mocks.useSession.mockReturnValue(trustedSession({ isAuthorizedDeviceSession: false }));
+      mocks.confirmIdentity.mockResolvedValue(false);
+      const blockedMutation = hook() as unknown as MutationOptions;
+      await expect(blockedMutation.mutationFn(input)).rejects.toMatchObject({
+        name: 'IdentityConfirmationCancelledError',
+      });
+      expect(mocks.invokeSupabaseFunction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retries a definitive authorization rejection once with the identical request body and key', async () => {
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(
+      Object.assign(new Error('Authorize device'), { code: 'device_authorization_required' }),
+    );
+    const mutation = useApproveSettlementMutation() as unknown as MutationOptions<string>;
+    await mutation.mutationFn('44444444-4444-4444-8444-444444444444');
+
+    expect(mocks.confirmIdentity).toHaveBeenCalledExactlyOnceWith({
+      actionLabel: 'aprobar el Happy Circle',
+      purpose: 'device',
+      force: true,
+    });
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledTimes(2);
+    const firstBody = mocks.invokeSupabaseFunction.mock.calls[0]?.[1] as unknown;
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toBe(firstBody);
+    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[2]).toEqual({ expectedUserId: 'user-1' });
+  });
+
+  it('does not retry a financial mutation after an ambiguous network failure', async () => {
+    const failure = new Error('Network request failed');
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(failure);
+    const mutation = useApproveSettlementMutation() as unknown as MutationOptions<string>;
+    await expect(mutation.mutationFn('44444444-4444-4444-8444-444444444444')).rejects.toBe(failure);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+    expect(mocks.confirmIdentity).not.toHaveBeenCalled();
+  });
+
+  it('binds account deletion to the initiating account without repeating identity confirmation', async () => {
+    const mutation = useRequestAccountDeletionMutation() as unknown as MutationOptions<undefined>;
+    await mutation.mutationFn(undefined);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledExactlyOnceWith(
+      'request-account-deletion',
+      { idempotencyKey: 'request_account_deletion_fixed' },
+      { expectedUserId: 'user-1' },
+    );
+    expect(mocks.confirmIdentity).not.toHaveBeenCalled();
+  });
+
+  it('recovers a definitive deletion authorization rejection with the same payload and key', async () => {
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(
+      Object.assign(new Error('Authorize device'), { code: 'device_authorization_required' }),
+    );
+    const mutation = useRequestAccountDeletionMutation() as unknown as MutationOptions<undefined>;
+    await mutation.mutationFn(undefined);
+    expect(mocks.confirmIdentity).toHaveBeenCalledExactlyOnceWith({
+      actionLabel: 'eliminar tu cuenta',
+      purpose: 'device',
+      force: true,
+    });
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledTimes(2);
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toStrictEqual(
+      mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+    );
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[2]).toEqual({ expectedUserId: 'user-1' });
+    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
   });
 
   it('dedupes notification views before upserting and invalidating', async () => {

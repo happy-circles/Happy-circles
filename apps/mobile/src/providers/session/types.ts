@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { ContactsPermissionStatus } from '@/lib/contacts-permissions';
 import type { NotificationPermissionStatus } from '@/lib/notifications';
 import type { SetupStep } from '@/lib/setup-account';
-import type { BiometricAuthResult } from '@/lib/security';
+import type { BiometricAuthResult, BiometricSupportRefreshResult } from '@/lib/security';
 import type { Database } from '@happy-circles/shared';
 
 export type SessionStatus =
@@ -17,7 +17,7 @@ export type AccountAccessState = 'loading' | 'needs_invite' | 'needs_activation'
 export type ProfileCompletionState = 'loading' | 'incomplete' | 'complete';
 export type DeviceTrustState = 'loading' | 'unknown' | 'pending' | 'trusted' | 'revoked';
 export type IdentityProvider = 'email' | 'google' | 'apple' | 'phone' | 'unknown';
-export type TrustedDeviceAuthMethod = 'google' | 'apple' | 'password';
+export type TrustedDeviceAuthMethod = 'google' | 'apple' | 'password' | 'recent_auth';
 export type SetupPermissionStatus =
   | 'loading'
   | ContactsPermissionStatus
@@ -95,6 +95,7 @@ export interface TrustCurrentDeviceInput {
 
 export interface StepUpAuthInput {
   readonly force?: boolean;
+  readonly method?: 'biometric' | 'password' | 'google' | 'apple';
   readonly password?: string;
 }
 
@@ -142,6 +143,7 @@ export interface SessionContextValue {
   readonly profileCompletionState: ProfileCompletionState;
   readonly setupState: SetupState;
   readonly deviceTrustState: DeviceTrustState;
+  readonly isAuthorizedDeviceSession: boolean;
   readonly trustedDevices: readonly TrustedDeviceRow[];
   readonly currentDeviceId: string | null;
   readonly stepUpFreshUntil: number | null;
@@ -172,6 +174,7 @@ export interface SessionContextValue {
   linkApple(input?: LinkSocialInput): Promise<string>;
   attachEmailPassword(input: AttachEmailPasswordInput): Promise<string>;
   trustCurrentDevice(input?: TrustCurrentDeviceInput): Promise<string>;
+  authorizeCurrentDeviceSession(this: void): Promise<BiometricAuthResult>;
   revokeTrustedDevice(deviceId: string, input?: TrustCurrentDeviceInput): Promise<string>;
   readonly refreshAccountState: (options?: RefreshAccountStateOptions) => Promise<void>;
   readonly retrySession: () => Promise<void>;
@@ -180,6 +183,8 @@ export interface SessionContextValue {
   lock(): void;
   stepUpAuth(input?: boolean | StepUpAuthInput): Promise<BiometricAuthResult>;
   setBiometricsEnabled(enabled: boolean): Promise<BiometricToggleResult>;
+  refreshBiometricSupport(this: void): Promise<BiometricSupportRefreshResult>;
+  beginNotificationEnableFromSettings(this: void): void;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
   requestContactsPermission(): Promise<string>;
   requestNotificationsPermission(): Promise<string>;

@@ -6,16 +6,19 @@
   "build": {
     "development": {
       "environment": "preview",
+      "channel": "preview",
       "developmentClient": true,
       "distribution": "internal"
     },
     "preview": {
       "environment": "preview",
+      "channel": "preview",
       "distribution": "internal"
     },
     "apk": {
       "distribution": "internal",
       "environment": "production",
+      "channel": "production-smoke",
       "autoIncrement": false,
       "credentialsSource": "remote",
       "android": {

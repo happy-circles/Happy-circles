@@ -13,6 +13,7 @@ import { useAppTheme } from '@/providers/theme-provider';
 import type { SecurityTone } from './setup-account-helpers';
 import { styles } from './setup-account-screen-runtime.styles';
 import { SecurityStatusRow } from './setup-security-status-row';
+import { resolveSetupNotificationState } from './setup-notification-state';
 
 type OnboardingPermissionKey = 'contacts' | 'notifications';
 
@@ -101,14 +102,18 @@ function resolveOnboardingPermissionActionLabel(status: SetupPermissionStatus): 
 
 export function SetupAccountPermissionsSection({
   contactsPermissionStatus,
+  notificationsEnabled,
   notificationsPermissionStatus,
   onMessage,
+  onOpenNotificationSettings,
   requestContactsPermission,
   requestNotificationsPermission,
 }: {
   readonly contactsPermissionStatus: SetupPermissionStatus;
+  readonly notificationsEnabled: boolean;
   readonly notificationsPermissionStatus: SetupPermissionStatus;
   readonly onMessage: (message: string | null) => void;
+  readonly onOpenNotificationSettings?: () => void;
   readonly requestContactsPermission: () => Promise<string>;
   readonly requestNotificationsPermission: () => Promise<string>;
 }) {
@@ -137,8 +142,9 @@ export function SetupAccountPermissionsSection({
   );
   const contactsPermissionActionLabel =
     resolveOnboardingPermissionActionLabel(contactsPermissionStatus);
-  const notificationsPermissionActionLabel = resolveOnboardingPermissionActionLabel(
+  const notificationState = resolveSetupNotificationState(
     notificationsPermissionStatus,
+    notificationsEnabled,
   );
 
   function openOnboardingPermissionSettings(key: OnboardingPermissionKey) {
@@ -149,7 +155,17 @@ export function SetupAccountPermissionsSection({
         : 'Abre Ajustes y permite notificaciones para activar recordatorios.',
       [
         { style: 'cancel', text: 'Ahora no' },
-        { text: 'Abrir ajustes', onPress: () => void Linking.openSettings() },
+        {
+          text: 'Abrir ajustes',
+          onPress: () => {
+            if (key === 'notifications') {
+              onOpenNotificationSettings?.();
+            }
+            void Linking.openSettings().catch(() => {
+              onMessage('No pudimos abrir Ajustes. Puedes abrirlos desde tu teléfono.');
+            });
+          },
+        },
       ],
     );
   }
@@ -208,7 +224,10 @@ export function SetupAccountPermissionsSection({
       return;
     }
 
-    if (notificationsPermissionStatus !== 'undetermined') {
+    if (
+      notificationsPermissionStatus !== 'undetermined' &&
+      !(notificationsPermissionStatus === 'granted' && !notificationsEnabled)
+    ) {
       return;
     }
 
@@ -241,23 +260,23 @@ export function SetupAccountPermissionsSection({
     status: SetupPermissionStatus,
     actionLabel: string | null,
     onPress: () => void,
+    statusLabel = formatOnboardingPermissionStateLabel(status),
+    tone = resolveOnboardingPermissionTone(status),
   ) {
     if (!actionLabel) {
       return undefined;
     }
 
     const statusColor =
-      status === 'granted' || status === 'limited'
+      tone === 'success'
         ? activeTheme.colors.success
-        : status === 'denied'
+        : tone === 'danger'
           ? activeTheme.colors.danger
           : activeTheme.colors.textMuted;
 
     return (
       <View style={styles.permissionTrailing}>
-        <AppText style={[styles.permissionStatus, { color: statusColor }]}>
-          {formatOnboardingPermissionStateLabel(status)}
-        </AppText>
+        <AppText style={[styles.permissionStatus, { color: statusColor }]}>{statusLabel}</AppText>
         <Pressable
           disabled={permissionBusyKey !== null}
           onPress={onPress}
@@ -305,18 +324,17 @@ export function SetupAccountPermissionsSection({
 
         <SecurityStatusRow
           icon="notifications"
-          status={formatOnboardingPermissionStateLabel(notificationsPermissionStatus)}
-          subtitle={formatOnboardingPermissionSubtitle(
-            'notifications',
-            notificationsPermissionStatus,
-          )}
+          status={notificationState.statusLabel}
+          subtitle={notificationState.subtitle}
           title="Notificaciones"
-          tone={resolveOnboardingPermissionTone(notificationsPermissionStatus)}
+          tone={notificationState.tone}
           trailing={renderPermissionTrailing(
             'notifications',
             notificationsPermissionStatus,
-            notificationsPermissionActionLabel,
+            notificationState.actionLabel,
             () => void handleNotificationsPermission(),
+            notificationState.statusLabel,
+            notificationState.tone,
           )}
         />
       </View>

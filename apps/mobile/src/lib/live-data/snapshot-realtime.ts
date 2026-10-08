@@ -3,6 +3,8 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { supabase } from '../supabase';
 import { invalidateAppSnapshot } from './client';
+import { invalidateContactResolutions, setContactRealtimeReady } from '../contact-resolution-state';
+import { disposeContactResolutionUser } from '@/features/home/contact-resolution-service';
 
 const SNAPSHOT_REALTIME_DEBOUNCE_MS = 650;
 const FOREGROUND_REFETCH_AFTER_MS = 5 * 60_000;
@@ -127,6 +129,24 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
       }
 
       scheduleSnapshotInvalidation();
+      if (!payload?.kind || /friendship|account_invite|relationship|profile/.test(payload.kind)) {
+        invalidateContactResolutions({
+          userId,
+          ...(payload?.sourceItemId && !/relationship/.test(payload.kind ?? '')
+            ? { inviteId: payload.sourceItemId, matchedUserId: payload.sourceItemId }
+            : {}),
+        });
+      }
+    }
+
+    function handleContactsChanged(envelope: BroadcastEnvelope) {
+      const payload = asRecord(envelope.payload);
+      if (!payload || !Array.isArray(payload.watchIds)) return;
+      if (typeof payload.eventId === 'string' && !rememberEventId(payload.eventId)) return;
+      const watchIds = payload.watchIds.filter(
+        (value): value is string => typeof value === 'string',
+      );
+      if (watchIds.length) invalidateContactResolutions({ userId, watchIds });
     }
 
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
@@ -158,8 +178,10 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
 
         channel
           .on('broadcast', { event: 'snapshot_changed' }, handleSnapshotChanged)
+          .on('broadcast', { event: 'contacts_changed' }, handleContactsChanged)
           .subscribe((status) => {
             const statusText = String(status);
+            setContactRealtimeReady(userId, statusText === 'SUBSCRIBED');
             if (statusText === 'CHANNEL_ERROR' || statusText === 'TIMED_OUT') {
               scheduleSnapshotInvalidation();
             }
@@ -169,6 +191,8 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
 
     return () => {
       isMounted = false;
+      setContactRealtimeReady(userId, false);
+      disposeContactResolutionUser(userId);
       appStateSubscription.remove();
       authSubscription.unsubscribe();
       if (debounceTimeoutRef.current) {

@@ -270,6 +270,17 @@ export const friendshipInvitePreviewSchema = friendshipInviteTokenSchema;
 
 export const resolvePeopleTargetsSchema = z.object({
   phoneE164List: z.array(z.string().trim().min(8).max(24)).min(1).max(60),
+  discoverySessionId: uuidSchema.optional(),
+});
+
+export const manageContactDiscoverySchema = z.object({
+  discoverySessionId: uuidSchema,
+  action: z.enum(['renew', 'stop']),
+});
+
+export const remindFriendshipInviteSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  inviteId: uuidSchema,
 });
 
 export const createAccountInviteSchema = z.object({
