@@ -133,6 +133,19 @@ Estado EAS confirmado el 2026-10-07, antes de generar la candidata `1.0.3`:
   App Store sigue activo hasta 2027-05-05; restaurar la autorizacion Apple
   antes de dar por confirmado el submit de la candidata.
 
+Estado posterior de la candidata 1.0.3, confirmado el 2026-10-07:
+
+- Android `1.0.3 (23)` e iOS `1.0.3 (38)` finalizaron en EAS desde `3a6b8d15`.
+- Android enviado al track existente `alpha`; Play Console confirma cambios
+  en proceso de revision. El acceso a produccion publica sigue sujeto a los
+  14 dias de closed testing requeridos por Google.
+- Acuerdo Apple Developer `XG8DNV4HYY` aceptado y App Store Connect API
+  habilitada con autorizacion explicita del titular. Free Apps Agreement
+  confirmado Active. La clave existente EAS App Manager sigue activa.
+- La ficha iOS 1.0.3 y sus novedades estan guardadas en App Store Connect.
+- Consultar `docs/release-1.0.3-2026-10-07.md` para IDs, recibos y estado del
+  envio iOS. Un build terminado no implica aprobacion o distribucion.
+
 Estado EAS historico observado el 2026-07-05 (no es la candidata actual):
 
 - iOS production build `936eb1bd-a5f1-47c6-aaec-167dd3f6502a`:

@@ -79,8 +79,8 @@ Los binarios publicados 1.0.2 no incorporan expo-updates: necesitan instalar
 - `completed` en la API identifica la configuración del rollout; no demuestra
   aprobación de la revisión ni disponibilidad pública de la candidata.
 - Play Console confirma `Prueba cerrada - Alpha`, `1.0.3`, `Iniciar lanzamiento
-  completo` en "Cambios en la etapa de revisión". Google está ejecutando
-  verificaciones rápidas y enviará los cambios a revisión al terminarlas.
+  completo` en "Cambios en la etapa de revisión". Las verificaciones rápidas
+  terminaron y el panel confirma: "Tus cambios están en proceso de revisión".
   La publicación administrada ya estaba desactivada; no se alteró ese ajuste.
 - Panel Play verificado: 12 testers participan durante nueve días consecutivos;
   Google requiere 14 días antes de solicitar acceso a producción. El botón de
@@ -96,15 +96,31 @@ Los binarios publicados 1.0.2 no incorporan expo-updates: necesitan instalar
 
 ## Apple
 
-- Build firmado terminado; no se ha enviado 1.0.3 a App Store Connect.
-- Sesión del titular y equipo `AA75LHJ4LC` verificados. Apple Developer muestra
-  un contrato actualizado pendiente de aceptación. El aviso indica que su
-  aceptación restaura recursos, incluido App Store Connect API.
-- La consulta de apps con la clave EAS existente devuelve 403. Ese resultado
-  no demuestra revocación de la clave; reintentar tras aceptar el contrato.
-- El titular debe revisar y aceptar el acuerdo en
-  [Apple Developer](https://developer.apple.com/account) antes del envío.
-  La aceptación legal no se realizó automáticamente.
+- Apple Developer confirma el acuerdo `XG8DNV4HYY`, emitido el 2026-08-18,
+  aceptado el 2026-10-07 en el equipo `AA75LHJ4LC`. El titular autorizó su
+  aceptación y recuperó la sesión de Apple.
+- El titular autorizó también las condiciones de uso interno de App Store
+  Connect API. La solicitud se envió y el panel confirmó el acceso habilitado.
+- La clave existente de Expo `2H598AX2VF` figura ACTIVE, rol App Manager,
+  issuer `018298b1-2b50-45eb-8d4e-ecea59a56067`, coincidente con EAS y la cuenta.
+  No se generó ni revocó ninguna clave Apple.
+- Primer envío
+  [388b59e7-c501-4a49-8dda-0c9c2685bf94](https://expo.dev/accounts/happy-circles/projects/happy-circles/submissions/388b59e7-c501-4a49-8dda-0c9c2685bf94)
+  falló antes de cargar el binario: `EAS_ASC_REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`.
+  Business confirmó Free Apps Agreement ACTIVE, vigente desde el 2026-10-07
+  hasta el 2027-04-20. Paid Apps Agreement no se aceptó; la app es gratuita.
+- Después de esa verificación, la consulta de apps de EAS respondió 200.
+  Reintento controlado
+  [e43213df-9de5-4c09-9ce4-59874e384836](https://expo.dev/accounts/happy-circles/projects/happy-circles/submissions/e43213df-9de5-4c09-9ce4-59874e384836)
+  FINISHED el 2026-10-07 22:43:15 America/Bogota, worker sin errores. Usó la
+  misma clave y exactamente el build 1.0.3 (38); no se recompiló.
+- Ficha iOS 1.0.3 creada en App Store Connect, `Prepare for Submission`.
+  Novedades `es-MX` guardadas; descripción, capturas existentes y datos de
+  revisión heredados. Publicación automática tras aprobación conservada.
+- Apple confirma 1.0.3 (38) en Build Uploads, estado `Processing`, creada
+  2026-10-07 22:43 America/Bogota. BuildUpload
+  `eeb552d3-0ae6-45a5-a83a-26c4becbace8`; la carga está completada, pendiente
+  de procesamiento y selección del build para enviar la ficha a revisión.
 - App Privacy publicada ya incluye Contacts, Phone Number y Email Address
   para funcionalidad, vinculados a la identidad. No se alteró la declaración.
 - La versión pública comprobada sigue siendo 1.0.2. Un build terminado no
