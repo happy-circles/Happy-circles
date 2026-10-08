@@ -8,7 +8,7 @@ function firstNonEmpty(...values: readonly (string | undefined)[]): string {
   return value?.trim() ?? '';
 }
 
-const env = process.env;
+const env = process.env as Readonly<Record<string, string | undefined>>;
 const appWebOrigin = env.EXPO_PUBLIC_APP_WEB_ORIGIN ?? 'https://app.happy-circles.com';
 const authRedirectMode = env.EXPO_PUBLIC_AUTH_REDIRECT_MODE ?? 'universal-link';
 const authDebugEnabled = firstNonEmpty(env.EXPO_PUBLIC_AUTH_DEBUG);
