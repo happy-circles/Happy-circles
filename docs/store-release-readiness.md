@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-10-07.
+Ultima revision: 2026-10-08.
 
 Objetivo: dejar la nueva version `1.0.3` de Happy Circles publicable en App Store
 y Play Store para su salida en Colombia.
@@ -425,12 +425,12 @@ Verificacion de los formularios publicados el 2026-10-07:
 - Supabase procesa los datos como proveedor de servicio. Para este flujo, ese
   tratamiento por encargo encaja en la excepcion de proveedor de servicio de
   Google para la respuesta de datos compartidos.
-- La politica web publicada de `/privacy`, con fecha 2026-10-07, describe el
-  ciclo anterior limitado a la pantalla de contactos. La candidata local,
-  con fecha 2026-10-08, explica el envio de numeros, las huellas HMAC vinculadas
-  a cuenta, la renovacion mientras la app esta en primer plano y la diferencia
-  entre caducidad y borrado periodico. Publicar ese texto antes de distribuir
-  la actualizacion que cambia el ciclo de observaciones.
+- La politica web publicada de `/privacy`, con fecha 2026-10-08, explica el
+  envio de numeros, las huellas HMAC vinculadas a cuenta, la renovacion mientras
+  la app esta en primer plano y la diferencia entre caducidad y borrado
+  periodico. Se verifico en produccion antes de publicar las OTA de contactos.
+  El [registro de la publicacion](./contact-discovery-release-2026-10-08.md)
+  conserva los commits, grupos OTA, comprobaciones y limites de la entrega.
 
 Criterios oficiales revisados:
 [Apple App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)

@@ -75,7 +75,20 @@ y un mensaje. El workflow:
 - Exporta el código del checkout y ejecuta `eas update` con `--environment`
   explícito y `.env` local desactivado. En SDK 54 este argumento es esencial
   para evitar incorporar variables de otro entorno.
-- Guarda el resultado con los IDs publicados en un artifact del workflow.
+- Con plataformas `all`, publica Android y después iOS mediante dos comandos
+  separados (`--platform android` y `--platform ios`). No exporta web. Se generan
+  **dos grupos**, uno por plataforma, con el mismo commit, canal, environment y
+  runtime. Una selección individual genera sólo el grupo de esa plataforma.
+- Guarda resultados y metadata por plataforma en un artifact del workflow:
+  `ota-android-result.json`, `ota-ios-result.json` y sus archivos
+  `ota-*-metadata.json`. También conserva los resultados si falla la segunda
+  publicación; el workflow permanece fallido y no representa una entrega completa.
+
+Si una plataforma ya fue publicada y la siguiente falla, consultar sus IDs en el
+artifact y en EAS antes de reintentar. Publicar sólo la plataforma pendiente desde
+el mismo commit, destino y runtime; no volver a publicar automáticamente la que
+ya salió bien. Verificar ambas plataformas por separado. Si se necesita retirar
+la entrega parcial, revertir el grupo que sí se publicó.
 
 Primero validar en preview. Para producción se exporta otra vez **el mismo
 commit probado**, usando sus variables de producción. No republicar un grupo
@@ -86,8 +99,8 @@ Comprobar en cada plataforma:
 
 1. Abrir el build instalado con red, dejar terminar la descarga y cerrarlo.
 2. Abrirlo otra vez y demostrar que ejecuta el cambio publicado; guardar el ID
-   del grupo y evidencia de la conducta modificada. Metro/Expo Go no sustituyen
-   esta comprobación.
+   del grupo de esa plataforma y evidencia de la conducta modificada. Para
+   `all`, conservar los dos IDs. Metro/Expo Go no sustituyen esta comprobación.
 3. Enviar/cancelar una solicitud con el update pendiente: no debe reiniciarse
    la sesión ni perderse la operación.
 4. Cerrar y abrir en modo avión después de haber recibido la OTA; comprobar
@@ -107,10 +120,13 @@ pnpm dlx eas-cli@21.7.1 update:view ID_DEL_GRUPO --json
 ```
 
 Para retirar el último grupo de su rama y runtime, volver al anterior (o al
-embedded si era el primero):
+embedded si era el primero). Una publicación `all` tiene dos grupos: consultar
+y revertir cada ID con su plataforma; un ID no representa la entrega completa.
+Ejecutar sólo el comando correspondiente si el incidente afecta una plataforma:
 
 ```sh
-pnpm dlx eas-cli@21.7.1 update:rollback ID_DEL_GRUPO_DEFECTUOSO --message "Revertir actualización" --platform all --non-interactive
+pnpm dlx eas-cli@21.7.1 update:rollback ID_DEL_GRUPO_ANDROID_DEFECTUOSO --message "Revertir actualización Android" --platform android --non-interactive
+pnpm dlx eas-cli@21.7.1 update:rollback ID_DEL_GRUPO_IOS_DEFECTUOSO --message "Revertir actualización iOS" --platform ios --non-interactive
 ```
 
 Para volver expresamente al bundle del binario en el canal afectado:

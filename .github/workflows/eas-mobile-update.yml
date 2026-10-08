@@ -119,29 +119,45 @@ jobs:
           --non-interactive
 
       - name: Export from this commit and publish with the verified environment
+        id: publish
+        shell: bash
         working-directory: apps/mobile
         env:
           UPDATE_ENVIRONMENT: ${{ steps.target.outputs.environment }}
           UPDATE_CHANNEL: ${{ steps.target.outputs.channel }}
         run: |
-          pnpm dlx eas-cli@21.7.1 update \
-            --channel "$UPDATE_CHANNEL" \
-            --environment "$UPDATE_ENVIRONMENT" \
-            --platform "$UPDATE_PLATFORM" \
-            --message "$UPDATE_MESSAGE (${GITHUB_SHA})" \
-            --emit-metadata \
-            --non-interactive \
-            --json > ota-result.json
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/eas-update"
+          case "$UPDATE_PLATFORM" in
+            all) platforms=(android ios) ;;
+            android|ios) platforms=("$UPDATE_PLATFORM") ;;
+            *) echo "::error::Unsupported mobile platform: $UPDATE_PLATFORM"; exit 1 ;;
+          esac
+          for platform in "${platforms[@]}"; do
+            pnpm dlx eas-cli@21.7.1 update \
+              --channel "$UPDATE_CHANNEL" \
+              --environment "$UPDATE_ENVIRONMENT" \
+              --platform "$platform" \
+              --message "$UPDATE_MESSAGE (${GITHUB_SHA})" \
+              --emit-metadata \
+              --non-interactive \
+              --json > "$RUNNER_TEMP/eas-update/ota-${platform}-result.json"
+            cp dist/eas-update-metadata.json "$RUNNER_TEMP/eas-update/ota-${platform}-metadata.json"
+          done
 
       - name: Preserve the published update identifiers
+        if: ${{ always() && steps.publish.outcome != 'skipped' }}
         uses: actions/upload-artifact@v4
         with:
           name: eas-update-${{ inputs.target }}-${{ github.sha }}
-          path: apps/mobile/ota-result.json
+          path: |
+            ${{ runner.temp }}/eas-update/ota-*-result.json
+            ${{ runner.temp }}/eas-update/ota-*-metadata.json
           if-no-files-found: error
 
       - name: Record the release context
+        if: ${{ always() && steps.publish.outcome != 'skipped' }}
         shell: bash
         run: |
-          printf 'Commit: `%s`\n\nTarget: `%s`\n\nRuntime: `%s`\n' \
-            "$GITHUB_SHA" "$UPDATE_TARGET" "$EXPECTED_RUNTIME" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Commit: `%s`\n\nTarget: `%s`\n\nRuntime: `%s`\n\nPlatforms requested: `%s`\n' \
+            "$GITHUB_SHA" "$UPDATE_TARGET" "$EXPECTED_RUNTIME" "$UPDATE_PLATFORM" >> "$GITHUB_STEP_SUMMARY"
