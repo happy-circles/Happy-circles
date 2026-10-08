@@ -1,9 +1,9 @@
 # Store Release Readiness
 
-Ultima revision: 2026-08-14.
+Ultima revision: 2026-10-07.
 
-Objetivo: dejar Happy Circles publicable en App Store y Play Store para primera
-salida en Colombia.
+Objetivo: dejar la nueva version `1.0.3` de Happy Circles publicable en App Store
+y Play Store para su salida en Colombia.
 
 ## Fuentes oficiales revisadas
 
@@ -347,6 +347,65 @@ Notas:
   tener excepciones, pero hay que contestar con el criterio oficial de Play.
 - No declarar ubicacion, pagos, credit score, browsing history ni advertising
   data salvo que el producto cambie.
+
+## Privacidad de contactos: candidata 1.0.3, revision 2026-10-07
+
+El descubrimiento de contactos es opcional: requiere acceso a la agenda y la app
+permite seguir usando QR e invitaciones sin ese permiso. Con el permiso, la app
+envia a Supabase los numeros E.164 de los contactos cargados, incluidos los que
+resuelve en segundo plano. No se limita al contacto seleccionado para invitar.
+La busqueda no envia nombres ni una copia de la agenda con sus datos originales;
+el telefono y alias de una invitacion elegida se tratan por separado.
+
+El servidor conserva HMAC de esos numeros vinculados a la cuenta y a una sesion
+de descubrimiento, no datos anonimos. La sesion expira 15 minutos despues de la
+ultima busqueda o renovacion; la pantalla activa puede renovarla cada 5 minutos.
+Cerrar la pantalla solicita eliminarla y la limpieza periodica elimina sesiones
+expiradas y sus huellas. Por esta persistencia, Contacts debe declararse como
+recopilado y **no efimero**, aunque la retencion sea temporal. No hay SMS ni
+invitaciones automaticas por ejecutar la busqueda. Las coincidencias requieren
+una identidad telefonica habilitada (telefono verificado o identidad legacy);
+el codigo no implementa un ajuste para optar por ser descubrible.
+
+Evidencia en la candidata:
+
+- `apps/mobile/src/features/home/contact-resolution-service.ts`: envio de
+  `phoneE164List` y `discoverySessionId`, sin nombres.
+- `apps/mobile/src/features/home/add-person-contacts-sheet-controller.ts`:
+  carga y resolucion de contactos en segundo plano.
+- `apps/mobile/src/features/home/add-person-contact-resolution-controller.ts`:
+  renovacion y cierre de la sesion de descubrimiento.
+- `supabase/migrations/20260928202134_private_contact_discovery.sql`: huellas
+  HMAC, vinculo con cuenta, expiracion renovable y limpieza de sesiones.
+- `supabase/migrations/20260928202038_friendship_lifecycle_recovery.sql` y
+  `supabase/migrations/20260813020000_0079_new_user_backend_definitions.sql`:
+  filtro de identidad telefonica para las coincidencias.
+
+Verificacion de los formularios publicados el 2026-10-07:
+
+- App Store Connect: 13 tipos declarados. Contacts, Name, Email Address y Phone
+  Number figuran para App Functionality, vinculados a la identidad. No hay
+  tracking declarado. Contacts ya cubre esta funcion; no requiere agregar una
+  categoria por la candidata `1.0.3`.
+- Google Play Console: Contacts figura recopilado, no
+  compartido, no efimero, opcional y solo para App functionality. Phone number
+  figura recopilado, no compartido, no efimero, opcional, para App functionality
+  y Account management. Email address tiene los mismos usos y figura requerido.
+  Estas respuestas cubren el flujo revisado. No se modificaron los formularios.
+- Supabase procesa los datos como proveedor de servicio. Para este flujo, ese
+  tratamiento por encargo encaja en la excepcion de proveedor de servicio de
+  Google para la respuesta de datos compartidos.
+- La politica web de `/privacy`, con fecha 2026-10-07, explica el envio de numeros,
+  las huellas HMAC vinculadas a cuenta, su expiracion renovable y el caracter
+  opcional del descubrimiento. Publicar ese texto junto con la candidata.
+
+Criterios oficiales revisados:
+[Apple App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)
+y [Google Play Data safety](https://support.google.com/googleplay/android-developer/answer/10787469).
+Google considera efimero el procesamiento en memoria que no persiste mas alla de
+la solicitud; las huellas guardadas de esta funcion no cumplen esa condicion.
+Apple exige declarar Contacts y su vinculo con la identidad para este uso
+continuado tras conceder el permiso.
 
 ## Google Play Console y candidata Android
 

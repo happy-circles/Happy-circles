@@ -16,7 +16,7 @@ export default function PrivacyPage() {
 
         <header className="legalHeader">
           <h1>Política de privacidad</h1>
-          <p className="legalUpdated">Última actualización: 2026-05-02</p>
+          <p className="legalUpdated">Última actualización: 2026-10-07</p>
         </header>
 
         <section className="legalSection">
@@ -28,7 +28,8 @@ export default function PrivacyPage() {
           <ul>
             <li>Identidad de cuenta: correo, nombre visible, teléfono y proveedores de acceso.</li>
             <li>
-              Contactos opcionales: teléfonos o alias que eliges usar para preparar invitaciones.
+              Contactos opcionales: teléfonos de tu agenda para buscar coincidencias y teléfonos o
+              alias que eliges usar para preparar invitaciones.
             </li>
             <li>Contenido opcional: foto o avatar de perfil.</li>
             <li>
@@ -47,6 +48,31 @@ export default function PrivacyPage() {
             Usamos estos datos para autenticarte, proteger acciones sensibles, mostrar saldos,
             enviar o resolver invitaciones, mantener auditoría financiera y dar soporte. No vendemos
             datos personales ni usamos publicidad comportamental.
+          </p>
+        </section>
+
+        <section className="legalSection">
+          <h2>Descubrimiento de contactos</h2>
+          <p>
+            Usar tu agenda es opcional. Si permites el acceso, enviamos los números de teléfono de
+            los contactos cargados a Supabase, nuestro proveedor de infraestructura, para buscar
+            coincidencias con cuentas cuyo teléfono está habilitado para esta función. También
+            puedes conectar con otras personas mediante QR o invitaciones sin dar acceso a tu
+            agenda. Buscar contactos no envía SMS ni invitaciones automáticamente.
+          </p>
+          <p>
+            Para actualizar las coincidencias mientras usas esta pantalla, el servidor guarda
+            huellas criptográficas de los teléfonos (HMAC), asociadas a tu cuenta y a la sesión de
+            búsqueda. La sesión caduca 15 minutos después de la última búsqueda o renovación y puede
+            renovarse mientras la pantalla sigue activa. Al cerrar la pantalla, la app pide eliminar
+            esa sesión; el servidor también elimina periódicamente las sesiones caducadas y sus
+            huellas.
+          </p>
+          <p>
+            Esta búsqueda no envía los nombres de tus contactos ni guarda en el servidor una copia
+            de tu agenda con nombres y números en texto legible. Los nombres se procesan en tu
+            dispositivo. Si preparas una invitación, sí usamos el teléfono y el alias que eliges
+            para gestionarla.
           </p>
         </section>
 
