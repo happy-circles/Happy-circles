@@ -142,7 +142,10 @@ Estado posterior de la candidata 1.0.3, confirmado el 2026-10-07:
 - Acuerdo Apple Developer `XG8DNV4HYY` aceptado y App Store Connect API
   habilitada con autorizacion explicita del titular. Free Apps Agreement
   confirmado Active. La clave existente EAS App Manager sigue activa.
-- La ficha iOS 1.0.3 y sus novedades estan guardadas en App Store Connect.
+- iOS 1.0.3 (38) subido, procesado VALID y seleccionado en App Store Connect.
+  Revision `9e5351c6-4911-436f-a46a-02bc17ece6ff`, Waiting for Review,
+  enviada el 2026-10-07 22:46 America/Bogota. Publicacion automatica tras
+  aprobacion conservada.
 - Consultar `docs/release-1.0.3-2026-10-07.md` para IDs, recibos y estado del
   envio iOS. Un build terminado no implica aprobacion o distribucion.
 

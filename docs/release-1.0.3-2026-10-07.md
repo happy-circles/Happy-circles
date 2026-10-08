@@ -114,13 +114,16 @@ Los binarios publicados 1.0.2 no incorporan expo-updates: necesitan instalar
   [e43213df-9de5-4c09-9ce4-59874e384836](https://expo.dev/accounts/happy-circles/projects/happy-circles/submissions/e43213df-9de5-4c09-9ce4-59874e384836)
   FINISHED el 2026-10-07 22:43:15 America/Bogota, worker sin errores. Usó la
   misma clave y exactamente el build 1.0.3 (38); no se recompiló.
-- Ficha iOS 1.0.3 creada en App Store Connect, `Prepare for Submission`.
+- Ficha iOS 1.0.3 creada en App Store Connect.
   Novedades `es-MX` guardadas; descripción, capturas existentes y datos de
   revisión heredados. Publicación automática tras aprobación conservada.
-- Apple confirma 1.0.3 (38) en Build Uploads, estado `Processing`, creada
-  2026-10-07 22:43 America/Bogota. BuildUpload
-  `eeb552d3-0ae6-45a5-a83a-26c4becbace8`; la carga está completada, pendiente
-  de procesamiento y selección del build para enviar la ficha a revisión.
+- Apple procesó 1.0.3 (38): `VALID`, disponible para pruebas internas.
+  BuildUpload `eeb552d3-0ae6-45a5-a83a-26c4becbace8`; el build se seleccionó
+  y guardó en la ficha antes de ejecutar Add for Review y Submit for Review.
+- [Revisión Apple 9e5351c6-4911-436f-a46a-02bc17ece6ff](https://appstoreconnect.apple.com/apps/6766675014/distribution/reviewsubmissions/details/9e5351c6-4911-436f-a46a-02bc17ece6ff):
+  `Waiting for Review`, un único item iOS 1.0.3 (38), enviado el 2026-10-07
+  22:46 America/Bogota. El panel confirmó `1 Item Submitted` y después el
+  detalle de revisión con ese build. No hay aprobación pública todavía.
 - App Privacy publicada ya incluye Contacts, Phone Number y Email Address
   para funcionalidad, vinculados a la identidad. No se alteró la declaración.
 - La versión pública comprobada sigue siendo 1.0.2. Un build terminado no
