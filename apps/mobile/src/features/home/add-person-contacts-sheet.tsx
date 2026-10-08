@@ -38,6 +38,7 @@ import {
 } from './add-person-manual-invite-card';
 import { AppText } from '@/components/app-text';
 import { buildManualPhoneE164 } from '@/features/invites/people-outreach-utils';
+import { buildContactListSections } from './contact-list-sections';
 
 const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
 const AnimatedContactList = Animated.createAnimatedComponent(SectionList<EnrichedContact>);
@@ -131,12 +132,7 @@ export function AddPersonContactsSheet({
     void contactPressRef.current(contact);
   }, []);
   const contactSections = useMemo(
-    () =>
-      [
-        { title: 'En Happy Circles', data: inAppContacts },
-        { title: 'Agregar a Happy Circles', data: unresolvedContacts },
-        { title: 'Invitar a Happy Circles', data: inviteContacts },
-      ].filter((section) => section.data.length > 0),
+    () => buildContactListSections({ inAppContacts, unresolvedContacts, inviteContacts }),
     [inAppContacts, unresolvedContacts, inviteContacts],
   );
   const viewableContactsRef = useRef(handleViewableContactsChanged);
@@ -149,7 +145,7 @@ export function AddPersonContactsSheet({
     ({ viewableItems }: { viewableItems: ViewToken<EnrichedContact>[] }) => {
       viewableContactsRef.current(
         viewableItems
-          .filter((token) => token.isViewable && token.item?.contact)
+          .filter((token) => token.isViewable && token.index != null)
           .map((token) => token.item.contact),
       );
     },
@@ -220,7 +216,6 @@ export function AddPersonContactsSheet({
               sections={canReadContacts ? contactSections : []}
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
-              keyExtractor={(item) => item.contact.contactId}
               renderItem={renderContact}
               renderSectionHeader={({ section }) => (
                 <AppText style={styles.sectionLabel}>{section.title}</AppText>
