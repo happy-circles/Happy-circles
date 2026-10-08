@@ -2,6 +2,11 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const nativeContainerSelector =
+  ':matches(JSXElement[openingElement.name.name=/^(View|ScrollView|Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|KeyboardAvoidingView|SafeAreaView|Modal)$/], JSXElement[openingElement.name.object.name=/^(Animated|Reanimated)$/][openingElement.name.property.name=/^(View|ScrollView)$/])';
+const nativeTextMessage =
+  'Wrap native text in AppText instead of placing it directly in a container.';
+
 export default tseslint.config(
   {
     ignores: [
@@ -61,6 +66,18 @@ export default tseslint.config(
             'CallExpression[callee.object.name="router"][callee.property.name=/^(back|dismiss|dismissTo|push|replace)$/]',
           message:
             'Use src/lib/navigation.ts helpers so route changes do not duplicate screens in history.',
+        },
+        {
+          selector: `${nativeContainerSelector} > JSXText[value=/\\S/]`,
+          message: nativeTextMessage,
+        },
+        {
+          selector: `${nativeContainerSelector} > JSXExpressionContainer > :matches(Literal[value=type(string)][value!=""], Literal[value=type(number)], TemplateLiteral:not([expressions.length=0][quasis.0.value.raw=""]))`,
+          message: nativeTextMessage,
+        },
+        {
+          selector: `${nativeContainerSelector} > JSXExpressionContainer > UnaryExpression[operator=/^[-+]$/] > Literal[value=type(number)]`,
+          message: nativeTextMessage,
         },
       ],
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],

@@ -241,7 +241,6 @@ export function AddPersonContactsSheet({
               showsVerticalScrollIndicator={false}
               ListHeaderComponent={
                 <View style={styles.contactSection}>
-                  {' '}
                   <AddPersonInPersonQrBlock
                     busyKey={busyKey}
                     onOpenScanner={() => void handleOpenScanner()}
@@ -327,7 +326,6 @@ export function AddPersonContactsSheet({
               ListFooterComponent={
                 canReadContacts ? (
                   <View style={styles.contactSection}>
-                    {' '}
                     {hasMoreContactsToDisplay ? (
                       <PrimaryAction
                         compact
