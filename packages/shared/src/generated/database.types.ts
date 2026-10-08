@@ -4371,6 +4371,15 @@ export type Database = {
           p_action: string;
           p_actor_user_id: string;
           p_discovery_session_id: string;
+          p_watch_ids?: string[];
+        };
+        Returns: Json;
+      };
+      register_contact_discovery: {
+        Args: {
+          p_actor_user_id: string;
+          p_discovery_session_id: string;
+          p_phone_e164_list: string[];
         };
         Returns: Json;
       };

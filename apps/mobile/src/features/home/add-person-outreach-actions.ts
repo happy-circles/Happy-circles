@@ -1,20 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Router } from 'expo-router';
-import { Alert, Share } from 'react-native';
+import { Share } from 'react-native';
 
 import type { ContactActionFeedbackMode } from '@/components/contact-action-feedback-overlay';
 import {
   compareEnrichedContacts,
-  outreachPreflightActionForResolution,
   type AddPersonTransactionContext,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
@@ -29,6 +20,13 @@ import { showBlockedActionAlert, type ActionFeedbackVariant } from '@/lib/action
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { pushRoute } from '@/lib/navigation';
 import { assertAccountDeliveryCurrent } from '@/features/invites/invite-delivery-validation';
+import { rememberImmediateInviteRequest } from '@/features/people/immediate-invite-request';
+import {
+  contactResolutionForOutreach,
+  friendshipOutreachOutcome,
+} from '@/lib/live-data/mutations/people-outreach-confirmation';
+import { useSession } from '@/providers/session-provider';
+import { readContactResolutions } from '@/lib/contact-resolution-state';
 import type {
   AccountInviteDeliveryResult,
   PeopleOutreachResult,
@@ -57,8 +55,6 @@ export function useAddPersonOutreachActions({
   onClose,
   busyKey,
   createPeopleOutreach,
-  ensurePhoneStatuses,
-  resolvePhoneStatusesNow,
   router,
   setBusyKey,
   setMessage,
@@ -78,12 +74,11 @@ export function useAddPersonOutreachActions({
   readonly targetCache: Readonly<Record<string, PeopleTargetResolution>>;
   readonly transactionContext?: AddPersonTransactionContext | null;
 }) {
+  const { userId } = useSession();
   const [pendingContactSelection, setPendingContactSelection] =
     useState<PendingContactSelection | null>(null);
   const [contactActionFeedback, setContactActionFeedback] =
     useState<AddPersonContactActionFeedback | null>(null);
-  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const feedbackResolveRef = useRef<(() => void) | null>(null);
   const actionInFlightRef = useRef(false);
 
   const pendingContactOptions = useMemo<readonly EnrichedContact[]>(
@@ -105,24 +100,9 @@ export function useAddPersonOutreachActions({
     [pendingContactSelection, targetCache],
   );
 
-  const clearFeedbackTimeout = useCallback(() => {
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current);
-      feedbackTimeoutRef.current = null;
-    }
-
-    if (feedbackResolveRef.current) {
-      feedbackResolveRef.current();
-      feedbackResolveRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => clearFeedbackTimeout(), [clearFeedbackTimeout]);
-
   const hideContactActionFeedback = useCallback(() => {
-    clearFeedbackTimeout();
     setContactActionFeedback(null);
-  }, [clearFeedbackTimeout]);
+  }, []);
 
   const showContactActionLoading = useCallback(
     (input: {
@@ -131,7 +111,6 @@ export function useAddPersonOutreachActions({
       readonly mode?: ContactActionFeedbackMode;
       readonly title?: string;
     }) => {
-      clearFeedbackTimeout();
       setContactActionFeedback({
         alias: input.alias,
         message: input.message,
@@ -140,42 +119,7 @@ export function useAddPersonOutreachActions({
         variant: 'loading',
       });
     },
-    [clearFeedbackTimeout],
-  );
-
-  const showContactActionResult = useCallback(
-    (input: {
-      readonly alias: string;
-      readonly durationMs?: number;
-      readonly message?: string;
-      readonly mode?: ContactActionFeedbackMode;
-      readonly title: string;
-      readonly variant?: Exclude<ActionFeedbackVariant, 'loading'>;
-    }) => {
-      clearFeedbackTimeout();
-      const variant = input.variant ?? 'success';
-      setContactActionFeedback({
-        alias: input.alias,
-        message: input.message,
-        mode: input.mode ?? 'prepare',
-        title: input.title,
-        variant,
-      });
-
-      return new Promise<void>((resolve) => {
-        feedbackResolveRef.current = resolve;
-        feedbackTimeoutRef.current = setTimeout(
-          () => {
-            setContactActionFeedback(null);
-            feedbackTimeoutRef.current = null;
-            feedbackResolveRef.current = null;
-            resolve();
-          },
-          input.durationMs ?? (variant === 'danger' ? 1900 : 950),
-        );
-      });
-    },
-    [clearFeedbackTimeout],
+    [],
   );
 
   const resetPendingContactSelection = useCallback(() => {
@@ -236,102 +180,23 @@ export function useAddPersonOutreachActions({
     }
   }
 
-  function confirmHappyCirclesFriendship(alias: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (value: boolean) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        resolve(value);
-      };
-
-      Alert.alert(
-        'Esta en Happy Circles',
-        `${alias} ya usa Happy Circles. Quieres enviarle una solicitud de amistad?`,
-        [
-          {
-            onPress: () => settle(false),
-            style: 'cancel',
-            text: 'Cancelar',
-          },
-          {
-            onPress: () => settle(true),
-            text: 'Enviar solicitud',
-          },
-        ],
-        {
-          cancelable: true,
-          onDismiss: () => settle(false),
-        },
-      );
+  function openPendingRequest(
+    resolution: PeopleTargetResolution,
+    input: { readonly alias: string; readonly phoneLabel?: string | null },
+  ) {
+    const requestId = resolution.friendshipInviteId ?? resolution.accountInviteId;
+    if (!requestId) return false;
+    if (userId) rememberImmediateInviteRequest(userId, resolution, input);
+    hideContactActionFeedback();
+    onClose();
+    pushRoute(router, {
+      pathname: '/people',
+      params: {
+        requests: '1',
+        requestId,
+        requestTab: resolution.friendshipDirection === 'incoming' ? 'received' : 'sent',
+      },
     });
-  }
-
-  async function runOutreachPreflight(input: {
-    readonly alias: string;
-    readonly phoneE164: string;
-  }): Promise<boolean> {
-    showContactActionLoading({
-      alias: input.alias,
-      message: 'Antes de invitar, revisamos si ya esta en Happy Circles.',
-      mode: 'prepare',
-      title: 'Revisando contacto',
-    });
-
-    const resolutions = await resolvePhoneStatusesNow([input.phoneE164]);
-    const resolution =
-      resolutions.find((item) => item.phoneE164 === input.phoneE164) ??
-      targetCache[input.phoneE164] ??
-      null;
-
-    if (!resolution) {
-      throw new Error('No pudimos confirmar si este numero esta en Happy Circles.');
-    }
-
-    const action = outreachPreflightActionForResolution(resolution);
-
-    if (action === 'block_already_related') {
-      setMessage(`${input.alias} ya aparece en tus personas.`);
-      await showContactActionResult({
-        alias: input.alias,
-        message: 'Ya estaba en tu lista de personas.',
-        title: 'Persona encontrada',
-      });
-      return false;
-    }
-
-    if (action === 'block_pending_friendship') {
-      hideContactActionFeedback();
-      onClose();
-      pushRoute(router, {
-        pathname: '/people',
-        params: {
-          requests: '1',
-          requestTab: resolution.friendshipDirection === 'incoming' ? 'received' : 'sent',
-        },
-      });
-      return false;
-    }
-
-    if (action === 'confirm_friendship') {
-      hideContactActionFeedback();
-      const confirmed = await confirmHappyCirclesFriendship(input.alias);
-      if (!confirmed) {
-        setMessage(`No enviamos solicitud a ${input.alias}.`);
-        return false;
-      }
-
-      showContactActionLoading({
-        alias: input.alias,
-        message: 'Preparando la solicitud de amistad.',
-        mode: 'prepare',
-        title: 'Preparando solicitud',
-      });
-    }
-
     return true;
   }
 
@@ -345,25 +210,16 @@ export function useAddPersonOutreachActions({
       return;
     }
 
+    const cached =
+      (userId ? readContactResolutions(userId)[input.phoneE164] : undefined) ??
+      targetCache[input.phoneE164];
+    if (cached?.status === 'pending_friendship' && openPendingRequest(cached, input)) return;
+
     actionInFlightRef.current = true;
     setBusyKey(input.phoneE164);
-    setMessage(`Preparando invitación para ${input.alias}.`);
-    showContactActionLoading({
-      alias: input.alias,
-      message: 'Estamos revisando el numero y preparando la accion correcta.',
-      mode: 'prepare',
-      title: 'Preparando contacto',
-    });
+    setMessage(`Enviando invitación a ${input.alias}.`);
 
     try {
-      const shouldContinue = await runOutreachPreflight({
-        alias: input.alias,
-        phoneE164: input.phoneE164,
-      });
-      if (!shouldContinue) {
-        return;
-      }
-
       const response = await createPeopleOutreach.mutateAsync({
         channel: 'remote',
         intendedRecipientAlias: input.alias,
@@ -372,61 +228,54 @@ export function useAddPersonOutreachActions({
         sourceContext: input.sourceContext,
       });
 
-      const current = (await resolvePhoneStatusesNow([input.phoneE164]).catch(() => [])).find(
-        (row) => row.phoneE164 === input.phoneE164,
-      );
-      if (!current) {
-        setMessage(
-          'La operación fue procesada. Consulta el contacto para confirmar su estado actual.',
-        );
-        return;
-      }
-      if (current.status === 'already_related') {
-        setMessage(`${input.alias} ya aparece en tus personas.`);
-        return;
-      }
-      if (response.kind === 'friendship' && current.status !== 'pending_friendship') {
-        setMessage('La solicitud ya fue cerrada. Puedes enviar una nueva.');
-        return;
-      }
-      if (
-        response.kind === 'account_invite' &&
-        current.accountInviteId !== response.result?.inviteId
-      ) {
-        setMessage('Este acceso ya cambió de estado. Vuelve a consultar para continuar.');
-        return;
-      }
-
       if (response.kind === 'already_related') {
         setMessage(`${input.alias} ya aparece en tus personas.`);
-        await showContactActionResult({
-          alias: input.alias,
+        showGlobalFeedback({
           message: 'Ya estaba en tu lista de personas.',
           title: 'Persona encontrada',
+          tone: 'neutral',
         });
         return;
       }
 
       if (response.kind === 'friendship') {
-        const nextMessage =
-          response.status === 'pending_friendship'
-            ? `${input.alias} ya tiene una solicitud pendiente.`
-            : `Enviamos una solicitud de amistad a ${input.alias}.`;
-        setMessage(nextMessage);
-
-        if (response.status !== 'pending_friendship') {
+        const outcome = friendshipOutreachOutcome(response);
+        const latest = userId ? readContactResolutions(userId)[input.phoneE164] : undefined;
+        if (latest?.resolvedAt && latest.friendshipInviteId !== outcome.inviteId) {
+          const nextMessage =
+            latest.status === 'already_related'
+              ? `${input.alias} ya aparece en tus personas.`
+              : 'La solicitud ya cambió de estado. La información del contacto está actualizada.';
+          setMessage(nextMessage);
           showGlobalFeedback({
-            message: `A ${input.alias}.`,
-            title: 'Solicitud enviada',
-            tone: 'success',
+            message: nextMessage,
+            title: 'Contacto actualizado',
+            tone: 'neutral',
           });
+          if (latest.status === 'pending_friendship') openPendingRequest(latest, input);
+          return;
         }
-        await showContactActionResult({
-          alias: input.alias,
+        const nextMessage =
+          outcome.direction === 'incoming'
+            ? `${input.alias} ya te envió una solicitud. Puedes responderla.`
+            : outcome.created
+              ? `Enviamos una solicitud de amistad a ${input.alias}.`
+              : `Ya tienes una solicitud pendiente con ${input.alias}.`;
+        setMessage(nextMessage);
+        showGlobalFeedback({
           message: nextMessage,
           title:
-            response.status === 'pending_friendship' ? 'Solicitud pendiente' : 'Solicitud enviada',
+            outcome.created && outcome.direction !== 'incoming'
+              ? 'Solicitud enviada'
+              : 'Solicitud pendiente',
+          tone: outcome.created && outcome.direction !== 'incoming' ? 'success' : 'neutral',
         });
+        if (!outcome.created || outcome.direction === 'incoming') {
+          openPendingRequest(
+            contactResolutionForOutreach(input.phoneE164, response, cached),
+            input,
+          );
+        }
         return;
       }
 
@@ -435,22 +284,10 @@ export function useAddPersonOutreachActions({
       }
 
       await shareAccountInviteLink(input.alias, response.result);
-      await showContactActionResult({
-        alias: input.alias,
-        message: 'El acceso privado quedo listo para enviar o reenviar.',
-        mode: 'share',
-        title: 'Acceso listo',
-      });
     } catch (error) {
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
       setMessage(failureMessage);
-      await showContactActionResult({
-        alias: input.alias,
-        message: failureMessage,
-        title: 'No se pudo completar',
-        variant: 'danger',
-      });
       showBlockedActionAlert(failureMessage, router);
     } finally {
       actionInFlightRef.current = false;
@@ -478,14 +315,6 @@ export function useAddPersonOutreachActions({
       alias: contact.alias,
       contactId: contact.contactId,
       phoneOptions: contact.phoneOptions,
-    });
-
-    void ensurePhoneStatuses(
-      contact.phoneOptions.map((phoneOption) => phoneOption.phoneE164),
-    ).catch((error) => {
-      setMessage(
-        error instanceof Error ? error.message : 'No se pudo revisar los numeros de este contacto.',
-      );
     });
   }
 

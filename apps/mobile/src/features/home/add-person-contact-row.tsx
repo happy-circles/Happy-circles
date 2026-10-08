@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, View } from 'react-native';
 
@@ -14,7 +15,7 @@ import { type ContactCandidate } from '@/features/invites/people-outreach-utils'
 import { type PeopleTargetResolution } from '@/lib/live-data';
 import { useAppTheme } from '@/providers/theme-provider';
 
-export function ContactRow({
+export const ContactRow = memo(function ContactRow({
   busy,
   contact,
   onPress,
@@ -22,7 +23,7 @@ export function ContactRow({
 }: {
   readonly busy: boolean;
   readonly contact: ContactCandidate;
-  readonly onPress: () => void;
+  readonly onPress: (contact: ContactCandidate) => void;
   readonly resolution: PeopleTargetResolution | null;
 }) {
   const activeTheme = useAppTheme();
@@ -71,7 +72,7 @@ export function ContactRow({
       </View>
       <Pressable
         disabled={disabled}
-        onPress={disabled ? undefined : onPress}
+        onPress={disabled ? undefined : () => onPress(contact)}
         style={({ pressed }) => [
           styles.contactActionButton,
           { backgroundColor: actionBackgroundColor },
@@ -85,19 +86,19 @@ export function ContactRow({
           size={14}
         />
         <AppText numberOfLines={1} style={styles.contactActionText}>
-          {busy ? 'Preparando' : action.label}
+          {busy ? 'Enviando' : action.label}
         </AppText>
       </Pressable>
     </View>
   );
-}
+});
 
 function contactResolutionDetail(
   phoneMeta: string,
   resolution: PeopleTargetResolution | null,
 ): string {
   if (!resolution) {
-    return `${phoneMeta} | Consulta si está en Happy Circles`;
+    return `${phoneMeta} | Comprueba y agrega con un toque`;
   }
 
   if (resolution.status === 'active_user') {

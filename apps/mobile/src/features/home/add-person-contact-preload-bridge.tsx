@@ -11,6 +11,13 @@ import {
 } from '@/lib/contacts-permissions';
 import { subscribeFirstScreenReady } from '@/lib/performance-metrics';
 import { useSession } from '@/providers/session-provider';
+import {
+  activateContactDiscoveryRuntime,
+  disposeContactDiscoveryRuntime,
+  suspendContactDiscoveryRuntime,
+  replaceContactDiscoveryKnownPhones,
+} from '@/lib/contact-discovery-runtime';
+import { clearWarmContactScanCache } from './add-person-contact-scan-cache';
 
 const CONTACT_PRELOAD_DELAY_MS = 700;
 
@@ -34,29 +41,41 @@ export function AddPersonContactPreloadBridge() {
 
     if (!canReadContactsPermissionStatus(knownPermissionStatus)) {
       pauseContactIndexing(session.userId);
+      disposeContactDiscoveryRuntime(session.userId);
+      clearWarmContactScanCache(session.userId);
       return undefined;
     }
 
+    let lastPermissionStatus = knownPermissionStatus;
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
 
     function startIndexIfActive() {
       if (AppState.currentState !== 'active') {
         pauseContactIndexing(session.userId);
+        suspendContactDiscoveryRuntime(session.userId!);
         return;
       }
 
       void getContactsPermissionStatus()
         .then((currentPermissionStatus) => {
-          if (cancelled) {
+          if (cancelled || AppState.currentState !== 'active') {
             return;
           }
 
           if (!canReadContactsPermissionStatus(currentPermissionStatus)) {
             pauseContactIndexing(session.userId);
+            disposeContactDiscoveryRuntime(session.userId!);
+            clearWarmContactScanCache(session.userId);
             return;
           }
 
+          if (lastPermissionStatus !== currentPermissionStatus) {
+            replaceContactDiscoveryKnownPhones(session.userId!, []);
+            clearWarmContactScanCache(session.userId);
+            lastPermissionStatus = currentPermissionStatus;
+          }
+          activateContactDiscoveryRuntime(session.userId!);
           void startContactIndexing({
             permissionStatus: currentPermissionStatus,
             reason: 'app_active',
@@ -84,6 +103,7 @@ export function AddPersonContactPreloadBridge() {
       }
 
       pauseContactIndexing(session.userId);
+      suspendContactDiscoveryRuntime(session.userId!);
     });
 
     return () => {
@@ -91,6 +111,7 @@ export function AddPersonContactPreloadBridge() {
       unsubscribe();
       appStateSubscription.remove();
       pauseContactIndexing(session.userId);
+      disposeContactDiscoveryRuntime(session.userId!);
       if (timeout) {
         clearTimeout(timeout);
       }

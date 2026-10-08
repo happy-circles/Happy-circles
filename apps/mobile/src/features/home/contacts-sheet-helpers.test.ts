@@ -157,14 +157,14 @@ describe('contact section helpers', () => {
   it('keeps add-person actions explicit for unresolved, multiple-number, and invite contacts', () => {
     expect(actionMetaForResolution(null, false)).toEqual({
       disabled: false,
-      icon: 'search-outline',
-      label: 'Consultar',
+      icon: 'person-add-outline',
+      label: 'Agregar',
       tone: 'primary',
     });
     expect(actionMetaForResolution(null, true)).toEqual({
       disabled: false,
-      icon: 'search-outline',
-      label: 'Consultar',
+      icon: 'list-outline',
+      label: 'Elegir',
       tone: 'primary',
     });
     expect(actionMetaForResolution(resolution('+573004', 'active_user'), true)).toEqual({

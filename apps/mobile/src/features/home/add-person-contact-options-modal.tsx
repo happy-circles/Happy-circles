@@ -24,7 +24,6 @@ export function AddPersonContactOptionsModal({
   inviteAvailableLabel,
   onCancel,
   onCreateOutreach,
-  onReviewPhone,
   pendingContactOptions,
   pendingContactSelection,
   presentation = 'modal',
@@ -93,19 +92,15 @@ export function AddPersonContactOptionsModal({
                   onPress={
                     disabled
                       ? undefined
-                      : isResolving
-                        ? () => {
-                            void onReviewPhone({ phoneE164: phoneOption.phoneE164 });
-                          }
-                        : () => {
-                            onCancel();
-                            void onCreateOutreach({
-                              alias: pendingContactSelection.alias,
-                              phoneE164: phoneOption.phoneE164,
-                              phoneLabel: phoneOption.label,
-                              sourceContext: 'home_add_contact_option',
-                            });
-                          }
+                      : () => {
+                          onCancel();
+                          void onCreateOutreach({
+                            alias: pendingContactSelection.alias,
+                            phoneE164: phoneOption.phoneE164,
+                            phoneLabel: phoneOption.label,
+                            sourceContext: 'home_add_contact_option',
+                          });
+                        }
                   }
                   style={({ pressed }) => [
                     styles.contactActionButton,
@@ -127,7 +122,7 @@ export function AddPersonContactOptionsModal({
                     size={14}
                   />
                   <AppText style={styles.contactActionText}>
-                    {isBusy ? 'Revisando' : action.label}
+                    {isBusy ? 'Enviando' : action.label}
                   </AppText>
                 </Pressable>
               </View>

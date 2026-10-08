@@ -20,6 +20,7 @@ export const addPersonContactsSheetStyles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.large,
     borderTopRightRadius: theme.radius.large,
     gap: theme.spacing.md,
+    height: '88%',
     maxHeight: '88%',
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,

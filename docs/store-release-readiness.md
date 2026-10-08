@@ -364,7 +364,7 @@ Notas:
 - No declarar ubicacion, pagos, credit score, browsing history ni advertising
   data salvo que el producto cambie.
 
-## Privacidad de contactos: candidata 1.0.3, revision 2026-10-07
+## Privacidad de contactos: candidata 1.0.3, revision 2026-10-08
 
 El descubrimiento de contactos es opcional: requiere acceso a la agenda y la app
 permite seguir usando QR e invitaciones sin ese permiso. Con el permiso, la app
@@ -374,10 +374,17 @@ La busqueda no envia nombres ni una copia de la agenda con sus datos originales;
 el telefono y alias de una invitacion elegida se tratan por separado.
 
 El servidor conserva HMAC de esos numeros vinculados a la cuenta y a una sesion
-de descubrimiento, no datos anonimos. La sesion expira 15 minutos despues de la
-ultima busqueda o renovacion; la pantalla activa puede renovarla cada 5 minutos.
-Cerrar la pantalla solicita eliminarla y la limpieza periodica elimina sesiones
-expiradas y sus huellas. Por esta persistencia, Contacts debe declararse como
+de descubrimiento, no datos anonimos. El registro de observaciones es independiente
+de la consulta de coincidencias. La sesion expira 15 minutos despues del ultimo
+registro o renovacion; la app en primer plano puede renovarla cada 5 minutos,
+con sesion desbloqueada, acceso a contactos vigente y conexion disponible. Cerrar
+la pantalla de contactos no termina esa sesion. Pasar a segundo plano, detectar
+la revocacion del permiso o cerrar sesion detiene las renovaciones y solicita
+eliminar la sesion de descubrimiento. Si la solicitud no llega al servidor,
+la caducidad deja de habilitar avisos; la limpieza periodica borra despues las
+sesiones expiradas y sus huellas, sin garantizar el borrado en el instante de
+caducidad. La limpieza procesa hasta 100 sesiones por ejecucion y se programa
+cada minuto. Por esta persistencia, Contacts debe declararse como
 recopilado y **no efimero**, aunque la retencion sea temporal. No hay SMS ni
 invitaciones automaticas por ejecutar la busqueda. Las coincidencias requieren
 una identidad telefonica habilitada (telefono verificado o identidad legacy);
@@ -387,12 +394,19 @@ Evidencia en la candidata:
 
 - `apps/mobile/src/features/home/contact-resolution-service.ts`: envio de
   `phoneE164List` y `discoverySessionId`, sin nombres.
-- `apps/mobile/src/features/home/add-person-contacts-sheet-controller.ts`:
+- `apps/mobile/src/features/home/use-add-person-contact-list.ts`:
   carga y resolucion de contactos en segundo plano.
-- `apps/mobile/src/features/home/add-person-contact-resolution-controller.ts`:
-  renovacion y cierre de la sesion de descubrimiento.
+- `apps/mobile/src/features/home/add-person-contact-preload-bridge.tsx` y
+  `apps/mobile/src/lib/contact-discovery-coordinator.ts`: activacion, renovacion
+  y suspension de la sesion, independientes de la pantalla de contactos.
+- `apps/mobile/src/lib/live-data/snapshot-realtime.ts`: cierre del runtime y
+  limpieza de caches al cambiar o cerrar la sesion de usuario.
 - `supabase/migrations/20260928202134_private_contact_discovery.sql`: huellas
-  HMAC, vinculo con cuenta, expiracion renovable y limpieza de sesiones.
+  HMAC, vinculo con cuenta, expiracion renovable y limpieza limitada por lotes.
+- `supabase/migrations/20261008182226_separate_contact_discovery_registration.sql`:
+  registro separado de las consultas y limpieza cada minuto.
+- `supabase/migrations/20261008183958_prune_contact_discovery_watches.sql`:
+  retiro selectivo de observaciones por propietario y sesion.
 - `supabase/migrations/20260928202038_friendship_lifecycle_recovery.sql` y
   `supabase/migrations/20260813020000_0079_new_user_backend_definitions.sql`:
   filtro de identidad telefonica para las coincidencias.
@@ -411,9 +425,12 @@ Verificacion de los formularios publicados el 2026-10-07:
 - Supabase procesa los datos como proveedor de servicio. Para este flujo, ese
   tratamiento por encargo encaja en la excepcion de proveedor de servicio de
   Google para la respuesta de datos compartidos.
-- La politica web de `/privacy`, con fecha 2026-10-07, explica el envio de numeros,
-  las huellas HMAC vinculadas a cuenta, su expiracion renovable y el caracter
-  opcional del descubrimiento. Publicar ese texto junto con la candidata.
+- La politica web publicada de `/privacy`, con fecha 2026-10-07, describe el
+  ciclo anterior limitado a la pantalla de contactos. La candidata local,
+  con fecha 2026-10-08, explica el envio de numeros, las huellas HMAC vinculadas
+  a cuenta, la renovacion mientras la app esta en primer plano y la diferencia
+  entre caducidad y borrado periodico. Publicar ese texto antes de distribuir
+  la actualizacion que cambia el ciclo de observaciones.
 
 Criterios oficiales revisados:
 [Apple App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)

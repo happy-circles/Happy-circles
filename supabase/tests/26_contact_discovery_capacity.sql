@@ -16,10 +16,10 @@ begin
     v_offset := 1;
     v_batches := 0;
     while v_offset <= v_size loop
-      v_result := public.resolve_people_targets_observed(v_actor,
+      v_result := public.register_contact_discovery(v_actor,
         array(select '+5738' || lpad(number::text, 8, '0')
               from generate_series(v_offset, least(v_offset + 59, v_size)) number), v_session);
-      if jsonb_array_length(v_result) <> least(60, v_size - v_offset + 1) then
+      if jsonb_array_length(v_result -> 'watches') <> least(60, v_size - v_offset + 1) then
         raise exception 'discovery batch dropped phones';
       end if;
       v_offset := v_offset + 60;

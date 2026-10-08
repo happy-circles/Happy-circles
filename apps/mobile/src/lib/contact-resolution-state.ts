@@ -5,21 +5,32 @@ export type ContactResolutionTarget = {
   readonly phoneE164?: string;
   readonly matchedUserId?: string | null;
   readonly inviteId?: string | null;
+  readonly relationshipId?: string | null;
   readonly watchIds?: readonly string[];
 };
 
 type Change = {
   readonly invalidatedPhones: readonly string[];
+  readonly changedPhones: readonly string[];
   readonly priority?: 'event' | 'background';
 };
 type Listener = (change: Change) => void;
 type UserState = {
   entries: Record<string, PeopleTargetResolution>;
   generations: Map<string, number>;
+  pendingWrites: Map<string, number>;
   listeners: Set<Listener>;
   invalidatedAt: number;
   epoch: number;
   watchInvalidations: Map<string, { revision: number; at: number }>;
+  watchPhones: Map<string, string>;
+  matchedPhones: Map<string, Set<string>>;
+  invitePhones: Map<string, Set<string>>;
+  relationshipPhones: Map<string, Set<string>>;
+  targetInvalidations: Map<
+    string,
+    { target: ContactResolutionTarget; revision: number; at: number }
+  >;
 };
 
 const states = new Map<string, UserState>();
@@ -32,10 +43,16 @@ function stateFor(userId: string): UserState {
     state = {
       entries: {},
       generations: new Map(),
+      pendingWrites: new Map(),
       listeners: new Set(),
       invalidatedAt: 0,
       epoch: 0,
       watchInvalidations: new Map(),
+      watchPhones: new Map(),
+      matchedPhones: new Map(),
+      invitePhones: new Map(),
+      relationshipPhones: new Map(),
+      targetInvalidations: new Map(),
     };
     states.set(userId, state);
   }
@@ -67,12 +84,19 @@ export function subscribeContactResolutions(userId: string, listener: Listener) 
 
 export function clearContactResolutionUser(userId: string) {
   const state = stateFor(userId);
+  const changedPhones = Object.keys(state.entries);
   state.entries = {};
   state.generations.clear();
+  state.pendingWrites.clear();
   state.watchInvalidations.clear();
+  state.watchPhones.clear();
+  state.matchedPhones.clear();
+  state.invitePhones.clear();
+  state.relationshipPhones.clear();
+  state.targetInvalidations.clear();
   state.invalidatedAt = Date.now();
   state.epoch += 1;
-  for (const listener of state.listeners) listener({ invalidatedPhones: [] });
+  for (const listener of state.listeners) listener({ invalidatedPhones: [], changedPhones });
   setContactRealtimeReady(userId, false);
 }
 
@@ -80,11 +104,41 @@ export function captureContactGenerations(userId: string, phones: readonly strin
   const state = stateFor(userId);
   return Object.assign(new Map(phones.map((phone) => [phone, state.generations.get(phone) ?? 0])), {
     epoch: state.epoch,
+    revision,
   });
 }
 
 export function contactResolutionEpoch(userId: string) {
   return stateFor(userId).epoch;
+}
+
+/** Keep display rows while older reads are fenced off by an explicit command. */
+export function beginContactResolutionWrite(userId: string, phones: readonly string[]) {
+  const state = stateFor(userId);
+  const tokens = new Map<string, number>();
+  for (const phone of new Set(phones)) {
+    const token = ++revision;
+    state.generations.set(phone, token);
+    state.pendingWrites.set(phone, token);
+    tokens.set(phone, token);
+  }
+  return Object.assign(captureContactGenerations(userId, phones), {
+    finish: () => {
+      const invalidatedPhones: string[] = [];
+      for (const [phone, token] of tokens) {
+        if (state.pendingWrites.get(phone) !== token) continue;
+        state.pendingWrites.delete(phone);
+        if (!state.entries[phone]?.resolvedAt) invalidatedPhones.push(phone);
+      }
+      if (invalidatedPhones.length)
+        for (const listener of state.listeners)
+          listener({ invalidatedPhones, changedPhones: [], priority: 'event' });
+    },
+  });
+}
+
+export function isContactResolutionWritePending(userId: string, phone: string) {
+  return stateFor(userId).pendingWrites.has(phone);
 }
 
 export function captureContactDiscoveryRevision() {
@@ -95,7 +149,10 @@ export function mergeContactResolutions(
   userId: string,
   rows: readonly PeopleTargetResolution[],
   options: {
-    readonly expectedGenerations?: ReadonlyMap<string, number> & { readonly epoch?: number };
+    readonly expectedGenerations?: ReadonlyMap<string, number> & {
+      readonly epoch?: number;
+      readonly revision?: number;
+    };
     readonly expectedEpoch?: number;
     readonly fromCache?: boolean;
     readonly discoveryRevision?: number;
@@ -104,10 +161,11 @@ export function mergeContactResolutions(
   const state = stateFor(userId);
   const expectedEpoch = options.expectedEpoch ?? options.expectedGenerations?.epoch;
   if (expectedEpoch !== undefined && expectedEpoch !== state.epoch) return [];
-  const next = { ...state.entries };
+  let next = state.entries;
   const accepted: PeopleTargetResolution[] = [];
   const invalidatedPhones: string[] = [];
   for (const row of rows) {
+    if (options.fromCache && state.pendingWrites.has(row.phoneE164)) continue;
     revision = Math.max(revision, row.generation ?? 0, Date.now());
     const current = next[row.phoneE164];
     const generation = state.generations.get(row.phoneE164) ?? 0;
@@ -117,10 +175,19 @@ export function mergeContactResolutions(
     )
       continue;
     if (
+      options.expectedGenerations?.revision !== undefined &&
+      [...state.targetInvalidations.values()].some(
+        (entry) =>
+          entry.revision > options.expectedGenerations!.revision! &&
+          matchesTarget(row.phoneE164, row, entry.target),
+      )
+    )
+      continue;
+    if (
       options.fromCache &&
       (!row.resolvedAt ||
         row.resolvedAt <= state.invalidatedAt ||
-        (current && (current.generation ?? 0) >= (row.generation ?? 0)))
+        (generation > 0 && generation >= (row.generation ?? 0)))
     )
       continue;
     const watchInvalidation = row.discoveryWatchId
@@ -135,7 +202,28 @@ export function mergeContactResolutions(
       resolvedAt: invalidatedDuringRead ? 0 : options.fromCache ? row.resolvedAt : Date.now(),
       generation: options.fromCache ? row.generation : ++revision,
     };
+    if (next === state.entries) next = { ...state.entries };
+    updateRowIndex(state.matchedPhones, row.phoneE164, current?.matchedUserId, row.matchedUserId);
+    updateRowIndex(
+      state.relationshipPhones,
+      row.phoneE164,
+      current?.relationshipId,
+      row.relationshipId,
+    );
+    updateRowIndex(
+      state.invitePhones,
+      row.phoneE164,
+      current?.friendshipInviteId,
+      row.friendshipInviteId,
+    );
+    updateRowIndex(
+      state.invitePhones,
+      row.phoneE164,
+      current?.accountInviteId,
+      row.accountInviteId,
+    );
     next[row.phoneE164] = acceptedRow;
+    if (row.discoveryWatchId) state.watchPhones.set(row.discoveryWatchId, row.phoneE164);
     state.generations.set(row.phoneE164, acceptedRow.generation ?? generation);
     accepted.push(acceptedRow);
     if (invalidatedDuringRead) invalidatedPhones.push(row.phoneE164);
@@ -144,9 +232,95 @@ export function mergeContactResolutions(
   }
   if (accepted.length) {
     state.entries = next;
-    for (const listener of state.listeners) listener({ invalidatedPhones, priority: 'event' });
+    for (const listener of state.listeners)
+      listener({
+        invalidatedPhones,
+        changedPhones: accepted.map((row) => row.phoneE164),
+        priority: 'event',
+      });
   }
   return accepted;
+}
+
+function matchesTarget(
+  phone: string,
+  row: PeopleTargetResolution,
+  target: ContactResolutionTarget,
+) {
+  return Boolean(
+    phone === target.phoneE164 ||
+    (target.matchedUserId && row.matchedUserId === target.matchedUserId) ||
+    (target.inviteId &&
+      (row.friendshipInviteId === target.inviteId || row.accountInviteId === target.inviteId)) ||
+    (target.relationshipId && row.relationshipId === target.relationshipId) ||
+    (row.discoveryWatchId && target.watchIds?.includes(row.discoveryWatchId)),
+  );
+}
+
+function updateRowIndex(
+  index: Map<string, Set<string>>,
+  phone: string,
+  previousKey: string | null | undefined,
+  key: string | null | undefined,
+) {
+  if (previousKey === key) return;
+  if (previousKey) {
+    const previous = index.get(previousKey);
+    previous?.delete(phone);
+    if (previous?.size === 0) index.delete(previousKey);
+  }
+  if (key) {
+    const phones = index.get(key) ?? new Set<string>();
+    phones.add(phone);
+    index.set(key, phones);
+  }
+}
+
+function phonesForTarget(state: UserState, target: ContactResolutionTarget) {
+  const scoped =
+    target.phoneE164 ||
+    target.matchedUserId ||
+    target.inviteId ||
+    target.relationshipId ||
+    target.watchIds;
+  if (!scoped) return Object.keys(state.entries);
+  const phones = new Set<string>(target.phoneE164 ? [target.phoneE164] : []);
+  if (target.matchedUserId)
+    for (const phone of state.matchedPhones.get(target.matchedUserId) ?? []) phones.add(phone);
+  if (target.inviteId)
+    for (const phone of state.invitePhones.get(target.inviteId) ?? []) phones.add(phone);
+  if (target.relationshipId)
+    for (const phone of state.relationshipPhones.get(target.relationshipId) ?? [])
+      phones.add(phone);
+  for (const watchId of target.watchIds ?? []) {
+    const phone = state.watchPhones.get(watchId);
+    if (phone) phones.add(phone);
+  }
+  return [...phones];
+}
+
+export function readContactResolutionPhonesForTarget(
+  userId: string,
+  target: ContactResolutionTarget,
+) {
+  return phonesForTarget(stateFor(userId), target);
+}
+
+/** Registration associates opaque events even before a phone's first state lookup. */
+export function associateContactDiscoveryWatches(
+  userId: string,
+  watches: readonly { readonly phoneE164: string; readonly discoveryWatchId: string }[],
+  discoveryRevision: number,
+) {
+  const state = stateFor(userId);
+  const changedDuringRegistration: string[] = [];
+  for (const watch of watches) {
+    state.watchPhones.set(watch.discoveryWatchId, watch.phoneE164);
+    if ((state.watchInvalidations.get(watch.discoveryWatchId)?.revision ?? 0) > discoveryRevision)
+      changedDuringRegistration.push(watch.phoneE164);
+  }
+  for (const phoneE164 of changedDuringRegistration)
+    invalidateContactResolutions({ userId, phoneE164 });
 }
 
 export function invalidateContactResolutions(target: ContactResolutionTarget = {}) {
@@ -156,8 +330,28 @@ export function invalidateContactResolutions(target: ContactResolutionTarget = {
   for (const [, state] of selected) {
     // Watch IDs are scoped: existing rows use their generation, and first reads
     // use the buffered watch event once the response reveals its opaque ID.
-    if (!target.watchIds) state.epoch += 1;
-    state.invalidatedAt = Date.now();
+    const scoped =
+      target.phoneE164 ||
+      target.matchedUserId ||
+      target.inviteId ||
+      target.relationshipId ||
+      target.watchIds;
+    if (!scoped) {
+      state.epoch += 1;
+      state.invalidatedAt = Date.now();
+    } else if (!target.watchIds) {
+      const key = JSON.stringify([
+        target.phoneE164,
+        target.matchedUserId,
+        target.inviteId,
+        target.relationshipId,
+      ]);
+      state.targetInvalidations.set(key, { target, revision: ++revision, at: Date.now() });
+      for (const [key, entry] of state.targetInvalidations) {
+        if (Date.now() - entry.at > 15 * 60_000 || state.targetInvalidations.size > 10_000)
+          state.targetInvalidations.delete(key);
+      }
+    }
     if (target.watchIds) {
       const eventRevision = ++revision;
       for (const watchId of target.watchIds)
@@ -167,34 +361,25 @@ export function invalidateContactResolutions(target: ContactResolutionTarget = {
           state.watchInvalidations.delete(watchId);
       }
     }
-    const next = { ...state.entries };
+    let next = state.entries;
     const phones: string[] = [];
-    const scoped = target.phoneE164 || target.matchedUserId || target.inviteId || target.watchIds;
-    for (const [phone, row] of Object.entries(next)) {
-      if (
-        scoped &&
-        !(
-          phone === target.phoneE164 ||
-          (target.matchedUserId && row.matchedUserId === target.matchedUserId) ||
-          (target.inviteId &&
-            (row.friendshipInviteId === target.inviteId ||
-              row.accountInviteId === target.inviteId)) ||
-          (row.discoveryWatchId && target.watchIds?.includes(row.discoveryWatchId))
-        )
-      )
-        continue;
+    for (const phone of phonesForTarget(state, target)) {
+      const row = next[phone];
       const generation = ++revision;
       state.generations.set(phone, generation);
-      next[phone] = { ...row, resolvedAt: 0, generation };
+      if (row) {
+        if (next === state.entries) next = { ...state.entries };
+        next[phone] = { ...row, resolvedAt: 0, generation };
+      }
       phones.push(phone);
-    }
-    if (target.phoneE164 && !next[target.phoneE164]) {
-      state.generations.set(target.phoneE164, ++revision);
-      phones.push(target.phoneE164);
     }
     state.entries = next;
     for (const listener of state.listeners) {
-      listener({ invalidatedPhones: phones, priority: scoped ? 'event' : 'background' });
+      listener({
+        invalidatedPhones: phones,
+        changedPhones: phones,
+        priority: scoped ? 'event' : 'background',
+      });
     }
   }
 }
@@ -205,12 +390,8 @@ export function applyContactActionResult(target: ContactResolutionTarget, status
     ? [[target.userId, stateFor(target.userId)] as const]
     : [...states.entries()];
   for (const [userId, state] of selected) {
-    const rows = Object.values(state.entries).filter(
-      (row) =>
-        row.phoneE164 === target.phoneE164 ||
-        (target.matchedUserId && row.matchedUserId === target.matchedUserId) ||
-        (target.inviteId &&
-          (row.friendshipInviteId === target.inviteId || row.accountInviteId === target.inviteId)),
+    const rows = phonesForTarget(state, target).flatMap((phone) =>
+      state.entries[phone] ? [state.entries[phone]] : [],
     );
     const terminal = ['canceled', 'rejected', 'expired'].includes(status);
     if (status !== 'accepted' && !terminal) continue;

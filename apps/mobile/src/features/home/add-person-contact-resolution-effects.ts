@@ -8,6 +8,8 @@ type MutableRef<T> = {
 };
 
 export function useAddPersonContactResolutionEffects(input: {
+  readonly userId: string | null;
+  readonly resolutionEpoch: number;
   readonly canReadContacts: boolean;
   readonly contactResolutionWindow: readonly ContactCandidate[];
   readonly contacts: readonly ContactCandidate[];
@@ -20,7 +22,9 @@ export function useAddPersonContactResolutionEffects(input: {
   readonly visible: boolean;
   readonly visibleResolutionPhonesRef: MutableRef<Set<string>>;
 }) {
-  const backgroundPhonesKeyRef = useRef('');
+  const processedContactsRef = useRef<readonly ContactCandidate[] | null>(null);
+  const processedUserRef = useRef(input.userId);
+  const processedEpochRef = useRef(input.resolutionEpoch);
   const visiblePhonesKeyRef = useRef('');
 
   useEffect(() => {
@@ -55,30 +59,35 @@ export function useAddPersonContactResolutionEffects(input: {
   ]);
 
   useEffect(() => {
-    if (!input.visible || !input.canReadContacts || input.contacts.length === 0) {
-      backgroundPhonesKeyRef.current = '';
-      return undefined;
+    if (
+      processedUserRef.current !== input.userId ||
+      processedEpochRef.current !== input.resolutionEpoch ||
+      !input.canReadContacts
+    ) {
+      processedContactsRef.current = null;
+      processedUserRef.current = input.userId;
+      processedEpochRef.current = input.resolutionEpoch;
     }
-
-    const backgroundPhones = uniqueContactPhoneE164List(input.contacts);
-    const backgroundPhonesKey = backgroundPhones.join('|');
-    if (backgroundPhonesKeyRef.current === backgroundPhonesKey) {
-      return undefined;
-    }
-
-    backgroundPhonesKeyRef.current = backgroundPhonesKey;
+    if (!input.visible || !input.canReadContacts || !input.contacts.length) return;
+    const previous = processedContactsRef.current;
+    if (previous === input.contacts) return;
+    const appended =
+      previous &&
+      previous.length <= input.contacts.length &&
+      previous.every((contact, index) => input.contacts[index] === contact);
+    const additions = appended ? input.contacts.slice(previous.length) : input.contacts;
     const timeout = setTimeout(() => {
+      processedContactsRef.current = input.contacts;
       input.hydrateAndEnqueueResolutionPhones(
         input.scanRunIdRef.current,
-        backgroundPhones,
+        uniqueContactPhoneE164List(additions),
         'background',
       );
     }, 240);
-
-    return () => {
-      clearTimeout(timeout);
-    };
+    return () => clearTimeout(timeout);
   }, [
+    input.userId,
+    input.resolutionEpoch,
     input.canReadContacts,
     input.contacts,
     input.hydrateAndEnqueueResolutionPhones,

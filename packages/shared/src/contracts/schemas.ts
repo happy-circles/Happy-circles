@@ -273,9 +273,26 @@ export const resolvePeopleTargetsSchema = z.object({
   discoverySessionId: uuidSchema.optional(),
 });
 
-export const manageContactDiscoverySchema = z.object({
+export const manageContactDiscoverySchema = z.discriminatedUnion('action', [
+  z.object({ discoverySessionId: uuidSchema, action: z.enum(['renew', 'stop']) }),
+  z.object({
+    discoverySessionId: uuidSchema,
+    action: z.literal('remove'),
+    watchIds: z.array(uuidSchema).min(1).max(60),
+  }),
+]);
+
+export const registerContactDiscoverySchema = z.object({
+  phoneE164List: z
+    .array(
+      z
+        .string()
+        .trim()
+        .regex(/^\+[1-9]\d{7,14}$/),
+    )
+    .min(1)
+    .max(60),
   discoverySessionId: uuidSchema,
-  action: z.enum(['renew', 'stop']),
 });
 
 export const remindFriendshipInviteSchema = z.object({

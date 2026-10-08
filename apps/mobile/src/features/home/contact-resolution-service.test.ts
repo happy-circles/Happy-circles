@@ -4,14 +4,7 @@ import type { PeopleTargetResolution } from '@/lib/live-data/types-runtime';
 const mocks = vi.hoisted(() => ({
   actor: 'discovery-user',
   invoke:
-    vi.fn<
-      (
-        name: string,
-        schema: unknown,
-        input: unknown,
-        options: unknown,
-      ) => Promise<PeopleTargetResolution[]>
-    >(),
+    vi.fn<(name: string, schema: unknown, input: unknown, options: unknown) => Promise<unknown>>(),
   manage: vi.fn(async () => ({ status: 'stopped' })),
   getSession: vi.fn(async () => ({ data: { session: { user: { id: 'discovery-user' } } } })),
   save: vi.fn(async () => undefined),
@@ -31,11 +24,18 @@ vi.mock('./people-target-resolution-cache', () => ({
 
 import {
   invalidateContactResolutions,
+  beginContactResolutionWrite,
+  mergeContactResolutions,
   readContactResolutions,
   setContactRealtimeReady,
 } from '@/lib/contact-resolution-state';
 import {
   disposeContactResolutionUser,
+  beginContactDiscoveryRecovery,
+  registerContactDiscoveryPhoneWatches,
+  removeContactDiscoveryPhoneWatches,
+  restoreContactDiscoveryPhones,
+  synchronizeContactDiscoveryPhones,
   resolveContactPhones,
   setContactDiscoverySession,
 } from './contact-resolution-service';
@@ -63,7 +63,7 @@ beforeEach(() => {
   mocks.getSession.mockReset().mockImplementation(async () => ({
     data: { session: { user: { id: mocks.actor } } },
   }));
-  mocks.save.mockClear();
+  mocks.save.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   disposeContactResolutionUser('discovery-user');
@@ -81,7 +81,7 @@ describe('contact resolution service races', () => {
           invalidateContactResolutions(
             kind === 'watch'
               ? { userId: mocks.actor, watchIds: ['opaque-watch'] }
-              : { userId: mocks.actor, inviteId: 'unknown-invite' },
+              : { userId: mocks.actor, phoneE164: row('no_account').phoneE164 },
           );
           return [row('no_account')];
         })
@@ -112,7 +112,7 @@ describe('contact resolution service races', () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it('does not recreate the remaining background scan when the contacts sheet closes', async () => {
+  it('does not recreate the remaining background scan when the app lease is suspended', async () => {
     setContactDiscoverySession(mocks.actor, 'c8176506-336f-49b7-a7f2-0ebd3d78ec76');
     setContactRealtimeReady(mocks.actor, true);
     let release!: (rows: PeopleTargetResolution[]) => void;
@@ -179,10 +179,12 @@ describe('contact resolution service races', () => {
     const currentSession = '97f85926-c91c-47fd-8da9-0cb6f2305463';
     setContactDiscoverySession(mocks.actor, previousSession);
     setContactRealtimeReady(mocks.actor, true);
-    mocks.invoke.mockImplementationOnce(async () => {
-      setContactDiscoverySession(mocks.actor, currentSession);
-      return [row('no_account')];
-    });
+    mocks.invoke
+      .mockImplementationOnce(async () => {
+        setContactDiscoverySession(mocks.actor, currentSession);
+        return [row('no_account')];
+      })
+      .mockResolvedValue([row('no_account')]);
     const result = resolveContactPhones(mocks.actor, [row('no_account').phoneE164], 'visible');
     await vi.runAllTimersAsync();
     await result;
@@ -199,11 +201,13 @@ describe('contact resolution service races', () => {
       const sessionId = 'c8176506-336f-49b7-a7f2-0ebd3d78ec76';
       setContactDiscoverySession(mocks.actor, sessionId);
       setContactRealtimeReady(mocks.actor, true);
-      mocks.invoke.mockImplementationOnce(async () => {
-        setContactDiscoverySession(mocks.actor, null);
-        if (when === 'before') setContactDiscoverySession(mocks.actor, sessionId);
-        return [row('no_account')];
-      });
+      mocks.invoke
+        .mockImplementationOnce(async () => {
+          setContactDiscoverySession(mocks.actor, null);
+          if (when === 'before') setContactDiscoverySession(mocks.actor, sessionId);
+          return [row('no_account')];
+        })
+        .mockResolvedValue([row('no_account')]);
       let authReads = 0;
       mocks.getSession.mockImplementation(async () => {
         authReads += 1;
@@ -248,5 +252,242 @@ describe('contact resolution service races', () => {
     await vi.runAllTimersAsync();
     expect(await result).toHaveLength(1);
     expect(mocks.manage).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers fresh cached phones without resolving them and deduplicates repeat registration', async () => {
+    const phone = row('no_account').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockResolvedValue({ watches: [{ phoneE164: phone, discoveryWatchId: 'watch' }] });
+    const first = registerContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    const duplicate = registerContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    await vi.runAllTimersAsync();
+    await Promise.all([first, duplicate]);
+    await registerContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.invoke.mock.calls[0][0]).toBe('register-contact-discovery');
+    expect(readContactResolutions(mocks.actor)).toEqual({});
+  });
+
+  it('uses the same observed rows on reopen even after the ordinary TTL expires', async () => {
+    const phone = row('no_account').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockImplementation(async (name) =>
+      name === 'register-contact-discovery'
+        ? { watches: [{ phoneE164: phone, discoveryWatchId: 'opaque-watch' }] }
+        : [row('no_account')],
+    );
+    const registration = registerContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    await vi.runAllTimersAsync();
+    await registration;
+    const initial = resolveContactPhones(mocks.actor, [phone], 'background');
+    await vi.runAllTimersAsync();
+    await initial;
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    await resolveContactPhones(mocks.actor, [phone], 'visible');
+    await registerContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(mocks.manage).not.toHaveBeenCalled();
+  });
+
+  it('does not restart early batches when a 10,000-phone queue outlives their TTL', async () => {
+    const phones = Array.from({ length: 10_000 }, (_, index) => `+57300${index}`);
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockImplementation(async (_name, _schema, input) =>
+      (input as { phoneE164List: string[] }).phoneE164List.map((phoneE164) => ({
+        ...row('no_account'),
+        phoneE164,
+        discoveryWatchId: `watch-${phoneE164}`,
+      })),
+    );
+    const result = resolveContactPhones(mocks.actor, phones, 'background');
+    await vi.runAllTimersAsync();
+    expect(await result).toHaveLength(10_000);
+    expect(mocks.invoke).toHaveBeenCalledTimes(167);
+  });
+
+  it('rejects a response started before a connection gap and reconciles it once', async () => {
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke
+      .mockImplementationOnce(async () => {
+        beginContactDiscoveryRecovery(mocks.actor);
+        return [row('no_account')];
+      })
+      .mockResolvedValue([row('active_user')]);
+    const result = resolveContactPhones(mocks.actor, [row('no_account').phoneE164], 'visible');
+    await vi.runAllTimersAsync();
+    expect((await result)[0].status).toBe('active_user');
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a confirmed command result that supersedes a read during persistence', async () => {
+    mocks.invoke.mockResolvedValue([row('active_user')]);
+    mocks.save.mockImplementationOnce(async () => {
+      mergeContactResolutions(mocks.actor, [
+        { ...row('pending_friendship'), friendshipInviteId: 'new-invite' },
+      ]);
+    });
+    const result = resolveContactPhones(
+      mocks.actor,
+      [row('active_user').phoneE164],
+      'interactive',
+      true,
+    );
+    await vi.runAllTimersAsync();
+    expect((await result)[0].friendshipInviteId).toBe('new-invite');
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves and observes uncached phones in one request per batch', async () => {
+    const phones = Array.from({ length: 120 }, (_, index) => `+57300${index}`);
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockImplementation(async (_name, _schema, input) =>
+      (input as { phoneE164List: string[] }).phoneE164List.map((phoneE164) => ({
+        ...row('no_account'),
+        phoneE164,
+        discoveryWatchId: `watch-${phoneE164}`,
+      })),
+    );
+    const sync = synchronizeContactDiscoveryPhones(mocks.actor, phones);
+    await vi.runAllTimersAsync();
+    await sync;
+    await registerContactDiscoveryPhoneWatches(mocks.actor, phones);
+    expect(mocks.invoke.mock.calls.map(([name]) => name)).toEqual([
+      'resolve-people-targets',
+      'resolve-people-targets',
+    ]);
+  });
+
+  it('only registers a fresh cached phone and schedules its missed-event baseline after TTL', async () => {
+    const phone = row('no_account').phoneE164;
+    mergeContactResolutions(mocks.actor, [row('no_account')]);
+    const resolvedAt = readContactResolutions(mocks.actor)[phone].resolvedAt!;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke
+      .mockResolvedValueOnce({ watches: [{ phoneE164: phone, discoveryWatchId: 'watch' }] })
+      .mockResolvedValue([row('active_user')]);
+    const sync = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.runAllTimersAsync();
+    expect(await sync).toEqual({ recheck: [{ phoneE164: phone, at: resolvedAt + 60_001 }] });
+    expect(mocks.invoke.mock.calls.map(([name]) => name)).toEqual(['register-contact-discovery']);
+    await vi.advanceTimersByTimeAsync(60_001);
+    const baseline = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.runAllTimersAsync();
+    expect((await baseline).recheck).toEqual([]);
+    expect(mocks.invoke.mock.calls.map(([name]) => name)).toEqual([
+      'register-contact-discovery',
+      'resolve-people-targets',
+    ]);
+  });
+
+  it('does not issue reads while the selected contact has an explicit command pending', async () => {
+    const phone = row('active_user').phoneE164;
+    mergeContactResolutions(mocks.actor, [row('active_user')]);
+    const write = beginContactResolutionWrite(mocks.actor, [phone]);
+    expect((await resolveContactPhones(mocks.actor, [phone], 'interactive', true))[0].status).toBe(
+      'active_user',
+    );
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    mergeContactResolutions(mocks.actor, [row('pending_friendship')], {
+      expectedGenerations: write,
+    });
+    write.finish();
+  });
+
+  it('removes a phone only after its in-flight observed response supplies the watch ID', async () => {
+    const phone = row('no_account').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    let finish!: (rows: PeopleTargetResolution[]) => void;
+    mocks.invoke.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const read = resolveContactPhones(mocks.actor, [phone], 'background');
+    await vi.advanceTimersByTimeAsync(1);
+    const removal = removeContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.manage).not.toHaveBeenCalled();
+    finish([row('no_account')]);
+    await vi.runAllTimersAsync();
+    await removal;
+    expect(await read).toEqual([]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.manage).toHaveBeenCalledExactlyOnceWith(
+      'manage-contact-discovery',
+      { discoverySessionId: 'stable-session', action: 'remove', watchIds: ['opaque-watch'] },
+      { expectedUserId: mocks.actor },
+    );
+  });
+
+  it('registers a re-added contact after removal finishes instead of trusting the deleted watch', async () => {
+    const phone = row('no_account').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke
+      .mockResolvedValueOnce([row('no_account')])
+      .mockResolvedValue({ watches: [{ phoneE164: phone, discoveryWatchId: 'new-watch' }] });
+    const initial = resolveContactPhones(mocks.actor, [phone], 'background');
+    await vi.runAllTimersAsync();
+    await initial;
+    let finishRemove!: () => void;
+    mocks.manage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRemove = () => resolve({ status: 'stopped' });
+        }),
+    );
+    const removal = removeContactDiscoveryPhoneWatches(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    restoreContactDiscoveryPhones(mocks.actor, [phone]);
+    const readded = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    finishRemove();
+    await vi.runAllTimersAsync();
+    await Promise.all([removal, readded]);
+    expect(mocks.invoke.mock.calls.map(([name]) => name)).toEqual([
+      'resolve-people-targets',
+      'register-contact-discovery',
+    ]);
+    invalidateContactResolutions({ userId: mocks.actor, watchIds: ['new-watch'] });
+    expect(readContactResolutions(mocks.actor)[phone].resolvedAt).toBe(0);
+  });
+
+  it('rechecks only the visible window after five minutes to recover a silently missed event', async () => {
+    const phones = Array.from({ length: 120 }, (_, index) => `+57300${index}`);
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockImplementation(async (_name, _schema, input) =>
+      (input as { phoneE164List: string[] }).phoneE164List.map((phoneE164) => ({
+        ...row('no_account'),
+        phoneE164,
+        discoveryWatchId: `watch-${phoneE164}`,
+      })),
+    );
+    const initial = synchronizeContactDiscoveryPhones(mocks.actor, phones);
+    await vi.runAllTimersAsync();
+    await initial;
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
+    await resolveContactPhones(mocks.actor, phones.slice(0, 60), 'visible');
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const visible = resolveContactPhones(mocks.actor, phones.slice(0, 60), 'visible');
+    await vi.runAllTimersAsync();
+    await visible;
+    await resolveContactPhones(mocks.actor, phones, 'background');
+    await resolveContactPhones(mocks.actor, phones.slice(0, 60), 'visible');
+    expect(mocks.invoke).toHaveBeenCalledTimes(3);
+    expect((mocks.invoke.mock.calls[2][2] as { phoneE164List: string[] }).phoneE164List).toEqual(
+      phones.slice(0, 60),
+    );
   });
 });

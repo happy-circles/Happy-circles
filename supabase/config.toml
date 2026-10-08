@@ -106,6 +106,9 @@ verify_jwt = true
 [functions.manage-contact-discovery]
 verify_jwt = true
 
+[functions.register-contact-discovery]
+verify_jwt = true
+
 [functions.get-account-invite-preview-public]
 verify_jwt = false
 

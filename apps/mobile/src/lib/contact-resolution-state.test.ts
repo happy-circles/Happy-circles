@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { PeopleTargetResolution } from './live-data/types-runtime';
 import {
   applyContactActionResult,
+  associateContactDiscoveryWatches,
+  beginContactResolutionWrite,
   captureContactDiscoveryRevision,
   captureContactGenerations,
   clearContactResolutionUser,
@@ -9,6 +11,8 @@ import {
   isContactResolutionFresh,
   mergeContactResolutions,
   readContactResolutions,
+  isContactResolutionWritePending,
+  readContactResolutionPhonesForTarget,
   subscribeContactResolutions,
 } from './contact-resolution-state';
 
@@ -134,7 +138,7 @@ describe('shared contact resolution state', () => {
   it('invalidates an initial unknown phone request when a mutation occurs before lookup completes', () => {
     const user = 'unknown-mutation';
     const expectedGenerations = captureContactGenerations(user, [row('no_account').phoneE164]);
-    invalidateContactResolutions({ userId: user, inviteId: 'invite-not-yet-cached' });
+    invalidateContactResolutions({ userId: user, inviteId: 'invite' });
     expect(
       mergeContactResolutions(user, [row('pending_friendship')], { expectedGenerations }),
     ).toEqual([]);
@@ -169,6 +173,109 @@ describe('shared contact resolution state', () => {
     applyContactActionResult({ userId: user, phoneE164: row('active_user').phoneE164 }, 'canceled');
     expect(readContactResolutions(user)[row('active_user').phoneE164].status).toBe(
       'already_related',
+    );
+  });
+
+  it('keeps an unrelated in-flight phone and exposes only changed phone IDs', () => {
+    const user = 'scoped-generations';
+    const other = '+573009876543';
+    mergeContactResolutions(user, [row('active_user'), row('no_account', other)]);
+    const snapshot = readContactResolutions(user);
+    const expectedGenerations = captureContactGenerations(user, [other]);
+    const changes: readonly string[][] = [];
+    const unsubscribe = subscribeContactResolutions(user, (change) =>
+      (changes as string[][]).push([...change.changedPhones]),
+    );
+    invalidateContactResolutions({ userId: user, phoneE164: row('active_user').phoneE164 });
+    expect(readContactResolutions(user)[other]).toBe(snapshot[other]);
+    expect(
+      mergeContactResolutions(user, [row('no_account', other)], { expectedGenerations }),
+    ).toHaveLength(1);
+    expect(changes).toEqual([[row('active_user').phoneE164], [other]]);
+    unsubscribe();
+  });
+
+  it('associates an event before watch registration with only its unknown phone', () => {
+    const user = 'registration-event';
+    const phone = row('no_account').phoneE164;
+    const start = captureContactDiscoveryRevision();
+    const phones: string[][] = [];
+    const unsubscribe = subscribeContactResolutions(user, (change) =>
+      phones.push([...change.invalidatedPhones]),
+    );
+    invalidateContactResolutions({ userId: user, watchIds: ['opaque-new-watch'] });
+    associateContactDiscoveryWatches(
+      user,
+      [{ phoneE164: phone, discoveryWatchId: 'opaque-new-watch' }],
+      start,
+    );
+    expect(phones.at(-1)).toEqual([phone]);
+    expect(readContactResolutions(user)).toEqual({});
+    unsubscribe();
+  });
+
+  it('fences older reads and cache hydration without changing the displayed row during outreach', () => {
+    const user = 'write-barrier';
+    const phone = row('active_user').phoneE164;
+    mergeContactResolutions(user, [row('active_user')]);
+    const displayed = readContactResolutions(user)[phone];
+    const before = captureContactGenerations(user, [phone]);
+    const write = beginContactResolutionWrite(user, [phone]);
+    expect(readContactResolutions(user)[phone]).toBe(displayed);
+    expect(
+      mergeContactResolutions(user, [row('active_user')], { expectedGenerations: before }),
+    ).toEqual([]);
+    expect(
+      mergeContactResolutions(
+        user,
+        [{ ...row('no_account'), resolvedAt: Date.now(), generation: Date.now() + 100_000 }],
+        { fromCache: true },
+      ),
+    ).toEqual([]);
+    expect(
+      mergeContactResolutions(user, [row('pending_friendship')], { expectedGenerations: write }),
+    ).toHaveLength(1);
+    write.finish();
+    expect(isContactResolutionWritePending(user, phone)).toBe(false);
+    expect(readContactResolutions(user)[phone].status).toBe('pending_friendship');
+  });
+
+  it('requeues a scoped event after a pending command finishes even with no modal consumer', () => {
+    const user = 'event-during-write';
+    const phone = row('active_user').phoneE164;
+    mergeContactResolutions(user, [row('active_user')]);
+    const write = beginContactResolutionWrite(user, [phone]);
+    const invalidated: string[][] = [];
+    const unsubscribe = subscribeContactResolutions(user, (change) =>
+      invalidated.push([...change.invalidatedPhones]),
+    );
+    invalidateContactResolutions({ userId: user, phoneE164: phone });
+    expect(
+      mergeContactResolutions(user, [row('pending_friendship')], { expectedGenerations: write }),
+    ).toEqual([]);
+    write.finish();
+    expect(invalidated).toEqual([[phone], [phone]]);
+    expect(isContactResolutionWritePending(user, phone)).toBe(false);
+    unsubscribe();
+  });
+
+  it('looks up relationship events by ID and removes stale reverse associations', () => {
+    const user = 'relationship-index';
+    const phone = row('already_related').phoneE164;
+    const other = '+573009876543';
+    mergeContactResolutions(user, [
+      { ...row('already_related'), relationshipId: 'relationship' },
+      row('active_user', other),
+    ]);
+    const previous = readContactResolutions(user)[other];
+    expect(readContactResolutionPhonesForTarget(user, { relationshipId: 'relationship' })).toEqual([
+      phone,
+    ]);
+    invalidateContactResolutions({ userId: user, relationshipId: 'relationship' });
+    expect(readContactResolutions(user)[other]).toBe(previous);
+    mergeContactResolutions(user, [row('active_user')]);
+    expect(readContactResolutionPhonesForTarget(user, { relationshipId: 'relationship' })).toEqual(
+      [],
     );
   });
 });

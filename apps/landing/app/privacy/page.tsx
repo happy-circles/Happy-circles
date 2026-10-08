@@ -16,7 +16,7 @@ export default function PrivacyPage() {
 
         <header className="legalHeader">
           <h1>Política de privacidad</h1>
-          <p className="legalUpdated">Última actualización: 2026-10-07</p>
+          <p className="legalUpdated">Última actualización: 2026-10-08</p>
         </header>
 
         <section className="legalSection">
@@ -61,12 +61,18 @@ export default function PrivacyPage() {
             agenda. Buscar contactos no envía SMS ni invitaciones automáticamente.
           </p>
           <p>
-            Para actualizar las coincidencias mientras usas esta pantalla, el servidor guarda
-            huellas criptográficas de los teléfonos (HMAC), asociadas a tu cuenta y a la sesión de
-            búsqueda. La sesión caduca 15 minutos después de la última búsqueda o renovación y puede
-            renovarse mientras la pantalla sigue activa. Al cerrar la pantalla, la app pide eliminar
-            esa sesión; el servidor también elimina periódicamente las sesiones caducadas y sus
-            huellas.
+            Para actualizar las coincidencias mientras usas la app, el servidor guarda huellas
+            criptográficas de los teléfonos (HMAC), asociadas a tu cuenta y a la sesión de búsqueda.
+            Estas huellas no son datos anónimos. La sesión puede renovarse mientras la app está en
+            primer plano, con tu sesión abierta y el permiso de contactos vigente, aunque cierres la
+            pantalla de contactos.
+          </p>
+          <p>
+            Al pasar a segundo plano, detectar que retiraste el permiso de contactos o cerrar tu
+            sesión, la app deja de renovar estas observaciones y solicita eliminar la sesión de
+            búsqueda. Si no se renueva, caduca 15 minutos después del último registro o renovación y
+            deja de habilitar avisos de coincidencias. El servidor elimina periódicamente las
+            sesiones caducadas y sus huellas; ese borrado puede ocurrir después de la caducidad.
           </p>
           <p>
             Esta búsqueda no envía los nombres de tus contactos ni guarda en el servidor una copia

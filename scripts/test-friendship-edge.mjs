@@ -176,6 +176,93 @@ try {
   );
 
   await call(
+    'register-contact-discovery',
+    null,
+    { phoneE164List: [recipient.phone], discoverySessionId: session },
+    401,
+  );
+  await call(
+    'register-contact-discovery',
+    actor,
+    { phoneE164List: phones, discoverySessionId: session },
+    400,
+  );
+  await call('register-contact-discovery', actor, { phoneE164List: [recipient.phone] }, 400);
+  await call(
+    'register-contact-discovery',
+    actor,
+    { phoneE164List: [recipient.phone], discoverySessionId: 'bad' },
+    400,
+  );
+  const registered = await call('register-contact-discovery', actor, {
+    phoneE164List: [recipient.phone, ...phones.slice(0, 59)],
+    discoverySessionId: session,
+  });
+  assert.equal(registered.status, 'registered');
+  assert.equal(registered.discoverySessionId, session);
+  assert.equal(registered.watches.length, 60);
+  assert.ok(registered.expiresAt);
+  assert.deepEqual(registered.watches[0], {
+    phoneE164: recipient.phone,
+    discoveryWatchId: resolved[0].discoveryWatchId,
+  });
+  assert.ok(registered.watches.every((watch) => Object.keys(watch).length === 2));
+  const registeredReplay = await call('register-contact-discovery', actor, {
+    phoneE164List: [recipient.phone],
+    discoverySessionId: session,
+  });
+  assert.equal(
+    registeredReplay.watches[0].discoveryWatchId,
+    registered.watches[0].discoveryWatchId,
+  );
+  const outsiderRegistered = await call('register-contact-discovery', outsider, {
+    actorUserId: actor.id,
+    phoneE164List: [recipient.phone],
+    discoverySessionId: session,
+  });
+  assert.notEqual(
+    outsiderRegistered.watches[0].discoveryWatchId,
+    registered.watches[0].discoveryWatchId,
+  );
+  await call('manage-contact-discovery', outsider, {
+    discoverySessionId: session,
+    action: 'stop',
+  });
+  console.log(
+    'PASS Edge registration: authenticated, max 60, required UUID, stable watches, no resolved data, scoped actor',
+  );
+
+  const removeBody = {
+    discoverySessionId: session,
+    action: 'remove',
+    watchIds: [registered.watches[1].discoveryWatchId],
+  };
+  await call('manage-contact-discovery', null, removeBody, 401);
+  await call('manage-contact-discovery', actor, { ...removeBody, watchIds: [] }, 400);
+  await call('manage-contact-discovery', actor, { ...removeBody, watchIds: ['not-a-watch'] }, 400);
+  await call(
+    'manage-contact-discovery',
+    actor,
+    { ...removeBody, watchIds: Array(61).fill(registered.watches[1].discoveryWatchId) },
+    400,
+  );
+  assert.equal(
+    (await call('manage-contact-discovery', outsider, { ...removeBody, actorUserId: actor.id }))
+      .removedWatchCount,
+    0,
+  );
+  assert.equal((await call('manage-contact-discovery', actor, removeBody)).removedWatchCount, 1);
+  assert.equal((await call('manage-contact-discovery', actor, removeBody)).removedWatchCount, 0);
+  assert.equal(
+    sql(`select count(*) from app_private.contact_discovery_watches
+         where id=${literal(registered.watches[0].discoveryWatchId)};`),
+    '1',
+  );
+  console.log(
+    'PASS Edge pruning: bounded UUIDs, scoped actor, idempotent delete, remaining watch preserved',
+  );
+
+  await call(
     'manage-contact-discovery',
     null,
     { discoverySessionId: session, action: 'renew' },

@@ -281,6 +281,10 @@ export interface FriendshipInviteDeliveryResult {
 export interface FriendshipInviteActionResult {
   readonly inviteId: string;
   readonly status: string;
+  readonly created?: boolean;
+  readonly friendshipDirection?: 'incoming' | 'outgoing';
+  readonly targetUserId?: string;
+  readonly expiresAt?: string | null;
   readonly resolvedAt?: string | null;
   readonly relationshipId?: string | null;
   readonly reminderStatus?: 'queued' | 'cooldown' | 'resolved';
@@ -409,6 +413,7 @@ export interface PeopleOutreachResult {
   readonly displayName: string | null;
   readonly relationshipId?: string | null;
   readonly inviteId?: string | null;
+  readonly friendshipDirection?: 'incoming' | 'outgoing';
   readonly result?: FriendshipInviteActionResult | AccountInviteDeliveryResult;
 }
 

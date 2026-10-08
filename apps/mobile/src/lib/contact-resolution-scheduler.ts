@@ -1,36 +1,37 @@
 import type { PeopleTargetResolution } from './live-data/types-runtime';
 
 export type ContactResolutionPriority = 'background' | 'visible' | 'event' | 'interactive';
-type Waiter = {
-  resolve: (row: PeopleTargetResolution | undefined) => void;
+type Waiter<Row> = {
+  resolve: (row: Row | undefined) => void;
   reject: (error: unknown) => void;
 };
-type Job = { phone: string; priority: ContactResolutionPriority; waiters: Waiter[] };
+type Job<Row> = { phone: string; priority: ContactResolutionPriority; waiters: Waiter<Row>[] };
 const priorityRank = { interactive: 0, event: 1, visible: 2, background: 3 };
 
 /** One budget and deduplication queue for every resolution entry point of a user. */
-export class ContactResolutionScheduler {
-  private jobs = new Map<string, Job>();
-  private active = new Map<string, Job>();
+export class ContactResolutionScheduler<
+  Row extends { readonly phoneE164: string } = PeopleTargetResolution,
+> {
+  private jobs = new Map<string, Job<Row>>();
+  private active = new Map<string, Job<Row>>();
   private running = false;
   private calls: number[] = [];
   private retryAt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly fetchBatch: (
-      phones: readonly string[],
-    ) => Promise<readonly PeopleTargetResolution[]>,
+    private readonly fetchBatch: (phones: readonly string[]) => Promise<readonly Row[]>,
+    private readonly minuteLimits = { background: 45, visible: 45, event: 55, interactive: 60 },
   ) {}
 
   request(
     phones: readonly string[],
     priority: ContactResolutionPriority,
     afterCurrent = false,
-  ): Promise<readonly PeopleTargetResolution[]> {
+  ): Promise<readonly Row[]> {
     const promises = [...new Set(phones)].map(
       (phone) =>
-        new Promise<PeopleTargetResolution | undefined>((resolve, reject) => {
+        new Promise<Row | undefined>((resolve, reject) => {
           const existing =
             this.jobs.get(phone) ?? (afterCurrent ? undefined : this.active.get(phone));
           if (existing) {
@@ -43,9 +44,7 @@ export class ContactResolutionScheduler {
         }),
     );
     this.schedule(0);
-    return Promise.all(promises).then((rows) =>
-      rows.filter((row): row is PeopleTargetResolution => Boolean(row)),
-    );
+    return Promise.all(promises).then((rows) => rows.filter((row) => row !== undefined) as Row[]);
   }
 
   private schedule(delay: number) {
@@ -67,7 +66,7 @@ export class ContactResolutionScheduler {
     const interactive = sorted[0].priority === 'interactive';
     const event = sorted[0].priority === 'event';
     const minuteCalls = this.calls.filter((at) => now - at < 60_000);
-    const minuteLimit = interactive ? 60 : event ? 55 : 45;
+    const minuteLimit = this.minuteLimits[sorted[0].priority];
     const hourLimit = interactive ? 1200 : event ? 1100 : 1000;
     const resumeAt = Math.max(
       this.retryAt,

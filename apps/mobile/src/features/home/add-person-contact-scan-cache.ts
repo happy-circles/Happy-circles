@@ -1,13 +1,17 @@
 import { type PeopleTargetResolution } from '@/lib/live-data';
 import { type ContactsPermissionStatus } from '@/lib/contacts-permissions';
 import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
-import { filterReusableContactResolutionCache } from '@/features/home/contacts-sheet-helpers';
 
 export type WarmContactScanCache = {
   readonly userId: string | null;
   readonly contactsPermissionStatus: ContactsPermissionStatus;
   readonly contacts: readonly ContactCandidate[];
   readonly targetCache: Record<string, PeopleTargetResolution>;
+  readonly indexRevision?: number;
+  readonly readLimit?: number;
+  readonly loadedCount?: number;
+  readonly matchingCount?: number;
+  readonly scanComplete?: boolean;
 };
 
 let warmContactScanCache: WarmContactScanCache | null = null;
@@ -19,18 +23,14 @@ export function readWarmContactScanCache(
     return null;
   }
 
-  return {
-    ...warmContactScanCache,
-    contacts: [...warmContactScanCache.contacts],
-    targetCache: filterReusableContactResolutionCache(warmContactScanCache.targetCache),
-  };
+  return warmContactScanCache;
 }
 
 export function writeWarmContactScanCache(cache: WarmContactScanCache) {
   warmContactScanCache = {
     ...cache,
-    contacts: [...cache.contacts],
-    targetCache: filterReusableContactResolutionCache(cache.targetCache),
+    contacts: cache.contacts,
+    targetCache: cache.targetCache,
   };
 }
 
@@ -50,6 +50,6 @@ export function updateWarmContactScanTargetCache(
 
   warmContactScanCache = {
     ...warmContactScanCache,
-    targetCache: filterReusableContactResolutionCache(targetCache),
+    targetCache,
   };
 }

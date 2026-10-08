@@ -4,7 +4,15 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { supabase } from '../supabase';
 import { invalidateAppSnapshot } from './client';
 import { invalidateContactResolutions, setContactRealtimeReady } from '../contact-resolution-state';
-import { disposeContactResolutionUser } from '@/features/home/contact-resolution-service';
+import { disposeContactDiscoveryRuntime } from '@/lib/contact-discovery-runtime';
+import { clearContactIndexMemory } from '@/features/home/add-person-contact-index';
+import { clearPeopleTargetResolutionMemory } from '@/features/home/people-target-resolution-cache';
+import { clearWarmContactScanCache } from '@/features/home/add-person-contact-scan-cache';
+import { clearImmediateInviteRequestUser } from '@/features/people/immediate-invite-request';
+import { queryClient } from '@/lib/query-client';
+import { APP_SNAPSHOT_QUERY_KEY } from './constants';
+import type { AppSnapshot } from './snapshot-types';
+import { contactTargetsForSnapshotDiff } from './snapshot-contact-reconciliation';
 
 const SNAPSHOT_REALTIME_DEBOUNCE_MS = 650;
 const FOREGROUND_REFETCH_AFTER_MS = 5 * 60_000;
@@ -92,6 +100,10 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
     }
 
     let isMounted = true;
+    const actorUserId = userId;
+    let currentActorId: string | null = userId;
+    const snapshotQueryKey = [APP_SNAPSHOT_QUERY_KEY, userId] as const;
+    let lastReconciledSnapshot = queryClient.getQueryData<AppSnapshot>(snapshotQueryKey);
     let appState: AppStateStatus = AppState.currentState;
     const channel = client.channel(`user:${userId}`, {
       config: {
@@ -117,8 +129,21 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
 
       debounceTimeoutRef.current = setTimeout(() => {
         debounceTimeoutRef.current = null;
+        if (!isMounted || currentActorId !== actorUserId) return;
         lastInvalidateAtRef.current = Date.now();
-        void invalidateAppSnapshot().catch(() => undefined);
+        const before =
+          lastReconciledSnapshot ?? queryClient.getQueryData<AppSnapshot>(snapshotQueryKey);
+        void invalidateAppSnapshot()
+          .then(() => {
+            if (!isMounted || currentActorId !== userId) return;
+            const after = queryClient.getQueryData<AppSnapshot>(snapshotQueryKey);
+            if (!after || after === lastReconciledSnapshot) return;
+            lastReconciledSnapshot = after;
+            for (const target of contactTargetsForSnapshotDiff(before, after, actorUserId)) {
+              invalidateContactResolutions({ ...target, userId });
+            }
+          })
+          .catch(() => undefined);
       }, delayMs);
     }
 
@@ -129,13 +154,13 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
       }
 
       scheduleSnapshotInvalidation();
-      if (!payload?.kind || /friendship|account_invite|relationship|profile/.test(payload.kind)) {
-        invalidateContactResolutions({
-          userId,
-          ...(payload?.sourceItemId && !/relationship/.test(payload.kind ?? '')
-            ? { inviteId: payload.sourceItemId, matchedUserId: payload.sourceItemId }
-            : {}),
-        });
+      if (!payload?.sourceItemId || !payload.kind) return;
+      if (/friendship|account_invite/.test(payload.kind)) {
+        invalidateContactResolutions({ userId, inviteId: payload.sourceItemId });
+      } else if (/relationship/.test(payload.kind)) {
+        invalidateContactResolutions({ userId, relationshipId: payload.sourceItemId });
+      } else if (/profile/.test(payload.kind)) {
+        invalidateContactResolutions({ userId, matchedUserId: payload.sourceItemId });
       }
     }
 
@@ -165,6 +190,7 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
     });
 
     const authSubscription = client.auth.onAuthStateChange((_event, session) => {
+      currentActorId = session?.user.id ?? null;
       if (session?.user.id === userId) {
         void client.realtime.setAuth(session.access_token);
       }
@@ -192,7 +218,11 @@ export function useSnapshotRealtimeBridge(userId: string | null | undefined, ena
     return () => {
       isMounted = false;
       setContactRealtimeReady(userId, false);
-      disposeContactResolutionUser(userId);
+      disposeContactDiscoveryRuntime(userId);
+      clearWarmContactScanCache(userId);
+      clearContactIndexMemory(userId);
+      clearPeopleTargetResolutionMemory(userId);
+      clearImmediateInviteRequestUser(userId);
       appStateSubscription.remove();
       authSubscription.unsubscribe();
       if (debounceTimeoutRef.current) {

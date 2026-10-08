@@ -6,26 +6,20 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { AppState } from 'react-native';
-import * as Crypto from 'expo-crypto';
 import { onlineManager } from '@tanstack/react-query';
-import { updateWarmContactScanTargetCache } from './add-person-contact-scan-cache';
 import { uniqueContactPhoneE164List } from './contacts-sheet-helpers';
 import { loadPeopleTargetResolutionCache } from './people-target-resolution-cache';
+import { resolveContactPhones } from './contact-resolution-service';
 import {
-  manageContactDiscovery,
-  resolveContactPhones,
-  setContactDiscoverySession,
-} from './contact-resolution-service';
+  setContactDiscoveryKnownPhones,
+  setContactDiscoveryVisiblePhones,
+} from '@/lib/contact-discovery-runtime';
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
 import type { PeopleTargetResolution } from '@/lib/live-data/types-runtime';
 import {
   contactResolutionEpoch,
-  invalidateContactResolutions,
-  isContactRealtimeReady,
   mergeContactResolutions,
   readContactResolutions,
-  subscribeContactRealtime,
   subscribeContactResolutions,
 } from '@/lib/contact-resolution-state';
 
@@ -48,8 +42,8 @@ export function useAddPersonContactResolutionController(input: {
   targetCacheRef.current = targetCache;
   const scanRunIdRef = useRef(0);
   const visibleResolutionPhonesRef = useRef(new Set<string>());
-  const knownPhonesRef = useRef(new Set<string>());
-  const activeRef = useRef(false);
+  const hydratedPhonesRef = useRef(new Set<string>());
+  const cacheLoadsRef = useRef(new Map<string, Promise<void>>());
 
   const mergeTargetResolutions = useCallback(
     (rows: readonly PeopleTargetResolution[]) => {
@@ -67,41 +61,46 @@ export function useAddPersonContactResolutionController(input: {
   const loadCachedTargetResolutionsForPhones = useCallback(
     async (runId: number, phones: readonly string[]) => {
       if (!userId || !phones.length) return;
+      void runId;
+      const hydrated = hydratedPhonesRef.current;
+      const loads = cacheLoadsRef.current;
+      const needed = [...new Set(phones)].filter(
+        (phone) => !targetCacheRef.current[phone] && !hydrated.has(phone) && !loads.has(phone),
+      );
+      const pending = phones.flatMap((phone) => (loads.get(phone) ? [loads.get(phone)!] : []));
+      if (!needed.length) {
+        await Promise.all(pending);
+        return;
+      }
       const expectedEpoch = contactResolutionEpoch(userId);
-      const cached = await loadPeopleTargetResolutionCache(userId, phones).catch(() => ({}));
-      if (scanRunIdRef.current === runId)
-        mergeContactResolutions(userId, Object.values(cached), { fromCache: true, expectedEpoch });
+      const load = loadPeopleTargetResolutionCache(userId, needed)
+        .then((cached) => {
+          mergeContactResolutions(userId, Object.values(cached), {
+            fromCache: true,
+            expectedEpoch,
+          });
+          for (const phone of needed) hydrated.add(phone);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          for (const phone of needed) loads.delete(phone);
+        });
+      for (const phone of needed) loads.set(phone, load);
+      await Promise.all([...pending, load]);
     },
     [userId],
   );
 
-  const refreshPhones = useCallback(
-    async (
-      phones: readonly string[],
-      priority: 'visible' | 'background' | 'event',
-      force = false,
-    ) => {
-      if (!userId || !activeRef.current || !onlineManager.isOnline()) return;
-      try {
-        await resolveContactPhones(userId, phones, priority, force);
-      } catch {
-        if (priority === 'visible')
-          setMessage(
-            'Mostramos la última información disponible. Volveremos a consultar al recuperar la conexión.',
-          );
-      }
-    },
-    [setMessage, userId],
-  );
-
   const hydrateAndEnqueueResolutionPhones = useCallback(
     (runId: number, phones: readonly string[], priority: 'visible' | 'background') => {
-      for (const phone of phones) knownPhonesRef.current.add(phone);
       void loadCachedTargetResolutionsForPhones(runId, phones).then(() => {
-        if (scanRunIdRef.current === runId) void refreshPhones(phones, priority);
+        if (!userId || scanRunIdRef.current !== runId) return;
+        if (priority === 'visible')
+          setContactDiscoveryVisiblePhones(userId, [...visibleResolutionPhonesRef.current]);
+        setContactDiscoveryKnownPhones(userId, phones, priority);
       });
     },
-    [loadCachedTargetResolutionsForPhones, refreshPhones],
+    [loadCachedTargetResolutionsForPhones, userId],
   );
 
   const resolvePhoneStatusesNow = useCallback(
@@ -116,7 +115,7 @@ export function useAddPersonContactResolutionController(input: {
   const ensurePhoneStatuses = useCallback(
     async (phones: readonly string[]) => {
       if (!userId) return;
-      for (const phone of phones) knownPhonesRef.current.add(phone);
+      setContactDiscoveryKnownPhones(userId, phones, 'visible');
       await resolveContactPhones(userId, phones, 'interactive');
     },
     [userId],
@@ -149,78 +148,22 @@ export function useAddPersonContactResolutionController(input: {
   const resetResolutionState = useCallback(() => {
     scanRunIdRef.current += 1;
     visibleResolutionPhonesRef.current.clear();
-  }, []);
-
-  useEffect(() => {
-    knownPhonesRef.current.clear();
-    scanRunIdRef.current += 1;
+    if (userId) setContactDiscoveryVisiblePhones(userId, []);
   }, [userId]);
 
   useEffect(() => {
-    if (!userId || !visible) return;
-    const sessionId = Crypto.randomUUID();
-    let lastRenewedAt = Date.now();
-    let registered = false;
-    const registerKnown = () => {
-      if (!activeRef.current || !isContactRealtimeReady(userId) || !knownPhonesRef.current.size)
-        return;
-      registered = true;
-      void refreshPhones([...knownPhonesRef.current], 'background', true);
-    };
-    const activate = () => {
-      activeRef.current = AppState.currentState === 'active';
-      setContactDiscoverySession(userId, activeRef.current ? sessionId : null);
-      if (activeRef.current) {
-        invalidateContactResolutions({ userId });
-        registerKnown();
-      }
-    };
-    activeRef.current = AppState.currentState === 'active';
-    setContactDiscoverySession(userId, activeRef.current ? sessionId : null);
-    const unsubscribe = subscribeContactResolutions(userId, ({ invalidatedPhones, priority }) => {
-      updateWarmContactScanTargetCache(userId, readContactResolutions(userId));
-      if (!invalidatedPhones.length) return;
-      if (priority === 'event') {
-        void refreshPhones(invalidatedPhones, 'event', true);
-      } else {
-        const visiblePhones = invalidatedPhones.filter((phone) =>
-          visibleResolutionPhonesRef.current.has(phone),
-        );
-        void refreshPhones(visiblePhones, 'visible', true);
-        void refreshPhones(invalidatedPhones, 'background', true);
-      }
-    });
-    const unsubscribeRealtime = subscribeContactRealtime(userId, registerKnown);
-    const unsubscribeOnline = onlineManager.subscribe((online) => {
-      if (online) activate();
-    });
-    const appState = AppState.addEventListener('change', activate);
-    const interval = setInterval(() => {
-      if (!activeRef.current || !onlineManager.isOnline()) return;
-      void refreshPhones([...visibleResolutionPhonesRef.current], 'visible');
-      if (!registered && isContactRealtimeReady(userId)) registerKnown();
-      if (Date.now() - lastRenewedAt >= 5 * 60_000 && isContactRealtimeReady(userId)) {
-        lastRenewedAt = Date.now();
-        void manageContactDiscovery(sessionId, 'renew')
-          .then((result) => {
-            if (result.status === 'expired') registerKnown();
-          })
-          .catch(() => {
-            lastRenewedAt = 0;
-          });
-      }
-    }, 15_000);
+    scanRunIdRef.current += 1;
+    hydratedPhonesRef.current = new Set();
+    cacheLoadsRef.current = new Map();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (!visible) setContactDiscoveryVisiblePhones(userId, []);
     return () => {
-      activeRef.current = false;
-      clearInterval(interval);
-      unsubscribe();
-      unsubscribeRealtime();
-      unsubscribeOnline();
-      appState.remove();
-      setContactDiscoverySession(userId, null);
-      void manageContactDiscovery(sessionId, 'stop').catch(() => undefined);
+      setContactDiscoveryVisiblePhones(userId, []);
     };
-  }, [refreshPhones, userId, visible]);
+  }, [userId, visible]);
 
   return {
     ensurePhoneStatuses,

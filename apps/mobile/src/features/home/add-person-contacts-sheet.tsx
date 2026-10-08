@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -6,11 +6,11 @@ import {
   Animated,
   KeyboardAvoidingView,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
+  SectionList,
   Platform,
   Pressable,
   View,
+  type ViewToken,
 } from 'react-native';
 
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
@@ -32,11 +32,15 @@ import {
 import { ContactRow } from '@/features/home/add-person-contact-row';
 import { useAppTheme } from '@/providers/theme-provider';
 import { useAddPersonContactsSheetController } from '@/features/home/add-person-contacts-sheet-controller';
+import {
+  AddPersonManualInviteCard,
+  resolveManualInviteAlias,
+} from './add-person-manual-invite-card';
 import { AppText } from '@/components/app-text';
-import { buildManualPhoneE164, formatPhonePreview } from '@/features/invites/people-outreach-utils';
+import { buildManualPhoneE164 } from '@/features/invites/people-outreach-utils';
 
 const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
-const CONTACT_SCROLL_LOAD_MORE_THRESHOLD = 520;
+const AnimatedContactList = Animated.createAnimatedComponent(SectionList<EnrichedContact>);
 
 export function AddPersonContactsSheet({
   currentUserAvatarUrl,
@@ -69,7 +73,7 @@ export function AddPersonContactsSheet({
     handleOpenScanner,
     handleRefreshMyQr,
     handleRefreshContacts,
-    handleReviewContact,
+    handleViewableContactsChanged,
     handleReviewPhone,
     handleShareMyQr,
     handleShowMyQr,
@@ -99,7 +103,6 @@ export function AddPersonContactsSheet({
     transactionContext,
     visible,
   });
-  const stickySearchIndex = transactionContext ? 2 : 1;
   const manualInvitePhoneE164 = buildManualPhoneE164(searchValue);
   const manualInviteAlias = manualInvitePhoneE164
     ? resolveManualInviteAlias(searchValue, manualInvitePhoneE164)
@@ -122,42 +125,47 @@ export function AddPersonContactsSheet({
     [compactActionsRevealY],
   );
 
-  function handleSheetScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!hasMoreContactsToDisplay) {
-      return;
-    }
-
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    if (distanceFromBottom <= CONTACT_SCROLL_LOAD_MORE_THRESHOLD) {
-      requestMoreContacts();
-    }
-  }
-
-  function renderContactSection(title: string, items: readonly EnrichedContact[]) {
-    if (items.length === 0) {
-      return null;
-    }
-
-    return (
-      <View style={styles.contactSection}>
-        <AppText style={styles.sectionLabel}>{title}</AppText>
-        <View style={styles.contactList}>
-          {items.map(({ contact, resolution }) => (
-            <ContactRow
-              busy={contact.phoneOptions.some((phoneOption) => busyKey === phoneOption.phoneE164)}
-              contact={contact}
-              key={`${contact.contactId}:${contact.primaryPhone.id}`}
-              onPress={() =>
-                !resolution ? void handleReviewContact(contact) : void handleContactPress(contact)
-              }
-              resolution={resolution}
-            />
-          ))}
-        </View>
-      </View>
-    );
-  }
+  const contactPressRef = useRef(handleContactPress);
+  contactPressRef.current = handleContactPress;
+  const onContactPress = useCallback((contact: EnrichedContact['contact']) => {
+    void contactPressRef.current(contact);
+  }, []);
+  const contactSections = useMemo(
+    () =>
+      [
+        { title: 'En Happy Circles', data: inAppContacts },
+        { title: 'Agregar a Happy Circles', data: unresolvedContacts },
+        { title: 'Invitar a Happy Circles', data: inviteContacts },
+      ].filter((section) => section.data.length > 0),
+    [inAppContacts, unresolvedContacts, inviteContacts],
+  );
+  const viewableContactsRef = useRef(handleViewableContactsChanged);
+  viewableContactsRef.current = handleViewableContactsChanged;
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 20,
+    minimumViewTime: 100,
+  }).current;
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<EnrichedContact>[] }) => {
+      viewableContactsRef.current(
+        viewableItems
+          .filter((token) => token.isViewable && token.item?.contact)
+          .map((token) => token.item.contact),
+      );
+    },
+    [],
+  );
+  const renderContact = useCallback(
+    ({ item }: { item: EnrichedContact }) => (
+      <ContactRow
+        busy={item.contact.phoneOptions.some((phone) => busyKey === phone.phoneE164)}
+        contact={item.contact}
+        onPress={onContactPress}
+        resolution={item.resolution}
+      />
+    ),
+    [busyKey, onContactPress],
+  );
 
   function handleManualInvitePress() {
     if (!manualInvitePhoneE164 || !manualInviteAlias || busyKey) {
@@ -172,36 +180,14 @@ export function AddPersonContactsSheet({
     });
   }
 
-  function renderManualInviteCard() {
-    if (!manualInvitePhoneE164) {
-      return null;
-    }
-
-    return (
-      <View
-        style={[
-          styles.manualInviteCard,
-          {
-            backgroundColor: activeTheme.colors.surfaceMuted,
-            borderColor: activeTheme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.manualInviteCopy}>
-          <AppText style={styles.manualInviteTitle}>Invitación directa</AppText>
-          <AppText style={styles.emptyText}>{formatPhonePreview(manualInvitePhoneE164)}</AppText>
-        </View>
-        <PrimaryAction
-          compact
-          disabled={Boolean(busyKey)}
-          icon="paper-plane-outline"
-          label={manualInviteBusy ? 'Preparando...' : 'Consultar y continuar'}
-          loading={manualInviteBusy}
-          onPress={handleManualInvitePress}
-        />
-      </View>
-    );
-  }
+  const manualInviteCard = (
+    <AddPersonManualInviteCard
+      phoneE164={manualInvitePhoneE164}
+      busy={manualInviteBusy}
+      disabled={Boolean(busyKey)}
+      onPress={handleManualInvitePress}
+    />
+  );
 
   return (
     <>
@@ -219,137 +205,162 @@ export function AddPersonContactsSheet({
               </Pressable>
             </View>
 
-            <Animated.ScrollView
+            <AddPersonSearchControls
+              busyKey={busyKey}
+              onOpenScanner={() => void handleOpenScanner()}
+              onShowMyQr={() => void handleShowMyQr()}
+              searchValue={searchValue}
+              compactActionsStyle={compactActionsRevealStyle}
+              setSearchValue={setSearchValue}
+            />
+
+            <AnimatedContactList
+              style={{ flex: 1 }}
               contentContainerStyle={styles.sheetContent}
+              sections={canReadContacts ? contactSections : []}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              keyExtractor={(item) => item.contact.contactId}
+              renderItem={renderContact}
+              renderSectionHeader={({ section }) => (
+                <AppText style={styles.sectionLabel}>{section.title}</AppText>
+              )}
+              extraData={busyKey}
+              initialNumToRender={12}
+              maxToRenderPerBatch={12}
+              windowSize={7}
+              stickySectionHeadersEnabled={false}
               keyboardShouldPersistTaps="handled"
+              onEndReached={hasMoreContactsToDisplay ? requestMoreContacts : undefined}
+              onEndReachedThreshold={0.5}
               onScroll={Animated.event(
                 [{ nativeEvent: { contentOffset: { y: compactActionsRevealY } } }],
-                { listener: handleSheetScroll, useNativeDriver: true },
+                { useNativeDriver: true },
               )}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
-              stickyHeaderIndices={[stickySearchIndex]}
-            >
-              <AddPersonInPersonQrBlock
-                busyKey={busyKey}
-                onOpenScanner={() => void handleOpenScanner()}
-                onShowMyQr={() => void handleShowMyQr()}
-              />
-
-              {transactionContext ? (
-                <AddPersonTransactionContextBlock transactionContext={transactionContext} />
-              ) : null}
-
-              <AddPersonSearchControls
-                busyKey={busyKey}
-                onOpenScanner={() => void handleOpenScanner()}
-                onShowMyQr={() => void handleShowMyQr()}
-                searchValue={searchValue}
-                compactActionsStyle={compactActionsRevealStyle}
-                setSearchValue={setSearchValue}
-              />
-
-              {message ? <MessageBanner message={message} tone="neutral" /> : null}
-
-              {canReadContacts ? (
-                <>
-                  {contactsPermissionStatus === 'limited' ? (
-                    <PrimaryAction
-                      compact
-                      disabled={Boolean(busyKey)}
-                      label={
-                        busyKey === 'expand-contacts' ? 'Abriendo agenda...' : 'Ver más contactos'
-                      }
-                      onPress={busyKey ? undefined : () => void handleExpandLimitedContactsAccess()}
-                      variant="secondary"
-                    />
-                  ) : null}
-
-                  <PrimaryAction
-                    compact
-                    disabled={Boolean(busyKey)}
-                    icon="refresh-outline"
-                    label={
-                      busyKey === 'refresh-contacts'
-                        ? 'Actualizando agenda...'
-                        : 'Actualizar agenda'
-                    }
-                    loading={busyKey === 'refresh-contacts'}
-                    onPress={busyKey ? undefined : () => void handleRefreshContacts()}
-                    variant="ghost"
+              ListHeaderComponent={
+                <View style={styles.contactSection}>
+                  {' '}
+                  <AddPersonInPersonQrBlock
+                    busyKey={busyKey}
+                    onOpenScanner={() => void handleOpenScanner()}
+                    onShowMyQr={() => void handleShowMyQr()}
                   />
-
-                  {contactsLoading ? (
-                    <AppText style={styles.helperText}>
-                      {contactsLoadedCount > 0
-                        ? `Cargando agenda en segundo plano (${contactsLoadedCount} contactos).`
-                        : 'Leyendo tu agenda...'}
-                    </AppText>
-                  ) : contactsLoadedCount > 0 && !contactsScanComplete ? (
-                    <AppText style={styles.helperText}>Terminando de revisar la agenda...</AppText>
+                  {transactionContext ? (
+                    <AddPersonTransactionContextBlock transactionContext={transactionContext} />
                   ) : null}
+                  {message ? <MessageBanner message={message} tone="neutral" /> : null}
+                  {canReadContacts ? (
+                    <>
+                      {contactsPermissionStatus === 'limited' ? (
+                        <PrimaryAction
+                          compact
+                          disabled={Boolean(busyKey)}
+                          label={
+                            busyKey === 'expand-contacts'
+                              ? 'Abriendo agenda...'
+                              : 'Ver más contactos'
+                          }
+                          onPress={
+                            busyKey ? undefined : () => void handleExpandLimitedContactsAccess()
+                          }
+                          variant="secondary"
+                        />
+                      ) : null}
 
-                  {renderContactSection('En Happy Circles', inAppContacts)}
-                  {renderContactSection('Consultar en Happy Circles', unresolvedContacts)}
-                  {renderContactSection('Invitar a Happy Circles', inviteContacts)}
+                      <PrimaryAction
+                        compact
+                        disabled={Boolean(busyKey)}
+                        icon="refresh-outline"
+                        label={
+                          busyKey === 'refresh-contacts'
+                            ? 'Actualizando agenda...'
+                            : 'Actualizar agenda'
+                        }
+                        loading={busyKey === 'refresh-contacts'}
+                        onPress={busyKey ? undefined : () => void handleRefreshContacts()}
+                        variant="ghost"
+                      />
 
-                  {hasMoreContactsToDisplay ? (
-                    <PrimaryAction
-                      compact
-                      label="Cargar más contactos"
-                      onPress={requestMoreContacts}
-                      variant="secondary"
-                    />
-                  ) : null}
-
-                  {displayedContactsCount === 0 && (!contactsLoading || searchStillIndexing) ? (
-                    <View style={styles.emptyState}>
-                      <AppText style={styles.emptyTitle}>
-                        {searchStillIndexing
-                          ? 'Buscando en tu agenda...'
-                          : isSearchingContacts
-                            ? 'Sin resultados'
-                            : 'Sin contactos utiles'}
-                      </AppText>
+                      {contactsLoading ? (
+                        <AppText style={styles.helperText}>
+                          {contactsLoadedCount > 0
+                            ? `Cargando agenda en segundo plano (${contactsLoadedCount} contactos).`
+                            : 'Leyendo tu agenda...'}
+                        </AppText>
+                      ) : contactsLoadedCount > 0 && !contactsScanComplete ? (
+                        <AppText style={styles.helperText}>
+                          Terminando de revisar la agenda...
+                        </AppText>
+                      ) : null}
+                    </>
+                  ) : (
+                    <View
+                      style={[
+                        styles.permissionBox,
+                        { backgroundColor: activeTheme.colors.surfaceMuted },
+                      ]}
+                    >
+                      <AppText style={styles.emptyTitle}>Conecta tu agenda</AppText>
                       <AppText style={styles.emptyText}>
-                        {searchStillIndexing
-                          ? 'Seguimos cargando contactos guardados en este telefono.'
-                          : manualInvitePhoneE164
-                            ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
-                            : isSearchingContacts
-                              ? 'Prueba con otro nombre o celular.'
-                              : 'No encontramos contactos con numero en la agenda disponible.'}
+                        Así vemos quién ya está en Happy Circles y quién necesita invitación.
                       </AppText>
-                      {renderManualInviteCard()}
+                      {contactsPermissionStatus !== 'unavailable' ? (
+                        <PrimaryAction
+                          compact
+                          disabled={Boolean(busyKey)}
+                          label={
+                            busyKey === 'request-contacts'
+                              ? 'Abriendo permiso...'
+                              : 'Usar mi agenda'
+                          }
+                          onPress={busyKey ? undefined : () => void requestContactsAccess()}
+                          variant="secondary"
+                        />
+                      ) : null}
+                      {manualInviteCard}
                     </View>
-                  ) : null}
-                </>
-              ) : (
-                <View
-                  style={[
-                    styles.permissionBox,
-                    { backgroundColor: activeTheme.colors.surfaceMuted },
-                  ]}
-                >
-                  <AppText style={styles.emptyTitle}>Conecta tu agenda</AppText>
-                  <AppText style={styles.emptyText}>
-                    Así vemos quién ya está en Happy Circles y quién necesita invitación.
-                  </AppText>
-                  {contactsPermissionStatus !== 'unavailable' ? (
-                    <PrimaryAction
-                      compact
-                      disabled={Boolean(busyKey)}
-                      label={
-                        busyKey === 'request-contacts' ? 'Abriendo permiso...' : 'Usar mi agenda'
-                      }
-                      onPress={busyKey ? undefined : () => void requestContactsAccess()}
-                      variant="secondary"
-                    />
-                  ) : null}
-                  {manualInvitePhoneE164 ? renderManualInviteCard() : null}
+                  )}
                 </View>
-              )}
-            </Animated.ScrollView>
+              }
+              ListFooterComponent={
+                canReadContacts ? (
+                  <View style={styles.contactSection}>
+                    {' '}
+                    {hasMoreContactsToDisplay ? (
+                      <PrimaryAction
+                        compact
+                        label="Cargar más contactos"
+                        onPress={requestMoreContacts}
+                        variant="secondary"
+                      />
+                    ) : null}
+                    {displayedContactsCount === 0 && (!contactsLoading || searchStillIndexing) ? (
+                      <View style={styles.emptyState}>
+                        <AppText style={styles.emptyTitle}>
+                          {searchStillIndexing
+                            ? 'Buscando en tu agenda...'
+                            : isSearchingContacts
+                              ? 'Sin resultados'
+                              : 'Sin contactos utiles'}
+                        </AppText>
+                        <AppText style={styles.emptyText}>
+                          {searchStillIndexing
+                            ? 'Seguimos cargando contactos guardados en este telefono.'
+                            : manualInvitePhoneE164
+                              ? 'No esta en tus contactos, pero puedes enviarle un acceso privado.'
+                              : isSearchingContacts
+                                ? 'Prueba con otro nombre o celular.'
+                                : 'No encontramos contactos con numero en la agenda disponible.'}
+                        </AppText>
+                        {manualInviteCard}
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null
+              }
+            />
           </View>
 
           {scannerOpen ? (
@@ -483,13 +494,4 @@ export function AddPersonContactsSheet({
       </Modal>
     </>
   );
-}
-
-function resolveManualInviteAlias(searchValue: string, phoneE164: string): string {
-  const namePart = searchValue
-    .replace(/[+\d().\-\s]/g, ' ')
-    .replaceAll(/\s+/g, ' ')
-    .trim();
-
-  return namePart.length > 0 ? namePart : formatPhonePreview(phoneE164);
 }

@@ -2,18 +2,36 @@ import { describe, expect, it } from 'vitest';
 
 import {
   manageContactDiscoverySchema,
+  registerContactDiscoverySchema,
   remindFriendshipInviteSchema,
   resolvePeopleTargetsSchema,
 } from '../packages/shared/src/contracts/schemas';
 import {
   readDiscoverySessionId,
   validateContactPhoneBatch,
+  validateDiscoveryWatchBatch,
 } from '../supabase/functions/_shared/contact-discovery';
 import { readRpcErrorMessage } from '../supabase/functions/_shared/rpc-error-message';
 
 const sessionId = '00000000-0000-4000-8000-000000000001';
 
 describe('contact discovery contract', () => {
+  it('requires a session and normalized bounded phones for registration alone', () => {
+    expect(
+      registerContactDiscoverySchema.parse({
+        discoverySessionId: sessionId,
+        phoneE164List: ['+573000000001'],
+      }),
+    ).toEqual({ discoverySessionId: sessionId, phoneE164List: ['+573000000001'] });
+    for (const request of [
+      { phoneE164List: ['+573000000001'] },
+      { discoverySessionId: sessionId, phoneE164List: [] },
+      { discoverySessionId: sessionId, phoneE164List: ['3000000001'] },
+      { discoverySessionId: sessionId, phoneE164List: Array(61).fill('+573000000001') },
+    ]) {
+      expect(registerContactDiscoverySchema.safeParse(request).success).toBe(false);
+    }
+  });
   it('recognizes structured database rate-limit errors as well as thrown errors', () => {
     expect(
       readRpcErrorMessage({ code: 'P0001', message: 'rate_limited: discovery contacts' }),
@@ -65,5 +83,26 @@ describe('contact discovery contract', () => {
       }).success,
     ).toBe(false);
     expect(remindFriendshipInviteSchema.safeParse({ inviteId: sessionId }).success).toBe(false);
+  });
+
+  it('requires explicit bounded watch identifiers when removing observations', () => {
+    expect(
+      manageContactDiscoverySchema.parse({
+        discoverySessionId: sessionId,
+        action: 'remove',
+        watchIds: [sessionId],
+      }),
+    ).toEqual({ discoverySessionId: sessionId, action: 'remove', watchIds: [sessionId] });
+    expect(() => validateDiscoveryWatchBatch([sessionId])).not.toThrow();
+    for (const watchIds of [undefined, [], ['phone'], Array(61).fill(sessionId)]) {
+      expect(
+        manageContactDiscoverySchema.safeParse({
+          discoverySessionId: sessionId,
+          action: 'remove',
+          watchIds,
+        }).success,
+      ).toBe(false);
+      if (watchIds) expect(() => validateDiscoveryWatchBatch(watchIds)).toThrow('Invalid watchIds');
+    }
   });
 });

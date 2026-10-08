@@ -125,4 +125,23 @@ describe('shared discovery budget', () => {
     await vi.advanceTimersByTimeAsync(10_001);
     expect(await second).toHaveLength(1);
   });
+
+  it('reserves management capacity while retiring a large agenda snapshot', async () => {
+    const fetch = vi.fn(async (phones: readonly string[]) => phones.map(row));
+    const scheduler = new ContactResolutionScheduler(fetch, {
+      background: 15,
+      visible: 15,
+      event: 17,
+      interactive: 18,
+    });
+    const removals = scheduler.request(
+      Array.from({ length: 960 }, (_, index) => `removed-${index}`),
+      'background',
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fetch).toHaveBeenCalledTimes(15);
+    await vi.advanceTimersByTimeAsync(59_901);
+    expect(await removals).toHaveLength(960);
+    expect(fetch).toHaveBeenCalledTimes(16);
+  });
 });

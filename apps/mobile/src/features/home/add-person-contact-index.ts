@@ -75,6 +75,12 @@ const activeRunsByUser = new Map<string, ActiveContactIndexRun>();
 const contactIndexWritesByUser = new Map<string, Promise<void>>();
 const listenersByUser = new Map<string, Set<ContactIndexListener>>();
 const migratedLegacyCacheUsers = new Set<string>();
+const revisionsByUser = new Map<string, number>();
+const readsByUser = new Map<string, Map<string, Promise<ContactIndexReadResult>>>();
+
+export function contactIndexRevision(userId: string | null | undefined): number {
+  return revisionsByUser.get(cacheUserKey(userId)) ?? 0;
+}
 
 async function writeForContactIndexRun(
   userKey: string,
@@ -154,7 +160,10 @@ function parseContact(value: string): ContactCandidate | null {
 }
 
 function notifyContactIndexSubscribers(userId: string | null | undefined) {
-  const listeners = listenersByUser.get(cacheUserKey(userId));
+  const userKey = cacheUserKey(userId);
+  revisionsByUser.set(userKey, contactIndexRevision(userId) + 1);
+  readsByUser.delete(userKey);
+  const listeners = listenersByUser.get(userKey);
   if (!listeners) {
     return;
   }
@@ -435,6 +444,7 @@ function shouldResumeMeta(meta: ContactIndexMetaRow | null): boolean {
 
 async function runContactIndex(input: {
   readonly generation: number;
+  readonly onStarted: () => void;
   readonly initialLoadedCount: number;
   readonly initialPageOffset: number;
   readonly lastCompletedAt: number | null;
@@ -473,6 +483,7 @@ async function runContactIndex(input: {
       return;
     }
     notifyContactIndexSubscribers(input.userId);
+    input.onStarted();
 
     let hasNextPage = true;
     while (hasNextPage && !input.run.cancelled && AppState.currentState === 'active') {
@@ -600,6 +611,7 @@ async function runContactIndex(input: {
       notifyContactIndexSubscribers(input.userId);
     }
   } finally {
+    input.onStarted();
     if (activeRunsByUser.get(input.userKey) === input.run) {
       activeRunsByUser.delete(input.userKey);
     }
@@ -623,11 +635,38 @@ export function subscribeContactIndex(
   };
 }
 
-export async function readContactIndex(input: {
+type ContactIndexReadInput = {
   readonly limit: number;
+  readonly offset?: number;
   readonly searchValue?: string | null;
   readonly userId: string | null | undefined;
-}): Promise<ContactIndexReadResult> {
+};
+
+export function clearContactIndexMemory(userId: string): void {
+  readsByUser.delete(cacheUserKey(userId));
+}
+
+export function readContactIndex(input: ContactIndexReadInput): Promise<ContactIndexReadResult> {
+  const userKey = cacheUserKey(input.userId);
+  let reads = readsByUser.get(userKey);
+  if (!reads)
+    readsByUser.set(userKey, (reads = new Map<string, Promise<ContactIndexReadResult>>()));
+  const key = `${normalizeSearchValue(input.searchValue)}:${input.limit}:${input.offset ?? 0}`;
+  const existing = reads.get(key);
+  if (existing) return existing;
+  const read = readContactIndexFromDisk(input);
+  // Only the most recent pages/searches stay resident; warm UI snapshots own their rows.
+  if (reads.size >= 16) reads.delete(reads.keys().next().value!);
+  reads.set(key, read);
+  void read.catch(() => {
+    if (reads?.get(key) === read) reads.delete(key);
+  });
+  return read;
+}
+
+async function readContactIndexFromDisk(
+  input: ContactIndexReadInput,
+): Promise<ContactIndexReadResult> {
   if (Platform.OS === 'web' || !input.userId) {
     return {
       contacts: [],
@@ -652,6 +691,9 @@ export async function readContactIndex(input: {
   const status: ContactIndexStatus = isContactIndexStatus(metaScanStatus) ? metaScanStatus : 'idle';
   const normalizedSearch = normalizeSearchValue(input.searchValue);
   const limit = Number.isFinite(input.limit) ? Math.max(1, Math.floor(input.limit)) : 1;
+  const offset = Math.max(0, Math.floor(input.offset ?? 0));
+  const offsetClause = offset ? ' OFFSET ?' : '';
+  const pageParams = offset ? [limit, offset] : [limit];
   const matchingCount = await countMatchingContacts({
     database,
     normalizedSearch,
@@ -666,8 +708,13 @@ export async function readContactIndex(input: {
              AND schema_version = ?
              AND search_key LIKE ? ESCAPE '\\'
            ORDER BY alias COLLATE NOCASE ASC, primary_phone_e164 ASC
-           LIMIT ?`,
-          [userKey, CONTACT_INDEX_SCHEMA_VERSION, `%${escapeLikeValue(normalizedSearch)}%`, limit],
+           LIMIT ?${offsetClause}`,
+          [
+            userKey,
+            CONTACT_INDEX_SCHEMA_VERSION,
+            `%${escapeLikeValue(normalizedSearch)}%`,
+            ...pageParams,
+          ],
         )
       : await database.getAllAsync<ContactIndexRow>(
           `SELECT contact_json
@@ -675,8 +722,8 @@ export async function readContactIndex(input: {
            WHERE user_id = ?
              AND schema_version = ?
            ORDER BY alias COLLATE NOCASE ASC, primary_phone_e164 ASC
-           LIMIT ?`,
-          [userKey, CONTACT_INDEX_SCHEMA_VERSION, limit],
+           LIMIT ?${offsetClause}`,
+          [userKey, CONTACT_INDEX_SCHEMA_VERSION, ...pageParams],
         );
 
   const contacts = rows.flatMap((row) => {
@@ -748,19 +795,33 @@ export async function startContactIndexing(input: {
     if (
       (input.reason === 'sheet_open' || input.reason === 'app_active') &&
       meta?.scan_status === 'ready' &&
+      meta.permission_status === permissionStatus &&
       indexIsFresh
     ) {
-      notifyContactIndexSubscribers(input.userId);
       return;
     }
 
-    const resume = input.reason !== 'permission_granted' && shouldResumeMeta(meta);
+    const permissionChanged = meta && meta.permission_status !== permissionStatus;
+    if (permissionChanged) {
+      await writeForContactIndexRun(userKey, run, async () => {
+        await database.runAsync(`DELETE FROM ${CONTACT_TABLE_NAME} WHERE user_id = ?`, [userKey]);
+      });
+      if (activeRunsByUser.get(userKey) !== run || run.cancelled) return;
+    }
+    const resume =
+      !permissionChanged && input.reason !== 'permission_granted' && shouldResumeMeta(meta);
     const generation = resume
       ? meta!.scan_generation
       : Math.max(run.generation, (meta?.scan_generation ?? 0) + 1);
     const startedAt = resume ? (meta!.last_started_at ?? Date.now()) : Date.now();
     run.generation = generation;
+    clearContactIndexMemory(input.userId);
+    let onStarted!: () => void;
+    const startedPromise = new Promise<void>((resolve) => {
+      onStarted = resolve;
+    });
     run.promise = runContactIndex({
+      onStarted,
       generation,
       initialLoadedCount: resume ? meta!.loaded_count : 0,
       initialPageOffset: resume ? meta!.next_page_offset : 0,
@@ -772,6 +833,7 @@ export async function startContactIndexing(input: {
       userKey,
     });
     started = true;
+    await startedPromise;
   } finally {
     if (!started && activeRunsByUser.get(userKey) === run) {
       activeRunsByUser.delete(userKey);

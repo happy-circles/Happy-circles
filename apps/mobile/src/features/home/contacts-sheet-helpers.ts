@@ -61,20 +61,20 @@ export function actionMetaForResolution(
   readonly tone: 'primary' | 'invite' | 'muted';
   readonly disabled: boolean;
 } {
-  if (!resolution) {
-    return {
-      disabled: false,
-      icon: 'search-outline',
-      label: 'Consultar',
-      tone: 'primary',
-    };
-  }
-
   if (hasMultiplePhones) {
     return {
       disabled: false,
       icon: 'list-outline',
       label: 'Elegir',
+      tone: 'primary',
+    };
+  }
+
+  if (!resolution) {
+    return {
+      disabled: false,
+      icon: 'person-add-outline',
+      label: 'Agregar',
       tone: 'primary',
     };
   }

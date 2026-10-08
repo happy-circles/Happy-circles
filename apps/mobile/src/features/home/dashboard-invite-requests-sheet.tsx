@@ -329,24 +329,28 @@ export function InviteRequestRow({
 export function InviteRequestsSheet({
   activeTab,
   busyKey,
+  focusedInviteId,
   historyItems,
   message,
   onAction,
   onChangeTab,
   onClose,
   onOpenPerson,
+  onShowAll,
   receivedItems,
   sentItems,
   visible,
 }: {
   readonly activeTab: InviteRequestsTab;
   readonly busyKey: string | null;
+  readonly focusedInviteId?: string | null;
   readonly historyItems: readonly InviteRequestItem[];
   readonly message: string | null;
   readonly onAction: (item: InviteRequestItem, action: InviteRequestAction) => void;
   readonly onChangeTab: (tab: InviteRequestsTab) => void;
   readonly onClose: () => void;
   readonly onOpenPerson?: (href: Href) => void;
+  readonly onShowAll?: () => void;
   readonly receivedItems: readonly InviteRequestItem[];
   readonly sentItems: readonly InviteRequestItem[];
   readonly visible: boolean;
@@ -364,7 +368,10 @@ export function InviteRequestsSheet({
   }
 
   function renderRequestPage(tab: InviteRequestsTab) {
-    const items = tab === 'received' ? receivedItems : tab === 'sent' ? sentItems : historyItems;
+    const tabItems = tab === 'received' ? receivedItems : tab === 'sent' ? sentItems : historyItems;
+    const items = focusedInviteId
+      ? tabItems.filter((item) => item.inviteId === focusedInviteId)
+      : tabItems;
 
     return (
       <ScrollView
@@ -401,7 +408,18 @@ export function InviteRequestsSheet({
         <Pressable onPress={onClose} style={styles.sheetBackdrop} />
         <View style={[styles.friendshipSheet, { backgroundColor: activeTheme.colors.surface }]}>
           <View style={styles.sheetHeader}>
-            <AppText style={styles.sheetTitle}>Solicitudes</AppText>
+            <AppText style={styles.sheetTitle}>
+              {focusedInviteId ? 'Solicitud' : 'Solicitudes'}
+            </AppText>
+            {focusedInviteId && onShowAll ? (
+              <Pressable
+                accessibilityLabel="Ver todas las solicitudes"
+                accessibilityRole="button"
+                onPress={onShowAll}
+              >
+                <AppText style={{ color: activeTheme.colors.primary }}>Ver todas</AppText>
+              </Pressable>
+            ) : null}
             <Pressable onPress={onClose} style={styles.sheetCloseButton}>
               <Ionicons color={activeTheme.colors.text} name="close" size={22} />
             </Pressable>

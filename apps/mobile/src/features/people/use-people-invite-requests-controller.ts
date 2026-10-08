@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { Share } from 'react-native';
 
@@ -37,6 +37,16 @@ import {
   isAccountInviteDeliveryResult,
 } from '@/features/invites/people-outreach-utils';
 import { showGlobalFeedback } from '@/lib/global-feedback';
+import { readContactResolutions } from '@/lib/contact-resolution-state';
+import { refreshInvitationStateQueries } from '@/lib/live-data/mutations/contact-invalidation';
+import { friendshipOutreachOutcome } from '@/lib/live-data/mutations/people-outreach-confirmation';
+import { useSession } from '@/providers/session-provider';
+import {
+  readImmediateInviteRequest,
+  reconcileImmediateInviteRequest,
+  rememberImmediateInviteRequest,
+  type ImmediateInviteRequest,
+} from './immediate-invite-request';
 import { inviteActionResult } from './invite-action-result';
 import {
   assertAccountDeliveryCurrent,
@@ -160,12 +170,15 @@ export function usePeopleInviteRequestsController({
   accountInvitePendingItems,
   friendshipHistoryItems,
   friendshipPendingItems,
+  snapshotUpdatedAt = 0,
 }: {
   readonly accountInviteHistoryItems: readonly AccountInviteListItem[];
   readonly accountInvitePendingItems: readonly AccountInviteListItem[];
   readonly friendshipHistoryItems: readonly FriendshipInviteListItem[];
   readonly friendshipPendingItems: readonly FriendshipInviteListItem[];
+  readonly snapshotUpdatedAt?: number;
 }) {
+  const { userId } = useSession();
   const respondInternalInvite = useRespondInternalFriendshipInviteMutation();
   const reviewExternalInvite = useReviewExternalFriendshipInviteMutation();
   const reviewAccountInvite = useReviewAccountInviteMutation();
@@ -179,10 +192,40 @@ export function usePeopleInviteRequestsController({
   const [activeTab, setActiveTab] = useState<InviteRequestsTab>('received');
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [focusedInviteId, setFocusedInviteId] = useState<string | null>(null);
+  const [focusedSeed, setFocusedSeed] = useState<ImmediateInviteRequest | null>(null);
   const actionInFlight = useRef(false);
+  const allSnapshotItems = useMemo(
+    () => [
+      ...friendshipPendingItems,
+      ...accountInvitePendingItems,
+      ...friendshipHistoryItems,
+      ...accountInviteHistoryItems,
+    ],
+    [
+      friendshipPendingItems,
+      accountInvitePendingItems,
+      friendshipHistoryItems,
+      accountInviteHistoryItems,
+    ],
+  );
+  const focusedItem = reconcileImmediateInviteRequest(
+    focusedSeed,
+    allSnapshotItems,
+    snapshotUpdatedAt,
+  );
   const pendingItems = useMemo(
-    () => sortInviteRequestItems([...friendshipPendingItems, ...accountInvitePendingItems]),
-    [accountInvitePendingItems, friendshipPendingItems],
+    () =>
+      sortInviteRequestItems([
+        ...friendshipPendingItems,
+        ...accountInvitePendingItems,
+        ...(focusedItem &&
+        focusedItem.actionState !== 'history' &&
+        !allSnapshotItems.some((item) => item.inviteId === focusedItem.inviteId)
+          ? [focusedItem]
+          : []),
+      ]),
+    [accountInvitePendingItems, friendshipPendingItems, focusedItem, allSnapshotItems],
   );
   const historyItems = useMemo(
     () =>
@@ -197,12 +240,47 @@ export function usePeopleInviteRequestsController({
     receivedItems.length > 0 ? 'received' : sentItems.length > 0 ? 'sent' : 'history';
 
   const open = useCallback(
-    (nextTab: InviteRequestsTab = preferredTab) => {
+    (nextTab: InviteRequestsTab = preferredTab, inviteId?: string) => {
+      let seed = userId && inviteId ? readImmediateInviteRequest(userId, inviteId) : null;
+      if (!seed && userId && inviteId) {
+        const resolution = Object.values(readContactResolutions(userId)).find(
+          (row) => row.friendshipInviteId === inviteId || row.accountInviteId === inviteId,
+        );
+        if (resolution) seed = rememberImmediateInviteRequest(userId, resolution);
+      }
+      setFocusedInviteId(inviteId ?? null);
+      setFocusedSeed(seed);
       setMessage(null);
       setActiveTab(nextTab);
       setVisible(true);
+      if (inviteId) refreshInvitationStateQueries();
     },
-    [preferredTab],
+    [preferredTab, userId],
+  );
+
+  useEffect(() => {
+    if (!visible || !focusedInviteId) return;
+    const item =
+      allSnapshotItems.find((entry) => entry.inviteId === focusedInviteId) ?? focusedItem;
+    if (item) {
+      setActiveTab(
+        item.actionState === 'history' ? 'history' : isReceivedInvite(item) ? 'received' : 'sent',
+      );
+    } else if (snapshotUpdatedAt > (focusedSeed?.recordedAt ?? 0)) {
+      setMessage('Esta solicitud ya cambió de estado. La lista está actualizada.');
+    }
+  }, [allSnapshotItems, focusedInviteId, focusedItem, focusedSeed, snapshotUpdatedAt, visible]);
+
+  const showAllRequests = useCallback(() => {
+    setFocusedInviteId(null);
+  }, []);
+
+  const changeActiveTab = useCallback(
+    (tab: InviteRequestsTab) => {
+      showAllRequests();
+      setActiveTab(tab);
+    },
+    [showAllRequests],
   );
 
   const close = useCallback(() => {
@@ -312,15 +390,21 @@ export function usePeopleInviteRequestsController({
           }
 
           if (response.kind === 'friendship') {
+            const outcome = friendshipOutreachOutcome(response);
             const nextMessage =
-              response.status === 'pending_friendship'
-                ? `${alias} ya tiene una solicitud pendiente.`
-                : `Enviamos una solicitud de amistad a ${alias}.`;
+              outcome.direction === 'incoming'
+                ? `${alias} ya te envió una solicitud. Puedes responderla.`
+                : outcome.created
+                  ? `Enviamos una solicitud de amistad a ${alias}.`
+                  : `Ya tienes una solicitud pendiente con ${alias}.`;
             setMessage(nextMessage);
             showGlobalFeedback({
               message: nextMessage,
-              title: 'Solicitud enviada',
-              tone: 'success',
+              title:
+                outcome.created && outcome.direction !== 'incoming'
+                  ? 'Solicitud enviada'
+                  : 'Solicitud pendiente',
+              tone: outcome.created && outcome.direction !== 'incoming' ? 'success' : 'neutral',
             });
             return false;
           }
@@ -448,6 +532,7 @@ export function usePeopleInviteRequestsController({
     activeTab,
     busyKey,
     close,
+    focusedInviteId,
     handleAction,
     historyItems,
     message,
@@ -456,7 +541,8 @@ export function usePeopleInviteRequestsController({
     receivedItems,
     requestCount: receivedItems.length + sentItems.length,
     sentItems,
-    setActiveTab,
+    setActiveTab: changeActiveTab,
+    showAllRequests,
     visible,
   };
 }

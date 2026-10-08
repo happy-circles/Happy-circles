@@ -853,6 +853,7 @@ export function PeopleIndexScreen() {
     period?: string | string[];
     requests?: string;
     requestTab?: string;
+    requestId?: string;
   }>();
   const snapshotQuery = useAppSnapshot();
   const peopleOverviewQuery = usePeopleOverview();
@@ -879,6 +880,7 @@ export function PeopleIndexScreen() {
     accountInvitePendingItems: snapshotQuery.data?.accountInvitePendingItems ?? [],
     friendshipHistoryItems: snapshotQuery.data?.friendshipHistoryItems ?? [],
     friendshipPendingItems: snapshotQuery.data?.friendshipPendingItems ?? [],
+    snapshotUpdatedAt: snapshotQuery.dataUpdatedAt,
   });
   const openInviteRequests = inviteRequests.open;
   const preferredInviteTab = inviteRequests.preferredTab;
@@ -1188,18 +1190,29 @@ export function PeopleIndexScreen() {
       return;
     }
 
-    const requestKey = `${params.requests}:${params.requestTab ?? ''}`;
+    const requestKey = `${params.requests}:${params.requestTab ?? ''}:${params.requestId ?? ''}`;
     if (handledRequestParamRef.current === requestKey) {
       return;
     }
 
     handledRequestParamRef.current = requestKey;
-    openInviteRequests(parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab);
-    router.setParams({ requests: undefined, requestTab: undefined });
-  }, [openInviteRequests, params.requestTab, params.requests, preferredInviteTab, router]);
+    openInviteRequests(
+      parseInviteRequestsTabParam(params.requestTab) ?? preferredInviteTab,
+      params.requestId,
+    );
+    router.setParams({ requests: undefined, requestTab: undefined, requestId: undefined });
+  }, [
+    openInviteRequests,
+    params.requestId,
+    params.requestTab,
+    params.requests,
+    preferredInviteTab,
+    router,
+  ]);
 
   if (
     !hasPeopleScreenData &&
+    !inviteRequests.visible &&
     (snapshotQuery.isRestoringCache ||
       snapshotQuery.isLoading ||
       peopleOverviewQuery.isRestoringCache ||
@@ -1221,7 +1234,7 @@ export function PeopleIndexScreen() {
   }
 
   const peopleScreenError = peopleOverviewQuery.error ?? snapshotQuery.error;
-  if (peopleScreenError && !hasPeopleScreenData) {
+  if (peopleScreenError && !hasPeopleScreenData && !inviteRequests.visible) {
     return (
       <ScreenShell
         headerLeading={<AppHeaderBackButton onPress={() => backOrReturnTo(router, '/home')} />}
@@ -1447,12 +1460,14 @@ export function PeopleIndexScreen() {
       <InviteRequestsSheet
         activeTab={inviteRequests.activeTab}
         busyKey={inviteRequests.busyKey}
+        focusedInviteId={inviteRequests.focusedInviteId}
         historyItems={inviteRequests.historyItems}
         message={inviteRequests.message}
         onAction={(item, action) => void handleInviteRequestAction(item, action)}
         onChangeTab={inviteRequests.setActiveTab}
         onClose={inviteRequests.close}
         onOpenPerson={openInviteRequestPerson}
+        onShowAll={inviteRequests.showAllRequests}
         receivedItems={inviteRequests.receivedItems}
         sentItems={inviteRequests.sentItems}
         visible={inviteRequests.visible}

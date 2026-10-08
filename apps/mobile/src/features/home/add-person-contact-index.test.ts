@@ -39,13 +39,14 @@ const sqliteMock = vi.hoisted(() => {
     execAsync: vi.fn(async () => undefined),
     getAllAsync: vi.fn(async (query: string, params: readonly unknown[]) => {
       const userId = String(params[0]);
-      const limit = Number(params.at(-1));
+      const offset = query.includes('OFFSET') ? Number(params.at(-1)) : 0;
+      const limit = Number(params.at(query.includes('OFFSET') ? -2 : -1));
       const searchPattern = query.includes('LIKE') ? String(params[2]).replace(/%/g, '') : null;
       return [...contacts.values()]
         .filter((row) => row.user_id === userId)
         .filter((row) => !searchPattern || row.search_key.includes(searchPattern))
         .sort((left, right) => left.alias.localeCompare(right.alias, 'es-CO'))
-        .slice(0, limit)
+        .slice(offset, offset + limit)
         .map((row) => ({ contact_json: row.contact_json }));
     }),
     getFirstAsync: vi.fn(async (query: string, params: readonly unknown[]) => {
@@ -168,6 +169,7 @@ vi.mock('@/features/home/add-person-device-contact-cache', () => ({
 }));
 
 import {
+  clearContactIndexMemory,
   pauseContactIndexing,
   readContactIndex,
   startContactIndexing,
@@ -194,6 +196,7 @@ async function waitForIndexStatus(status: string) {
 }
 
 beforeEach(() => {
+  clearContactIndexMemory('user-a');
   sqliteMock.contacts.clear();
   sqliteMock.meta.clear();
   sqliteMock.database.execAsync.mockClear();
@@ -206,6 +209,56 @@ beforeEach(() => {
 });
 
 describe('contact index', () => {
+  it('reuses the same local result on repeated opens without a native scan or SQLite read', async () => {
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: [nativeContact('contact-ana', 'Ana Ruiz', '3001234567')],
+      hasNextPage: false,
+    });
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'manual_refresh',
+      userId: 'user-a',
+    });
+    await waitForIndexStatus('ready');
+    const first = await readContactIndex({ limit: 120, userId: 'user-a' });
+    const queries = sqliteMock.database.getAllAsync.mock.calls.length;
+    for (let open = 0; open < 5; open++) {
+      await startContactIndexing({
+        permissionStatus: 'granted',
+        reason: 'sheet_open',
+        userId: 'user-a',
+      });
+      expect(await readContactIndex({ limit: 120, userId: 'user-a' })).toBe(first);
+    }
+    expect(sqliteMock.database.getAllAsync).toHaveBeenCalledTimes(queries);
+    expect(contactsMock.getContactsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads disjoint local pages for background loading', async () => {
+    contactsMock.getContactsAsync.mockResolvedValueOnce({
+      data: Array.from({ length: 130 }, (_, index) =>
+        nativeContact(
+          String(index),
+          'Persona ' + String(index).padStart(3, '0'),
+          '3001234' + String(index).padStart(3, '0'),
+        ),
+      ),
+      hasNextPage: false,
+    });
+    await startContactIndexing({
+      permissionStatus: 'granted',
+      reason: 'manual_refresh',
+      userId: 'user-a',
+    });
+    await waitForIndexStatus('ready');
+    const first = await readContactIndex({ limit: 120, userId: 'user-a' });
+    const next = await readContactIndex({ limit: 120, offset: 120, userId: 'user-a' });
+    expect(next.contacts).toHaveLength(10);
+    expect(new Set([...first.contacts, ...next.contacts].map((row) => row.contactId)).size).toBe(
+      130,
+    );
+  });
+
   it('persists contact pages and reads them by local search', async () => {
     contactsMock.getContactsAsync
       .mockResolvedValueOnce({

@@ -7,7 +7,11 @@ import {
   isReusableCachedContactResolution,
 } from '@/features/home/contacts-sheet-helpers';
 import type { PeopleTargetResolution } from '@/lib/live-data';
-import { readContactResolutions } from '@/lib/contact-resolution-state';
+import {
+  readContactResolutions,
+  readContactResolutionPhonesForTarget,
+  type ContactResolutionTarget,
+} from '@/lib/contact-resolution-state';
 
 const DATABASE_NAME = 'happy-circles-people-target-resolution-cache.db';
 // Versioned separately: pre-v2 rows had no usable in-memory freshness metadata.
@@ -25,6 +29,10 @@ type PeopleTargetResolutionCacheRow = {
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let writes: Promise<void> = Promise.resolve();
+const hashesByUser = new Map<string, Map<string, Promise<string>>>();
+export function clearPeopleTargetResolutionMemory(userId: string) {
+  hashesByUser.delete(userId);
+}
 
 function serializeWrite(work: () => Promise<void>): Promise<void> {
   const next = writes.catch(() => undefined).then(work);
@@ -64,10 +72,20 @@ export async function createPeopleTargetResolutionCacheKey(input: {
   readonly userId: string;
   readonly phoneE164: string;
 }): Promise<string> {
-  return Crypto.digestStringAsync(
+  let hashes = hashesByUser.get(input.userId);
+  if (!hashes) hashesByUser.set(input.userId, (hashes = new Map<string, Promise<string>>()));
+  const existing = hashes.get(input.phoneE164);
+  if (existing) return existing;
+  const hash = Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     createPeopleTargetResolutionCacheHashSource(input),
   );
+  if (hashes.size >= 20_000) hashes.delete(hashes.keys().next().value!);
+  hashes.set(input.phoneE164, hash);
+  void hash.catch(() => {
+    if (hashes?.get(input.phoneE164) === hash) hashes.delete(input.phoneE164);
+  });
+  return hash;
 }
 
 export function isPeopleTargetResolutionCacheEntryFresh(input: {
@@ -252,10 +270,31 @@ export async function savePeopleTargetResolutionsToCache(
   });
 }
 
-export async function invalidatePeopleTargetResolutionCache(userId: string): Promise<void> {
+export async function invalidatePeopleTargetResolutionCache(
+  userId: string,
+  target?: ContactResolutionTarget,
+): Promise<void> {
+  const scoped =
+    target?.phoneE164 ||
+    target?.inviteId ||
+    target?.matchedUserId ||
+    target?.relationshipId ||
+    target?.watchIds;
+  const phones = scoped ? readContactResolutionPhonesForTarget(userId, target) : [];
+  const pairs = scoped ? await buildHashPhonePairs(userId, phones) : [];
   await serializeWrite(async () => {
     const database = await getDatabase();
-    await database.runAsync(`DELETE FROM ${TABLE_NAME} WHERE user_id = ?`, [userId]);
+    if (!scoped) {
+      await database.runAsync(`DELETE FROM ${TABLE_NAME} WHERE user_id = ?`, [userId]);
+      return;
+    }
+    for (let offset = 0; offset < pairs.length; offset += QUERY_CHUNK_SIZE) {
+      const chunk = pairs.slice(offset, offset + QUERY_CHUNK_SIZE);
+      await database.runAsync(
+        `DELETE FROM ${TABLE_NAME} WHERE user_id = ? AND phone_hash IN (${chunk.map(() => '?').join(', ')})`,
+        [userId, ...chunk.map((pair) => pair.phoneHash)],
+      );
+    }
   });
 }
 
