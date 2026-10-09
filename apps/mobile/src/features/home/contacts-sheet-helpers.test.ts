@@ -25,11 +25,13 @@ import {
   buildContactSectionItems,
   chunkContactPhoneE164List,
   contactResolutionDetail,
+  contactResolutionForPresentation,
   CONTACT_TARGET_RESOLUTION_LIMIT,
   filterReusableContactResolutionCache,
   getUnresolvedContactPhoneE164List,
   isReusableCachedContactResolution,
   outreachPreflightActionForResolution,
+  shouldShowInApp,
 } from './contacts-sheet-helpers';
 import {
   createPeopleTargetResolutionCacheHashSource,
@@ -90,10 +92,11 @@ function resolution(
     avatarPath: null,
     displayName: null,
     friendshipInviteId: null,
-    matchedUserId: null,
+    matchedUserId: status === 'active_user' ? '11111111-1111-4111-8111-111111111111' : null,
     phoneE164,
     relationshipId: null,
     status,
+    ...(status === 'active_user' ? { accountMatchConfirmed: true } : {}),
   };
 }
 
@@ -155,12 +158,12 @@ describe('contact resolution queue helpers', () => {
 });
 
 describe('contact section helpers', () => {
-  it('lets an unresolved contact continue without claiming it has an account', () => {
+  it('lets an unresolved contact invite without claiming its account state is confirmed', () => {
     expect(actionMetaForResolution(null, false)).toEqual({
       disabled: false,
-      icon: 'arrow-forward-outline',
-      label: 'Continuar',
-      tone: 'primary',
+      icon: 'paper-plane-outline',
+      label: 'Invitar',
+      tone: 'invite',
     });
     expect(actionMetaForResolution(null, true)).toEqual({
       disabled: false,
@@ -200,7 +203,7 @@ describe('contact section helpers', () => {
     expect(before.inAppContacts).toHaveLength(0);
     expect(before.inviteContacts).toHaveLength(0);
     expect(actionMetaForResolution(unknown.resolution, false)).toMatchObject({
-      label: 'Continuar',
+      label: 'Invitar',
       disabled: false,
     });
     expect(contactResolutionDetail('mobile +57300001000', unknown.resolution)).toBe(
@@ -227,6 +230,107 @@ describe('contact section helpers', () => {
           : 'mobile +57300001000 | Está en Happy Circles',
       );
     }
+  });
+
+  it.each([
+    { reason: 'legacy disk match', accountMatchConfirmed: undefined },
+    { reason: 'unconfirmed disk match', accountMatchConfirmed: false },
+    { reason: 'missing account ID', accountMatchConfirmed: true, matchedUserId: null },
+    { reason: 'empty account ID', accountMatchConfirmed: true, matchedUserId: '' },
+    { reason: 'invalid account ID', accountMatchConfirmed: true, matchedUserId: 'another-user' },
+    {
+      reason: 'invalid UUID variant',
+      accountMatchConfirmed: true,
+      matchedUserId: '11111111-1111-4111-7111-111111111111',
+    },
+  ])('keeps $reason actionable without claiming the person has an account', (input) => {
+    const person = contact(7);
+    const cachedActive = { ...resolution(person.primaryPhone.phoneE164, 'active_user'), ...input };
+    const sections = buildContactSectionItems({
+      contacts: [person],
+      searchValue: '',
+      targetCache: { [person.primaryPhone.phoneE164]: cachedActive },
+    });
+    expect(sections.inAppContacts).toHaveLength(0);
+    expect(sections.inviteContacts).toHaveLength(0);
+    expect(sections.unresolvedContacts[0].contact).toBe(person);
+    expect(actionMetaForResolution(cachedActive, false)).toMatchObject({
+      label: 'Invitar',
+      icon: 'paper-plane-outline',
+      tone: 'invite',
+      disabled: false,
+    });
+    expect(contactResolutionDetail('mobile +57300007000', cachedActive)).toBe(
+      'mobile +57300007000 | Estado por confirmar',
+    );
+    expect(shouldShowInApp(cachedActive)).toBe(false);
+    expect(contactResolutionForPresentation(cachedActive)).toBeNull();
+    expect(cachedActive.status).toBe('active_user');
+  });
+
+  it('changes an unconfirmed disk match to its current result without removing the contact', () => {
+    const person = contact(8);
+    const cached = {
+      ...resolution(person.primaryPhone.phoneE164, 'active_user'),
+      accountMatchConfirmed: false,
+    };
+    const classify = (entry: PeopleTargetResolution) =>
+      buildContactSectionItems({
+        contacts: [person],
+        searchValue: '',
+        targetCache: { [person.primaryPhone.phoneE164]: entry },
+      });
+    const before = classify(cached);
+    expect(before.unresolvedContacts[0].contact).toBe(person);
+    expect(actionMetaForResolution(before.unresolvedContacts[0].resolution, false).label).toBe(
+      'Invitar',
+    );
+
+    const noAccount = classify(resolution(person.primaryPhone.phoneE164, 'no_account'));
+    expect(noAccount.inviteContacts[0].contact).toBe(person);
+    expect(noAccount.unresolvedContacts).toHaveLength(0);
+    expect(contactResolutionDetail('mobile', noAccount.inviteContacts[0].resolution)).toBe(
+      'mobile | No aparece en Happy Circles',
+    );
+
+    const live = resolution(person.primaryPhone.phoneE164, 'active_user');
+    const confirmed = classify(live);
+    expect(confirmed.inAppContacts[0].contact).toBe(person);
+    expect(confirmed.unresolvedContacts).toHaveLength(0);
+    expect(actionMetaForResolution(confirmed.inAppContacts[0].resolution, false).label).toBe(
+      'Agregar',
+    );
+    expect(contactResolutionForPresentation(live)).toBe(live);
+    expect(contactResolutionDetail('mobile', live)).toBe('mobile | Está en Happy Circles');
+  });
+
+  it('keeps a session-confirmed match visible past the disk cache freshness window', () => {
+    const person = contact(9);
+    const live = {
+      ...resolution(person.primaryPhone.phoneE164, 'active_user'),
+      resolvedAt: Date.now() - 60 * 60 * 1000,
+    };
+    const sections = buildContactSectionItems({
+      contacts: [person],
+      searchValue: '',
+      targetCache: { [person.primaryPhone.phoneE164]: live },
+    });
+    expect(sections.inAppContacts[0].resolution).toBe(live);
+    expect(actionMetaForResolution(live, false).label).toBe('Agregar');
+  });
+
+  it('does not present a confirmed match stored under another contact phone', () => {
+    const person = contact(10);
+    const anotherPhone = contact(11).primaryPhone.phoneE164;
+    const mismatched = resolution(anotherPhone, 'active_user');
+    const sections = buildContactSectionItems({
+      contacts: [person],
+      searchValue: '',
+      targetCache: { [person.primaryPhone.phoneE164]: mismatched },
+    });
+    expect(sections.inAppContacts).toHaveLength(0);
+    expect(sections.unresolvedContacts[0].contact).toBe(person);
+    expect(contactResolutionForPresentation(mismatched, person.primaryPhone.phoneE164)).toBeNull();
   });
 
   it('retains pending actions and disables already-related contacts', () => {
@@ -341,6 +445,28 @@ describe('contact section helpers', () => {
     expect(sections.inviteContacts).toHaveLength(0);
   });
 
+  it('keeps a multi-phone contact unconfirmed when its only positive match came from disk', () => {
+    const person = multiPhoneContact(12);
+    const secondary = person.phoneOptions[1];
+    const sections = buildContactSectionItems({
+      contacts: [person],
+      searchValue: '',
+      targetCache: {
+        [person.primaryPhone.phoneE164]: resolution(person.primaryPhone.phoneE164, 'no_account'),
+        [secondary.phoneE164]: {
+          ...resolution(secondary.phoneE164, 'active_user'),
+          accountMatchConfirmed: false,
+        },
+      },
+    });
+    expect(sections.inAppContacts).toHaveLength(0);
+    expect(sections.inviteContacts).toHaveLength(0);
+    expect(sections.unresolvedContacts[0].contact).toBe(person);
+    expect(actionMetaForResolution(sections.unresolvedContacts[0].resolution, true).label).toBe(
+      'Elegir',
+    );
+  });
+
   it('moves a multi-phone contact to invite only when all phones are not in Happy Circles', () => {
     const multiContact = multiPhoneContact(6);
     const secondaryPhone = multiContact.phoneOptions[1];
@@ -424,7 +550,7 @@ describe('people target resolution cache helpers', () => {
         phoneE164: original.phoneE164,
         storedResolution: stored,
       }),
-    ).toEqual(original);
+    ).toEqual({ ...original, accountMatchConfirmed: false });
   });
 
   it('uses status-specific freshness windows', () => {

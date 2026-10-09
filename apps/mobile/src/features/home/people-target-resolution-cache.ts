@@ -18,7 +18,10 @@ const DATABASE_NAME = 'happy-circles-people-target-resolution-cache.db';
 const TABLE_NAME = 'people_target_resolution_cache_v2';
 const QUERY_CHUNK_SIZE = 250;
 
-type StoredPeopleTargetResolution = Omit<PeopleTargetResolution, 'phoneE164'>;
+type StoredPeopleTargetResolution = Omit<
+  PeopleTargetResolution,
+  'phoneE164' | 'accountMatchConfirmed'
+>;
 
 type PeopleTargetResolutionCacheRow = {
   readonly phone_hash: string;
@@ -124,8 +127,9 @@ export function restorePhoneOnPeopleTargetResolution(input: {
   readonly storedResolution: StoredPeopleTargetResolution;
 }): PeopleTargetResolution {
   return {
-    phoneE164: input.phoneE164,
     ...input.storedResolution,
+    phoneE164: input.phoneE164,
+    accountMatchConfirmed: false,
   };
 }
 

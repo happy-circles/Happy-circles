@@ -85,6 +85,45 @@ describe('contact runtime authorization boundary', () => {
     expect(mocks.manage).not.toHaveBeenCalled();
   });
 
+  it('prioritizes only this actors unconfirmed cached positives without querying on warm reopen', async () => {
+    const otherUser = 'other-runtime-user';
+    const phones = Array.from({ length: 10_000 }, (_, index) => `phone-${index}`);
+    const positive = {
+      phoneE164: phones.at(-1)!,
+      status: 'active_user' as const,
+      matchedUserId: '00000000-0000-4000-8000-000000000123',
+      displayName: null,
+      avatarPath: null,
+      relationshipId: null,
+      friendshipInviteId: null,
+      accountInviteId: null,
+      accountInviteStatus: null,
+      resolvedAt: Date.now() + 1,
+      generation: 0,
+    };
+    mergeContactResolutions(user, [positive], { fromCache: true });
+    mergeContactResolutions(otherUser, [{ ...positive, phoneE164: phones.at(-2)! }], {
+      fromCache: true,
+    });
+    onlineManager.setOnline(false);
+    activateContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, phones);
+    onlineManager.setOnline(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.synchronize.mock.calls[0]).toEqual([
+      user,
+      [phones.at(-1)!, ...phones.slice(0, 59)],
+      'background',
+    ]);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(167);
+    setContactDiscoveryVisiblePhones(user, []);
+    activateContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, phones);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(167);
+    clearContactResolutionUser(otherUser);
+  });
+
   it('recovers realtime separately from HTTP and ignores repeated readiness notifications', async () => {
     setContactRealtimeReady(user, false);
     activateContactDiscoveryRuntime(user);

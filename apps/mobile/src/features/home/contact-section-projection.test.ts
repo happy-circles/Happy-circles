@@ -10,6 +10,9 @@ vi.mock('react-native', () => ({
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
 import type { PeopleTargetResolution } from '@/lib/live-data/types-runtime';
 import { ContactSectionProjection } from './contact-section-projection';
+import { actionMetaForResolution, contactResolutionDetail } from './contacts-sheet-helpers';
+
+const matchedUserId = '11111111-1111-4111-8111-111111111111';
 
 function contact(
   index: number,
@@ -33,7 +36,8 @@ function resolution(
   return {
     phoneE164,
     status,
-    matchedUserId: null,
+    matchedUserId: status === 'active_user' ? matchedUserId : null,
+    ...(status === 'active_user' ? { accountMatchConfirmed: true } : {}),
     displayName: null,
     avatarPath: null,
     relationshipId: null,
@@ -44,6 +48,92 @@ function resolution(
 }
 
 describe('incremental contact section projection', () => {
+  it('corrects one cached positive without rebuilding a 10000-contact list or claiming unknown accounts exist', () => {
+    const projection = new ContactSectionProjection();
+    const source = Array.from({ length: 10000 }, (_, index) => contact(index));
+    let reads = 0;
+    const contacts = new Proxy(source, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) reads += 1;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const phone = source[5000].primaryPhone.phoneE164;
+    const cache: Record<string, PeopleTargetResolution> = Object.fromEntries(
+      source.map((person) => [
+        person.primaryPhone.phoneE164,
+        resolution(person.primaryPhone.phoneE164, 'no_account'),
+      ]),
+    );
+    cache[phone] = {
+      ...resolution(phone, 'active_user'),
+      resolvedAt: Date.now() - 7 * 24 * 60 * 60_000,
+      accountMatchConfirmed: false,
+    };
+    const before = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: cache,
+      changedPhones: [],
+    });
+    expect(before.inAppContacts).toHaveLength(0);
+    expect(before.unresolvedContacts).toHaveLength(1);
+    expect(actionMetaForResolution(before.unresolvedContacts[0].resolution, false).label).toBe(
+      'Invitar',
+    );
+    expect(contactResolutionDetail('mobile', before.unresolvedContacts[0].resolution)).toBe(
+      'mobile | Estado por confirmar',
+    );
+    const original = new Map(before.inviteContacts.map((row) => [row.contact.contactId, row]));
+
+    reads = 0;
+    cache[phone] = resolution(phone, 'no_account');
+    const negative = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: cache,
+      changedPhones: [phone],
+    });
+    expect(reads).toBe(0);
+    expect(negative.inAppContacts).toHaveLength(0);
+    expect(negative.inviteContacts).toHaveLength(10000);
+    expect(negative.unresolvedContacts).toHaveLength(0);
+    for (const row of negative.inviteContacts) {
+      if (row.contact.contactId !== source[5000].contactId)
+        expect(row).toBe(original.get(row.contact.contactId));
+    }
+
+    reads = 0;
+    cache[phone] = resolution(phone, 'active_user');
+    const joined = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: cache,
+      changedPhones: [phone],
+    });
+    expect(reads).toBe(0);
+    expect(joined.inAppContacts).toHaveLength(1);
+    expect(actionMetaForResolution(joined.inAppContacts[0].resolution, false).label).toBe(
+      'Agregar',
+    );
+    expect(joined.inviteContacts).toHaveLength(9999);
+    for (const row of joined.inviteContacts) expect(row).toBe(original.get(row.contact.contactId));
+
+    cache[phone] = { ...cache[phone], resolvedAt: 0, accountMatchConfirmed: false };
+    const invalidated = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: cache,
+      changedPhones: [phone],
+    });
+    expect(invalidated.inAppContacts).toHaveLength(0);
+    expect(invalidated.unresolvedContacts).toHaveLength(1);
+    expect(actionMetaForResolution(invalidated.unresolvedContacts[0].resolution, false).label).toBe(
+      'Invitar',
+    );
+    expect(invalidated.inviteContacts).toBe(joined.inviteContacts);
+  });
+
   it('moves one contact in a 10000-row agenda without rebuilding or reading all other contacts', () => {
     const projection = new ContactSectionProjection();
     const source = Array.from({ length: 10000 }, (_, index) => contact(index));
@@ -162,7 +252,7 @@ describe('incremental contact section projection', () => {
     });
     const contacts = [...initial, second];
     projection.update({ contacts, searchValue: '', targetCache: cache, changedPhones: [] });
-    const joined = { ...resolution(phone, 'active_user'), matchedUserId: 'joined-user' };
+    const joined = resolution(phone, 'active_user');
     const after = projection.update({
       contacts,
       searchValue: '',

@@ -10,6 +10,7 @@ import {
   contactAvatarColor,
   contactMeta,
   contactResolutionDetail,
+  contactResolutionForPresentation,
   shouldShowInApp,
 } from '@/features/home/contacts-sheet-helpers';
 import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
@@ -29,13 +30,14 @@ export const ContactRow = memo(function ContactRow({
 }) {
   const activeTheme = useAppTheme();
   const hasMultiplePhones = contact.phoneOptions.length > 1;
-  const action = actionMetaForResolution(resolution, hasMultiplePhones);
-  const disabled = action.disabled || busy;
   const displayPhone =
     contact.phoneOptions.find((phoneOption) => phoneOption.phoneE164 === resolution?.phoneE164) ??
     contact.primaryPhone;
+  const presentedResolution = contactResolutionForPresentation(resolution, displayPhone.phoneE164);
+  const action = actionMetaForResolution(presentedResolution, hasMultiplePhones);
+  const disabled = action.disabled || busy;
   const phoneMeta = contactMeta(displayPhone);
-  const detailMeta = contactResolutionDetail(phoneMeta, resolution);
+  const detailMeta = contactResolutionDetail(phoneMeta, presentedResolution);
   const actionBackgroundColor =
     action.tone === 'invite'
       ? activeTheme.colors.warning
@@ -48,7 +50,7 @@ export const ContactRow = memo(function ContactRow({
       style={[
         styles.contactRow,
         { backgroundColor: activeTheme.colors.surfaceMuted },
-        shouldShowInApp(resolution)
+        shouldShowInApp(presentedResolution)
           ? {
               backgroundColor: activeTheme.colors.successSoft,
               borderColor: activeTheme.colors.successSoft,

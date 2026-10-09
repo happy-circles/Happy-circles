@@ -10,6 +10,7 @@ import {
   contactResolutionTtl,
   mergeContactResolutions,
   readContactResolutions,
+  revokeContactAccountMatchConfirmations,
 } from '@/lib/contact-resolution-state';
 import {
   ContactResolutionScheduler,
@@ -26,6 +27,9 @@ const discoverySessions = new Map<string, string>();
 const recoveryVersions = new Map<string, number>();
 const recoveryRequired = new Set<string>();
 const validatedPhones = new Map<string, Map<string, number>>();
+// A malformed live positive stays unconfirmed, but does not bypass the TTL on
+// every visible tick. A genuine recovery or a newer row permits a new attempt.
+const accountConfirmationReads = new Map<string, Map<string, number>>();
 type DiscoveryWatch = { readonly phoneE164: string; readonly discoveryWatchId: string };
 const registeredPhones = new Map<string, Map<string, DiscoveryWatch>>();
 const registrationSchedulers = new Map<string, ContactResolutionScheduler<DiscoveryWatch>>();
@@ -151,6 +155,13 @@ function schedulerFor(userId: string) {
             })),
           { expectedGenerations, discoveryRevision },
         );
+        const confirmationReads = accountConfirmationReads.get(userId) ?? new Map<string, number>();
+        for (const row of accepted) {
+          if (row.status === 'active_user' && row.accountMatchConfirmed !== true)
+            confirmationReads.set(row.phoneE164, row.generation ?? 0);
+          else confirmationReads.delete(row.phoneE164);
+        }
+        accountConfirmationReads.set(userId, confirmationReads);
         const validated = validatedPhones.get(userId) ?? new Map<string, number>();
         for (const row of accepted) {
           if (
@@ -335,6 +346,8 @@ export async function registerContactDiscoveryPhoneWatches(
 export function beginContactDiscoveryRecovery(userId: string) {
   recoveryVersions.set(userId, (recoveryVersions.get(userId) ?? 0) + 1);
   recoveryRequired.add(userId);
+  accountConfirmationReads.delete(userId);
+  revokeContactAccountMatchConfirmations(userId);
 }
 
 function needsContactResolution(
@@ -346,6 +359,10 @@ function needsContactResolution(
   const sessionId = discoverySessions.get(userId);
   const version = recoveryVersions.get(userId);
   const validated = validatedPhones.get(userId)?.get(phone) === version;
+  const needsAccountConfirmation =
+    row?.status === 'active_user' &&
+    row.accountMatchConfirmed !== true &&
+    accountConfirmationReads.get(userId)?.get(phone) !== (row.generation ?? 0);
   const observed =
     sessionId &&
     isContactRealtimeReady(userId) &&
@@ -358,7 +375,9 @@ function needsContactResolution(
     row.status !== 'pending_friendship';
   const needsRecovery =
     sessionId && isContactRealtimeReady(userId) && recoveryRequired.has(userId) && !validated;
-  return Boolean(needsRecovery || (!observed && !isContactResolutionFresh(row)));
+  return Boolean(
+    needsAccountConfirmation || needsRecovery || (!observed && !isContactResolutionFresh(row)),
+  );
 }
 
 /** Observed resolution already registers its watches; do not pay for two requests. */
@@ -452,6 +471,7 @@ export async function resolveContactPhones(
 export function setContactDiscoverySession(userId: string, sessionId: string | null) {
   if (discoverySessions.get(userId) === sessionId) return;
   registeredPhones.delete(userId);
+  accountConfirmationReads.delete(userId);
   retiredWatches.delete(userId);
   pendingRemovals.delete(userId);
   removedPhones.delete(userId);
@@ -491,6 +511,7 @@ export function disposeContactResolutionUser(userId: string) {
   recoveryVersions.delete(userId);
   recoveryRequired.delete(userId);
   validatedPhones.delete(userId);
+  accountConfirmationReads.delete(userId);
   registeredPhones.delete(userId);
   registrationSchedulers.get(userId)?.cancelAll();
   registrationSchedulers.delete(userId);

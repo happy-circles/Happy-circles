@@ -31,6 +31,10 @@ function runtimeFor(userId: string) {
       createSessionId: () => Crypto.randomUUID(),
       isConnected: () => onlineManager.isOnline(),
       isRealtimeReady: () => isContactRealtimeReady(userId),
+      isUnconfirmedCachedPositive: (phone) => {
+        const row = readContactResolutions(userId)[phone];
+        return row?.status === 'active_user' && row.accountMatchConfirmed !== true;
+      },
       setSession: (sessionId) => setContactDiscoverySession(userId, sessionId),
       beginRecovery: () => beginContactDiscoveryRecovery(userId),
       register: (phones, priority) =>

@@ -8,6 +8,7 @@ import {
   actionMetaForResolution,
   CONTACT_UNCONFIRMED_STATUS_LABEL,
   contactMeta,
+  contactResolutionForPresentation,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
 import type { PendingContactSelection } from '@/features/invites/people-outreach-utils';
@@ -59,8 +60,12 @@ export function AddPersonContactOptionsModal({
           {`${pendingContactSelection.alias} tiene varios números.`}
         </AppText>
         <View style={styles.optionList}>
-          {pendingContactOptions.map(({ contact, resolution }) => {
+          {pendingContactOptions.map(({ contact, resolution: cachedResolution }) => {
             const phoneOption = contact.primaryPhone;
+            const resolution = contactResolutionForPresentation(
+              cachedResolution,
+              phoneOption.phoneE164,
+            );
             const action = actionMetaForResolution(resolution, false);
             const isBusy = busyKey === phoneOption.phoneE164;
             const disabled = action.disabled || Boolean(busyKey);

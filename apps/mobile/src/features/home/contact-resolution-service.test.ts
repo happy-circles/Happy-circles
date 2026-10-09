@@ -71,6 +71,88 @@ afterEach(() => {
 });
 
 describe('contact resolution service races', () => {
+  it('confirms a fresh disk positive once over HTTP and immediately replaces it with a negative', async () => {
+    const phone = row('active_user').phoneE164;
+    mergeContactResolutions(
+      mocks.actor,
+      [
+        {
+          ...row('active_user'),
+          matchedUserId: '00000000-0000-4000-8000-000000000123',
+          resolvedAt: Date.now() + 1,
+          generation: 0,
+        },
+      ],
+      { fromCache: true },
+    );
+    expect(readContactResolutions(mocks.actor)[phone].accountMatchConfirmed).toBe(false);
+    setContactDiscoverySession(mocks.actor, 'http-fallback-session');
+    setContactRealtimeReady(mocks.actor, false);
+    mocks.invoke.mockResolvedValue([row('no_account')]);
+    const confirmation = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await confirmation;
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(readContactResolutions(mocks.actor)[phone]).toMatchObject({
+      status: 'no_account',
+      matchedUserId: null,
+    });
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains a current positive across warm reopening and revokes it only for a genuine recovery', async () => {
+    const positive = {
+      ...row('active_user'),
+      matchedUserId: '00000000-0000-4000-8000-000000000123',
+    };
+    const phone = positive.phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, true);
+    mocks.invoke.mockResolvedValue([positive]);
+    const initial = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await initial;
+    expect(readContactResolutions(mocks.actor)[phone].accountMatchConfirmed).toBe(true);
+    const current = readContactResolutions(mocks.actor)[phone];
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(readContactResolutions(mocks.actor)[phone]).toBe(current);
+    beginContactDiscoveryRecovery(mocks.actor);
+    expect(readContactResolutions(mocks.actor)[phone]).toMatchObject({
+      status: 'active_user',
+      accountMatchConfirmed: false,
+      resolvedAt: 0,
+    });
+    const recovery = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await recovery;
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(readContactResolutions(mocks.actor)[phone].accountMatchConfirmed).toBe(true);
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a malformed live positive unconfirmed without repeating the immediate TTL bypass', async () => {
+    const phone = row('active_user').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'http-fallback-session');
+    setContactRealtimeReady(mocks.actor, false);
+    mocks.invoke.mockResolvedValue([{ ...row('active_user'), matchedUserId: null }]);
+    const initial = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await initial;
+    expect(readContactResolutions(mocks.actor)[phone].accountMatchConfirmed).toBe(false);
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await resolveContactPhones(mocks.actor, [phone], 'visible');
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_001);
+    const ordinaryRefresh = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await ordinaryRefresh;
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(readContactResolutions(mocks.actor)[phone].accountMatchConfirmed).toBe(false);
+  });
+
   it('resolves immediately over HTTP without creating watches when realtime is unavailable', async () => {
     setContactDiscoverySession(mocks.actor, 'http-fallback-session');
     setContactRealtimeReady(mocks.actor, false);

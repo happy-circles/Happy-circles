@@ -53,7 +53,7 @@ function invite(value: Partial<InviteRequestItem>): InviteRequestItem {
 function enriched(value: {
   readonly alias: string;
   readonly phone: string;
-  readonly status: string | null;
+  readonly status: NonNullable<EnrichedContact['resolution']>['status'] | null;
 }): EnrichedContact {
   return {
     contact: {
@@ -75,7 +75,21 @@ function enriched(value: {
         phoneE164: value.phone,
       },
     },
-    resolution: value.status ? ({ status: value.status } as EnrichedContact['resolution']) : null,
+    resolution: value.status
+      ? {
+          phoneE164: value.phone,
+          status: value.status,
+          matchedUserId:
+            value.status === 'active_user' ? '11111111-1111-4111-8111-111111111111' : null,
+          accountMatchConfirmed: value.status === 'active_user',
+          displayName: null,
+          avatarPath: null,
+          relationshipId: null,
+          friendshipInviteId: null,
+          accountInviteId: null,
+          accountInviteStatus: null,
+        }
+      : null,
   };
 }
 

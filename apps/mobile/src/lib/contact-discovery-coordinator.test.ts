@@ -190,6 +190,52 @@ describe('app-scoped contact discovery lease', () => {
     coordinator.dispose();
   });
 
+  it('confirms late cached positives ahead of queued negatives without overtaking user priorities', async () => {
+    const { dependencies } = fixture();
+    const phones = Array.from({ length: 10_000 }, (_, index) => `phone-${index}`);
+    const positives = new Set(phones.slice(-38));
+    let finishFirst!: () => void;
+    const synchronize = vi
+      .fn<(phones: readonly string[], priority: string) => Promise<{ recheck: never[] }>>()
+      .mockResolvedValue({ recheck: [] })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirst = () => resolve({ recheck: [] });
+          }),
+      );
+    const coordinator = new ContactDiscoveryCoordinator({
+      ...dependencies,
+      synchronize,
+      isUnconfirmedCachedPositive: (phone) => positives.has(phone),
+    });
+    coordinator.activate();
+    coordinator.addPhones(phones.slice(0, 60));
+    coordinator.addPhones(phones.slice(60));
+    coordinator.setVisiblePhones(['phone-9000']);
+    coordinator.handleInvalidation(['phone-9001']);
+    coordinator.addPhones(['interactive-phone'], 'interactive');
+    finishFirst();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(synchronize.mock.calls[1][0].slice(0, 3)).toEqual([
+      'interactive-phone',
+      'phone-9001',
+      'phone-9000',
+    ]);
+    expect(synchronize.mock.calls[1][0].slice(3, 41)).toEqual([...positives]);
+    expect(Math.max(...synchronize.mock.calls.map(([batch]) => batch.length))).toBe(60);
+    const resolved = synchronize.mock.calls.flatMap(([batch]) => [...batch]);
+    expect(new Set(resolved).size).toBe(10_001);
+    expect(resolved).toHaveLength(10_001);
+    positives.clear();
+    coordinator.setVisiblePhones([]);
+    coordinator.addPhones(phones);
+    coordinator.activate();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(synchronize).toHaveBeenCalledTimes(167);
+    coordinator.dispose();
+  });
+
   it('registers only new phones in a healthy existing app session', async () => {
     const { coordinator, dependencies } = fixture();
     coordinator.activate();

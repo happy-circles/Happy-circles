@@ -15,6 +15,31 @@ export const CONTACT_INDEX_INITIAL_READ_LIMIT = 120;
 export const CONTACT_INDEX_READ_PAGE_SIZE = 120;
 export const CONTACT_INDEX_IN_APP_BACKFILL_READ_LIMIT = 10_000;
 export const CONTACT_UNCONFIRMED_STATUS_LABEL = 'Estado por confirmar';
+const ACCOUNT_USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function contactResolutionForPresentation(
+  resolution: PeopleTargetResolution | null,
+  expectedPhoneE164?: string,
+): PeopleTargetResolution | null {
+  if (
+    !resolution ||
+    (expectedPhoneE164 !== undefined && resolution.phoneE164 !== expectedPhoneE164)
+  ) {
+    return null;
+  }
+
+  if (
+    resolution.status === 'active_user' &&
+    (resolution.accountMatchConfirmed !== true ||
+      !resolution.matchedUserId ||
+      !ACCOUNT_USER_ID_PATTERN.test(resolution.matchedUserId))
+  ) {
+    return null;
+  }
+
+  return resolution;
+}
 
 export type EnrichedContact = {
   readonly contact: ContactCandidate;
@@ -28,7 +53,6 @@ export type AddPersonTransactionContext = {
 };
 
 export type ContactActionIconName =
-  | 'arrow-forward-outline'
   | 'list-outline'
   | 'sync-outline'
   | 'search-outline'
@@ -55,7 +79,7 @@ export function contactAvatarColor(
 }
 
 export function actionMetaForResolution(
-  resolution: PeopleTargetResolution | null,
+  inputResolution: PeopleTargetResolution | null,
   hasMultiplePhones: boolean,
 ): {
   readonly label: string;
@@ -72,12 +96,13 @@ export function actionMetaForResolution(
     };
   }
 
+  const resolution = contactResolutionForPresentation(inputResolution);
   if (!resolution) {
     return {
       disabled: false,
-      icon: 'arrow-forward-outline',
-      label: 'Continuar',
-      tone: 'primary',
+      icon: 'paper-plane-outline',
+      label: 'Invitar',
+      tone: 'invite',
     };
   }
 
@@ -127,8 +152,9 @@ export function actionMetaForResolution(
 
 export function contactResolutionDetail(
   phoneMeta: string,
-  resolution: PeopleTargetResolution | null,
+  inputResolution: PeopleTargetResolution | null,
 ): string {
+  const resolution = contactResolutionForPresentation(inputResolution);
   if (!resolution) {
     return `${phoneMeta} | ${CONTACT_UNCONFIRMED_STATUS_LABEL}`;
   }
@@ -152,7 +178,8 @@ export function contactResolutionDetail(
   return `${phoneMeta} | No aparece en Happy Circles`;
 }
 
-export function shouldShowInApp(resolution: PeopleTargetResolution | null): boolean {
+export function shouldShowInApp(inputResolution: PeopleTargetResolution | null): boolean {
+  const resolution = contactResolutionForPresentation(inputResolution);
   return (
     resolution?.status === 'active_user' ||
     resolution?.status === 'already_related' ||
@@ -216,7 +243,8 @@ export function filterReusableContactResolutionCache(
   return reusableCache;
 }
 
-export function rankContactResolution(resolution: PeopleTargetResolution | null): number {
+export function rankContactResolution(inputResolution: PeopleTargetResolution | null): number {
+  const resolution = contactResolutionForPresentation(inputResolution);
   if (resolution?.status === 'active_user') {
     return 0;
   }
@@ -248,7 +276,10 @@ export function bestResolutionForContact(
   let hasUnresolvedPhone = false;
 
   for (const phoneOption of contact.phoneOptions) {
-    const resolution = targetCache[phoneOption.phoneE164] ?? null;
+    const resolution = contactResolutionForPresentation(
+      targetCache[phoneOption.phoneE164] ?? null,
+      phoneOption.phoneE164,
+    );
     if (!resolution) {
       hasUnresolvedPhone = true;
       continue;

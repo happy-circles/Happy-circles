@@ -7,6 +7,7 @@ type Dependencies = {
   readonly createSessionId: () => string;
   readonly isConnected: () => boolean;
   readonly isRealtimeReady?: () => boolean;
+  readonly isUnconfirmedCachedPositive?: (phone: string) => boolean;
   readonly setSession: (sessionId: string | null) => void;
   readonly beginRecovery: () => void;
   readonly register: (
@@ -215,8 +216,20 @@ export class ContactDiscoveryCoordinator {
     try {
       while (this.active && this.connected && generation === this.generation && this.pending.size) {
         const batch = [...this.pending.entries()]
-          .sort((a, b) => priorityRank[a[1]] - priorityRank[b[1]])
-          .slice(0, 60);
+          .map(([phone, priority]) => ({
+            phone,
+            priority,
+            unconfirmedPositive:
+              priority === 'background' &&
+              this.dependencies.isUnconfirmedCachedPositive?.(phone) === true,
+          }))
+          .sort(
+            (a, b) =>
+              priorityRank[a.priority] - priorityRank[b.priority] ||
+              Number(b.unconfirmedPositive) - Number(a.unconfirmedPositive),
+          )
+          .slice(0, 60)
+          .map(({ phone, priority }) => [phone, priority] as const);
         const priority = batch[0][1];
         const phones = batch.map(([phone]) => phone);
         if (!this.realtimeConnected) this.unobservedWork = true;

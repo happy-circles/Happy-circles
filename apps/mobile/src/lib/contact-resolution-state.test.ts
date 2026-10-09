@@ -13,6 +13,7 @@ import {
   readContactResolutions,
   isContactResolutionWritePending,
   readContactResolutionPhonesForTarget,
+  revokeContactAccountMatchConfirmations,
   subscribeContactResolutions,
 } from './contact-resolution-state';
 
@@ -30,6 +31,13 @@ function row(
     friendshipInviteId: status === 'pending_friendship' ? 'invite' : null,
     accountInviteId: null,
     accountInviteStatus: null,
+  };
+}
+
+function activeAccount(phoneE164 = '+573001234567'): PeopleTargetResolution {
+  return {
+    ...row('active_user', phoneE164),
+    matchedUserId: '66cae267-3792-4b0b-9674-106965144100',
   };
 }
 
@@ -277,5 +285,183 @@ describe('shared contact resolution state', () => {
     expect(readContactResolutionPhonesForTarget(user, { relationshipId: 'relationship' })).toEqual(
       [],
     );
+  });
+});
+
+describe('current active-account confirmation', () => {
+  it('does not trust a positive or a forged confirmation restored from disk', () => {
+    const user = 'cached-positive-proof';
+    const [cached] = mergeContactResolutions(
+      user,
+      [{ ...activeAccount(), accountMatchConfirmed: true, resolvedAt: Date.now(), generation: 0 }],
+      { fromCache: true },
+    );
+    expect(cached.status).toBe('active_user');
+    expect(cached.accountMatchConfirmed).toBe(false);
+    const expectedGenerations = captureContactGenerations(user, [cached.phoneE164]);
+    const [live] = mergeContactResolutions(
+      user,
+      [{ ...activeAccount(), accountMatchConfirmed: false }],
+      { expectedGenerations },
+    );
+    expect(live.accountMatchConfirmed).toBe(true);
+  });
+
+  it('keeps a live confirmation across TTL expiry and subsequent disk hydration', () => {
+    const user = 'live-positive-reopen';
+    const [live] = mergeContactResolutions(user, [activeAccount()]);
+    expect(isContactResolutionFresh(live, live.resolvedAt! + 120_000)).toBe(false);
+    expect(readContactResolutions(user)[live.phoneE164]).toBe(live);
+    expect(live.accountMatchConfirmed).toBe(true);
+    expect(
+      mergeContactResolutions(
+        user,
+        [{ ...activeAccount(), resolvedAt: Date.now(), generation: live.generation! + 1_000 }],
+        { fromCache: true },
+      ),
+    ).toEqual([]);
+    expect(readContactResolutions(user)[live.phoneE164]).toBe(live);
+  });
+
+  it.each([
+    ['missing user', { matchedUserId: null }],
+    ['non-UUID user', { matchedUserId: 'person' }],
+    ['invalid UUID variant', { matchedUserId: '66cae267-3792-4b0b-1674-106965144100' }],
+    ['invalid E164 phone', { phoneE164: '573001234567' }],
+    ['oversized phone', { phoneE164: '+1234567890123456' }],
+  ])('keeps malformed live positives neutral: %s', (label, invalid) => {
+    const [accepted] = mergeContactResolutions(`malformed-positive-${label}`, [
+      { ...activeAccount(), ...invalid, accountMatchConfirmed: true },
+    ]);
+    expect(accepted.accountMatchConfirmed).toBe(false);
+    expect(accepted.status).toBe('active_user');
+  });
+
+  it('does not certify the current account itself or an unrequested phone', () => {
+    const account = activeAccount();
+    const [self] = mergeContactResolutions(account.matchedUserId!, [account]);
+    expect(self.accountMatchConfirmed).toBe(false);
+    const [sameAccount] = mergeContactResolutions(account.matchedUserId!, [
+      { ...account, matchedUserId: account.matchedUserId!.toUpperCase() },
+    ]);
+    expect(sameAccount.accountMatchConfirmed).toBe(false);
+    const user = 'phone-binding-positive';
+    const expectedGenerations = captureContactGenerations(user, ['+573009876543']);
+    expect(mergeContactResolutions(user, [account], { expectedGenerations })).toEqual([]);
+    expect(readContactResolutions(user)).toEqual({});
+  });
+
+  it('removes proof on scoped invalidation and rejects the old positive response', () => {
+    const user = 'invalidated-positive-proof';
+    const [live] = mergeContactResolutions(user, [activeAccount()]);
+    const before = captureContactGenerations(user, [live.phoneE164]);
+    invalidateContactResolutions({ userId: user, phoneE164: live.phoneE164 });
+    const invalidated = readContactResolutions(user)[live.phoneE164];
+    expect(invalidated.status).toBe('active_user');
+    expect(invalidated.accountMatchConfirmed).toBe(false);
+    expect(invalidated.resolvedAt).toBe(0);
+    expect(
+      mergeContactResolutions(user, [activeAccount()], { expectedGenerations: before }),
+    ).toEqual([]);
+    const current = captureContactGenerations(user, [live.phoneE164]);
+    const [corrected] = mergeContactResolutions(
+      user,
+      [{ ...row('no_account'), matchedUserId: null, accountMatchConfirmed: true }],
+      { expectedGenerations: current },
+    );
+    expect(corrected.status).toBe('no_account');
+    expect(corrected.accountMatchConfirmed).toBe(false);
+  });
+
+  it('fences positive proof across global invalidation and logout epochs', () => {
+    const user = 'positive-epoch-proof';
+    const [live] = mergeContactResolutions(user, [activeAccount()]);
+    const beforeInvalidation = captureContactGenerations(user, [live.phoneE164]);
+    invalidateContactResolutions({ userId: user });
+    expect(readContactResolutions(user)[live.phoneE164].accountMatchConfirmed).toBe(false);
+    expect(
+      mergeContactResolutions(user, [activeAccount()], { expectedGenerations: beforeInvalidation }),
+    ).toEqual([]);
+    const beforeLogout = captureContactGenerations(user, [live.phoneE164]);
+    clearContactResolutionUser(user);
+    expect(
+      mergeContactResolutions(user, [activeAccount()], { expectedGenerations: beforeLogout }),
+    ).toEqual([]);
+    expect(readContactResolutions(user)).toEqual({});
+    expect(readContactResolutions('positive-different-actor')).toEqual({});
+  });
+
+  it('does not certify a positive overtaken by an opaque realtime event', () => {
+    const user = 'opaque-event-positive-proof';
+    const start = captureContactDiscoveryRevision();
+    const expectedGenerations = captureContactGenerations(user, [activeAccount().phoneE164]);
+    invalidateContactResolutions({ userId: user, watchIds: ['positive-watch'] });
+    const [overtaken] = mergeContactResolutions(
+      user,
+      [{ ...activeAccount(), discoveryWatchId: 'positive-watch', accountMatchConfirmed: true }],
+      { expectedGenerations, discoveryRevision: start },
+    );
+    expect(overtaken.resolvedAt).toBe(0);
+    expect(overtaken.accountMatchConfirmed).toBe(false);
+    const [current] = mergeContactResolutions(
+      user,
+      [{ ...activeAccount(), discoveryWatchId: 'positive-watch' }],
+      {
+        expectedGenerations: captureContactGenerations(user, [overtaken.phoneE164]),
+        discoveryRevision: captureContactDiscoveryRevision(),
+      },
+    );
+    expect(current.accountMatchConfirmed).toBe(true);
+  });
+
+  it('retires proof after a discovery gap without changing pending or unrelated rows', () => {
+    const user = 'gap-positive-proof';
+    const other = '+573009876543';
+    const pendingPhone = '+573007654321';
+    mergeContactResolutions(user, [
+      activeAccount(),
+      row('no_account', other),
+      row('pending_friendship', pendingPhone),
+    ]);
+    const snapshot = readContactResolutions(user);
+    const before = captureContactGenerations(user, [activeAccount().phoneE164]);
+    const changes: unknown[] = [];
+    const unsubscribe = subscribeContactResolutions(user, (change) => changes.push(change));
+    expect(revokeContactAccountMatchConfirmations(user)).toEqual([activeAccount().phoneE164]);
+    expect(readContactResolutions(user)[activeAccount().phoneE164]).toMatchObject({
+      status: 'active_user',
+      accountMatchConfirmed: false,
+      resolvedAt: 0,
+    });
+    expect(readContactResolutions(user)[other]).toBe(snapshot[other]);
+    expect(readContactResolutions(user)[pendingPhone]).toBe(snapshot[pendingPhone]);
+    expect(
+      mergeContactResolutions(user, [activeAccount()], { expectedGenerations: before }),
+    ).toEqual([]);
+    expect(changes).toEqual([
+      {
+        changedPhones: [activeAccount().phoneE164],
+        invalidatedPhones: [activeAccount().phoneE164],
+        priority: 'background',
+      },
+    ]);
+    expect(revokeContactAccountMatchConfirmations(user)).toEqual([]);
+    expect(changes).toHaveLength(1);
+    const [fresh] = mergeContactResolutions(user, [activeAccount()], {
+      expectedGenerations: captureContactGenerations(user, [activeAccount().phoneE164]),
+    });
+    expect(fresh.accountMatchConfirmed).toBe(true);
+    unsubscribe();
+  });
+
+  it('does not infer active-account proof from a terminal friendship action', () => {
+    const user = 'terminal-positive-proof';
+    mergeContactResolutions(user, [
+      { ...activeAccount(), status: 'pending_friendship', friendshipInviteId: 'positive-invite' },
+    ]);
+    applyContactActionResult({ userId: user, inviteId: 'positive-invite' }, 'rejected');
+    const current = readContactResolutions(user)[activeAccount().phoneE164];
+    expect(current.status).toBe('active_user');
+    expect(current.accountMatchConfirmed).toBe(false);
   });
 });

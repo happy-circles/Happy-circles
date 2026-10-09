@@ -36,6 +36,9 @@ type UserState = {
 const states = new Map<string, UserState>();
 const EMPTY_RESOLUTIONS: Record<string, PeopleTargetResolution> = {};
 let revision = Date.now();
+const ACCOUNT_USER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ACCOUNT_PHONE = /^\+[1-9]\d{7,14}$/;
 
 function stateFor(userId: string): UserState {
   let state = states.get(userId);
@@ -156,6 +159,8 @@ export function mergeContactResolutions(
     readonly expectedEpoch?: number;
     readonly fromCache?: boolean;
     readonly discoveryRevision?: number;
+    /** Synthesized action rows do not prove that a phone still has an active account. */
+    readonly confirmAccountMatch?: boolean;
   } = {},
 ): readonly PeopleTargetResolution[] {
   const state = stateFor(userId);
@@ -169,6 +174,7 @@ export function mergeContactResolutions(
     revision = Math.max(revision, row.generation ?? 0, Date.now());
     const current = next[row.phoneE164];
     const generation = state.generations.get(row.phoneE164) ?? 0;
+    if (options.fromCache && current?.accountMatchConfirmed === true) continue;
     if (
       options.expectedGenerations &&
       options.expectedGenerations.get(row.phoneE164) !== generation
@@ -199,6 +205,17 @@ export function mergeContactResolutions(
       watchInvalidation.revision > options.discoveryRevision;
     const acceptedRow = {
       ...row,
+      accountMatchConfirmed: Boolean(
+        !options.fromCache &&
+        options.confirmAccountMatch !== false &&
+        !invalidatedDuringRead &&
+        row.status === 'active_user' &&
+        typeof row.matchedUserId === 'string' &&
+        ACCOUNT_USER_ID.test(row.matchedUserId) &&
+        row.matchedUserId.toLowerCase() !== userId.toLowerCase() &&
+        typeof row.phoneE164 === 'string' &&
+        ACCOUNT_PHONE.test(row.phoneE164),
+      ),
       resolvedAt: invalidatedDuringRead ? 0 : options.fromCache ? row.resolvedAt : Date.now(),
       generation: options.fromCache ? row.generation : ++revision,
     };
@@ -306,6 +323,27 @@ export function readContactResolutionPhonesForTarget(
   return phonesForTarget(stateFor(userId), target);
 }
 
+/** A discovery gap retires only current active-account proof, keeping display rows intact. */
+export function revokeContactAccountMatchConfirmations(userId: string) {
+  const state = stateFor(userId);
+  let next = state.entries;
+  const phones: string[] = [];
+  for (const [phone, row] of Object.entries(state.entries)) {
+    if (row.status !== 'active_user' || row.accountMatchConfirmed !== true) continue;
+    const generation = ++revision;
+    state.generations.set(phone, generation);
+    if (next === state.entries) next = { ...state.entries };
+    next[phone] = { ...row, accountMatchConfirmed: false, resolvedAt: 0, generation };
+    phones.push(phone);
+  }
+  if (phones.length) {
+    state.entries = next;
+    for (const listener of state.listeners)
+      listener({ invalidatedPhones: phones, changedPhones: phones, priority: 'background' });
+  }
+  return phones;
+}
+
 /** Registration associates opaque events even before a phone's first state lookup. */
 export function associateContactDiscoveryWatches(
   userId: string,
@@ -369,7 +407,7 @@ export function invalidateContactResolutions(target: ContactResolutionTarget = {
       state.generations.set(phone, generation);
       if (row) {
         if (next === state.entries) next = { ...state.entries };
-        next[phone] = { ...row, resolvedAt: 0, generation };
+        next[phone] = { ...row, accountMatchConfirmed: false, resolvedAt: 0, generation };
       }
       phones.push(phone);
     }
@@ -418,6 +456,7 @@ export function applyContactActionResult(target: ContactResolutionTarget, status
           friendshipDirection: null,
           availableActions: status === 'accepted' ? [] : row.matchedUserId ? ['add'] : ['invite'],
         })),
+      { confirmAccountMatch: false },
     );
   }
 }

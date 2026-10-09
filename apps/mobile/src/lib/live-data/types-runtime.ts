@@ -320,6 +320,8 @@ export interface FriendshipInvitePreviewResult {
 export interface PeopleTargetResolution {
   readonly resolvedAt?: number;
   readonly generation?: number;
+  /** In-memory proof from a current server response; never restored from disk. */
+  readonly accountMatchConfirmed?: boolean;
   readonly discoveryWatchId?: string | null;
   readonly discoverySessionId?: string;
   readonly friendshipDirection?: 'incoming' | 'outgoing' | null;
