@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image as ExpoImage } from 'expo-image';
+import { Image as ExpoImage, type ImageRef } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
 import {
@@ -24,6 +24,7 @@ export type AppAvatarVariant = 'person' | 'system';
 export interface AppAvatarProps {
   readonly label: string;
   readonly imageUrl?: string | null;
+  readonly imageRef?: ImageRef;
   readonly priority?: 'low' | 'normal' | 'high';
   readonly size?: number;
   readonly rounded?: boolean;
@@ -35,6 +36,7 @@ export interface AppAvatarProps {
 export function AppAvatar({
   label,
   imageUrl,
+  imageRef,
   priority = 'normal',
   size = 44,
   fallbackBackgroundColor,
@@ -47,7 +49,8 @@ export function AppAvatar({
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
   const stableImageCacheKey = avatarImageCacheKey(imageUrl);
   // Retain the native image for this mount even if the bounded prefetch cache evicts it.
-  const prefetchedImage = useMemo(() => getPrefetchedAvatarImageRef(imageUrl), [imageUrl]);
+  const cachedImage = useMemo(() => getPrefetchedAvatarImageRef(imageUrl), [imageUrl]);
+  const prefetchedImage = imageRef ?? cachedImage;
   const initialImageReady =
     Boolean(prefetchedImage) || isAvatarImageReady(imageUrl, resolvedImageUrl);
   const [hasImageError, setHasImageError] = useState(false);

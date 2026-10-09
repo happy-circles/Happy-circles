@@ -27,6 +27,7 @@ import {
   clearAvatarPrefetchCacheForTests,
   collectCriticalAvatarPaths,
   collectDeferredAvatarPaths,
+  ensureAvatarImageRef,
   getPrefetchedAvatarImageRef,
   prefetchAvatarPaths,
   prefetchCriticalAvatarImages,
@@ -109,11 +110,12 @@ describe('avatar-prefetch', () => {
   it('keeps the disk cache key stable after memory eviction and URL renewal', async () => {
     mocks.resolveSignedAvatarUrl.mockResolvedValueOnce('https://signed.test/a?token=one');
     await prefetchAvatarPaths(['a.jpg']);
+    mocks.isAvatarImageReady.mockReturnValue(true);
     await prefetchAvatarPaths(Array.from({ length: 16 }, (_, index) => `other-${index}.jpg`));
     expect(getPrefetchedAvatarImageRef('a.jpg')).toBeUndefined();
 
     mocks.resolveSignedAvatarUrl.mockResolvedValueOnce('https://signed.test/a?token=two');
-    await prefetchAvatarPaths(['a.jpg']);
+    await ensureAvatarImageRef('a.jpg');
 
     expect(mocks.loadAsync).toHaveBeenNthCalledWith(
       1,
@@ -122,6 +124,37 @@ describe('avatar-prefetch', () => {
     );
     expect(mocks.loadAsync).toHaveBeenLastCalledWith(
       { uri: 'https://signed.test/a?token=two', cacheKey: 'a.jpg' },
+      { maxWidth: 1024, maxHeight: 1024 },
+    );
+  });
+
+  it('does not decode evicted background images again when a warmed snapshot is prefetched repeatedly', async () => {
+    const paths = Array.from({ length: 64 }, (_, index) => `person-${index}.jpg`);
+    await prefetchAvatarPaths(paths);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(64);
+    expect(paths.filter((path) => getPrefetchedAvatarImageRef(path))).toHaveLength(16);
+
+    await expect(prefetchAvatarPaths(paths)).resolves.toBe(true);
+    await expect(prefetchAvatarPaths(paths)).resolves.toBe(true);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(64);
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(64);
+
+    mocks.isAvatarImageReady.mockReturnValue(true);
+    await expect(ensureAvatarImageRef(paths[0])).resolves.toBeDefined();
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(65);
+    expect(getPrefetchedAvatarImageRef(paths[0])).toBeDefined();
+  });
+
+  it('bounds session warm bookkeeping and can warm a key again after that bookkeeping expires', async () => {
+    const paths = Array.from({ length: 513 }, (_, index) => `person-${index}.jpg`);
+    await prefetchAvatarPaths(paths);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(513);
+
+    await prefetchAvatarPaths([paths[0], paths[1], paths[512]]);
+
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(514);
+    expect(mocks.loadAsync).toHaveBeenLastCalledWith(
+      { uri: `https://signed.test/${paths[0]}`, cacheKey: paths[0] },
       { maxWidth: 1024, maxHeight: 1024 },
     );
   });
@@ -149,17 +182,78 @@ describe('avatar-prefetch', () => {
     expect(currentPaths.every((path) => Boolean(getPrefetchedAvatarImageRef(path)))).toBe(true);
   });
 
-  it('does not resolve or prefetch paths already marked ready', async () => {
+  it('preserves eight recent selections through background loads within the shared sixteen-reference bound', async () => {
+    const criticalPaths = Array.from({ length: 9 }, (_, index) => `critical-${index}.jpg`);
+    const recentPaths = Array.from({ length: 8 }, (_, index) => `recent-${index}.jpg`);
+    const backgroundPaths = Array.from({ length: 64 }, (_, index) => `background-${index}.jpg`);
+    await prefetchCriticalAvatarImages(snapshot(criticalPaths));
+    const recentImages = await Promise.all(recentPaths.map(ensureAvatarImageRef));
+    await prefetchAvatarPaths(backgroundPaths);
+
+    for (const [index, path] of recentPaths.entries()) {
+      expect(getPrefetchedAvatarImageRef(path)).toBe(recentImages[index]);
+    }
+    expect(criticalPaths.filter((path) => getPrefetchedAvatarImageRef(path))).toHaveLength(8);
+    expect(getPrefetchedAvatarImageRef(criticalPaths[0])).toBeUndefined();
+    expect(
+      [...criticalPaths, ...recentPaths, ...backgroundPaths].filter((path) =>
+        getPrefetchedAvatarImageRef(path),
+      ),
+    ).toHaveLength(16);
+  });
+
+  it('updates recency on explicit selection while getter reads and background hits remain pure', async () => {
+    const initialPaths = Array.from({ length: 16 }, (_, index) => `person-${index}.jpg`);
+    const backgroundPaths = Array.from({ length: 20 }, (_, index) => `background-${index}.jpg`);
+    await prefetchAvatarPaths(initialPaths);
+    for (const path of initialPaths.slice(0, 8)) {
+      await ensureAvatarImageRef(path);
+    }
+    // Reopening person-0 moves it to the end of the eight recent selections.
+    await ensureAvatarImageRef(initialPaths[0]);
+    await ensureAvatarImageRef(initialPaths[8]);
+    expect(getPrefetchedAvatarImageRef(initialPaths[1])).toBeDefined();
+    await prefetchAvatarPaths([initialPaths[1]]);
+    await prefetchAvatarPaths(backgroundPaths);
+
+    expect(getPrefetchedAvatarImageRef(initialPaths[0])).toBeDefined();
+    expect(getPrefetchedAvatarImageRef(initialPaths[1])).toBeUndefined();
+    expect(initialPaths.slice(2, 9).every((path) => getPrefetchedAvatarImageRef(path))).toBe(true);
+    expect(
+      [...initialPaths, ...backgroundPaths].filter((path) => getPrefetchedAvatarImageRef(path)),
+    ).toHaveLength(16);
+  });
+
+  it('returns the eventual reference to each requesting caller even after cache eviction', async () => {
+    const criticalPaths = Array.from({ length: 9 }, (_, index) => `critical-${index}.jpg`);
+    const requestedPaths = Array.from({ length: 9 }, (_, index) => `requested-${index}.jpg`);
+    mocks.loadAsync.mockImplementation(async ({ cacheKey }: { cacheKey: string }) => ({
+      width: 512,
+      height: 512,
+      cacheKey,
+    }));
+    await prefetchCriticalAvatarImages(snapshot(criticalPaths));
+    const images = await Promise.all(requestedPaths.map(ensureAvatarImageRef));
+
+    expect(images[0]).toEqual({ width: 512, height: 512, cacheKey: requestedPaths[0] });
+    expect(getPrefetchedAvatarImageRef(requestedPaths[0])).toBeUndefined();
+    expect(requestedPaths.slice(1).every((path) => getPrefetchedAvatarImageRef(path))).toBe(true);
+  });
+
+  it('loads a retained reference even when the thumbnail was already marked ready', async () => {
     mocks.isAvatarImageReady.mockReturnValue(true);
 
     await expect(prefetchAvatarPaths(['a.jpg'])).resolves.toBe(true);
 
-    expect(mocks.resolveSignedAvatarUrl).not.toHaveBeenCalled();
-    expect(mocks.loadAsync).not.toHaveBeenCalled();
-    expect(getPrefetchedAvatarImageRef('a.jpg')).toBeUndefined();
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledExactlyOnceWith('a.jpg');
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(1);
+    const image = getPrefetchedAvatarImageRef('a.jpg');
+    expect(image).toBeDefined();
+    await expect(ensureAvatarImageRef('/a.jpg')).resolves.toBe(image);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses a thumbnail that finishes while the URL is being resolved', async () => {
+  it('loads a retained reference when a thumbnail finishes during URL resolution', async () => {
     const signedUrl = deferred<string>();
     mocks.resolveSignedAvatarUrl.mockReturnValue(signedUrl.promise);
     const result = prefetchAvatarPaths(['a.jpg']);
@@ -168,7 +262,8 @@ describe('avatar-prefetch', () => {
     signedUrl.resolve('https://signed.test/a.jpg');
     await expect(result).resolves.toBe(true);
 
-    expect(mocks.loadAsync).not.toHaveBeenCalled();
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(1);
+    expect(getPrefetchedAvatarImageRef('a.jpg')).toBeDefined();
   });
 
   it('shares in-flight work between concurrent callers and normalized path aliases', async () => {
@@ -187,6 +282,50 @@ describe('avatar-prefetch', () => {
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(true);
     expect(mocks.rememberAvatarImageReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('promotes a queued preload requested by the user without duplicating its promise or load', async () => {
+    const image = { width: 512, height: 512 };
+    const activePaths = ['active-a.jpg', 'active-b.jpg', 'active-c.jpg', 'active-d.jpg'];
+    const activeLoads = new Map(activePaths.map((path) => [path, deferred<typeof image>()]));
+    const selectedLoad = deferred<typeof image>();
+    mocks.loadAsync.mockImplementation(({ cacheKey }: { cacheKey: string }) => {
+      return (
+        activeLoads.get(cacheKey)?.promise ??
+        (cacheKey === 'selected.jpg' ? selectedLoad.promise : Promise.resolve(image))
+      );
+    });
+    const background = prefetchAvatarPaths([
+      ...activePaths,
+      'background-a.jpg',
+      'background-b.jpg',
+      'selected.jpg',
+    ]);
+    const critical = prefetchCriticalAvatarImages(snapshot(['critical.jpg']));
+    const selected = ensureAvatarImageRef('selected.jpg');
+    const duplicate = ensureAvatarImageRef('/selected.jpg');
+    expect(duplicate).toBe(selected);
+    await Promise.resolve();
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
+
+    activeLoads.get(activePaths[0])?.resolve(image);
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(5));
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(5, 'selected.jpg');
+    expect(mocks.loadAsync).toHaveBeenLastCalledWith(
+      { uri: 'https://signed.test/selected.jpg', cacheKey: 'selected.jpg' },
+      { maxWidth: 1024, maxHeight: 1024 },
+    );
+    selectedLoad.resolve(image);
+    for (const load of activeLoads.values()) {
+      load.resolve(image);
+    }
+
+    await expect(background).resolves.toBe(true);
+    await expect(critical).resolves.toBe(true);
+    await expect(selected).resolves.toBe(image);
+    await expect(duplicate).resolves.toBe(image);
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(6, 'critical.jpg');
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(8);
   });
 
   it('limits image loads to four globally across concurrent callers', async () => {
@@ -248,7 +387,7 @@ describe('avatar-prefetch', () => {
     expect(mocks.loadAsync).toHaveBeenCalledTimes(5);
   });
 
-  it('skips a queued avatar when its thumbnail finishes before the load starts', async () => {
+  it('loads a queued reference when its thumbnail finishes before the load starts', async () => {
     const image = { width: 512, height: 512 };
     const activeLoad = deferred<typeof image>();
     mocks.loadAsync.mockReturnValue(activeLoad.promise);
@@ -264,9 +403,9 @@ describe('avatar-prefetch', () => {
     await expect(first).resolves.toBe(true);
     await expect(queued).resolves.toBe(true);
     await expect(duplicate).resolves.toBe(true);
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
-    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
-    expect(getPrefetchedAvatarImageRef('queued.jpg')).toBeUndefined();
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(5);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(5);
+    expect(getPrefetchedAvatarImageRef('queued.jpg')).toBe(image);
   });
 
   it('includes queue wait in the timeout while preserving queued work for another caller', async () => {
@@ -284,10 +423,10 @@ describe('avatar-prefetch', () => {
     expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
     expect(mocks.rememberAvatarImageReady).not.toHaveBeenCalled();
 
-    const retry = prefetchAvatarPaths(['queued.jpg'], { timeoutMs: 50 });
+    const retry = ensureAvatarImageRef('queued.jpg');
     activeLoad.resolve(image);
     await expect(first).resolves.toBe(true);
-    await expect(retry).resolves.toBe(true);
+    await expect(retry).resolves.toBe(image);
     expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(5);
     expect(mocks.loadAsync).toHaveBeenCalledTimes(5);
     expect(vi.getTimerCount()).toBe(0);
@@ -366,6 +505,30 @@ describe('avatar-prefetch', () => {
     expect(mocks.loadAsync).toHaveBeenCalledTimes(1);
   });
 
+  it('returns undefined on explicit request failures and allows a successful retry', async () => {
+    mocks.resolveSignedAvatarUrl.mockRejectedValueOnce(new Error('URL resolution failed'));
+    await expect(ensureAvatarImageRef('a.jpg')).resolves.toBeUndefined();
+    expect(mocks.loadAsync).not.toHaveBeenCalled();
+    mocks.loadAsync.mockRejectedValueOnce(new Error('Image download failed'));
+    await expect(ensureAvatarImageRef('a.jpg')).resolves.toBeUndefined();
+    expect(mocks.rememberAvatarImageReady).not.toHaveBeenCalled();
+    expect(getPrefetchedAvatarImageRef('a.jpg')).toBeUndefined();
+
+    const image = { width: 512, height: 512 };
+    mocks.loadAsync.mockResolvedValue(image);
+    await expect(ensureAvatarImageRef('a.jpg')).resolves.toBe(image);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(2);
+    expect(mocks.rememberAvatarImageReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resolve or load empty explicit requests', async () => {
+    for (const path of [null, undefined, '', '  ']) {
+      await expect(ensureAvatarImageRef(path)).resolves.toBeUndefined();
+    }
+    expect(mocks.resolveSignedAvatarUrl).not.toHaveBeenCalled();
+    expect(mocks.loadAsync).not.toHaveBeenCalled();
+  });
+
   it('collects deferred avatar paths from people and invite surfaces', () => {
     const deferredSnapshot = {
       accountInviteHistoryItems: [],
@@ -421,8 +584,10 @@ describe('avatar-prefetch', () => {
     );
   });
 
-  it('applies the path limit after skipping thumbnails already ready', async () => {
-    mocks.isAvatarImageReady.mockImplementation((path: string) => path === 'a.jpg');
+  it('applies the path limit after skipping references already retained', async () => {
+    await prefetchAvatarPaths(['a.jpg']);
+    mocks.resolveSignedAvatarUrl.mockClear();
+    mocks.loadAsync.mockClear();
 
     await prefetchAvatarPaths(['a.jpg', 'b.jpg', 'c.jpg'], { maxPaths: 1 });
 

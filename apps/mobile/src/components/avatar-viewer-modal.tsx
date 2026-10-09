@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
+import { useAvatarViewerImage } from '@/lib/use-avatar-viewer-image';
 
 import { AppAvatar } from './app-avatar';
 import { AppText } from '@/components/app-text';
@@ -14,6 +15,8 @@ export interface AvatarViewerModalProps {
 }
 
 export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarViewerModalProps) {
+  const imageRef = useAvatarViewerImage(imageUrl, visible);
+
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.root}>
@@ -32,6 +35,7 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
               fallbackBackgroundColor={theme.colors.primarySoft}
               fallbackTextColor={theme.colors.primary}
               imageUrl={imageUrl}
+              imageRef={imageRef}
               label={label}
               priority="high"
               size={240}

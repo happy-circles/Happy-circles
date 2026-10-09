@@ -1,12 +1,7 @@
 import { Image as ExpoImage, type ImageRef } from 'expo-image';
 
 import type { AppSnapshot } from './live-data/types';
-import {
-  avatarImageCacheKey,
-  isAvatarImageReady,
-  rememberAvatarImageReady,
-  resolveSignedAvatarUrl,
-} from './avatar';
+import { avatarImageCacheKey, rememberAvatarImageReady, resolveSignedAvatarUrl } from './avatar';
 
 const DEFAULT_AVATAR_PREFETCH_TIMEOUT_MS = 900;
 const DEFAULT_DEFERRED_AVATAR_PREFETCH_TIMEOUT_MS = 2200;
@@ -18,32 +13,48 @@ const DEFERRED_AVATAR_PREFETCH_DELAY_MS = 250;
 const MAX_PREFETCHED_AVATAR_IMAGES = 16;
 const MAX_PREFETCHED_AVATAR_SIZE = 1024;
 const MAX_CONCURRENT_AVATAR_LOADS = 4;
+const MAX_RECENT_AVATAR_IMAGES = 8;
+const MAX_WARMED_AVATAR_KEYS = 512;
+const BACKGROUND_LOAD_PRIORITY = 0;
+const CRITICAL_LOAD_PRIORITY = 1;
+const USER_LOAD_PRIORITY = 2;
+type AvatarLoadPriority = 0 | 1 | 2;
 
 interface QueuedAvatarLoad {
-  readonly load: () => Promise<boolean>;
-  readonly resolve: (result: boolean) => void;
+  readonly cacheKey: string;
+  priority: AvatarLoadPriority;
+  readonly load: () => Promise<ImageRef | undefined>;
+  readonly resolve: (result: ImageRef | undefined) => void;
 }
 
 const prefetchedAvatarImages = new Map<string, ImageRef>();
 const criticalAvatarImageKeys = new Set<string>();
-const pendingAvatarLoads = new Map<string, Promise<boolean>>();
+const recentAvatarImageKeys = new Set<string>();
+const warmedAvatarImageKeys = new Set<string>();
+const pendingAvatarLoads = new Map<string, Promise<ImageRef | undefined>>();
 const queuedAvatarLoads: QueuedAvatarLoad[] = [];
 let activeAvatarLoads = 0;
 
 function startQueuedAvatarLoads(): void {
   while (activeAvatarLoads < MAX_CONCURRENT_AVATAR_LOADS && queuedAvatarLoads.length > 0) {
-    const job = queuedAvatarLoads.shift();
+    let nextJobIndex = 0;
+    for (let index = 1; index < queuedAvatarLoads.length; index += 1) {
+      if (queuedAvatarLoads[index].priority > queuedAvatarLoads[nextJobIndex].priority) {
+        nextJobIndex = index;
+      }
+    }
+    const [job] = queuedAvatarLoads.splice(nextJobIndex, 1);
     if (!job) {
       return;
     }
 
     activeAvatarLoads += 1;
     void (async () => {
-      let result = false;
+      let result: ImageRef | undefined;
       try {
         result = await job.load();
       } catch {
-        result = false;
+        result = undefined;
       } finally {
         activeAvatarLoads -= 1;
         startQueuedAvatarLoads();
@@ -53,11 +64,46 @@ function startQueuedAvatarLoads(): void {
   }
 }
 
-function enqueueAvatarLoad(load: () => Promise<boolean>): Promise<boolean> {
+function enqueueAvatarLoad(
+  cacheKey: string,
+  priority: AvatarLoadPriority,
+  load: () => Promise<ImageRef | undefined>,
+): Promise<ImageRef | undefined> {
   return new Promise((resolve) => {
-    queuedAvatarLoads.push({ load, resolve });
+    queuedAvatarLoads.push({ cacheKey, priority, load, resolve });
     startQueuedAvatarLoads();
   });
+}
+
+function promoteQueuedAvatarLoad(cacheKey: string, priority: AvatarLoadPriority): void {
+  const job = queuedAvatarLoads.find((entry) => entry.cacheKey === cacheKey);
+  if (job && job.priority < priority) {
+    job.priority = priority;
+  }
+}
+
+function rememberRecentAvatarImageKey(cacheKey: string): void {
+  recentAvatarImageKeys.delete(cacheKey);
+  recentAvatarImageKeys.add(cacheKey);
+  while (recentAvatarImageKeys.size > MAX_RECENT_AVATAR_IMAGES) {
+    const oldestKey = recentAvatarImageKeys.values().next().value;
+    if (typeof oldestKey !== 'string') {
+      return;
+    }
+    recentAvatarImageKeys.delete(oldestKey);
+  }
+}
+
+function rememberWarmedAvatarImageKey(cacheKey: string): void {
+  warmedAvatarImageKeys.delete(cacheKey);
+  warmedAvatarImageKeys.add(cacheKey);
+  while (warmedAvatarImageKeys.size > MAX_WARMED_AVATAR_KEYS) {
+    const oldestKey = warmedAvatarImageKeys.values().next().value;
+    if (typeof oldestKey !== 'string') {
+      return;
+    }
+    warmedAvatarImageKeys.delete(oldestKey);
+  }
 }
 
 function waitForAvatarLoads(loads: Promise<boolean>, timeoutMs: number): Promise<boolean> {
@@ -76,11 +122,13 @@ function rememberPrefetchedImage(cacheKey: string, image: ImageRef): void {
   prefetchedAvatarImages.set(cacheKey, image);
 
   while (prefetchedAvatarImages.size > MAX_PREFETCHED_AVATAR_IMAGES) {
-    // Deferred people/invite loads must not evict the current user and the first
-    // eight visible profiles warmed during startup.
+    // Recent profiles explicitly opened by the user take precedence over the
+    // startup set. Together both tiers still share the same 16-reference limit.
+    const keys = Array.from(prefetchedAvatarImages.keys());
     const oldestKey =
-      Array.from(prefetchedAvatarImages.keys()).find((key) => !criticalAvatarImageKeys.has(key)) ??
-      prefetchedAvatarImages.keys().next().value;
+      keys.find((key) => !recentAvatarImageKeys.has(key) && !criticalAvatarImageKeys.has(key)) ??
+      keys.find((key) => !recentAvatarImageKeys.has(key)) ??
+      keys[0];
     if (typeof oldestKey !== 'string') {
       return;
     }
@@ -95,44 +143,71 @@ export function getPrefetchedAvatarImageRef(path: string | null | undefined): Im
   return cacheKey ? prefetchedAvatarImages.get(cacheKey) : undefined;
 }
 
-function loadAvatarImage(path: string): Promise<boolean> {
+export function ensureAvatarImageRef(
+  path: string | null | undefined,
+): Promise<ImageRef | undefined> {
   const cacheKey = avatarImageCacheKey(path);
-  if (!cacheKey || isAvatarImageReady(path) || prefetchedAvatarImages.has(cacheKey)) {
-    return Promise.resolve(true);
+  if (!path || !cacheKey) {
+    return Promise.resolve(undefined);
+  }
+
+  // Only explicit profile/viewer requests update recency; render-time reads and
+  // background prefetch hits cannot displace the last eight selected profiles.
+  rememberRecentAvatarImageKey(cacheKey);
+  const image = prefetchedAvatarImages.get(cacheKey);
+  if (image) {
+    prefetchedAvatarImages.delete(cacheKey);
+    prefetchedAvatarImages.set(cacheKey, image);
+    return Promise.resolve(image);
+  }
+
+  return loadAvatarImage(path, USER_LOAD_PRIORITY);
+}
+
+function loadAvatarImage(
+  path: string,
+  priority: AvatarLoadPriority,
+): Promise<ImageRef | undefined> {
+  const cacheKey = avatarImageCacheKey(path);
+  if (!cacheKey) {
+    return Promise.resolve(undefined);
+  }
+
+  const cachedImage = prefetchedAvatarImages.get(cacheKey);
+  if (cachedImage) {
+    return Promise.resolve(cachedImage);
   }
 
   const pendingLoad = pendingAvatarLoads.get(cacheKey);
   if (pendingLoad) {
+    promoteQueuedAvatarLoad(cacheKey, priority);
     return pendingLoad;
   }
 
-  const load = enqueueAvatarLoad(async () => {
+  const load = enqueueAvatarLoad(cacheKey, priority, async () => {
     try {
-      // A queued thumbnail may already have finished before its turn starts.
-      if (isAvatarImageReady(path) || prefetchedAvatarImages.has(cacheKey)) {
-        return true;
+      const existingImage = prefetchedAvatarImages.get(cacheKey);
+      if (existingImage) {
+        return existingImage;
       }
 
       const url = await resolveSignedAvatarUrl(path);
       if (!url) {
-        return false;
+        return undefined;
       }
 
-      // A thumbnail can finish while the signed URL is being resolved. It now
-      // uses the same cache key and memory/disk policy as the viewer.
-      if (isAvatarImageReady(path, url)) {
-        return true;
-      }
-
+      // A thumbnail-ready flag does not retain an ImageRef. Always load a real
+      // reference when absent, reusing the native cache through the stable key.
       const image = await ExpoImage.loadAsync(
         { uri: url, cacheKey },
         { maxWidth: MAX_PREFETCHED_AVATAR_SIZE, maxHeight: MAX_PREFETCHED_AVATAR_SIZE },
       );
       rememberPrefetchedImage(cacheKey, image);
+      rememberWarmedAvatarImageKey(cacheKey);
       rememberAvatarImageReady(path, url);
-      return true;
+      return image;
     } catch {
-      return false;
+      return undefined;
     }
   }).finally(() => {
     pendingAvatarLoads.delete(cacheKey);
@@ -200,15 +275,28 @@ export async function prefetchAvatarPaths(
   } = {},
 ): Promise<boolean> {
   const uniquePaths = uniqueAvatarPaths(paths)
-    .filter((path) => !isAvatarImageReady(path) && !getPrefetchedAvatarImageRef(path))
+    .filter(
+      (path) =>
+        !getPrefetchedAvatarImageRef(path) &&
+        !warmedAvatarImageKeys.has(avatarImageCacheKey(path) ?? ''),
+    )
     .slice(0, options.maxPaths);
   if (uniquePaths.length === 0) {
     return true;
   }
 
-  const loads = Promise.all(uniquePaths.map(loadAvatarImage)).then((results) =>
-    results.every(Boolean),
-  );
+  // Keep only booleans in the batch so completed references can be released
+  // after eviction instead of retaining all 64 until the slowest load finishes.
+  const loads = Promise.all(
+    uniquePaths.map((path) =>
+      loadAvatarImage(
+        path,
+        criticalAvatarImageKeys.has(avatarImageCacheKey(path) ?? '')
+          ? CRITICAL_LOAD_PRIORITY
+          : BACKGROUND_LOAD_PRIORITY,
+      ).then((image) => Boolean(image)),
+    ),
+  ).then((results) => results.every(Boolean));
 
   // Include URL resolution in the deadline. The shared load can finish in the
   // background after timeout, so later callers still reuse that work.
@@ -251,6 +339,8 @@ export function scheduleDeferredAvatarPrefetch(
 export function clearAvatarPrefetchCacheForTests(): void {
   prefetchedAvatarImages.clear();
   criticalAvatarImageKeys.clear();
+  recentAvatarImageKeys.clear();
+  warmedAvatarImageKeys.clear();
   pendingAvatarLoads.clear();
   queuedAvatarLoads.length = 0;
   activeAvatarLoads = 0;
