@@ -1,5 +1,5 @@
 import { queryClient } from '../query-client';
-import { publicEdgeSupabase, supabase } from '../supabase';
+import { explicitTokenEdgeSupabase, publicEdgeSupabase, supabase } from '../supabase';
 import {
   createSupportId,
   isJwtAuthError,
@@ -71,6 +71,14 @@ function assertPublicEdgeSupabaseClient() {
   return publicEdgeSupabase;
 }
 
+function assertExplicitTokenEdgeSupabaseClient() {
+  if (!explicitTokenEdgeSupabase) {
+    throw new Error('El servicio de datos no está disponible en este momento.');
+  }
+
+  return explicitTokenEdgeSupabase;
+}
+
 function isInvocationTimeoutError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -97,6 +105,8 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
   const client = shouldOmitAuthorization
     ? assertPublicEdgeSupabaseClient()
     : assertSupabaseClient();
+  const useExplicitTokenTransport =
+    name === 'create-people-outreach' && Boolean(options.expectedUserId);
   const supportId = createSupportId();
   const invoke = async () => {
     let accessToken: string | undefined;
@@ -106,7 +116,13 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
         throw new Error('La sesión cambió. Vuelve a intentar la acción.');
       accessToken = data.session.access_token;
     }
-    const response = await client.functions.invoke<TResult>(name, {
+    if (useExplicitTokenTransport && !accessToken?.trim()) {
+      throw new Error('Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.');
+    }
+    // Keep session validation/refresh on the main client. The functions-only
+    // transport avoids the SDK's additional getSession before sending this JWT.
+    const transport = useExplicitTokenTransport ? assertExplicitTokenEdgeSupabaseClient() : client;
+    const response = await transport.functions.invoke<TResult>(name, {
       body,
       headers: {
         'x-client-info': 'happy-circles-mobile',

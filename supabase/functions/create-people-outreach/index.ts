@@ -1,42 +1,12 @@
 import { createServiceRoleClient, handleRpc, requireString } from '../_shared/http.ts';
-import { readPayloadString, triggerPushNotificationWorker } from '../_shared/push-notifications.ts';
+import { triggerPushNotificationWorker } from '../_shared/push-notifications.ts';
+import { createPeopleOutreachEndpoint } from './handler.ts';
 
-Deno.serve((request) =>
-  handleRpc(request, async (body, actorUserId) => {
-    const client = createServiceRoleClient();
-    const { data, error } = await client.rpc('create_people_outreach', {
-      p_actor_user_id: actorUserId,
-      p_idempotency_key: requireString(body.idempotencyKey, 'idempotencyKey'),
-      p_channel: requireString(body.channel, 'channel'),
-      p_source_context:
-        typeof body.sourceContext === 'string' && body.sourceContext.trim().length > 0
-          ? body.sourceContext.trim()
-          : null,
-      p_intended_recipient_alias:
-        typeof body.intendedRecipientAlias === 'string' &&
-        body.intendedRecipientAlias.trim().length > 0
-          ? body.intendedRecipientAlias.trim()
-          : null,
-      p_intended_recipient_phone_e164:
-        typeof body.intendedRecipientPhoneE164 === 'string' &&
-        body.intendedRecipientPhoneE164.trim().length > 0
-          ? body.intendedRecipientPhoneE164.trim()
-          : null,
-      p_intended_recipient_phone_label:
-        typeof body.intendedRecipientPhoneLabel === 'string' &&
-        body.intendedRecipientPhoneLabel.trim().length > 0
-          ? body.intendedRecipientPhoneLabel.trim()
-          : null,
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    if (readPayloadString(data, 'kind') === 'friendship') {
-      // The invitation RPC commits its outbox event atomically with creation.
-      triggerPushNotificationWorker(10);
-    }
-    return data;
+Deno.serve(
+  createPeopleOutreachEndpoint(handleRpc, {
+    createClient: createServiceRoleClient,
+    requireString,
+    triggerPushWorker: triggerPushNotificationWorker,
+    onTiming: (timing) => console.log('outreach_timing', timing),
   }),
 );

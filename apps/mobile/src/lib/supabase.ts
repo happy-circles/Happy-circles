@@ -45,3 +45,15 @@ export const publicEdgeSupabase =
         },
       })
     : null;
+
+/**
+ * Transport for actor-bound outreach with a JWT captured by the main client's
+ * session checks. Each request must supply Authorization; this client has no
+ * auth storage or refresh lifecycle and preserves the explicit bearer token.
+ */
+export const explicitTokenEdgeSupabase =
+  appConfig.supabaseUrl && appConfig.supabaseAnonKey
+    ? createClient<Database>(appConfig.supabaseUrl, appConfig.supabaseAnonKey, {
+        accessToken: async () => null,
+      })
+    : null;
