@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/react-query';
 
 const mocks = vi.hoisted(() => ({
   setSession: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('@/features/home/add-person-contact-scan-cache', () => ({
 }));
 import {
   activateContactDiscoveryRuntime,
+  suspendContactDiscoveryRuntime,
   disposeContactDiscoveryRuntime,
   replaceContactDiscoveryKnownPhones,
   setContactDiscoveryKnownPhones,
@@ -45,15 +47,80 @@ const user = 'runtime-user';
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  mocks.synchronize.mockReset().mockResolvedValue({ recheck: [] });
+  onlineManager.setOnline(true);
   setContactRealtimeReady(user, true);
 });
 afterEach(() => {
   disposeContactDiscoveryRuntime(user);
   clearContactResolutionUser(user);
+  onlineManager.setOnline(true);
   vi.useRealTimers();
 });
 
 describe('contact runtime authorization boundary', () => {
+  it('queries unknown contacts with Internet even if realtime never subscribed', async () => {
+    setContactRealtimeReady(user, false);
+    mocks.synchronize.mockImplementation(async () => {
+      mergeContactResolutions(user, [
+        {
+          phoneE164: 'phone-a',
+          status: 'no_account',
+          matchedUserId: null,
+          displayName: null,
+          avatarPath: null,
+          relationshipId: null,
+          friendshipInviteId: null,
+          accountInviteId: null,
+          accountInviteStatus: null,
+        },
+      ]);
+      return { recheck: [] };
+    });
+    activateContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, ['phone-a']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.synchronize).toHaveBeenCalledExactlyOnceWith(user, ['phone-a'], 'background');
+    expect(readContactResolutions(user)['phone-a'].status).toBe('no_account');
+    expect(mocks.manage).not.toHaveBeenCalled();
+  });
+
+  it('recovers realtime separately from HTTP and ignores repeated readiness notifications', async () => {
+    setContactRealtimeReady(user, false);
+    activateContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, ['phone-a']);
+    await vi.advanceTimersByTimeAsync(0);
+    setContactRealtimeReady(user, true);
+    setContactRealtimeReady(user, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.recover).toHaveBeenCalledTimes(1);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(2);
+    setContactRealtimeReady(user, false);
+    expect(mocks.recover).toHaveBeenCalledTimes(2);
+    setContactRealtimeReady(user, true);
+    setContactRealtimeReady(user, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.recover).toHaveBeenCalledTimes(2);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(3);
+  });
+
+  it('waits for HTTP connectivity and keeps paused permission work paused', async () => {
+    onlineManager.setOnline(false);
+    setContactRealtimeReady(user, false);
+    activateContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, ['phone-a']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.synchronize).not.toHaveBeenCalled();
+    onlineManager.setOnline(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(1);
+    suspendContactDiscoveryRuntime(user);
+    setContactDiscoveryKnownPhones(user, ['phone-b']);
+    setContactRealtimeReady(user, true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.synchronize).toHaveBeenCalledTimes(1);
+  });
+
   it('does not recreate a disposed runtime from late hydration or viewport callbacks', async () => {
     activateContactDiscoveryRuntime(user);
     setContactDiscoveryKnownPhones(user, ['old-phone']);

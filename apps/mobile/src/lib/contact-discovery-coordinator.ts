@@ -6,6 +6,7 @@ const LEASE_TTL_MS = 15 * 60_000;
 type Dependencies = {
   readonly createSessionId: () => string;
   readonly isConnected: () => boolean;
+  readonly isRealtimeReady?: () => boolean;
   readonly setSession: (sessionId: string | null) => void;
   readonly beginRecovery: () => void;
   readonly register: (
@@ -41,7 +42,9 @@ export class ContactDiscoveryCoordinator {
   private running = false;
   private generation = 0;
   private connected = false;
-  private hasConnected = false;
+  private realtimeConnected = false;
+  private unobservedWork = false;
+  private recoveryStarted = false;
   private nextRenewAt = 0;
   private leaseExpiresAt = 0;
   private renewing = false;
@@ -54,7 +57,7 @@ export class ContactDiscoveryCoordinator {
     if (this.active) return;
     this.active = true;
     this.connected = this.dependencies.isConnected();
-    this.hasConnected = this.connected;
+    this.realtimeConnected = this.readRealtimeConnection();
     this.startSession();
     this.interval = setInterval(() => this.tick(), 15_000);
   }
@@ -63,7 +66,9 @@ export class ContactDiscoveryCoordinator {
     this.generation += 1;
     this.sessionId = this.dependencies.createSessionId();
     this.dependencies.setSession(this.sessionId);
+    this.recoveryStarted = this.known.size > 0;
     if (this.known.size) this.dependencies.beginRecovery();
+    this.unobservedWork = false;
     this.nextRenewAt = Date.now() + RENEW_INTERVAL_MS;
     this.leaseExpiresAt = Date.now() + LEASE_TTL_MS;
     this.recover();
@@ -149,18 +154,39 @@ export class ContactDiscoveryCoordinator {
 
   connectionChanged() {
     const connected = this.dependencies.isConnected();
-    if (connected === this.connected) return;
+    const realtimeConnected = connected && (this.dependencies.isRealtimeReady?.() ?? connected);
+    if (connected === this.connected && realtimeConnected === this.realtimeConnected) return;
     const wasConnected = this.connected;
-    const hadConnected = this.hasConnected;
+    const wasRealtimeConnected = this.realtimeConnected;
     this.connected = connected;
-    if (connected) this.hasConnected = true;
-    if (!this.active || !connected) return;
-    if (!wasConnected) {
-      // Broadcast has no durable replay. One bounded recovery reconciles the
-      // gap while keeping the last rows visible, with visible phones first.
-      if (hadConnected) this.dependencies.beginRecovery();
+    this.realtimeConnected = realtimeConnected;
+    if (!this.active) return;
+    if (wasRealtimeConnected && !realtimeConnected) {
+      // HTTP may stay available while broadcasts are disconnected. Fence
+      // observed reads now, but let ordinary cached HTTP reads continue.
+      this.unobservedWork = true;
+      this.dependencies.beginRecovery();
+      this.recoveryStarted = true;
+    }
+    if (!connected) return;
+    if (realtimeConnected && !wasRealtimeConnected) {
+      if (Date.now() >= this.leaseExpiresAt) {
+        this.startSession();
+        return;
+      }
+      // HTTP state read before subscription is not an observed baseline.
+      // Reconcile the gap once, with the visible window first.
+      if (this.unobservedWork && !this.recoveryStarted) this.dependencies.beginRecovery();
+      this.unobservedWork = false;
+      this.recoveryStarted = false;
+      this.recover();
+    } else if (!wasConnected) {
       this.recover();
     }
+  }
+
+  private readRealtimeConnection() {
+    return this.connected && (this.dependencies.isRealtimeReady?.() ?? this.connected);
   }
 
   private recover() {
@@ -193,6 +219,7 @@ export class ContactDiscoveryCoordinator {
           .slice(0, 60);
         const priority = batch[0][1];
         const phones = batch.map(([phone]) => phone);
+        if (!this.realtimeConnected) this.unobservedWork = true;
         for (const phone of phones) this.pending.delete(phone);
         try {
           if (this.dependencies.synchronize) {
@@ -204,7 +231,7 @@ export class ContactDiscoveryCoordinator {
                 this.deferred.set(recheck.phoneE164, recheck.at);
             }
           } else {
-            await this.dependencies.register(phones, priority);
+            if (this.realtimeConnected) await this.dependencies.register(phones, priority);
             if (!this.active || !this.connected || generation !== this.generation) break;
             await this.dependencies.resolve(phones, priority);
           }
@@ -232,7 +259,7 @@ export class ContactDiscoveryCoordinator {
 
   private tick() {
     if (!this.active || !this.connected) return;
-    if (Date.now() >= this.leaseExpiresAt) {
+    if (this.realtimeConnected && Date.now() >= this.leaseExpiresAt) {
       this.startSession();
       return;
     }
@@ -244,13 +271,20 @@ export class ContactDiscoveryCoordinator {
     void this.pump();
     if (this.visible.size)
       void this.dependencies.resolve([...this.visible], 'visible').catch(() => undefined);
-    if (!this.sessionId || this.renewing || Date.now() < this.nextRenewAt) return;
+    if (
+      !this.realtimeConnected ||
+      !this.known.size ||
+      !this.sessionId ||
+      this.renewing ||
+      Date.now() < this.nextRenewAt
+    )
+      return;
     const sessionId = this.sessionId;
     this.renewing = true;
     void this.dependencies
       .renew(sessionId)
       .then((result) => {
-        if (!this.active || this.sessionId !== sessionId) return;
+        if (!this.active || !this.realtimeConnected || this.sessionId !== sessionId) return;
         if (result.status === 'expired') {
           this.pending.clear();
           this.startSession();

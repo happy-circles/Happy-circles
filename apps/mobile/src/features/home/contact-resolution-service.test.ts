@@ -71,6 +71,80 @@ afterEach(() => {
 });
 
 describe('contact resolution service races', () => {
+  it('resolves immediately over HTTP without creating watches when realtime is unavailable', async () => {
+    setContactDiscoverySession(mocks.actor, 'http-fallback-session');
+    setContactRealtimeReady(mocks.actor, false);
+    mocks.invoke.mockResolvedValue([row('no_account')]);
+    const result = synchronizeContactDiscoveryPhones(mocks.actor, [row('no_account').phoneE164]);
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith(
+      'resolve-people-targets',
+      expect.anything(),
+      { phoneE164List: [row('no_account').phoneE164], discoverySessionId: undefined },
+      { expectedUserId: mocks.actor },
+    );
+    expect(readContactResolutions(mocks.actor)[row('no_account').phoneE164]).toMatchObject({
+      status: 'no_account',
+      discoverySessionId: undefined,
+      discoveryWatchId: undefined,
+    });
+    expect(mocks.manage).not.toHaveBeenCalled();
+  });
+
+  it('reuses fresh HTTP rows during a realtime gap but requires an observed baseline after reconnect', async () => {
+    const phone = row('no_account').phoneE164;
+    setContactDiscoverySession(mocks.actor, 'stable-session');
+    setContactRealtimeReady(mocks.actor, false);
+    beginContactDiscoveryRecovery(mocks.actor);
+    mergeContactResolutions(mocks.actor, [row('no_account')]);
+    const cached = readContactResolutions(mocks.actor)[phone];
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(readContactResolutions(mocks.actor)[phone]).toBe(cached);
+    await vi.advanceTimersByTimeAsync(60_001);
+    mocks.invoke.mockResolvedValue([row('no_account')]);
+    const fallback = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await fallback;
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    setContactRealtimeReady(mocks.actor, true);
+    const baseline = synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    await vi.advanceTimersByTimeAsync(1);
+    await baseline;
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(mocks.invoke.mock.calls[1][2]).toEqual({
+      phoneE164List: [phone],
+      discoverySessionId: 'stable-session',
+    });
+    await synchronizeContactDiscoveryPhones(mocks.actor, [phone]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the 60-phone batches and background budget for 10,000 unobserved HTTP lookups', async () => {
+    const phones = Array.from({ length: 10_000 }, (_, index) => `+57300${index}`);
+    setContactDiscoverySession(mocks.actor, 'http-fallback-session');
+    setContactRealtimeReady(mocks.actor, false);
+    const startedAt = Date.now();
+    mocks.invoke.mockImplementation(async (_name, _schema, input) =>
+      (input as { phoneE164List: string[] }).phoneE164List.map((phoneE164) => ({
+        ...row('no_account'),
+        phoneE164,
+      })),
+    );
+    const result = resolveContactPhones(mocks.actor, phones, 'background');
+    await vi.runAllTimersAsync();
+    expect(await result).toHaveLength(10_000);
+    expect(mocks.invoke).toHaveBeenCalledTimes(167);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(3 * 60_000);
+    for (const [name, , payload] of mocks.invoke.mock.calls) {
+      expect(name).toBe('resolve-people-targets');
+      expect((payload as { phoneE164List: string[] }).phoneE164List.length).toBeLessThanOrEqual(60);
+      expect((payload as { discoverySessionId?: string }).discoverySessionId).toBeUndefined();
+    }
+    expect(readContactResolutions(mocks.actor)[phones[0]].discoveryWatchId).toBeUndefined();
+  });
+
   it.each(['watch', 'mutation'] as const)(
     'immediately rechecks a first response invalidated by a %s before delivery',
     async (kind) => {

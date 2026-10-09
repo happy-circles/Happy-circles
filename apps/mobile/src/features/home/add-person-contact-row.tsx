@@ -9,6 +9,7 @@ import {
   actionMetaForResolution,
   contactAvatarColor,
   contactMeta,
+  contactResolutionDetail,
   shouldShowInApp,
 } from '@/features/home/contacts-sheet-helpers';
 import { type ContactCandidate } from '@/features/invites/people-outreach-utils';
@@ -92,30 +93,3 @@ export const ContactRow = memo(function ContactRow({
     </View>
   );
 });
-
-function contactResolutionDetail(
-  phoneMeta: string,
-  resolution: PeopleTargetResolution | null,
-): string {
-  if (!resolution) {
-    return `${phoneMeta} | Comprueba y agrega con un toque`;
-  }
-
-  if (resolution.status === 'active_user') {
-    return `${phoneMeta} | Está en Happy Circles`;
-  }
-
-  if (resolution.status === 'already_related') {
-    return `${phoneMeta} | Ya son amigos`;
-  }
-
-  if (resolution.status === 'pending_friendship') {
-    return `${phoneMeta} | Solicitud pendiente`;
-  }
-
-  if (resolution.status === 'pending_activation') {
-    return `${phoneMeta} | Pendiente de abrir`;
-  }
-
-  return `${phoneMeta} | No aparece en Happy Circles`;
-}

@@ -14,6 +14,7 @@ export const CONTACT_RESOLUTION_MAX_CONCURRENT_REQUESTS = 1;
 export const CONTACT_INDEX_INITIAL_READ_LIMIT = 120;
 export const CONTACT_INDEX_READ_PAGE_SIZE = 120;
 export const CONTACT_INDEX_IN_APP_BACKFILL_READ_LIMIT = 10_000;
+export const CONTACT_UNCONFIRMED_STATUS_LABEL = 'Estado por confirmar';
 
 export type EnrichedContact = {
   readonly contact: ContactCandidate;
@@ -27,6 +28,7 @@ export type AddPersonTransactionContext = {
 };
 
 export type ContactActionIconName =
+  | 'arrow-forward-outline'
   | 'list-outline'
   | 'sync-outline'
   | 'search-outline'
@@ -73,8 +75,8 @@ export function actionMetaForResolution(
   if (!resolution) {
     return {
       disabled: false,
-      icon: 'person-add-outline',
-      label: 'Agregar',
+      icon: 'arrow-forward-outline',
+      label: 'Continuar',
       tone: 'primary',
     };
   }
@@ -121,6 +123,33 @@ export function actionMetaForResolution(
     label: 'Agregado',
     tone: 'muted',
   };
+}
+
+export function contactResolutionDetail(
+  phoneMeta: string,
+  resolution: PeopleTargetResolution | null,
+): string {
+  if (!resolution) {
+    return `${phoneMeta} | ${CONTACT_UNCONFIRMED_STATUS_LABEL}`;
+  }
+
+  if (resolution.status === 'active_user') {
+    return `${phoneMeta} | Está en Happy Circles`;
+  }
+
+  if (resolution.status === 'already_related') {
+    return `${phoneMeta} | Ya son amigos`;
+  }
+
+  if (resolution.status === 'pending_friendship') {
+    return `${phoneMeta} | Solicitud pendiente`;
+  }
+
+  if (resolution.status === 'pending_activation') {
+    return `${phoneMeta} | Pendiente de abrir`;
+  }
+
+  return `${phoneMeta} | No aparece en Happy Circles`;
 }
 
 export function shouldShowInApp(resolution: PeopleTargetResolution | null): boolean {

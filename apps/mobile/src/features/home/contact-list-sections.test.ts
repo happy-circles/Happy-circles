@@ -27,6 +27,21 @@ function row(id: string): EnrichedContact {
 }
 
 describe('contact SectionList keys', () => {
+  it('labels unclassified rows neutrally and keeps known-account and invite sections distinct', () => {
+    const sections = buildContactListSections({
+      inAppContacts: [row('friend')],
+      unresolvedContacts: [row('unknown')],
+      inviteContacts: [row('invite')],
+    });
+    expect(sections.map(({ key, title }) => ({ key, title }))).toEqual([
+      { key: 'in-app', title: 'En Happy Circles' },
+      { key: 'unresolved', title: 'Por confirmar' },
+      { key: 'invite', title: 'Invitar a Happy Circles' },
+    ]);
+    expect(sections[1].data[0].resolution).toBeNull();
+    expect(sections[1].keyExtractor(sections[1].data[0], 0)).toBe('unknown');
+  });
+
   it('accepts header and footer viewability tokens containing the section instead of a contact', () => {
     const sections = buildContactListSections({
       inAppContacts: [row('friend')],

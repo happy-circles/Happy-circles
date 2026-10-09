@@ -1,14 +1,38 @@
 import type { ContactCandidate } from '@/features/invites/people-outreach-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clearWarmContactScanCache,
   readWarmContactScanCache,
   writeWarmContactScanCache,
   updateWarmContactScanTargetCache,
+  subscribeWarmContactScanCache,
 } from './add-person-contact-scan-cache';
 
 afterEach(() => clearWarmContactScanCache('actor'));
 describe('warm contact snapshot', () => {
+  it('notifies an already mounted subscriber only when the agenda snapshot changes', () => {
+    const available = vi.fn();
+    const otherActor = vi.fn();
+    const unsubscribe = subscribeWarmContactScanCache('actor', available);
+    const unsubscribeOther = subscribeWarmContactScanCache('other', otherActor);
+    const contacts: ContactCandidate[] = [];
+    const snapshot = {
+      userId: 'actor',
+      contactsPermissionStatus: 'granted' as const,
+      contacts,
+      targetCache: {},
+    };
+    writeWarmContactScanCache(snapshot);
+    expect(available).toHaveBeenCalledOnce();
+    updateWarmContactScanTargetCache('actor', {});
+    writeWarmContactScanCache({ ...snapshot, targetCache: {} });
+    expect(available).toHaveBeenCalledOnce();
+    expect(otherActor).not.toHaveBeenCalled();
+    unsubscribe();
+    unsubscribeOther();
+    writeWarmContactScanCache({ ...snapshot, contacts: [] });
+    expect(available).toHaveBeenCalledOnce();
+  });
   it('reuses rows and states by reference on reopening and scopes them to the account', () => {
     const contacts: ContactCandidate[] = [];
     const targetCache = {};

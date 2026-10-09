@@ -24,6 +24,7 @@ import {
   actionMetaForResolution,
   buildContactSectionItems,
   chunkContactPhoneE164List,
+  contactResolutionDetail,
   CONTACT_TARGET_RESOLUTION_LIMIT,
   filterReusableContactResolutionCache,
   getUnresolvedContactPhoneE164List,
@@ -154,11 +155,11 @@ describe('contact resolution queue helpers', () => {
 });
 
 describe('contact section helpers', () => {
-  it('keeps add-person actions explicit for unresolved, multiple-number, and invite contacts', () => {
+  it('lets an unresolved contact continue without claiming it has an account', () => {
     expect(actionMetaForResolution(null, false)).toEqual({
       disabled: false,
-      icon: 'person-add-outline',
-      label: 'Agregar',
+      icon: 'arrow-forward-outline',
+      label: 'Continuar',
       tone: 'primary',
     });
     expect(actionMetaForResolution(null, true)).toEqual({
@@ -173,11 +174,84 @@ describe('contact section helpers', () => {
       label: 'Elegir',
       tone: 'primary',
     });
+    expect(actionMetaForResolution(resolution('+573004', 'active_user'), false)).toEqual({
+      disabled: false,
+      icon: 'person-add-outline',
+      label: 'Agregar',
+      tone: 'primary',
+    });
     expect(actionMetaForResolution(resolution('+573005', 'no_account'), false)).toEqual({
       disabled: false,
       icon: 'paper-plane-outline',
       label: 'Invitar',
       tone: 'invite',
+    });
+  });
+
+  it('keeps the first row actionable and neutral until its actual classification arrives', () => {
+    const person = contact(1);
+    const before = buildContactSectionItems({
+      contacts: [person],
+      searchValue: '',
+      targetCache: {},
+    });
+    const unknown = before.unresolvedContacts[0];
+    expect(unknown.contact).toBe(person);
+    expect(before.inAppContacts).toHaveLength(0);
+    expect(before.inviteContacts).toHaveLength(0);
+    expect(actionMetaForResolution(unknown.resolution, false)).toMatchObject({
+      label: 'Continuar',
+      disabled: false,
+    });
+    expect(contactResolutionDetail('mobile +57300001000', unknown.resolution)).toBe(
+      'mobile +57300001000 | Estado por confirmar',
+    );
+
+    for (const status of ['no_account', 'active_user'] as const) {
+      const after = buildContactSectionItems({
+        contacts: [person],
+        searchValue: '',
+        targetCache: {
+          [person.primaryPhone.phoneE164]: resolution(person.primaryPhone.phoneE164, status),
+        },
+      });
+      const confirmed = status === 'no_account' ? after.inviteContacts[0] : after.inAppContacts[0];
+      expect(confirmed.contact).toBe(person);
+      expect(after.unresolvedContacts).toHaveLength(0);
+      expect(actionMetaForResolution(confirmed.resolution, false).label).toBe(
+        status === 'no_account' ? 'Invitar' : 'Agregar',
+      );
+      expect(contactResolutionDetail('mobile +57300001000', confirmed.resolution)).toBe(
+        status === 'no_account'
+          ? 'mobile +57300001000 | No aparece en Happy Circles'
+          : 'mobile +57300001000 | Está en Happy Circles',
+      );
+    }
+  });
+
+  it('retains pending actions and disables already-related contacts', () => {
+    const pending = resolution('+573001', 'pending_friendship');
+    expect(
+      actionMetaForResolution({ ...pending, friendshipDirection: 'incoming' }, false),
+    ).toMatchObject({
+      label: 'Responder',
+      disabled: false,
+    });
+    expect(
+      actionMetaForResolution({ ...pending, friendshipDirection: 'outgoing' }, false),
+    ).toMatchObject({
+      label: 'Ver solicitud',
+      disabled: false,
+    });
+    expect(
+      actionMetaForResolution(resolution('+573002', 'pending_activation'), false),
+    ).toMatchObject({
+      label: 'Reenviar',
+      disabled: false,
+    });
+    expect(actionMetaForResolution(resolution('+573003', 'already_related'), false)).toMatchObject({
+      label: 'Agregado',
+      disabled: true,
     });
   });
 

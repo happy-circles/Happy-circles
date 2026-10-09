@@ -47,7 +47,7 @@ export function getViewableContacts(
 export function buildContactListSections(contacts: ContactSections): ContactListSection[] {
   return [
     section('in-app', 'En Happy Circles', contacts.inAppContacts),
-    section('unresolved', 'Agregar a Happy Circles', contacts.unresolvedContacts),
+    section('unresolved', 'Por confirmar', contacts.unresolvedContacts),
     section('invite', 'Invitar a Happy Circles', contacts.inviteContacts),
   ].filter((entry) => entry.data.length > 0);
 }

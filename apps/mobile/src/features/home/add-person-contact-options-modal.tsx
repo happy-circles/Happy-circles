@@ -6,6 +6,7 @@ import { PrimaryAction } from '@/components/primary-action';
 import { addPersonContactsSheetStyles as styles } from '@/features/home/add-person-contacts-sheet.styles';
 import {
   actionMetaForResolution,
+  CONTACT_UNCONFIRMED_STATUS_LABEL,
   contactMeta,
   type EnrichedContact,
 } from '@/features/home/contacts-sheet-helpers';
@@ -38,9 +39,6 @@ export function AddPersonContactOptionsModal({
   readonly presentation?: 'inline' | 'modal';
 }) {
   const activeTheme = useAppTheme();
-  const pendingContactOptionsResolving = pendingContactOptions.some(
-    ({ resolution }) => !resolution,
-  );
 
   if (!pendingContactSelection) {
     return null;
@@ -60,21 +58,12 @@ export function AddPersonContactOptionsModal({
         <AppText style={styles.emptyText}>
           {`${pendingContactSelection.alias} tiene varios números.`}
         </AppText>
-        {pendingContactOptionsResolving ? (
-          <View style={styles.optionNotice}>
-            <Ionicons color={activeTheme.colors.primary} name="sync-outline" size={16} />
-            <AppText style={styles.optionNoticeText}>
-              Consultando cada número para saber si se agrega o se invita.
-            </AppText>
-          </View>
-        ) : null}
         <View style={styles.optionList}>
           {pendingContactOptions.map(({ contact, resolution }) => {
             const phoneOption = contact.primaryPhone;
             const action = actionMetaForResolution(resolution, false);
-            const isResolving = !resolution;
             const isBusy = busyKey === phoneOption.phoneE164;
-            const disabled = (action.disabled && !isResolving) || Boolean(busyKey);
+            const disabled = action.disabled || Boolean(busyKey);
 
             return (
               <View
@@ -121,7 +110,7 @@ export function AddPersonContactOptionsModal({
                     name={isBusy ? 'sync-outline' : action.icon}
                     size={14}
                   />
-                  <AppText style={styles.contactActionText}>
+                  <AppText numberOfLines={1} style={styles.contactActionText}>
                     {isBusy ? 'Enviando' : action.label}
                   </AppText>
                 </Pressable>
@@ -150,7 +139,7 @@ function contactOptionStatusLabel(
   inviteAvailableLabel: string,
 ): string {
   if (!resolution) {
-    return 'Listo para revisar';
+    return CONTACT_UNCONFIRMED_STATUS_LABEL;
   }
 
   if (resolution.status === 'active_user') {

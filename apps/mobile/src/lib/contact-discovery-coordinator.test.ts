@@ -3,10 +3,12 @@ import { ContactDiscoveryCoordinator } from './contact-discovery-coordinator';
 
 function fixture() {
   let connected = true;
+  let realtimeReady = true;
   let sessions = 0;
   const dependencies = {
     createSessionId: vi.fn(() => `session-${++sessions}`),
     isConnected: () => connected,
+    isRealtimeReady: () => realtimeReady,
     setSession: vi.fn<(sessionId: string | null) => void>(),
     beginRecovery: vi.fn(),
     register: vi
@@ -27,6 +29,9 @@ function fixture() {
     setConnected: (value: boolean) => {
       connected = value;
     },
+    setRealtimeReady: (value: boolean) => {
+      realtimeReady = value;
+    },
   };
 }
 
@@ -34,6 +39,125 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('app-scoped contact discovery lease', () => {
+  it('resolves over HTTP before the first realtime subscription and establishes its baseline once', async () => {
+    const { coordinator, dependencies, setRealtimeReady } = fixture();
+    setRealtimeReady(false);
+    coordinator.activate();
+    coordinator.addPhones(['phone-a', 'phone-b']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.register).not.toHaveBeenCalled();
+    expect(dependencies.resolve).toHaveBeenCalledExactlyOnceWith(
+      ['phone-a', 'phone-b'],
+      'background',
+    );
+    setRealtimeReady(true);
+    coordinator.connectionChanged();
+    coordinator.connectionChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.beginRecovery).toHaveBeenCalledTimes(1);
+    expect(dependencies.register).toHaveBeenCalledTimes(1);
+    expect(dependencies.resolve).toHaveBeenCalledTimes(2);
+    coordinator.addPhones(['phone-a', 'phone-b']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.resolve).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it('fences a realtime-only gap while HTTP remains online and reconciles it once', async () => {
+    const { coordinator, dependencies, setRealtimeReady } = fixture();
+    coordinator.activate();
+    coordinator.addPhones(['phone-a', 'phone-b']);
+    coordinator.setVisiblePhones(['phone-b']);
+    await vi.advanceTimersByTimeAsync(0);
+    dependencies.beginRecovery.mockClear();
+    dependencies.resolve.mockClear();
+    dependencies.register.mockClear();
+    setRealtimeReady(false);
+    coordinator.connectionChanged();
+    coordinator.connectionChanged();
+    expect(dependencies.beginRecovery).toHaveBeenCalledTimes(1);
+    coordinator.addPhones(['phone-c']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.resolve).toHaveBeenCalledExactlyOnceWith(['phone-c'], 'background');
+    expect(dependencies.register).not.toHaveBeenCalled();
+    setRealtimeReady(true);
+    coordinator.connectionChanged();
+    coordinator.connectionChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.beginRecovery).toHaveBeenCalledTimes(1);
+    expect(dependencies.resolve.mock.calls[1]).toEqual([
+      ['phone-b', 'phone-a', 'phone-c'],
+      'visible',
+    ]);
+    expect(dependencies.register).toHaveBeenCalledTimes(1);
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(1);
+    coordinator.dispose();
+  });
+
+  it('does not renew or rotate unused observation leases during a long HTTP fallback', async () => {
+    const { coordinator, dependencies, setRealtimeReady } = fixture();
+    setRealtimeReady(false);
+    coordinator.activate();
+    coordinator.addPhones(['phone-a']);
+    await vi.advanceTimersByTimeAsync(45 * 60_000);
+    expect(dependencies.resolve).toHaveBeenCalledTimes(1);
+    expect(dependencies.register).not.toHaveBeenCalled();
+    expect(dependencies.renew).not.toHaveBeenCalled();
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(1);
+    setRealtimeReady(true);
+    coordinator.connectionChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(2);
+    expect(dependencies.beginRecovery).toHaveBeenCalledTimes(1);
+    expect(dependencies.register).toHaveBeenCalledTimes(1);
+    expect(dependencies.resolve).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it('resumes HTTP work when Internet returns before realtime', async () => {
+    const { coordinator, dependencies, setConnected, setRealtimeReady } = fixture();
+    setConnected(false);
+    setRealtimeReady(false);
+    coordinator.activate();
+    coordinator.addPhones(['phone-a']);
+    await vi.advanceTimersByTimeAsync(45 * 60_000);
+    expect(dependencies.resolve).not.toHaveBeenCalled();
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(1);
+    setConnected(true);
+    coordinator.connectionChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.resolve).toHaveBeenCalledTimes(1);
+    expect(dependencies.register).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it('does not rotate a lease when an expired renewal arrives after realtime disconnects', async () => {
+    const { coordinator, dependencies, setRealtimeReady } = fixture();
+    let finishRenew!: (result: { status: string }) => void;
+    dependencies.renew.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRenew = resolve;
+        }),
+    );
+    coordinator.activate();
+    coordinator.addPhones(['phone-a']);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(dependencies.renew).toHaveBeenCalledTimes(1);
+    setRealtimeReady(false);
+    coordinator.connectionChanged();
+    finishRenew({ status: 'expired' });
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(1);
+    expect(dependencies.register).toHaveBeenCalledTimes(1);
+    setRealtimeReady(true);
+    coordinator.connectionChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dependencies.createSessionId).toHaveBeenCalledTimes(2);
+    expect(dependencies.register).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
   it('keeps registration and the session across modal close/reopen and renews only the lease', async () => {
     const { coordinator, dependencies } = fixture();
     coordinator.addPhones(['phone-a', 'phone-b']);

@@ -8,7 +8,6 @@ import {
   isContactResolutionFresh,
   isContactResolutionWritePending,
   contactResolutionTtl,
-  subscribeContactRealtime,
   mergeContactResolutions,
   readContactResolutions,
 } from '@/lib/contact-resolution-state';
@@ -97,27 +96,11 @@ async function stopInactiveDiscoverySession(userId: string, sessionId: string | 
   }
 }
 
-async function waitForSubscription(userId: string) {
-  if (isContactRealtimeReady(userId) || !discoverySessions.has(userId)) return;
-  await new Promise<void>((resolve) => {
-    const finish = () => {
-      clearTimeout(timer);
-      unsubscribe();
-      resolve();
-    };
-    const unsubscribe = subscribeContactRealtime(userId, () => {
-      if (isContactRealtimeReady(userId)) finish();
-    });
-    const timer = setTimeout(finish, 2000);
-  });
-}
-
 function schedulerFor(userId: string) {
   let scheduler = schedulers.get(userId);
   if (!scheduler) {
     scheduler = new ContactResolutionScheduler(async (phones) => {
       await waitForWatchRemovals(userId, phones);
-      await waitForSubscription(userId);
       await assertActor(userId);
       phones = phones.filter(
         (phone) =>
@@ -142,31 +125,43 @@ function schedulerFor(userId: string) {
           { expectedUserId: userId },
         );
         await assertActor(userId);
+        if (recoveryVersions.get(userId) !== recoveryVersion) return [];
+        const observedSessionCurrent = Boolean(
+          discoverySessionId &&
+          discoverySessionId === discoverySessions.get(userId) &&
+          isContactRealtimeReady(userId),
+        );
         const registered = registeredPhones.get(userId) ?? new Map<string, DiscoveryWatch>();
         for (const row of rows) {
-          if (row.discoveryWatchId && discoverySessionId === discoverySessions.get(userId))
+          if (row.discoveryWatchId && observedSessionCurrent)
             registered.set(row.phoneE164, {
               phoneE164: row.phoneE164,
               discoveryWatchId: row.discoveryWatchId,
             });
         }
         registeredPhones.set(userId, registered);
-        if (recoveryVersions.get(userId) !== recoveryVersion) return [];
         const accepted = mergeContactResolutions(
           userId,
           rows
             .filter((row) => !removedPhones.get(userId)?.has(row.phoneE164))
-            .map((row) => ({ ...row, discoverySessionId })),
+            .map((row) => ({
+              ...row,
+              discoverySessionId: observedSessionCurrent ? discoverySessionId : undefined,
+              discoveryWatchId: observedSessionCurrent ? row.discoveryWatchId : undefined,
+            })),
           { expectedGenerations, discoveryRevision },
         );
         const validated = validatedPhones.get(userId) ?? new Map<string, number>();
         for (const row of accepted) {
           if (
+            observedSessionCurrent &&
+            row.discoveryWatchId &&
             row.resolvedAt &&
             recoveryVersion !== undefined &&
             !pendingRemovals.get(userId)?.has(row.phoneE164)
           )
             validated.set(row.phoneE164, recoveryVersion);
+          else validated.delete(row.phoneE164);
         }
         validatedPhones.set(userId, validated);
         registeredPhones.set(userId, registered);
@@ -361,7 +356,8 @@ function needsContactResolution(
     validated &&
     row.status !== 'pending_activation' &&
     row.status !== 'pending_friendship';
-  const needsRecovery = sessionId && recoveryRequired.has(userId) && !validated;
+  const needsRecovery =
+    sessionId && isContactRealtimeReady(userId) && recoveryRequired.has(userId) && !validated;
   return Boolean(needsRecovery || (!observed && !isContactResolutionFresh(row)));
 }
 

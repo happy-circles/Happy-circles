@@ -29,7 +29,8 @@ function runtimeFor(userId: string) {
   if (!runtime) {
     const coordinator = new ContactDiscoveryCoordinator({
       createSessionId: () => Crypto.randomUUID(),
-      isConnected: () => onlineManager.isOnline() && isContactRealtimeReady(userId),
+      isConnected: () => onlineManager.isOnline(),
+      isRealtimeReady: () => isContactRealtimeReady(userId),
       setSession: (sessionId) => setContactDiscoverySession(userId, sessionId),
       beginRecovery: () => beginContactDiscoveryRecovery(userId),
       register: (phones, priority) =>
