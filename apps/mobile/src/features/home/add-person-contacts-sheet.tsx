@@ -38,7 +38,11 @@ import {
 } from './add-person-manual-invite-card';
 import { AppText } from '@/components/app-text';
 import { buildManualPhoneE164 } from '@/features/invites/people-outreach-utils';
-import { buildContactListSections } from './contact-list-sections';
+import {
+  buildContactListSections,
+  getViewableContacts,
+  type ContactListSection,
+} from './contact-list-sections';
 
 const CONTACT_CAN_RECEIVE_INVITE_LABEL = 'Puede recibir invitación';
 const AnimatedContactList = Animated.createAnimatedComponent(SectionList<EnrichedContact>);
@@ -142,12 +146,12 @@ export function AddPersonContactsSheet({
     minimumViewTime: 100,
   }).current;
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken<EnrichedContact>[] }) => {
-      viewableContactsRef.current(
-        viewableItems
-          .filter((token) => token.isViewable && token.index != null)
-          .map((token) => token.item.contact),
-      );
+    ({
+      viewableItems,
+    }: {
+      viewableItems: ViewToken<EnrichedContact | ContactListSection | null>[];
+    }) => {
+      viewableContactsRef.current(getViewableContacts(viewableItems));
     },
     [],
   );

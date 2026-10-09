@@ -1,4 +1,4 @@
-import type { SectionListData } from 'react-native';
+import type { SectionListData, ViewToken } from 'react-native';
 import type { ContactSections } from './contact-section-projection';
 import type { EnrichedContact } from './contacts-sheet-helpers';
 
@@ -23,13 +23,25 @@ function section(
     key,
     title,
     data,
-    keyExtractor(item: EnrichedContact | ContactListSection, index: number | null) {
-      // VirtualizedSectionList sends the section itself with a null index for header/footer tokens.
-      if (index === null) return key;
-      if ('data' in item) throw new Error('A contact row cannot be a section token.');
+    keyExtractor(item: EnrichedContact | ContactListSection) {
+      // RN can convert a previous token against new sections after async regrouping.
+      // Its payload keeps the old identity even when the converted index changes.
+      if ('data' in item) return item.key;
       return item.contact.contactId;
     },
   } satisfies SectionListData<EnrichedContact>;
+}
+
+export function getViewableContacts(
+  tokens: readonly ViewToken<EnrichedContact | ContactListSection | null>[],
+): EnrichedContact['contact'][] {
+  const contacts: EnrichedContact['contact'][] = [];
+  for (const token of tokens) {
+    if (token.isViewable && token.index != null && token.item != null && 'contact' in token.item) {
+      contacts.push(token.item.contact);
+    }
+  }
+  return contacts;
 }
 
 export function buildContactListSections(contacts: ContactSections): ContactListSection[] {
