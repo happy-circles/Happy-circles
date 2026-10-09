@@ -1,35 +1,145 @@
-import { Image as ExpoImage } from 'expo-image';
+import { Image as ExpoImage, type ImageRef } from 'expo-image';
 
 import type { AppSnapshot } from './live-data/types';
-import { isAvatarImageReady, rememberAvatarImageReady, resolveSignedAvatarUrl } from './avatar';
+import {
+  avatarImageCacheKey,
+  isAvatarImageReady,
+  rememberAvatarImageReady,
+  resolveSignedAvatarUrl,
+} from './avatar';
 
 const DEFAULT_AVATAR_PREFETCH_TIMEOUT_MS = 900;
 const DEFAULT_DEFERRED_AVATAR_PREFETCH_TIMEOUT_MS = 2200;
 const CRITICAL_PEOPLE_AVATAR_LIMIT = 8;
 const DEFAULT_DEFERRED_AVATAR_PREFETCH_LIMIT = 64;
 const DEFERRED_AVATAR_PREFETCH_DELAY_MS = 250;
-const MAX_PREFETCHED_AVATAR_URLS = 256;
+// 1024px preserves detail in the 240dp viewer on displays up to 4x density.
+// Keep at most 16 decoded references (64 MiB at this maximum, 16 MiB for 512px uploads).
+const MAX_PREFETCHED_AVATAR_IMAGES = 16;
+const MAX_PREFETCHED_AVATAR_SIZE = 1024;
+const MAX_CONCURRENT_AVATAR_LOADS = 4;
 
-const prefetchedAvatarUrls = new Set<string>();
+interface QueuedAvatarLoad {
+  readonly load: () => Promise<boolean>;
+  readonly resolve: (result: boolean) => void;
+}
 
-function waitForTimeout(ms: number): Promise<false> {
+const prefetchedAvatarImages = new Map<string, ImageRef>();
+const criticalAvatarImageKeys = new Set<string>();
+const pendingAvatarLoads = new Map<string, Promise<boolean>>();
+const queuedAvatarLoads: QueuedAvatarLoad[] = [];
+let activeAvatarLoads = 0;
+
+function startQueuedAvatarLoads(): void {
+  while (activeAvatarLoads < MAX_CONCURRENT_AVATAR_LOADS && queuedAvatarLoads.length > 0) {
+    const job = queuedAvatarLoads.shift();
+    if (!job) {
+      return;
+    }
+
+    activeAvatarLoads += 1;
+    void (async () => {
+      let result = false;
+      try {
+        result = await job.load();
+      } catch {
+        result = false;
+      } finally {
+        activeAvatarLoads -= 1;
+        startQueuedAvatarLoads();
+        job.resolve(result);
+      }
+    })();
+  }
+}
+
+function enqueueAvatarLoad(load: () => Promise<boolean>): Promise<boolean> {
   return new Promise((resolve) => {
-    setTimeout(() => resolve(false), ms);
+    queuedAvatarLoads.push({ load, resolve });
+    startQueuedAvatarLoads();
   });
 }
 
-function rememberPrefetchedUrls(urls: readonly string[]): void {
-  for (const url of urls) {
-    prefetchedAvatarUrls.add(url);
-  }
+function waitForAvatarLoads(loads: Promise<boolean>, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    void loads.then((result) => {
+      clearTimeout(timer);
+      resolve(result);
+    });
+  });
+}
 
-  while (prefetchedAvatarUrls.size > MAX_PREFETCHED_AVATAR_URLS) {
-    const oldestUrl = prefetchedAvatarUrls.values().next().value;
-    if (typeof oldestUrl !== 'string') {
+function rememberPrefetchedImage(cacheKey: string, image: ImageRef): void {
+  // loadAsync writes to disk under cacheKey. Retaining its ImageRef also keeps the
+  // decoded image in memory on iOS, where loadAsync itself only uses disk cache.
+  prefetchedAvatarImages.set(cacheKey, image);
+
+  while (prefetchedAvatarImages.size > MAX_PREFETCHED_AVATAR_IMAGES) {
+    // Deferred people/invite loads must not evict the current user and the first
+    // eight visible profiles warmed during startup.
+    const oldestKey =
+      Array.from(prefetchedAvatarImages.keys()).find((key) => !criticalAvatarImageKeys.has(key)) ??
+      prefetchedAvatarImages.keys().next().value;
+    if (typeof oldestKey !== 'string') {
       return;
     }
-    prefetchedAvatarUrls.delete(oldestUrl);
+    // A mounted avatar may still use this reference; let GC release it when no
+    // component retains it instead of releasing the native resource here.
+    prefetchedAvatarImages.delete(oldestKey);
   }
+}
+
+export function getPrefetchedAvatarImageRef(path: string | null | undefined): ImageRef | undefined {
+  const cacheKey = avatarImageCacheKey(path);
+  return cacheKey ? prefetchedAvatarImages.get(cacheKey) : undefined;
+}
+
+function loadAvatarImage(path: string): Promise<boolean> {
+  const cacheKey = avatarImageCacheKey(path);
+  if (!cacheKey || isAvatarImageReady(path) || prefetchedAvatarImages.has(cacheKey)) {
+    return Promise.resolve(true);
+  }
+
+  const pendingLoad = pendingAvatarLoads.get(cacheKey);
+  if (pendingLoad) {
+    return pendingLoad;
+  }
+
+  const load = enqueueAvatarLoad(async () => {
+    try {
+      // A queued thumbnail may already have finished before its turn starts.
+      if (isAvatarImageReady(path) || prefetchedAvatarImages.has(cacheKey)) {
+        return true;
+      }
+
+      const url = await resolveSignedAvatarUrl(path);
+      if (!url) {
+        return false;
+      }
+
+      // A thumbnail can finish while the signed URL is being resolved. It now
+      // uses the same cache key and memory/disk policy as the viewer.
+      if (isAvatarImageReady(path, url)) {
+        return true;
+      }
+
+      const image = await ExpoImage.loadAsync(
+        { uri: url, cacheKey },
+        { maxWidth: MAX_PREFETCHED_AVATAR_SIZE, maxHeight: MAX_PREFETCHED_AVATAR_SIZE },
+      );
+      rememberPrefetchedImage(cacheKey, image);
+      rememberAvatarImageReady(path, url);
+      return true;
+    } catch {
+      return false;
+    }
+  }).finally(() => {
+    pendingAvatarLoads.delete(cacheKey);
+  });
+
+  pendingAvatarLoads.set(cacheKey, load);
+  return load;
 }
 
 function uniqueAvatarPaths(paths: readonly (string | null | undefined)[]): readonly string[] {
@@ -90,65 +200,34 @@ export async function prefetchAvatarPaths(
   } = {},
 ): Promise<boolean> {
   const uniquePaths = uniqueAvatarPaths(paths)
-    .filter((path) => !isAvatarImageReady(path))
+    .filter((path) => !isAvatarImageReady(path) && !getPrefetchedAvatarImageRef(path))
     .slice(0, options.maxPaths);
   if (uniquePaths.length === 0) {
     return true;
   }
 
-  const resolvedEntries = (
-    await Promise.all(
-      uniquePaths.map(async (path) => {
-        const url = await resolveSignedAvatarUrl(path);
-        return url ? { path, url } : null;
-      }),
-    )
-  ).filter((entry): entry is { readonly path: string; readonly url: string } => Boolean(entry));
-
-  if (resolvedEntries.length === 0) {
-    return true;
-  }
-
-  for (const entry of resolvedEntries) {
-    if (prefetchedAvatarUrls.has(entry.url)) {
-      rememberAvatarImageReady(entry.path, entry.url);
-    }
-  }
-
-  const entriesToPrefetch = resolvedEntries.filter(
-    (entry) => !isAvatarImageReady(entry.path, entry.url) && !prefetchedAvatarUrls.has(entry.url),
-  );
-  const urlsToPrefetch = entriesToPrefetch.map((entry) => entry.url);
-  if (urlsToPrefetch.length === 0) {
-    return true;
-  }
-
-  const prefetchPromise = ExpoImage.prefetch(Array.from(urlsToPrefetch), {
-    cachePolicy: 'disk',
-  }).then(
-    (result) => {
-      if (result) {
-        rememberPrefetchedUrls(urlsToPrefetch);
-        for (const entry of entriesToPrefetch) {
-          rememberAvatarImageReady(entry.path, entry.url);
-        }
-      }
-      return result;
-    },
-    () => false,
+  const loads = Promise.all(uniquePaths.map(loadAvatarImage)).then((results) =>
+    results.every(Boolean),
   );
 
-  return Promise.race([
-    prefetchPromise,
-    waitForTimeout(options.timeoutMs ?? DEFAULT_AVATAR_PREFETCH_TIMEOUT_MS),
-  ]);
+  // Include URL resolution in the deadline. The shared load can finish in the
+  // background after timeout, so later callers still reuse that work.
+  return waitForAvatarLoads(loads, options.timeoutMs ?? DEFAULT_AVATAR_PREFETCH_TIMEOUT_MS);
 }
 
 export async function prefetchCriticalAvatarImages(
   snapshot: AppSnapshot,
   timeoutMs = DEFAULT_AVATAR_PREFETCH_TIMEOUT_MS,
 ): Promise<boolean> {
-  return prefetchAvatarPaths(collectCriticalAvatarPaths(snapshot), { timeoutMs });
+  const criticalPaths = collectCriticalAvatarPaths(snapshot);
+  criticalAvatarImageKeys.clear();
+  for (const path of criticalPaths) {
+    const cacheKey = avatarImageCacheKey(path);
+    if (cacheKey) {
+      criticalAvatarImageKeys.add(cacheKey);
+    }
+  }
+  return prefetchAvatarPaths(criticalPaths, { timeoutMs });
 }
 
 export function scheduleDeferredAvatarPrefetch(
@@ -170,5 +249,9 @@ export function scheduleDeferredAvatarPrefetch(
 }
 
 export function clearAvatarPrefetchCacheForTests(): void {
-  prefetchedAvatarUrls.clear();
+  prefetchedAvatarImages.clear();
+  criticalAvatarImageKeys.clear();
+  pendingAvatarLoads.clear();
+  queuedAvatarLoads.length = 0;
+  activeAvatarLoads = 0;
 }

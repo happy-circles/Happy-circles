@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
@@ -13,6 +13,7 @@ import {
   rememberAvatarImageReady,
   useResolvedAvatarUrl,
 } from '@/lib/avatar';
+import { getPrefetchedAvatarImageRef } from '@/lib/avatar-prefetch';
 import { AppText } from '@/components/app-text';
 import { useAppTheme } from '@/providers/theme-provider';
 
@@ -23,6 +24,7 @@ export type AppAvatarVariant = 'person' | 'system';
 export interface AppAvatarProps {
   readonly label: string;
   readonly imageUrl?: string | null;
+  readonly priority?: 'low' | 'normal' | 'high';
   readonly size?: number;
   readonly rounded?: boolean;
   readonly fallbackBackgroundColor?: string;
@@ -33,6 +35,7 @@ export interface AppAvatarProps {
 export function AppAvatar({
   label,
   imageUrl,
+  priority = 'normal',
   size = 44,
   fallbackBackgroundColor,
   fallbackTextColor,
@@ -43,20 +46,23 @@ export function AppAvatar({
   const avatarLabel = buildAvatarLabel(label);
   const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
   const stableImageCacheKey = avatarImageCacheKey(imageUrl);
-  const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
+  // Retain the native image for this mount even if the bounded prefetch cache evicts it.
+  const prefetchedImage = useMemo(() => getPrefetchedAvatarImageRef(imageUrl), [imageUrl]);
+  const initialImageReady =
+    Boolean(prefetchedImage) || isAvatarImageReady(imageUrl, resolvedImageUrl);
   const [hasImageError, setHasImageError] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(initialImageReady);
   const hasImageSource = Boolean(imageUrl?.trim());
 
   useEffect(() => {
     setHasImageError(false);
-    setIsImageLoaded(isAvatarImageReady(imageUrl, resolvedImageUrl));
-  }, [imageUrl, resolvedImageUrl]);
+    setIsImageLoaded(Boolean(prefetchedImage) || isAvatarImageReady(imageUrl, resolvedImageUrl));
+  }, [imageUrl, prefetchedImage, resolvedImageUrl]);
 
   const isSystemAvatar = variant === 'system';
   const systemAvatarPalette = resolveHappyCirclesPalette('brand');
   const canShowImage = Boolean(
-    !isSystemAvatar && hasImageSource && resolvedImageUrl && !hasImageError,
+    !isSystemAvatar && hasImageSource && (prefetchedImage || resolvedImageUrl) && !hasImageError,
   );
   const backgroundColor = isSystemAvatar
     ? activeTheme.colors.successSoft
@@ -99,7 +105,7 @@ export function AppAvatar({
           </AppText>
           {canShowImage ? (
             <ExpoImage
-              cachePolicy="disk"
+              cachePolicy="memory-disk"
               contentFit="cover"
               onError={() => {
                 setHasImageError(true);
@@ -109,8 +115,14 @@ export function AppAvatar({
                 rememberAvatarImageReady(imageUrl, resolvedImageUrl);
                 setIsImageLoaded(true);
               }}
+              priority={priority}
               recyclingKey={stableImageCacheKey ?? resolvedImageUrl}
-              source={{ uri: resolvedImageUrl ?? undefined, cacheKey: stableImageCacheKey }}
+              source={
+                prefetchedImage ?? {
+                  uri: resolvedImageUrl ?? undefined,
+                  cacheKey: stableImageCacheKey,
+                }
+              }
               style={[
                 styles.avatarImage,
                 {

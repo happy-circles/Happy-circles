@@ -1,9 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Image as ExpoImage } from 'expo-image';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { isAvatarImageReady, rememberAvatarImageReady, useResolvedAvatarUrl } from '@/lib/avatar';
 import { theme } from '@/lib/theme';
 
 import { AppAvatar } from './app-avatar';
@@ -17,18 +14,6 @@ export interface AvatarViewerModalProps {
 }
 
 export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarViewerModalProps) {
-  const resolvedImageUrl = useResolvedAvatarUrl(imageUrl);
-  const initialImageReady = isAvatarImageReady(imageUrl, resolvedImageUrl);
-  const [hasImageError, setHasImageError] = useState(false);
-  const [isImageLoaded, setIsImageLoaded] = useState(initialImageReady);
-
-  useEffect(() => {
-    setHasImageError(false);
-    setIsImageLoaded(isAvatarImageReady(imageUrl, resolvedImageUrl));
-  }, [imageUrl, resolvedImageUrl, visible]);
-
-  const canShowImage = Boolean(resolvedImageUrl && !hasImageError);
-
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.root}>
@@ -46,28 +31,12 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
             <AppAvatar
               fallbackBackgroundColor={theme.colors.primarySoft}
               fallbackTextColor={theme.colors.primary}
-              imageUrl={null}
+              imageUrl={imageUrl}
               label={label}
+              priority="high"
               size={240}
             />
-            {canShowImage ? (
-              <ExpoImage
-                cachePolicy="disk"
-                contentFit="cover"
-                onError={() => {
-                  setHasImageError(true);
-                  setIsImageLoaded(false);
-                }}
-                onLoad={() => {
-                  rememberAvatarImageReady(imageUrl, resolvedImageUrl);
-                  setIsImageLoaded(true);
-                }}
-                recyclingKey={resolvedImageUrl}
-                source={resolvedImageUrl}
-                style={[styles.photo, { opacity: isImageLoaded ? 1 : 0 }]}
-                transition={isImageLoaded ? 0 : 160}
-              />
-            ) : null}
+            <View pointerEvents="none" style={styles.photoFrame} />
           </View>
 
           <AppText numberOfLines={2} style={styles.label}>
@@ -105,13 +74,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 42,
   },
-  photo: {
+  photoFrame: {
     ...StyleSheet.absoluteFillObject,
     borderColor: theme.glass.softEdge,
     borderRadius: 120,
     borderWidth: 2,
-    height: 240,
-    width: 240,
   },
   photoWrap: {
     borderRadius: 120,
