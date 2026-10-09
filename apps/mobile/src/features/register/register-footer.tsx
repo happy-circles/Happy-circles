@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { View, type LayoutChangeEvent } from 'react-native';
 
 import { AppText } from '@/components/app-text';
-import { ScreenFinalAction } from '@/components/screen-final-action';
+import { PrimaryAction } from '@/components/primary-action';
 import {
   transactionCategoryBackgroundColor,
   transactionCategoryColor,
@@ -81,13 +81,14 @@ export function RegisterFooter({
           </View>
         ) : null}
       </View>
-      <ScreenFinalAction
-        anchored={false}
-        bottomPadding={false}
+      <PrimaryAction
+        compact
         disabled={isSubmitting}
+        icon="checkmark"
         label={label}
         loading={isSubmitting}
         onPress={isSubmitting ? undefined : onSubmit}
+        style={{ borderRadius: activeTheme.radius.pill, minHeight: 48 }}
       />
     </View>
   );
