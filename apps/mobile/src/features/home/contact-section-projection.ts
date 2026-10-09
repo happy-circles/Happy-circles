@@ -40,6 +40,7 @@ function samePresentation(a: PeopleTargetResolution | null, b: PeopleTargetResol
 /** Keeps ordering and unchanged row objects stable when one phone changes. */
 export class ContactSectionProjection {
   private contacts: readonly ContactCandidate[] | null = null;
+  private targetCache: Readonly<Record<string, PeopleTargetResolution>> | null = null;
   private search = '';
   private rows = new Map<string, EnrichedContact>();
   private contactsByPhone = new Map<string, Set<string>>();
@@ -53,7 +54,7 @@ export class ContactSectionProjection {
     contacts: readonly ContactCandidate[];
     searchValue: string;
     targetCache: Readonly<Record<string, PeopleTargetResolution>>;
-    changedPhones: readonly string[];
+    changedPhones?: readonly string[];
   }): ContactSections {
     const search = input.searchValue.trim().toLocaleLowerCase('es-CO');
     const previousContacts = this.contacts;
@@ -111,11 +112,21 @@ export class ContactSectionProjection {
       }
       for (const group of groups) sections[group].sort(compareEnrichedContacts);
       this.sections = sections;
+      this.targetCache = input.targetCache;
       return this.sections;
     }
 
     const ids = new Set<string>();
-    for (const phone of input.changedPhones) {
+    const changedPhones = new Set(input.changedPhones);
+    // Read changes from the same immutable snapshot used to build each row.
+    // A separate notification can arrive after React has already rendered it.
+    if (this.targetCache !== input.targetCache) {
+      for (const phone of this.contactsByPhone.keys()) {
+        if (this.targetCache?.[phone] !== input.targetCache[phone]) changedPhones.add(phone);
+      }
+    }
+    this.targetCache = input.targetCache;
+    for (const phone of changedPhones) {
       for (const id of this.contactsByPhone.get(phone) ?? []) ids.add(id);
     }
     const next: Partial<Record<Group, EnrichedContact[]>> = {};

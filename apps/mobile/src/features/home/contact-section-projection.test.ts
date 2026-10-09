@@ -48,6 +48,47 @@ function resolution(
 }
 
 describe('incremental contact section projection', () => {
+  it('shows a confirmed outgoing request when the cache changes before the phone notification', () => {
+    const projection = new ContactSectionProjection();
+    const contacts = [contact(1, 'Ana'), contact(2, 'Beatriz')];
+    const phone = contacts[0].primaryPhone.phoneE164;
+    const otherPhone = contacts[1].primaryPhone.phoneE164;
+    const cache = {
+      [phone]: resolution(phone, 'active_user'),
+      [otherPhone]: resolution(otherPhone, 'active_user'),
+    };
+    const before = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: cache,
+      changedPhones: [],
+    });
+    expect(actionMetaForResolution(before.inAppContacts[0].resolution, false).label).toBe(
+      'Agregar',
+    );
+    const pending = {
+      ...cache[phone],
+      status: 'pending_friendship' as const,
+      friendshipInviteId: 'sent-request',
+      friendshipDirection: 'outgoing' as const,
+    };
+    const after = projection.update({
+      contacts,
+      searchValue: '',
+      targetCache: { ...cache, [phone]: pending },
+      changedPhones: [],
+    });
+    const row = after.inAppContacts.find((entry) => entry.contact === contacts[0])!;
+    expect(row.resolution).toBe(pending);
+    expect(actionMetaForResolution(row.resolution, false).label).toBe('Ver solicitud');
+    expect(contactResolutionDetail('mobile', row.resolution)).toBe('mobile | Solicitud pendiente');
+    expect(after.inAppContacts.find((entry) => entry.contact === contacts[1])).toBe(
+      before.inAppContacts[1],
+    );
+    expect(after.inviteContacts).toBe(before.inviteContacts);
+    expect(after.unresolvedContacts).toBe(before.unresolvedContacts);
+  });
+
   it('corrects one cached positive without rebuilding a 10000-contact list or claiming unknown accounts exist', () => {
     const projection = new ContactSectionProjection();
     const source = Array.from({ length: 10000 }, (_, index) => contact(index));

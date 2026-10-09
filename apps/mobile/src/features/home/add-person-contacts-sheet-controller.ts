@@ -12,10 +12,7 @@ import {
   uniqueContactPhoneE164List,
   type AddPersonTransactionContext,
 } from './contacts-sheet-helpers';
-import {
-  subscribeContactResolutions,
-  contactResolutionEpoch,
-} from '@/lib/contact-resolution-state';
+import { contactResolutionEpoch } from '@/lib/contact-resolution-state';
 import {
   useCreateExternalFriendshipInviteMutation,
   useCreatePeopleOutreachMutation,
@@ -42,7 +39,6 @@ export function useAddPersonContactsSheetController({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState('');
-  const changedPhonesRef = useRef(new Set<string>());
   const projectionRef = useRef(new ContactSectionProjection());
   const {
     ensurePhoneStatuses,
@@ -98,22 +94,13 @@ export function useAddPersonContactsSheetController({
   });
   useEffect(() => {
     projectionRef.current = new ContactSectionProjection();
-    changedPhonesRef.current.clear();
   }, [session.userId]);
 
-  useEffect(() => {
-    if (!session.userId) return;
-    return subscribeContactResolutions(session.userId, ({ changedPhones }) => {
-      for (const phone of changedPhones) changedPhonesRef.current.add(phone);
-    });
-  }, [session.userId]);
   const contactSections = projectionRef.current.update({
     contacts,
     searchValue,
     targetCache,
-    changedPhones: [...changedPhonesRef.current],
   });
-  changedPhonesRef.current.clear();
   const { inAppContacts, unresolvedContacts, inviteContacts } = contactSections;
   const {
     handleBarcodeScanned,
