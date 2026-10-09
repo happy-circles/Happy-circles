@@ -401,6 +401,19 @@ export interface AccountInviteActionResult {
   readonly actorRole?: 'claimant';
 }
 
+export interface CurrentOutreachDeliveryValidation {
+  readonly status: 'current';
+  readonly ownerUserId: string;
+  readonly phoneE164: string;
+  readonly inviteId: string;
+  readonly deliveryId: string;
+  readonly channel: 'remote';
+  readonly deliveryStatus: 'issued' | 'authenticated';
+  readonly validatedAt: string;
+  readonly expiresAt: string;
+  readonly inviteExpiresAt: string;
+}
+
 export interface PeopleOutreachResult {
   readonly kind: 'friendship' | 'account_invite' | 'already_related';
   readonly status:
@@ -415,6 +428,7 @@ export interface PeopleOutreachResult {
   readonly inviteId?: string | null;
   readonly friendshipDirection?: 'incoming' | 'outgoing';
   readonly result?: FriendshipInviteActionResult | AccountInviteDeliveryResult;
+  readonly deliveryValidation?: CurrentOutreachDeliveryValidation;
 }
 
 export interface ActionableItem {

@@ -40,6 +40,7 @@ export function useCreatePeopleOutreachMutation() {
       readonly intendedRecipientPhoneE164: string;
       readonly intendedRecipientPhoneLabel?: string;
     }) => {
+      if (!userId) throw new Error('Inicia sesión para enviar esta invitación.');
       const phoneE164 = input.intendedRecipientPhoneE164;
       const previous = userId ? readContactResolutions(userId)[phoneE164] : undefined;
       const expectedGenerations = userId
@@ -59,6 +60,7 @@ export function useCreatePeopleOutreachMutation() {
             intendedRecipientPhoneE164: input.intendedRecipientPhoneE164,
             intendedRecipientPhoneLabel: input.intendedRecipientPhoneLabel,
           }),
+          { expectedUserId: userId },
         );
         if (userId) {
           const confirmed = contactResolutionForOutreach(phoneE164, response, previous);

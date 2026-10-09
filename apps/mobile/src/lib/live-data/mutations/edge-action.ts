@@ -68,6 +68,9 @@ export async function invokeParsedEdgeFunction<TPayload extends Record<string, u
     const { data } = await assertSupabaseClient().auth.getSession();
     if (!data.session) throw new Error('Inicia sesión para continuar.');
     const actorId = data.session.user.id;
+    if (options?.expectedUserId !== undefined && options.expectedUserId !== actorId) {
+      throw new Error('La sesión cambió. Vuelve a intentar la acción.');
+    }
     const intent: Record<string, unknown> = { ...payload };
     delete intent.idempotencyKey;
     const signature = JSON.stringify([actorId, name, intent]);
@@ -75,7 +78,7 @@ export async function invokeParsedEdgeFunction<TPayload extends Record<string, u
       invokeSupabaseFunction<TPayload, TResult>(
         name,
         { ...payload, idempotencyKey },
-        { ...options, expectedUserId: actorId },
+        { ...options, expectedUserId: options?.expectedUserId ?? actorId },
       ),
     );
   }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PeopleOutreachResult, PeopleTargetResolution } from '../types-runtime';
+import type * as EdgeActionModule from './edge-action';
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -9,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   forgetIntentions: vi.fn(),
   idempotency: vi.fn(),
+  useSession: vi.fn(),
+  getSession: vi.fn(),
 }));
 vi.mock('@tanstack/react-query', () => ({
   useMutation: (options: {
@@ -23,7 +26,7 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }));
 vi.mock('@/providers/session-provider', () => ({
-  useSession: () => ({ userId: 'mutation-user' }),
+  useSession: mocks.useSession,
 }));
 vi.mock('@/features/home/contact-resolution-service', () => ({ resolveContactPhones: vi.fn() }));
 vi.mock('@/features/home/people-target-resolution-cache', () => ({
@@ -35,18 +38,23 @@ vi.mock('@/lib/query-client', () => ({
 }));
 vi.mock('../client', () => ({
   invalidateAppSnapshot: mocks.invalidateSnapshot,
+  invokeSupabaseFunction: mocks.invoke,
   assertSupabaseClient: () => ({
-    auth: { getSession: async () => ({ data: { session: { user: { id: 'mutation-user' } } } }) },
+    auth: { getSession: mocks.getSession },
   }),
 }));
-vi.mock('./edge-action', () => ({
-  invokeParsedEdgeFunction: mocks.invoke,
+vi.mock('./edge-action', async () => ({
+  ...(await vi.importActual<typeof EdgeActionModule>('./edge-action')),
   withIdempotencyKey: mocks.idempotency,
   forgetInvitationIntentions: mocks.forgetIntentions,
 }));
 
 import { useCreatePeopleOutreachMutation } from './people-outreach';
 import { invalidateInvitationState } from './contact-invalidation';
+import {
+  clearImmediateInviteRequestUser,
+  readImmediateInviteRequest,
+} from '@/features/people/immediate-invite-request';
 import {
   applyContactActionResult,
   captureContactGenerations,
@@ -92,14 +100,24 @@ const response: PeopleOutreachResult = {
 
 beforeEach(() => {
   clearContactResolutionUser('mutation-user');
+  clearContactResolutionUser('other-account');
+  clearImmediateInviteRequestUser('mutation-user');
+  clearImmediateInviteRequestUser('other-account');
   vi.clearAllMocks();
+  mocks.useSession.mockReturnValue({ userId: 'mutation-user' });
+  mocks.getSession.mockReset().mockResolvedValue({
+    data: { session: { user: { id: 'mutation-user' } } },
+  });
   mocks.persist.mockResolvedValue(undefined);
   mocks.invalidateCache.mockResolvedValue(undefined);
   // These queries deliberately never finish: action completion must be independent of them.
   mocks.invalidateSnapshot.mockImplementation(() => new Promise(() => {}));
   mocks.invalidateQueries.mockImplementation(() => new Promise(() => {}));
   mocks.invoke.mockResolvedValue(response);
-  mocks.idempotency.mockImplementation((_operation: string, payload: unknown) => payload);
+  mocks.idempotency.mockImplementation((_operation: string, payload: Record<string, unknown>) => ({
+    ...payload,
+    idempotencyKey: 'outreach-test-key',
+  }));
 });
 
 describe('outreach mutation cache confirmation', () => {
@@ -111,6 +129,11 @@ describe('outreach mutation cache confirmation', () => {
     const beforeOther = readContactResolutions('mutation-user')[otherPhone];
     await expect(useCreatePeopleOutreachMutation().mutateAsync(input)).resolves.toEqual(response);
     expect(mocks.invoke).toHaveBeenCalledOnce();
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      'create-people-outreach',
+      expect.objectContaining({ intendedRecipientPhoneE164: phone }),
+      { expectedUserId: 'mutation-user' },
+    );
     expect(mocks.idempotency).toHaveBeenCalledWith(
       'create_people_outreach_remote',
       expect.objectContaining({ intendedRecipientPhoneE164: phone }),
@@ -131,13 +154,19 @@ describe('outreach mutation cache confirmation', () => {
   it('does not overwrite a newer accepted event that arrives while the command is pending', async () => {
     mergeContactResolutions('mutation-user', [initial]);
     let finish!: (result: PeopleOutreachResult) => void;
+    let started!: () => void;
+    const rpcStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     mocks.invoke.mockImplementation(
       () =>
         new Promise<PeopleOutreachResult>((resolve) => {
           finish = resolve;
+          started();
         }),
     );
     const action = useCreatePeopleOutreachMutation().mutateAsync(input);
+    await rpcStarted;
     applyContactActionResult({ userId: 'mutation-user', phoneE164: phone }, 'accepted');
     finish(response);
     await expect(action).resolves.toEqual(response);
@@ -170,6 +199,53 @@ describe('outreach mutation cache confirmation', () => {
     );
     expect(isContactResolutionWritePending('mutation-user', phone)).toBe(false);
     expect(mocks.persist).not.toHaveBeenCalled();
+  });
+
+  it('rejects account A actions before RPC when the actual session is already account B', async () => {
+    mergeContactResolutions('mutation-user', [initial]);
+    mergeContactResolutions('other-account', [{ ...initial, matchedUserId: 'other' }]);
+    const beforeA = readContactResolutions('mutation-user')[phone];
+    const beforeB = readContactResolutions('other-account')[phone];
+    const mutation = useCreatePeopleOutreachMutation();
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'other-account' } } } });
+    await expect(mutation.mutateAsync(input)).rejects.toThrow('sesión cambió');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.persist).not.toHaveBeenCalled();
+    expect(mocks.invalidateSnapshot).not.toHaveBeenCalled();
+    expect(readContactResolutions('mutation-user')[phone]).toBe(beforeA);
+    expect(readContactResolutions('other-account')[phone]).toBe(beforeB);
+    expect(readImmediateInviteRequest('mutation-user', 'confirmed-invite')).toBeNull();
+    expect(readImmediateInviteRequest('other-account', 'confirmed-invite')).toBeNull();
+    expect(isContactResolutionWritePending('mutation-user', phone)).toBe(false);
+  });
+
+  it('rejects a signed-out hook before any RPC or contact write barrier', async () => {
+    mergeContactResolutions('mutation-user', [initial]);
+    const before = readContactResolutions('mutation-user')[phone];
+    mocks.useSession.mockReturnValue({ userId: null });
+    await expect(useCreatePeopleOutreachMutation().mutateAsync(input)).rejects.toThrow(
+      'Inicia sesión',
+    );
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.idempotency).not.toHaveBeenCalled();
+    expect(mocks.persist).not.toHaveBeenCalled();
+    expect(mocks.invalidateSnapshot).not.toHaveBeenCalled();
+    expect(readContactResolutions('mutation-user')[phone]).toBe(before);
+    expect(isContactResolutionWritePending('mutation-user', phone)).toBe(false);
+  });
+
+  it('rejects logout after the hook captured its actor without caching an invitation', async () => {
+    mergeContactResolutions('mutation-user', [initial]);
+    const before = readContactResolutions('mutation-user')[phone];
+    const mutation = useCreatePeopleOutreachMutation();
+    mocks.getSession.mockResolvedValue({ data: { session: null } });
+    await expect(mutation.mutateAsync(input)).rejects.toThrow('Inicia sesión');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.persist).not.toHaveBeenCalled();
+    expect(readContactResolutions('mutation-user')[phone]).toBe(before);
+    expect(readImmediateInviteRequest('mutation-user', 'confirmed-invite')).toBeNull();
+    expect(isContactResolutionWritePending('mutation-user', phone)).toBe(false);
   });
 });
 

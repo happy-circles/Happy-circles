@@ -19,7 +19,10 @@ import {
 import { showBlockedActionAlert, type ActionFeedbackVariant } from '@/lib/action-feedback';
 import { showGlobalFeedback } from '@/lib/global-feedback';
 import { pushRoute } from '@/lib/navigation';
-import { assertAccountDeliveryCurrent } from '@/features/invites/invite-delivery-validation';
+import {
+  assertCurrentOutreachActor,
+  assertCurrentOutreachDelivery,
+} from './current-outreach-delivery';
 import { rememberImmediateInviteRequest } from '@/features/people/immediate-invite-request';
 import {
   contactResolutionForOutreach,
@@ -104,30 +107,23 @@ export function useAddPersonOutreachActions({
     setContactActionFeedback(null);
   }, []);
 
-  const showContactActionLoading = useCallback(
-    (input: {
-      readonly alias: string;
-      readonly message?: string;
-      readonly mode?: ContactActionFeedbackMode;
-      readonly title?: string;
-    }) => {
-      setContactActionFeedback({
-        alias: input.alias,
-        message: input.message,
-        mode: input.mode ?? 'prepare',
-        title: input.title,
-        variant: 'loading',
-      });
-    },
-    [],
-  );
+  const showContactActionLoading = useCallback((alias: string) => {
+    setContactActionFeedback({ alias, mode: 'prepare', variant: 'loading' });
+  }, []);
 
   const resetPendingContactSelection = useCallback(() => {
     setPendingContactSelection(null);
   }, []);
 
-  async function shareAccountInviteLink(alias: string, delivery: AccountInviteDeliveryResult) {
-    await assertAccountDeliveryCurrent(delivery);
+  async function shareAccountInviteLink(
+    alias: string,
+    delivery: AccountInviteDeliveryResult,
+    phoneE164: string,
+    validation: PeopleOutreachResult['deliveryValidation'],
+    onReady: () => void,
+  ) {
+    const deliveryInput = { delivery, expectedUserId: userId, phoneE164, validation };
+    await assertCurrentOutreachDelivery(deliveryInput);
     const inviteLink = buildAppInviteLink(delivery.deliveryToken);
     const shareMessage = buildAccountInviteShareMessage({
       amountMinor: transactionContext?.amountMinor ?? null,
@@ -138,38 +134,16 @@ export function useAddPersonOutreachActions({
     });
 
     setMessage(`Acceso listo para ${alias}. Elige cómo enviarlo.`);
-    showContactActionLoading({
-      alias,
-      message: 'Tu telefono esta abriendo las opciones para enviar el acceso.',
-      mode: 'share',
-      title: 'Abriendo compartir',
-    });
+    onReady();
 
+    let result;
     try {
-      const result = await Share.share({
+      result = await Share.share({
         message: shareMessage,
         title: 'Invitación a Happy Circles',
       });
-
-      if (result.action === Share.dismissedAction) {
-        setMessage(`Acceso privado listo para ${alias}. Si no lo enviaste, toca Reenviar.`);
-        showGlobalFeedback({
-          message: `Puedes reenviarlo a ${alias}.`,
-          title: 'Acceso listo',
-          tone: 'neutral',
-        });
-        return;
-      }
-
-      setMessage(
-        `Acceso privado listo para ${alias}. Quedó en Enviadas como "Pendiente de abrir".`,
-      );
-      showGlobalFeedback({
-        message: `Pendiente de abrir con ${alias}.`,
-        title: 'Acceso privado listo',
-        tone: 'success',
-      });
     } catch {
+      await assertCurrentOutreachDelivery(deliveryInput);
       await Clipboard.setStringAsync(inviteLink);
       setMessage(`No pudimos abrir compartir. Copiamos el enlace privado de ${alias}.`);
       showGlobalFeedback({
@@ -177,7 +151,25 @@ export function useAddPersonOutreachActions({
         title: 'Enlace copiado',
         tone: 'neutral',
       });
+      return;
     }
+    await assertCurrentOutreachActor(userId);
+    if (result.action === Share.dismissedAction) {
+      setMessage(`Acceso privado listo para ${alias}. Si no lo enviaste, toca Reenviar.`);
+      showGlobalFeedback({
+        message: `Puedes reenviarlo a ${alias}.`,
+        title: 'Acceso listo',
+        tone: 'neutral',
+      });
+      return;
+    }
+
+    setMessage(`Acceso privado listo para ${alias}. Quedó en Enviadas como "Pendiente de abrir".`);
+    showGlobalFeedback({
+      message: `Pendiente de abrir con ${alias}.`,
+      title: 'Acceso privado listo',
+      tone: 'success',
+    });
   }
 
   function openPendingRequest(
@@ -218,6 +210,8 @@ export function useAddPersonOutreachActions({
     actionInFlightRef.current = true;
     setBusyKey(input.phoneE164);
     setMessage(`Enviando invitación a ${input.alias}.`);
+    showContactActionLoading(input.alias);
+    let sendingFinished = false;
 
     try {
       const response = await createPeopleOutreach.mutateAsync({
@@ -283,7 +277,17 @@ export function useAddPersonOutreachActions({
         throw new Error('No pudimos preparar el enlace de acceso para este contacto.');
       }
 
-      await shareAccountInviteLink(input.alias, response.result);
+      await shareAccountInviteLink(
+        input.alias,
+        response.result,
+        input.phoneE164,
+        response.deliveryValidation,
+        () => {
+          sendingFinished = true;
+          hideContactActionFeedback();
+          setBusyKey(null);
+        },
+      );
     } catch (error) {
       const failureMessage =
         error instanceof Error ? error.message : 'No se pudo completar este movimiento.';
@@ -292,7 +296,7 @@ export function useAddPersonOutreachActions({
     } finally {
       actionInFlightRef.current = false;
       hideContactActionFeedback();
-      setBusyKey(null);
+      if (!sendingFinished) setBusyKey(null);
     }
   }
 

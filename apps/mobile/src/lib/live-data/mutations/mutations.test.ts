@@ -81,7 +81,7 @@ import {
   useResumeAccountInviteMutation,
 } from './account-invites';
 import { resolveAvatarUploadMetadata, uploadAvatar } from './avatar-upload';
-import { withIdempotencyKey } from './edge-action';
+import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
@@ -151,6 +151,52 @@ describe('live-data mutation helpers', () => {
       idempotencyKey: 'create_thing_fixed',
       inviteId: 'invite-1',
     });
+  });
+
+  it('rejects a provided actor mismatch before creating a retriable intention or invoking Edge', async () => {
+    mocks.assertSupabaseClient.mockReturnValue({
+      auth: { getSession: async () => ({ data: { session: { user: { id: 'account-b' } } } }) },
+    });
+    const payload = {
+      idempotencyKey: 'outreach-retry-key',
+      intendedRecipientPhoneE164: '+573001234567',
+    };
+    await expect(
+      invokeParsedEdgeFunction('create-people-outreach', { parse: () => payload }, payload, {
+        expectedUserId: 'account-a',
+      }),
+    ).rejects.toThrow('sesión cambió');
+    expect(mocks.invokeSupabaseFunction).not.toHaveBeenCalled();
+    expect(mocks.createIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it('preserves a provided matching actor when invoking the retriable command', async () => {
+    mocks.assertSupabaseClient.mockReturnValue({
+      auth: { getSession: async () => ({ data: { session: { user: { id: 'account-a' } } } }) },
+    });
+    const payload = { idempotencyKey: 'outreach-matching-key' };
+    await invokeParsedEdgeFunction('create-people-outreach', { parse: () => payload }, payload, {
+      expectedUserId: 'account-a',
+      authorization: 'session',
+    });
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledExactlyOnceWith(
+      'create-people-outreach',
+      expect.any(Object),
+      { expectedUserId: 'account-a', authorization: 'session' },
+    );
+  });
+
+  it('keeps legacy invitation commands bound to the current actor when no option is provided', async () => {
+    mocks.assertSupabaseClient.mockReturnValue({
+      auth: { getSession: async () => ({ data: { session: { user: { id: 'legacy-actor' } } } }) },
+    });
+    const payload = { idempotencyKey: 'outreach-legacy-key' };
+    await invokeParsedEdgeFunction('create-people-outreach', { parse: () => payload }, payload);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledExactlyOnceWith(
+      'create-people-outreach',
+      expect.any(Object),
+      { expectedUserId: 'legacy-actor' },
+    );
   });
 
   it('normalizes avatar upload metadata from content type or URI', () => {

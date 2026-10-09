@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   validateDelivery: vi.fn(),
   blocked: vi.fn(),
   clipboard: vi.fn(),
+  getSession: vi.fn(),
   stateSetters: [] as Array<ReturnType<typeof vi.fn>>,
 }));
 vi.mock('react', () => ({
@@ -39,6 +40,9 @@ vi.mock('@/lib/global-feedback', () => ({ showGlobalFeedback: mocks.feedback }))
 vi.mock('@/lib/navigation', () => ({ pushRoute: mocks.navigate }));
 vi.mock('@/lib/action-feedback', () => ({ showBlockedActionAlert: mocks.blocked }));
 vi.mock('@/providers/session-provider', () => ({ useSession: () => ({ userId: 'action-user' }) }));
+vi.mock('@/lib/live-data/client', () => ({
+  assertSupabaseClient: () => ({ auth: { getSession: mocks.getSession } }),
+}));
 
 import { useAddPersonOutreachActions } from './add-person-outreach-actions';
 import {
@@ -74,6 +78,42 @@ const pending: PeopleTargetResolution = {
   accountInviteId: null,
   accountInviteStatus: null,
 };
+const account: PeopleOutreachResult = {
+  kind: 'account_invite',
+  status: 'no_account',
+  matchedUserId: null,
+  displayName: null,
+  result: {
+    inviteId: 'account',
+    deliveryId: 'delivery',
+    deliveryToken: 'private-token',
+    status: 'pending_activation',
+    channel: 'remote',
+    originChannel: 'remote',
+    expiresAt: '2099-01-01T00:00:00Z',
+    inviteExpiresAt: '2099-01-01T00:00:00Z',
+    intendedRecipientAlias: 'Ana',
+    intendedRecipientPhoneE164: phone,
+    intendedRecipientPhoneLabel: null,
+  },
+};
+function currentAccount(): PeopleOutreachResult {
+  return {
+    ...account,
+    deliveryValidation: {
+      status: 'current',
+      ownerUserId: 'action-user',
+      phoneE164: phone,
+      inviteId: 'account',
+      deliveryId: 'delivery',
+      channel: 'remote',
+      deliveryStatus: 'issued',
+      validatedAt: new Date().toISOString(),
+      expiresAt: '2099-01-01T00:00:00Z',
+      inviteExpiresAt: '2099-01-01T00:00:00Z',
+    },
+  };
+}
 
 function actionsFor(result = response, cached?: PeopleTargetResolution) {
   const mutateAsync = vi.fn().mockResolvedValue(result);
@@ -105,6 +145,10 @@ beforeEach(() => {
   mocks.stateSetters = [];
   mocks.validateDelivery.mockResolvedValue(undefined);
   mocks.share.mockResolvedValue({ action: 'sharedAction' });
+  mocks.getSession.mockReset().mockResolvedValue({
+    data: { session: { user: { id: 'action-user' } } },
+    error: null,
+  });
 });
 
 describe('contact outreach command', () => {
@@ -117,7 +161,10 @@ describe('contact outreach command', () => {
       expect(resolver).not.toHaveBeenCalled();
       expect(ensurePhoneStatuses).not.toHaveBeenCalled();
       expect(setBusyKey.mock.calls).toEqual([[phone], [null]]);
-      expect(mocks.stateSetters[1].mock.calls).toEqual([[null]]);
+      expect(mocks.stateSetters[1].mock.calls).toEqual([
+        [{ alias: 'Ana', mode: 'prepare', variant: 'loading' }],
+        [null],
+      ]);
       expect(vi.getTimerCount()).toBe(0);
       expect(mocks.feedback).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Solicitud enviada' }),
@@ -187,25 +234,6 @@ describe('contact outreach command', () => {
   });
 
   it('keeps current-delivery validation before exposing an account access token', async () => {
-    const account: PeopleOutreachResult = {
-      kind: 'account_invite',
-      status: 'no_account',
-      matchedUserId: null,
-      displayName: null,
-      result: {
-        inviteId: 'account',
-        deliveryId: 'delivery',
-        deliveryToken: 'private-token',
-        status: 'pending_activation',
-        channel: 'remote',
-        originChannel: 'remote',
-        expiresAt: 'future',
-        inviteExpiresAt: 'future',
-        intendedRecipientAlias: 'Ana',
-        intendedRecipientPhoneE164: phone,
-        intendedRecipientPhoneLabel: null,
-      },
-    };
     mocks.validateDelivery.mockRejectedValue(new Error('El acceso fue revocado.'));
     const { actions } = actionsFor(account);
     await actions.handleCreateOutreach(command);
@@ -213,6 +241,110 @@ describe('contact outreach command', () => {
     expect(mocks.share).not.toHaveBeenCalled();
     expect(mocks.clipboard).not.toHaveBeenCalled();
     expect(mocks.blocked).toHaveBeenCalledWith('El acceso fue revocado.', expect.anything());
+  });
+
+  it('ends sending before opening share, without a loading overlay behind it or another request, and keeps double-tap protection', async () => {
+    const { actions, mutateAsync, setBusyKey } = actionsFor(currentAccount());
+    let started!: () => void;
+    const shareStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finish!: (result: { action: string }) => void;
+    mocks.share.mockImplementation(() => {
+      expect(setBusyKey).toHaveBeenLastCalledWith(null);
+      expect(mocks.stateSetters[1]).toHaveBeenLastCalledWith(null);
+      started();
+      return new Promise<{ action: string }>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const sending = actions.handleCreateOutreach(command);
+    await shareStarted;
+    expect(mocks.validateDelivery).not.toHaveBeenCalled();
+    await actions.handleCreateOutreach(command);
+    expect(mutateAsync).toHaveBeenCalledOnce();
+    finish({ action: 'dismissedAction' });
+    await sending;
+    expect(setBusyKey.mock.calls).toEqual([[phone], [null]]);
+    expect(mocks.feedback).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Acceso listo', tone: 'neutral' }),
+    );
+    expect(mocks.clipboard).not.toHaveBeenCalled();
+  });
+
+  it('keeps sending until a legacy preview finishes, then releases it before sharing', async () => {
+    const { actions, setBusyKey } = actionsFor(account);
+    let started!: () => void;
+    const previewStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finish!: () => void;
+    mocks.validateDelivery.mockImplementation(() => {
+      started();
+      return new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    mocks.share.mockImplementation(async () => {
+      expect(setBusyKey).toHaveBeenLastCalledWith(null);
+      return { action: 'sharedAction' };
+    });
+    const sending = actions.handleCreateOutreach(command);
+    await previewStarted;
+    expect(setBusyKey).toHaveBeenLastCalledWith(phone);
+    expect(mocks.stateSetters[1]).toHaveBeenLastCalledWith({
+      alias: 'Ana',
+      mode: 'prepare',
+      variant: 'loading',
+    });
+    expect(mocks.share).not.toHaveBeenCalled();
+    finish();
+    await sending;
+    expect(mocks.validateDelivery).toHaveBeenCalledOnce();
+    expect(mocks.share).toHaveBeenCalledOnce();
+  });
+
+  it('copies the ready link if the system share sheet cannot open', async () => {
+    const { actions, setBusyKey } = actionsFor(currentAccount());
+    mocks.share.mockRejectedValue(new Error('Share unavailable'));
+    await actions.handleCreateOutreach(command);
+    expect(mocks.validateDelivery).not.toHaveBeenCalled();
+    expect(mocks.clipboard).toHaveBeenCalledExactlyOnceWith('invite:private-token');
+    expect(setBusyKey.mock.calls).toEqual([[phone], [null]]);
+    expect(mocks.feedback).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Enlace copiado' }),
+    );
+  });
+
+  it('does not expose a ready link when the active account changed after creation', async () => {
+    const { actions } = actionsFor(currentAccount());
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'new-account' } } },
+      error: null,
+    });
+    await actions.handleCreateOutreach(command);
+    expect(mocks.share).not.toHaveBeenCalled();
+    expect(mocks.clipboard).not.toHaveBeenCalled();
+    expect(mocks.blocked).toHaveBeenCalledWith(
+      expect.stringContaining('sesión cambió'),
+      expect.anything(),
+    );
+  });
+
+  it('does not copy the previous account link after logout while share was pending', async () => {
+    const { actions } = actionsFor(currentAccount());
+    mocks.share.mockImplementation(async () => {
+      mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
+      throw new Error('Share dismissed by logout');
+    });
+    await actions.handleCreateOutreach(command);
+    expect(mocks.share).toHaveBeenCalledOnce();
+    expect(mocks.clipboard).not.toHaveBeenCalled();
+    expect(mocks.feedback).not.toHaveBeenCalled();
+    expect(mocks.blocked).toHaveBeenCalledWith(
+      expect.stringContaining('sesión cambió'),
+      expect.anything(),
+    );
   });
 
   it('does not reopen a stale pending response after a newer local accepted event', async () => {
