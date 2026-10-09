@@ -14,11 +14,13 @@ export function useSensitiveMutationGuard() {
   return async <T>(
     actionLabel: string,
     action: (expectedUserId: string) => Promise<T>,
+    forceConfirmation?: 'device' | 'sensitive',
   ): Promise<T> =>
     runAuthorizedMutationAction({
       actionLabel,
       readSession: () => sessionRef.current,
       confirmIdentity,
       action,
+      forceConfirmation,
     });
 }

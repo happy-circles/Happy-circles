@@ -263,6 +263,7 @@ export async function readFunctionErrorDetails(error: unknown): Promise<Function
 }
 
 export function isJwtAuthError(details: FunctionErrorDetails | string): boolean {
+  if (typeof details !== 'string' && details.code === 'recent_auth_required') return false;
   const normalized =
     typeof details === 'string'
       ? details.trim().toLocaleLowerCase('en-US')
@@ -271,9 +272,11 @@ export function isJwtAuthError(details: FunctionErrorDetails | string): boolean 
   return (
     normalized.includes('invalid jwt') ||
     normalized.includes('jwt expired') ||
+    normalized.includes('jwt has expired') ||
     normalized.includes('jwt malformed') ||
     normalized.includes('bad jwt') ||
-    normalized.includes('auth_required') ||
+    /(?:^|\s|:)auth_required(?:$|\s|:)/.test(normalized) ||
+    normalized.includes('auth session missing') ||
     normalized.includes('missing authorization header')
   );
 }

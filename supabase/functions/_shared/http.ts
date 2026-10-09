@@ -106,8 +106,10 @@ function normalizeError(error: unknown): SafeError {
   if (
     normalized.includes('missing authorization header') ||
     normalized.includes('unauthorized') ||
+    normalized.includes('auth session missing') ||
     normalized.includes('invalid jwt') ||
     normalized.includes('jwt expired') ||
+    normalized.includes('jwt has expired') ||
     normalized.includes('jwt malformed') ||
     normalized.includes('bad jwt')
   ) {
@@ -168,6 +170,14 @@ function normalizeError(error: unknown): SafeError {
       status: 400,
       code: 'identity_incomplete',
       message: 'Completa tu nombre, celular y confirma tu correo antes de enviar solicitudes.',
+    };
+  }
+
+  if (normalized.includes('active_relationship_required')) {
+    return {
+      status: 409,
+      code: 'active_relationship_required',
+      message: 'Necesitas una relación activa con esta persona antes de crear un movimiento.',
     };
   }
 

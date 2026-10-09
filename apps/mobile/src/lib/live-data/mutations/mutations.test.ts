@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createIdempotencyKey: vi.fn((prefix: string) => `${prefix}_fixed`),
   createSupportId: vi.fn(() => 'HC-TEST-0000-0000'),
   confirmIdentity: vi.fn(),
+  confirmCreatedRequestInCache: vi.fn(),
   invalidateAppSnapshot: vi.fn(),
   invokeSupabaseFunction: vi.fn(),
   readFunctionErrorDetails: vi.fn(),
@@ -57,6 +58,10 @@ vi.mock('../client', () => ({
 
 vi.mock('../../analytics-client', () => ({
   recordProductEventSafe: mocks.recordProductEventSafe,
+}));
+
+vi.mock('./confirmed-request-cache', () => ({
+  confirmCreatedRequestInCache: mocks.confirmCreatedRequestInCache,
 }));
 
 vi.mock('../../avatar-prefetch', () => ({ prefetchAvatarPaths: vi.fn() }));
@@ -132,6 +137,7 @@ describe('live-data mutation helpers', () => {
     vi.clearAllMocks();
     mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_fixed`);
     mocks.invokeSupabaseFunction.mockResolvedValue({});
+    mocks.invalidateAppSnapshot.mockReset().mockResolvedValue(undefined);
     mocks.confirmIdentity.mockResolvedValue(true);
     mocks.readFunctionErrorDetails.mockResolvedValue({
       code: 'edge_failed',
@@ -259,6 +265,7 @@ describe('live-data mutation hooks', () => {
     vi.clearAllMocks();
     mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_fixed`);
     mocks.invokeSupabaseFunction.mockResolvedValue({});
+    mocks.invalidateAppSnapshot.mockReset().mockResolvedValue(undefined);
     mocks.confirmIdentity.mockResolvedValue(true);
     mocks.useSession.mockReturnValue({
       ...trustedSession(),
@@ -422,6 +429,114 @@ describe('live-data mutation hooks', () => {
       screenName: 'register',
     });
     expect(mocks.invalidateAppSnapshot).toHaveBeenCalled();
+  });
+
+  it('starts creation feedback only after authorization and reuses the intention on server recovery', async () => {
+    mocks.useSession.mockReturnValue(trustedSession({ isAuthorizedDeviceSession: false }));
+    let finishConfirmation: (value: boolean) => void = () => undefined;
+    mocks.confirmIdentity.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishConfirmation = resolve;
+        }),
+    );
+    mocks.invokeSupabaseFunction
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Authorization required'), {
+          code: 'device_authorization_required',
+        }),
+      )
+      .mockResolvedValueOnce({ requestId: 'created', status: 'pending' });
+    const runRequest = vi.fn((action: () => Promise<unknown>) => action());
+    const input = {
+      amountMinor: 1200,
+      creditorUserId: '33333333-3333-4333-8333-333333333333',
+      debtorUserId: '22222222-2222-4222-8222-222222222222',
+      description: 'Lunch',
+      responderUserId: '11111111-1111-4111-8111-111111111111',
+    };
+    const mutation = useCreateRequestMutation({ runRequest }) as unknown as MutationOptions<
+      typeof input
+    >;
+    const save = mutation.mutationFn(input);
+    expect(runRequest).not.toHaveBeenCalled();
+    expect(mocks.invokeSupabaseFunction).not.toHaveBeenCalled();
+    finishConfirmation(true);
+    await expect(save).resolves.toEqual({ requestId: 'created', status: 'pending' });
+    expect(runRequest).toHaveBeenCalledTimes(2);
+    expect(mocks.confirmIdentity).toHaveBeenCalledTimes(2);
+    const calls = mocks.invokeSupabaseFunction.mock.calls;
+    expect(calls[0]?.[1]).toEqual(calls[1]?.[1]);
+    expect(calls[0]?.[2]).toEqual({ expectedUserId: 'user-1' });
+    expect(calls[1]?.[2]).toEqual({ expectedUserId: 'user-1' });
+  });
+
+  it.each(['pending', 'failed'] as const)(
+    'finishes confirmed movement creation while screen synchronization is %s',
+    async (refreshState) => {
+      const response = { requestId: 'created-request', status: 'pending' };
+      const input = {
+        amountMinor: 1200,
+        creditorUserId: '33333333-3333-4333-8333-333333333333',
+        debtorUserId: '22222222-2222-4222-8222-222222222222',
+        description: 'Lunch',
+        responderUserId: '11111111-1111-4111-8111-111111111111',
+      };
+      mocks.invokeSupabaseFunction.mockResolvedValue(response);
+      if (refreshState === 'pending') {
+        mocks.invalidateAppSnapshot.mockImplementation(() => new Promise(() => {}));
+      } else {
+        mocks.invalidateAppSnapshot.mockRejectedValue(new Error('Synchronization failed'));
+      }
+      const mutation = useCreateRequestMutation() as unknown as MutationOptions<typeof input>;
+      const save = async () => {
+        const data = await mutation.mutationFn(input);
+        await mutation.onSuccess?.(data, input);
+        return data;
+      };
+
+      await expect(save()).resolves.toEqual(response);
+      expect(mocks.confirmCreatedRequestInCache).toHaveBeenCalledWith('user-1', input, response);
+      expect(mocks.invalidateAppSnapshot).toHaveBeenCalledOnce();
+      expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('does not publish a pending movement when the server rejects creation', async () => {
+    mocks.invokeSupabaseFunction.mockRejectedValue(new Error('Creation failed'));
+    const mutation = useCreateRequestMutation() as unknown as MutationOptions;
+
+    await expect(
+      mutation.mutationFn({
+        amountMinor: 1200,
+        creditorUserId: '33333333-3333-4333-8333-333333333333',
+        debtorUserId: '22222222-2222-4222-8222-222222222222',
+        description: 'Lunch',
+        responderUserId: '11111111-1111-4111-8111-111111111111',
+      }),
+    ).rejects.toThrow('Creation failed');
+    expect(mocks.confirmCreatedRequestInCache).not.toHaveBeenCalled();
+    expect(mocks.invalidateAppSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('binds forced authorization to the submitted intention without sending UI recovery fields', async () => {
+    const input = {
+      amountMinor: 1200,
+      creditorUserId: '33333333-3333-4333-8333-333333333333',
+      debtorUserId: '22222222-2222-4222-8222-222222222222',
+      description: 'Lunch',
+      responderUserId: '11111111-1111-4111-8111-111111111111',
+      forceConfirmation: 'device' as const,
+    };
+    const mutation = useCreateRequestMutation() as unknown as MutationOptions<typeof input>;
+    await mutation.mutationFn(input);
+    expect(mocks.confirmIdentity).toHaveBeenCalledExactlyOnceWith({
+      actionLabel: 'crear el movimiento',
+      purpose: 'device',
+      force: true,
+    });
+    expect(mocks.invokeSupabaseFunction.mock.calls[0]?.[1]).not.toHaveProperty('forceConfirmation');
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
   });
 
   it('guards settlement approval and records the approval event', async () => {

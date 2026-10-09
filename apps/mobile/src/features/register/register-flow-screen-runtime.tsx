@@ -27,7 +27,6 @@ import { HappyCirclesMotion } from '@/components/happy-circles-motion';
 import { MessageBanner } from '@/components/message-banner';
 import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
 import { PrimaryAction } from '@/components/primary-action';
-import { ScreenFinalAction } from '@/components/screen-final-action';
 import { TransactionCategoryPicker } from '@/components/transaction-category-picker';
 import { TransactionActionFeedbackOverlay } from '@/components/transaction-action-feedback-overlay';
 import { AddPersonContactsSheet } from '@/features/home/add-person-contacts-sheet';
@@ -41,16 +40,13 @@ import {
   useCreateRequestMutation,
 } from '@/lib/live-data';
 import { directionVisual } from '@/lib/direction-ui';
-import { backOrReturnTo, returnToRoute } from '@/lib/navigation';
+import { backOrReturnTo, pushRoute, returnToRoute } from '@/lib/navigation';
+import { buildSetupAccountHref } from '@/lib/setup-account';
 import { theme } from '@/lib/theme';
 import { useSnapshotRefresh } from '@/lib/use-snapshot-refresh';
 import {
   DEFAULT_TRANSACTION_CATEGORY,
   type UserTransactionCategory,
-  transactionCategoryBackgroundColor,
-  transactionCategoryColor,
-  transactionCategoryIcon,
-  transactionCategoryLabel,
 } from '@/lib/transaction-categories';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -67,6 +63,12 @@ import {
   type RegisterPerson,
 } from './register-flow-helpers';
 import { styles } from './register-flow-screen-styles';
+import { RegisterFooter } from './register-footer';
+import {
+  isRegisterAccessFailure,
+  registerRetryConfirmation,
+  resolveRegisterAccessIssue,
+} from './register-access';
 import { AppText } from '@/components/app-text';
 
 const KEYBOARD_SCROLL_GAP = 16;
@@ -145,8 +147,15 @@ export function RegisterFlowScreen() {
   const { userId } = session;
   const snapshotQuery = useAppSnapshot();
   const refresh = useSnapshotRefresh(snapshotQuery);
-  const createRequest = useCreateRequestMutation();
-  const amendRequest = useAmendFinancialRequestMutation();
+  const actionFeedback = useActionFeedbackOverlay();
+  const [savePhase, setSavePhase] = useState<'authorizing' | 'saving' | null>(null);
+  const [accessError, setAccessError] = useState<unknown>(null);
+  const createRequest = useCreateRequestMutation({
+    runRequest: (action) => runSaveRequest('createMovement', action),
+  });
+  const amendRequest = useAmendFinancialRequestMutation({
+    runRequest: (action) => runSaveRequest('amendMovement', action),
+  });
 
   const { correctionRequestId, contextualPersonId, initialDirection, mode } =
     resolveRegisterRouteParams({
@@ -186,7 +195,7 @@ export function RegisterFlowScreen() {
     description: { height: 0, y: 0 },
   });
   const completedSaveRef = useRef(false);
-  const actionFeedback = useActionFeedbackOverlay();
+  const saveInFlightRef = useRef(false);
   const activeTheme = useAppTheme();
   const surfaceCardStyle = {
     backgroundColor: activeTheme.colors.surface,
@@ -267,9 +276,6 @@ export function RegisterFlowScreen() {
   const amountMinor = Math.max(Number.parseInt(amount || '0', 10) * 100, 0);
   const amountDisplay = formatAmountInput(amount);
   const activeDirectionVisual = directionVisual(direction, activeTheme);
-  const categoryIconName = transactionCategoryIcon(category) as keyof typeof Ionicons.glyphMap;
-  const categoryIconColor = transactionCategoryColor(category);
-  const categoryIconBackground = transactionCategoryBackgroundColor(category);
   const summaryText = selectedPerson
     ? `${
         direction === 'owes_me'
@@ -351,7 +357,18 @@ export function RegisterFlowScreen() {
         }
       : null,
   ];
-  const isSubmitting = createRequest.isPending || amendRequest.isPending;
+  const isSubmitting = savePhase !== null || createRequest.isPending || amendRequest.isPending;
+  const accessIssue = resolveRegisterAccessIssue(session, accessError, isCorrectionMode);
+
+  useEffect(() => {
+    setAccessError(null);
+  }, [
+    session.userId,
+    session.isEmailConfirmed,
+    session.profileCompletionState,
+    session.isAuthorizedDeviceSession,
+    session.isLocked,
+  ]);
   const isDirty =
     isCorrectionMode && correctionDraft
       ? isCorrectionDraftDirty || direction !== correctionDraft.direction
@@ -580,7 +597,33 @@ export function RegisterFlowScreen() {
     setAddPersonSheetVisible(true);
   }
 
+  async function runSaveRequest(
+    actionKey: 'createMovement' | 'amendMovement',
+    action: () => Promise<unknown>,
+  ) {
+    setSavePhase('saving');
+    try {
+      return await actionFeedback.runBlockingAction(actionKey, action);
+    } finally {
+      setSavePhase('authorizing');
+    }
+  }
+
+  function handleFinalAction() {
+    if (accessIssue?.kind === 'email' || accessIssue?.kind === 'profile') {
+      pushRoute(router, buildSetupAccountHref(accessIssue.kind, { returnTo: 'previous' }));
+      return;
+    }
+    if (accessIssue?.kind === 'session') {
+      pushRoute(router, { pathname: '/join', params: { mode: 'sign-in' } });
+      return;
+    }
+    void handleSave();
+  }
+
   async function handleSave() {
+    if (saveInFlightRef.current || completedSaveRef.current) return;
+
     const nextErrors = validateForm();
     if (Object.values(nextErrors).some(Boolean)) {
       showValidationFeedback(nextErrors);
@@ -595,6 +638,9 @@ export function RegisterFlowScreen() {
       return;
     }
 
+    saveInFlightRef.current = true;
+    const forceConfirmation = registerRetryConfirmation(accessError);
+    setSavePhase('authorizing');
     try {
       setBanner(null);
       let successFocusId: string | null = null;
@@ -609,29 +655,27 @@ export function RegisterFlowScreen() {
           return;
         }
 
-        const response = await actionFeedback.runBlockingAction('amendMovement', () =>
-          amendRequest.mutateAsync({
-            requestId: correctionRequestId,
-            amountMinor,
-            category,
-            description: description.trim(),
-          }),
-        );
+        const response = await amendRequest.mutateAsync({
+          forceConfirmation,
+          requestId: correctionRequestId,
+          amountMinor,
+          category,
+          description: description.trim(),
+        });
         successFocusId = readStringField(response, 'amendedRequestId') ?? correctionRequestId;
       } else {
         const debtorUserId = direction === 'i_owe' ? userId : personId;
         const creditorUserId = direction === 'i_owe' ? personId : userId;
 
-        const response = await actionFeedback.runBlockingAction('createMovement', () =>
-          createRequest.mutateAsync({
-            responderUserId: personId,
-            debtorUserId,
-            creditorUserId,
-            amountMinor,
-            category,
-            description: description.trim(),
-          }),
-        );
+        const response = await createRequest.mutateAsync({
+          forceConfirmation,
+          responderUserId: personId,
+          debtorUserId,
+          creditorUserId,
+          amountMinor,
+          category,
+          description: description.trim(),
+        });
         successFocusId = readStringField(response, 'requestId');
       }
 
@@ -665,6 +709,11 @@ export function RegisterFlowScreen() {
       }, 220);
     } catch (error) {
       if (isIdentityConfirmationCancelled(error)) return;
+      if (isRegisterAccessFailure(error)) {
+        setAccessError(error);
+        return;
+      }
+      setAccessError(null);
       const nextMessage =
         error instanceof Error
           ? error.message
@@ -672,9 +721,10 @@ export function RegisterFlowScreen() {
             ? 'No se pudo enviar la correccion.'
             : 'No se pudo guardar el movimiento.';
       if (
-        showBlockedActionAlert(nextMessage, router, {
+        showBlockedActionAlert(error, router, {
           hasEmailPassword: session.linkedMethods.hasEmailPassword,
           profile: {
+            emailConfirmed: session.isEmailConfirmed,
             displayName: session.profile?.display_name ?? null,
             avatarPath: session.profile?.avatar_path ?? null,
             phoneE164: session.profile?.phone_e164 ?? null,
@@ -693,6 +743,9 @@ export function RegisterFlowScreen() {
         title: 'No se pudo',
         variant: 'danger',
       });
+    } finally {
+      saveInFlightRef.current = false;
+      setSavePhase(null);
     }
   }
 
@@ -1104,49 +1157,20 @@ export function RegisterFlowScreen() {
         </View>
 
         {canShowForm ? (
-          <View
+          <RegisterFooter
+            accessIssue={accessIssue}
+            category={category}
+            hasSelectedPerson={Boolean(selectedPerson)}
+            isCorrection={isCorrectionMode}
+            isSubmitting={isSubmitting}
             onLayout={(event) => {
               footerHeightRef.current = event.nativeEvent.layout.height;
               updateKeyboardOverlap();
             }}
-            style={styles.footer}
-          >
-            <View
-              style={[styles.footerSummary, { backgroundColor: activeTheme.colors.primarySoft }]}
-            >
-              <AppText numberOfLines={1} style={styles.footerSummaryText}>
-                {footerSummaryText}
-              </AppText>
-              {selectedPerson ? (
-                <View style={styles.footerCategoryBadge}>
-                  <View
-                    style={[styles.footerCategoryIcon, { backgroundColor: categoryIconBackground }]}
-                  >
-                    <Ionicons color={categoryIconColor} name={categoryIconName} size={14} />
-                  </View>
-                  <AppText numberOfLines={1} style={styles.footerCategoryText}>
-                    {transactionCategoryLabel(category)}
-                  </AppText>
-                </View>
-              ) : null}
-            </View>
-            <ScreenFinalAction
-              anchored={false}
-              bottomPadding={false}
-              disabled={isSubmitting}
-              label={
-                isSubmitting
-                  ? isCorrectionMode
-                    ? 'Enviando...'
-                    : 'Creando...'
-                  : isCorrectionMode
-                    ? 'Enviar correccion'
-                    : 'Registrar'
-              }
-              loading={isSubmitting}
-              onPress={isSubmitting ? undefined : () => void handleSave()}
-            />
-          </View>
+            onSubmit={handleFinalAction}
+            savePhase={savePhase}
+            summary={footerSummaryText}
+          />
         ) : null}
       </View>
 

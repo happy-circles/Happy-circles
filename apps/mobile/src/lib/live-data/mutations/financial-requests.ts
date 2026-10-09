@@ -11,6 +11,7 @@ import { DEFAULT_TRANSACTION_CATEGORY } from '../../transaction-categories';
 import { invalidateAppSnapshot, invokeSupabaseFunction } from '../client';
 import type { CreateRequestInput } from '../types';
 import { parseEdgePayload, withIdempotencyKey } from './edge-action';
+import { confirmCreatedRequestInCache } from './confirmed-request-cache';
 import {
   recordFinancialRequestAccepted,
   recordFinancialRequestCreated,
@@ -18,11 +19,19 @@ import {
 } from './product-events';
 import { useSensitiveMutationGuard } from './sensitive-action-guard';
 
-export function useCreateRequestMutation() {
+interface FinancialRequestMutationOptions {
+  readonly runRequest?: (action: () => Promise<unknown>) => Promise<unknown>;
+}
+
+interface ConfirmationRecovery {
+  readonly forceConfirmation?: 'device' | 'sensitive';
+}
+
+export function useCreateRequestMutation(options: FinancialRequestMutationOptions = {}) {
   const guardSensitiveAction = useSensitiveMutationGuard();
 
   return useMutation({
-    mutationFn: async (input: CreateRequestInput) => {
+    mutationFn: async (input: CreateRequestInput & ConfirmationRecovery) => {
       const category = input.category ?? DEFAULT_TRANSACTION_CATEGORY;
       recordFinancialRequestStarted(category);
       const payload = parseEdgePayload(
@@ -38,13 +47,26 @@ export function useCreateRequestMutation() {
         }),
       );
 
-      return guardSensitiveAction('crear el movimiento', (expectedUserId) =>
-        invokeSupabaseFunction('create-balance-request', payload, { expectedUserId }),
+      return guardSensitiveAction(
+        'crear el movimiento',
+        (expectedUserId) => {
+          const sendRequest = async () => {
+            const response = await invokeSupabaseFunction('create-balance-request', payload, {
+              expectedUserId,
+            });
+            confirmCreatedRequestInCache(expectedUserId, input, response);
+            return response;
+          };
+          return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
+        },
+        input.forceConfirmation,
       );
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       recordFinancialRequestCreated();
-      await invalidateAppSnapshot();
+      // The command is committed; screen synchronization must not prolong saving
+      // or turn a successful financial request into an apparent failure.
+      void invalidateAppSnapshot().catch(() => undefined);
     },
   });
 }
@@ -92,7 +114,7 @@ export function useRejectFinancialRequestMutation() {
   });
 }
 
-export function useAmendFinancialRequestMutation() {
+export function useAmendFinancialRequestMutation(options: FinancialRequestMutationOptions = {}) {
   const guardSensitiveAction = useSensitiveMutationGuard();
 
   return useMutation({
@@ -101,6 +123,7 @@ export function useAmendFinancialRequestMutation() {
       readonly amountMinor: number;
       readonly description: string;
       readonly category?: TransactionCategory;
+      readonly forceConfirmation?: ConfirmationRecovery['forceConfirmation'];
     }) => {
       const payload = parseEdgePayload(
         amendFinancialRequestSchema,
@@ -112,8 +135,14 @@ export function useAmendFinancialRequestMutation() {
         }),
       );
 
-      return guardSensitiveAction('proponer un nuevo monto', (expectedUserId) =>
-        invokeSupabaseFunction('amend-financial-request', payload, { expectedUserId }),
+      return guardSensitiveAction(
+        'proponer un nuevo monto',
+        (expectedUserId) => {
+          const sendRequest = () =>
+            invokeSupabaseFunction('amend-financial-request', payload, { expectedUserId });
+          return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
+        },
+        input.forceConfirmation,
       );
     },
     onSuccess: invalidateAppSnapshot,

@@ -11,7 +11,10 @@ import {
 import { AppState, Platform } from 'react-native';
 
 import { IdentityConfirmationDialog } from '@/components/identity-confirmation-dialog';
-import { beginIdentityConfirmationPresentation } from '@/lib/identity-modal-coordination';
+import {
+  beginIdentityConfirmationPresentation,
+  IDENTITY_MODAL_DISMISS_TIMEOUT_MS,
+} from '@/lib/identity-modal-coordination';
 import { formatStepUpErrorMessage } from '@/providers/session/step-up';
 import {
   SESSION_SOCIAL_AUTH_TIMEOUT_MS,
@@ -22,6 +25,7 @@ import {
   availableIdentityConfirmationMethods,
   canReuseIdentityConfirmation,
   IdentityConfirmationRequests,
+  IdentityConfirmationUnavailableError,
   type IdentityConfirmationInput,
   type IdentityConfirmationMethod,
   type IdentityConfirmationRequest,
@@ -60,7 +64,8 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
   const presentationRef = useRef<ReturnType<typeof beginIdentityConfirmationPresentation> | null>(
     null,
   );
-  const closingPresentationRef = useRef(false);
+  const closingPresentationRef = useRef<Promise<boolean> | null>(null);
+  const dismissedPresentationsRef = useRef(new WeakSet<object>());
   const dialogVisibleRef = useRef(false);
   const operationRef = useRef<{
     readonly requestId: number;
@@ -76,84 +81,175 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const closeDialog = useCallback(() => {
-    if (!mountedRef.current) return;
+  const closeDialog = useCallback(async (): Promise<boolean> => {
+    if (closingPresentationRef.current) return closingPresentationRef.current;
+    if (!mountedRef.current) return false;
     setRequest(null);
     setDialogVisible(false);
     setBusyMethod(null);
     setPassword('');
     setError(null);
     const presentation = presentationRef.current;
-    if (!presentation || closingPresentationRef.current) return;
+    if (!presentation) return true;
     if (dialogVisibleRef.current) {
       dialogVisibleRef.current = false;
-      closingPresentationRef.current = true;
-      void presentation.closing(Platform.OS === 'ios').then(() => {
-        if (presentationRef.current === presentation) {
-          presentationRef.current = null;
-          closingPresentationRef.current = false;
-        }
-      });
+      const waitForNativeDismiss = Platform.OS === 'ios';
+      const closing = withSessionOperationTimeout(
+        'dismiss-identity-dialog',
+        Promise.resolve().then(() => presentation.closing(waitForNativeDismiss)),
+        IDENTITY_MODAL_DISMISS_TIMEOUT_MS + 250,
+      )
+        .then(() => !waitForNativeDismiss || dismissedPresentationsRef.current.has(presentation))
+        .catch(() => {
+          presentation.release();
+          return false;
+        })
+        .finally(() => {
+          if (presentationRef.current === presentation) presentationRef.current = null;
+          if (closingPresentationRef.current === closing) closingPresentationRef.current = null;
+        });
+      closingPresentationRef.current = closing;
+      return closing;
     } else {
       presentation.release();
       presentationRef.current = null;
+      return true;
     }
   }, []);
 
   const cancel = useCallback(() => {
     requests.cancel();
-    closeDialog();
+    void closeDialog();
   }, [closeDialog, requests]);
+
+  const failConfirmation = useCallback(
+    (failure: IdentityConfirmationUnavailableError) => {
+      requests.fail(failure);
+      void closeDialog();
+    },
+    [closeDialog, requests],
+  );
 
   const finish = useCallback(
     async (pending: IdentityConfirmationRequest, confirmed: boolean) => {
+      if (!requests.isCurrent(pending, sessionRef.current.userId)) return;
       const active = confirmed ? await waitForActiveApp() : false;
-      if (requests.finish(pending, sessionRef.current.userId, confirmed && active)) closeDialog();
+      if (!requests.isCurrent(pending, sessionRef.current.userId)) return;
+      if (!active) {
+        failConfirmation(
+          new IdentityConfirmationUnavailableError(
+            'Vuelve a la app para autorizar esta sesión. Tu borrador permanece disponible.',
+          ),
+        );
+        return;
+      }
+      const dismissed = await closeDialog();
+      if (!requests.isCurrent(pending, sessionRef.current.userId)) {
+        requests.fail(
+          new IdentityConfirmationUnavailableError(
+            'La sesión cambió. Vuelve a intentar desde la cuenta actual.',
+            'auth_required',
+          ),
+          pending,
+        );
+        return;
+      }
+      if (!dismissed) {
+        failConfirmation(
+          new IdentityConfirmationUnavailableError(
+            'No pudimos cerrar la autorización de forma segura. Intenta nuevamente; tu borrador permanece disponible.',
+          ),
+        );
+        return;
+      }
+      const activeAfterDismiss = await waitForActiveApp();
+      if (!requests.isCurrent(pending, sessionRef.current.userId)) {
+        requests.fail(
+          new IdentityConfirmationUnavailableError(
+            'La sesión cambió. Vuelve a intentar desde la cuenta actual.',
+            'auth_required',
+          ),
+          pending,
+        );
+        return;
+      }
+      if (!activeAfterDismiss || AppState.currentState !== 'active') {
+        failConfirmation(
+          new IdentityConfirmationUnavailableError(
+            'Vuelve a la app para autorizar esta sesión. Tu borrador permanece disponible.',
+          ),
+        );
+        return;
+      }
+      if (operationRef.current?.requestId === pending.id) operationRef.current = null;
+      requests.finish(pending, sessionRef.current.userId, true);
     },
-    [closeDialog, requests],
+    [closeDialog, failConfirmation, requests],
   );
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      requests.cancel();
+      requests.fail(
+        new IdentityConfirmationUnavailableError(
+          'La autorización se interrumpió. Intenta nuevamente desde la app.',
+        ),
+      );
+      operationRef.current = null;
       presentationRef.current?.release();
       presentationRef.current = null;
     };
   }, [requests]);
 
   useEffect(() => {
-    if (request && request.userId !== session.userId) cancel();
-  }, [cancel, request, session.userId]);
+    if (request && request.userId !== session.userId)
+      failConfirmation(
+        new IdentityConfirmationUnavailableError(
+          'La sesión cambió. Vuelve a intentar desde la cuenta actual.',
+          'auth_required',
+        ),
+      );
+  }, [failConfirmation, request, session.userId]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'background' && !operationRef.current?.externalHandoff) cancel();
+      if (state === 'background' && !operationRef.current?.externalHandoff)
+        failConfirmation(
+          new IdentityConfirmationUnavailableError(
+            'La autorización se interrumpió al salir de la app. Intenta nuevamente; tu borrador permanece disponible.',
+          ),
+        );
     });
     return () => subscription.remove();
-  }, [cancel]);
+  }, [failConfirmation]);
 
   const present = useCallback(
     async (pending: IdentityConfirmationRequest): Promise<boolean> => {
-      const presentation = beginIdentityConfirmationPresentation();
-      presentationRef.current = presentation;
-      const ready = await presentation.ready;
-      if (
-        !ready ||
-        !mountedRef.current ||
-        !requests.isCurrent(pending, sessionRef.current.userId) ||
-        AppState.currentState !== 'active'
-      ) {
-        presentation.release();
-        if (presentationRef.current === presentation) presentationRef.current = null;
-        if (requests.finish(pending, sessionRef.current.userId, false)) closeDialog();
+      try {
+        const presentation = beginIdentityConfirmationPresentation();
+        presentationRef.current = presentation;
+        const ready = await presentation.ready;
+        if (
+          !ready ||
+          !mountedRef.current ||
+          !requests.isCurrent(pending, sessionRef.current.userId) ||
+          AppState.currentState !== 'active'
+        ) {
+          presentation.release();
+          if (presentationRef.current === presentation) presentationRef.current = null;
+          if (requests.fail(new IdentityConfirmationUnavailableError(), pending))
+            void closeDialog();
+          return false;
+        }
+        setDialogPresentation({ request: pending, presentation });
+        dialogVisibleRef.current = true;
+        setDialogVisible(true);
+        return true;
+      } catch {
+        if (requests.fail(new IdentityConfirmationUnavailableError(), pending)) void closeDialog();
         return false;
       }
-      setDialogPresentation({ request: pending, presentation });
-      dialogVisibleRef.current = true;
-      setDialogVisible(true);
-      return true;
     },
     [closeDialog, requests],
   );
@@ -161,17 +257,48 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
   const confirmIdentity = useCallback(
     async (input: IdentityConfirmationInput): Promise<boolean> => {
       const current = sessionRef.current;
-      if (
-        operationRef.current ||
-        presentationRef.current ||
-        !current.userId ||
-        AppState.currentState !== 'active'
-      )
-        return false;
+      if (!current.userId)
+        throw new IdentityConfirmationUnavailableError(
+          'Inicia sesión nuevamente para autorizar este movimiento.',
+          'auth_required',
+        );
+      if (!mountedRef.current || AppState.currentState !== 'active')
+        throw new IdentityConfirmationUnavailableError(
+          'Vuelve a la app e intenta autorizar nuevamente. Tu borrador permanece disponible.',
+        );
+      if (operationRef.current || presentationRef.current)
+        throw new IdentityConfirmationUnavailableError(
+          'Ya hay una autorización en curso. Espera a que termine e intenta nuevamente.',
+          'identity_confirmation_busy',
+        );
       const pending = requests.begin(current.userId, input);
-      if (!pending) return false;
+      if (!pending)
+        throw new IdentityConfirmationUnavailableError(
+          'Ya hay una autorización en curso. Espera a que termine e intenta nuevamente.',
+          'identity_confirmation_busy',
+        );
       if (canReuseIdentityConfirmation(input, current)) {
         requests.finish(pending.request, current.userId, true);
+        return pending.promise;
+      }
+
+      const currentMethods = availableIdentityConfirmationMethods({
+        purpose: input.purpose,
+        isAuthorizedDeviceSession: current.isAuthorizedDeviceSession,
+        biometricAvailable: current.biometricAvailable,
+        hasGoogle: current.linkedMethods.hasGoogle,
+        hasApple: current.linkedMethods.hasApple,
+        appleSignInAvailable: current.appleSignInAvailable,
+        hasPassword: current.linkedMethods.hasEmailPassword,
+      });
+      if (input.purpose === 'sensitive' && currentMethods.length === 0) {
+        requests.fail(
+          new IdentityConfirmationUnavailableError(
+            'No hay un método de esta cuenta disponible en este teléfono. Vuelve a iniciar sesión con un método vinculado; tu borrador permanece disponible.',
+            'auth_required',
+          ),
+          pending.request,
+        );
         return pending.promise;
       }
 
@@ -190,27 +317,47 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
             );
             if (requests.isCurrent(pending.request, sessionRef.current.userId)) {
               if (result.success) await finish(pending.request, true);
-              else if (result.error !== 'recent_auth_required')
-                setError(result.message ?? 'Confirma con un método de tu cuenta para continuar.');
+              else if (currentMethods.length === 0) {
+                failConfirmation(
+                  new IdentityConfirmationUnavailableError(
+                    result.error === 'recent_auth_required'
+                      ? 'No hay un método de esta cuenta disponible en este teléfono. Vuelve a iniciar sesión con un método vinculado; tu borrador permanece disponible.'
+                      : 'No pudimos autorizar esta sesión. Intenta nuevamente; tu borrador permanece disponible.',
+                    result.error === 'recent_auth_required'
+                      ? 'auth_required'
+                      : 'identity_confirmation_unavailable',
+                  ),
+                );
+              } else
+                setError(
+                  result.error === 'recent_auth_required'
+                    ? 'Confirma con un método vinculado a tu cuenta para autorizar esta sesión. Tu borrador permanece disponible.'
+                    : (result.message ?? 'Confirma con un método de tu cuenta para continuar.'),
+                );
             }
           } catch (failure) {
             if (requests.isCurrent(pending.request, sessionRef.current.userId)) {
-              setError(
-                sessionOperationErrorMessage(
-                  failure,
-                  'No pudimos comprobar esta sesión. Usa un método de tu cuenta.',
-                ),
+              const nextMessage = sessionOperationErrorMessage(
+                failure,
+                currentMethods.length === 0
+                  ? 'No pudimos autorizar esta sesión. Intenta nuevamente; tu borrador permanece disponible.'
+                  : 'No pudimos comprobar esta sesión. Usa un método de tu cuenta.',
               );
+              if (currentMethods.length === 0)
+                failConfirmation(new IdentityConfirmationUnavailableError(nextMessage));
+              else setError(nextMessage);
             }
           } finally {
-            operationRef.current = null;
-            if (mountedRef.current) setBusyMethod(null);
+            if (operationRef.current?.requestId === pending.request.id) {
+              operationRef.current = null;
+              if (mountedRef.current) setBusyMethod(null);
+            }
           }
         })();
       } else void present(pending.request);
       return pending.promise;
     },
-    [finish, present, requests],
+    [failConfirmation, finish, present, requests],
   );
 
   const methods = availableIdentityConfirmationMethods({
@@ -283,8 +430,10 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
         );
       }
     } finally {
-      operationRef.current = null;
-      if (mountedRef.current) setBusyMethod(null);
+      if (operationRef.current?.requestId === request.id) {
+        operationRef.current = null;
+        if (mountedRef.current) setBusyMethod(null);
+      }
     }
   }
 
@@ -300,11 +449,17 @@ export function IdentityConfirmationProvider({ children }: PropsWithChildren) {
           busyMethod={busyMethod}
           error={error}
           methods={request ? methods : []}
-          onClose={cancel}
-          onDismiss={() => dialogPresentation.presentation.release()}
+          onClose={() => {
+            if (requests.isCurrent(dialogPresentation.request, sessionRef.current.userId)) cancel();
+          }}
+          onDismiss={() => {
+            dismissedPresentationsRef.current.add(dialogPresentation.presentation);
+            dialogPresentation.presentation.release();
+          }}
           onPasswordChange={setPassword}
           onSubmit={(method) => void submit(method)}
           password={password}
+          purpose={dialogPresentation.request.input.purpose}
           visible={dialogVisible}
         />
       ) : null}

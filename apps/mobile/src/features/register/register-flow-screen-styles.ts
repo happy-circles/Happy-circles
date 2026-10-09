@@ -267,6 +267,20 @@ export const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     paddingTop: 6,
   },
+  accessNotice: {
+    borderRadius: theme.radius.medium,
+    gap: 3,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  accessNoticeTitle: {
+    fontSize: theme.typography.footnote,
+    fontWeight: '700',
+  },
+  accessNoticeMessage: {
+    fontSize: theme.typography.caption,
+    lineHeight: 17,
+  },
   footerSummary: {
     alignItems: 'center',
     backgroundColor: theme.colors.primarySoft,

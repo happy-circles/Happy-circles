@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { prepareSetupProfileSave } from './setup-profile-save';
+import { IdentityConfirmationCancelledError } from '@/lib/live-data/mutations/sensitive-action-check';
 
 const draft = {
   fullName: 'Sara López',
@@ -48,6 +49,29 @@ describe('profile save confirmation', () => {
     input.confirmIdentity.mockResolvedValue(false);
     expect(await prepareSetupProfileSave(input)).toBeNull();
     expect(input.draft).toEqual(draft);
+    expect(input.onValidationError).not.toHaveBeenCalled();
+  });
+
+  it('shows a failed confirmation without returning a write or clearing the draft', async () => {
+    const input = { ...makeInput(), currentPhone: '+573009876543' };
+    const failure = Object.assign(
+      new Error('No pudimos abrir la confirmación. Intenta nuevamente.'),
+      {
+        code: 'identity_confirmation_unavailable',
+      },
+    );
+    input.confirmIdentity.mockRejectedValue(failure);
+
+    await expect(prepareSetupProfileSave(input)).resolves.toBeNull();
+    expect(input.draft).toEqual(draft);
+    expect(input.onValidationError).toHaveBeenCalledExactlyOnceWith(failure.message);
+  });
+
+  it('keeps explicit cancellation silent even when confirmation rejects with its cancellation type', async () => {
+    const input = { ...makeInput(), currentPhone: '+573009876543' };
+    input.confirmIdentity.mockRejectedValue(new IdentityConfirmationCancelledError());
+
+    await expect(prepareSetupProfileSave(input)).resolves.toBeNull();
     expect(input.onValidationError).not.toHaveBeenCalled();
   });
 

@@ -116,6 +116,50 @@ describe('sensitive mutation authorization recovery', () => {
     code: 'device_authorization_required',
   });
 
+  it('forces the requested recovery before sending even if local authorization looks current', async () => {
+    const events: string[] = [];
+    const confirmIdentity = vi.fn(async () => {
+      events.push('confirm');
+      return true;
+    });
+    const action = vi.fn(async () => {
+      events.push('send');
+      return 'sent';
+    });
+    await expect(
+      runAuthorizedMutationAction({
+        actionLabel: 'registrar',
+        readSession: () => readySession,
+        confirmIdentity,
+        action,
+        forceConfirmation: 'device',
+      }),
+    ).resolves.toBe('sent');
+    expect(events).toEqual(['confirm', 'send']);
+    expect(confirmIdentity).toHaveBeenCalledExactlyOnceWith({
+      actionLabel: 'registrar',
+      purpose: 'device',
+      force: true,
+    });
+  });
+
+  it('preserves a presentation failure as a visible error instead of cancellation', async () => {
+    const failure = Object.assign(new Error('No pudimos abrir la confirmación.'), {
+      code: 'identity_confirmation_unavailable',
+    });
+    const action = vi.fn();
+    await expect(
+      runAuthorizedMutationAction({
+        actionLabel: 'registrar',
+        readSession: () => ({ ...readySession, isAuthorizedDeviceSession: false }),
+        confirmIdentity: vi.fn().mockRejectedValue(failure),
+        action,
+      }),
+    ).rejects.toBe(failure);
+    expect(isIdentityConfirmationCancelled(failure)).toBe(false);
+    expect(action).not.toHaveBeenCalled();
+  });
+
   it('recognizes only the definitive structured authorization error', () => {
     expect(isDeviceAuthorizationRequired(authorizationRequired)).toBe(true);
     expect(isDeviceAuthorizationRequired(new Error('device_authorization_required'))).toBe(false);

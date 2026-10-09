@@ -6,6 +6,22 @@ export interface IdentityConfirmationInput {
 
 export type IdentityConfirmationMethod = 'biometric' | 'google' | 'apple' | 'password';
 
+export class IdentityConfirmationUnavailableError extends Error {
+  readonly code:
+    | 'identity_confirmation_unavailable'
+    | 'identity_confirmation_busy'
+    | 'auth_required';
+
+  constructor(
+    message = 'No pudimos abrir la autorización. Intenta nuevamente; tu borrador permanece en esta pantalla.',
+    code: IdentityConfirmationUnavailableError['code'] = 'identity_confirmation_unavailable',
+  ) {
+    super(message);
+    this.name = 'IdentityConfirmationUnavailableError';
+    this.code = code;
+  }
+}
+
 export function availableIdentityConfirmationMethods(input: {
   readonly purpose: IdentityConfirmationInput['purpose'];
   readonly isAuthorizedDeviceSession: boolean;
@@ -58,13 +74,14 @@ export class IdentityConfirmationRequests {
   private pending: {
     readonly request: IdentityConfirmationRequest;
     readonly resolve: (confirmed: boolean) => void;
+    readonly reject: (error: Error) => void;
   } | null = null;
 
   begin(userId: string | null, input: IdentityConfirmationInput) {
     if (!userId || this.pending) return null;
     const request: IdentityConfirmationRequest = { id: ++this.sequence, userId, input };
-    const promise = new Promise<boolean>((resolve) => {
-      this.pending = { request, resolve };
+    const promise = new Promise<boolean>((resolve, reject) => {
+      this.pending = { request, resolve, reject };
     });
     return { request, promise };
   }
@@ -77,7 +94,22 @@ export class IdentityConfirmationRequests {
     if (this.pending?.request.id !== request.id) return false;
     const pending = this.pending;
     this.pending = null;
-    pending.resolve(confirmed && request.userId === userId);
+    if (request.userId !== userId) {
+      pending.reject(
+        new IdentityConfirmationUnavailableError(
+          'La sesión cambió. Vuelve a intentar desde la cuenta actual.',
+          'auth_required',
+        ),
+      );
+    } else pending.resolve(confirmed);
+    return true;
+  }
+
+  fail(error: Error, request?: IdentityConfirmationRequest): boolean {
+    const pending = this.pending;
+    if (!pending || (request && pending.request.id !== request.id)) return false;
+    this.pending = null;
+    pending.reject(error);
     return true;
   }
 

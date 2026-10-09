@@ -12,7 +12,10 @@ import {
 import { AppText } from '@/components/app-text';
 import { PasswordTextInput } from '@/components/password-text-input';
 import { theme } from '@/lib/theme';
-import type { IdentityConfirmationMethod } from '@/providers/identity-confirmation-state';
+import type {
+  IdentityConfirmationInput,
+  IdentityConfirmationMethod,
+} from '@/providers/identity-confirmation-state';
 import { useAppTheme } from '@/providers/theme-provider';
 
 interface IdentityConfirmationDialogProps {
@@ -26,6 +29,7 @@ interface IdentityConfirmationDialogProps {
   readonly onPasswordChange: (password: string) => void;
   readonly onSubmit: (method: IdentityConfirmationMethod) => void;
   readonly password: string;
+  readonly purpose: IdentityConfirmationInput['purpose'];
   readonly visible: boolean;
 }
 
@@ -47,6 +51,7 @@ export function IdentityConfirmationDialog({
   onPasswordChange,
   onSubmit,
   password,
+  purpose,
   visible,
 }: IdentityConfirmationDialogProps) {
   const activeTheme = useAppTheme();
@@ -85,11 +90,13 @@ export function IdentityConfirmationDialog({
               accessibilityRole="header"
               style={[styles.title, { color: activeTheme.colors.text }]}
             >
-              Confirma para {actionLabel}
+              {purpose === 'device' ? 'Autoriza esta sesión' : `Confirma para ${actionLabel}`}
             </AppText>
           </View>
           <AppText style={[styles.body, { color: activeTheme.colors.textMuted }]}>
-            Usa un método de tu cuenta. Tu borrador permanece en esta pantalla.
+            {purpose === 'device'
+              ? `Necesitamos autorizar esta sesión para ${actionLabel}. Confirma con un método de tu cuenta. Tu borrador permanece en esta pantalla.`
+              : 'Usa un método de tu cuenta. Tu borrador permanece en esta pantalla.'}
           </AppText>
           <ScrollView
             keyboardShouldPersistTaps="handled"

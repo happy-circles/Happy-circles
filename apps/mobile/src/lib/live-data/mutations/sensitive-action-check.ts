@@ -6,6 +6,20 @@ export interface ActionIdentityConfirmationInput {
 
 export type ConfirmActionIdentity = (input: ActionIdentityConfirmationInput) => Promise<boolean>;
 
+export class SensitiveActionBlockedError extends Error {
+  constructor(
+    readonly code:
+      | 'auth_required'
+      | 'email_confirmation_required'
+      | 'profile_incomplete'
+      | 'session_changed',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SensitiveActionBlockedError';
+  }
+}
+
 export interface SensitiveMutationSession {
   readonly userId: string | null;
   readonly isEmailConfirmed: boolean;
@@ -39,13 +53,19 @@ function assertAccountReady(
   session: SensitiveMutationSession,
 ): asserts session is SensitiveMutationSession & { readonly userId: string } {
   if (!session.userId) {
-    throw new Error('Inicia sesión para continuar.');
+    throw new SensitiveActionBlockedError('auth_required', 'Inicia sesión para continuar.');
   }
   if (!session.isEmailConfirmed) {
-    throw new Error('Confirma tu correo antes de mover dinero o aprobar cambios sensibles.');
+    throw new SensitiveActionBlockedError(
+      'email_confirmation_required',
+      'Confirma tu correo antes de mover dinero o aprobar cambios sensibles.',
+    );
   }
   if (session.profileCompletionState !== 'complete') {
-    throw new Error('Completa tu perfil antes de mover dinero o aprobar cambios sensibles.');
+    throw new SensitiveActionBlockedError(
+      'profile_incomplete',
+      'Completa tu perfil antes de mover dinero o aprobar cambios sensibles.',
+    );
   }
 }
 
@@ -74,15 +94,28 @@ export async function runAuthorizedMutationAction<T>(input: {
   readonly readSession: () => SensitiveMutationSession;
   readonly confirmIdentity: ConfirmActionIdentity;
   readonly action: (expectedUserId: string) => Promise<T>;
+  readonly forceConfirmation?: 'device' | 'sensitive';
 }): Promise<T> {
   const originalSession = input.readSession();
   assertAccountReady(originalSession);
   const expectedUserId = originalSession.userId;
-  await guardSensitiveMutationAction(originalSession, input.actionLabel, input.confirmIdentity);
+  if (input.forceConfirmation) {
+    const confirmed = await input.confirmIdentity({
+      actionLabel: input.actionLabel,
+      purpose: input.forceConfirmation,
+      force: true,
+    });
+    if (!confirmed) throw new IdentityConfirmationCancelledError();
+  } else {
+    await guardSensitiveMutationAction(originalSession, input.actionLabel, input.confirmIdentity);
+  }
 
   function assertSameAccount() {
     if (input.readSession().userId !== expectedUserId) {
-      throw new Error('La sesión cambió. Vuelve a intentar la acción.');
+      throw new SensitiveActionBlockedError(
+        'session_changed',
+        'La sesión cambió. Vuelve a intentar la acción.',
+      );
     }
   }
 

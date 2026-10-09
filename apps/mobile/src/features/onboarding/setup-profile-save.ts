@@ -1,7 +1,10 @@
 import { completeProfileSchema } from '@happy-circles/shared';
 
 import { buildPhoneE164 } from '@/lib/phone';
-import type { ConfirmActionIdentity } from '@/lib/live-data/mutations/sensitive-action-check';
+import {
+  isIdentityConfirmationCancelled,
+  type ConfirmActionIdentity,
+} from '@/lib/live-data/mutations/sensitive-action-check';
 import { formatValidationMessage } from '@/providers/session/auth-errors';
 import type { CompleteProfileInput } from '@/providers/session/types';
 
@@ -26,14 +29,27 @@ export async function prepareSetupProfileSave(input: {
     input.profileComplete &&
     input.currentPhone &&
     input.currentPhone !== nextPhone &&
-    !input.preview &&
-    !(await input.confirmIdentity({
-      actionLabel: 'cambiar tu celular',
-      purpose: 'sensitive',
-      force: true,
-    }))
+    !input.preview
   ) {
-    return null;
+    try {
+      if (
+        !(await input.confirmIdentity({
+          actionLabel: 'cambiar tu celular',
+          purpose: 'sensitive',
+          force: true,
+        }))
+      )
+        return null;
+    } catch (error) {
+      if (!isIdentityConfirmationCancelled(error)) {
+        input.onValidationError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos confirmar tu identidad. Inténtalo de nuevo.',
+        );
+      }
+      return null;
+    }
   }
   return validation.data;
 }

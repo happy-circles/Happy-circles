@@ -81,14 +81,19 @@ export const BLOCKING_ACTION_FEEDBACK: Record<BlockingActionKey, BlockingActionF
   },
 };
 
-interface BlockedActionResolution {
+interface BlockedActionCopy {
   readonly title: string;
   readonly message: string;
   readonly ctaLabel: string;
-  readonly route: Href;
 }
 
-interface BlockedActionContext {
+export type BlockedActionResolution = BlockedActionCopy &
+  (
+    | { readonly presentation?: 'alert'; readonly route: Href }
+    | { readonly presentation: 'inline'; readonly route?: never }
+  );
+
+export interface BlockedActionContext {
   readonly hasEmailPassword?: boolean;
   readonly profile?: {
     readonly displayName?: string | null;
@@ -279,26 +284,80 @@ export function useActionFeedbackOverlay({
   };
 }
 
-function resolveBlockedAction(
-  message: string,
+export function resolveBlockedAction(
+  error: unknown,
   context?: BlockedActionContext,
 ): BlockedActionResolution | null {
+  const record =
+    error && typeof error === 'object'
+      ? (error as { readonly message?: unknown; readonly code?: unknown })
+      : null;
+  const message =
+    typeof error === 'string' ? error : typeof record?.message === 'string' ? record.message : '';
+  const code = typeof record?.code === 'string' ? record.code.trim() : null;
   const normalized = message.toLocaleLowerCase('es-CO');
+  if (code === 'identity_confirmation_busy') {
+    return {
+      presentation: 'inline',
+      title: 'Hay una validación en curso',
+      message: 'Termina la validación abierta y vuelve a intentar la acción.',
+      ctaLabel: 'Reintentar',
+    };
+  }
+  if (code === 'identity_confirmation_unavailable') {
+    return {
+      presentation: 'inline',
+      title: 'Falta confirmar tu identidad',
+      message: message || 'Vuelve a intentar la validación para continuar.',
+      ctaLabel: 'Confirmar identidad',
+    };
+  }
+  if (
+    code === 'auth_required' ||
+    normalized.includes('inicia sesión para continuar') ||
+    normalized.includes('tu sesión ya no es válida') ||
+    normalized.includes('autenticación requerida') ||
+    normalized.includes('auth session missing')
+  ) {
+    return {
+      title: 'Vuelve a iniciar sesión',
+      message: 'Tu sesión ya no es válida. Ingresa nuevamente para continuar.',
+      ctaLabel: 'Iniciar sesión',
+      route: { pathname: '/join', params: { mode: 'sign-in' } },
+    };
+  }
+  if (code === 'active_relationship_required') {
+    return {
+      title: 'Falta una relación activa',
+      message: 'Conecta con esta persona antes de crear un movimiento.',
+      ctaLabel: 'Abrir personas',
+      route: '/people',
+    };
+  }
   const missingDisplayName =
     context?.profile?.displayName === undefined
       ? false
       : !(context.profile.displayName ?? '').trim().length;
   const missingEmail =
-    normalized.includes('confirma tu correo') ||
-    normalized.includes('correo sin confirmar') ||
-    context?.profile?.emailConfirmed === false;
+    code === 'email_confirmation_required' ||
+    (code !== 'profile_incomplete' &&
+      (context?.profile?.emailConfirmed === false ||
+        ((code !== 'identity_incomplete' || context?.profile?.emailConfirmed !== true) &&
+          (normalized.includes('confirma tu correo') ||
+            normalized.includes('correo sin confirmar')))));
   const nextRequiredStep = missingEmail
     ? 'email'
     : !context?.profile?.phoneE164 || missingDisplayName
       ? 'profile'
       : 'profile';
 
-  if (normalized.includes('completa tu perfil') || normalized.includes('confirma tu correo')) {
+  if (
+    code === 'email_confirmation_required' ||
+    code === 'profile_incomplete' ||
+    code === 'identity_incomplete' ||
+    normalized.includes('completa tu perfil') ||
+    normalized.includes('confirma tu correo')
+  ) {
     return {
       title: missingEmail
         ? 'Confirma tu correo para continuar'
@@ -312,6 +371,9 @@ function resolveBlockedAction(
   }
 
   if (
+    code === 'device_authorization_required' ||
+    code === 'device_not_trusted' ||
+    code === 'trusted_origin_required' ||
     normalized.includes('dispositivo aún no es confiable') ||
     normalized.includes('dispositivo aun no es confiable') ||
     normalized.includes('teléfono aún no es confiable') ||
@@ -324,14 +386,21 @@ function resolveBlockedAction(
     (normalized.includes('solo puedes') && normalized.includes('dispositivo confiable'))
   ) {
     return {
-      title: 'Confía este teléfono para continuar',
-      message: 'Esta acción requiere un teléfono confiable. Puedes hacerlo en seguridad.',
+      title:
+        code === 'device_authorization_required'
+          ? 'Autoriza este dispositivo para continuar'
+          : 'Confía este teléfono para continuar',
+      message:
+        code === 'device_authorization_required'
+          ? 'Confirma tu identidad en seguridad para autorizar esta sesión.'
+          : 'Esta acción requiere un teléfono confiable. Puedes hacerlo en seguridad.',
       ctaLabel: 'Abrir seguridad',
       route: buildSetupAccountHref('security', { returnTo: 'previous' }),
     };
   }
 
   if (
+    code === 'recent_auth_required' ||
     normalized.includes('no se pudo validar tu identidad') ||
     normalized.includes('no se pudo validar') ||
     normalized.includes('desbloquea el dispositivo') ||
@@ -340,7 +409,10 @@ function resolveBlockedAction(
   ) {
     return {
       title: 'Valida tu identidad para continuar',
-      message,
+      message:
+        code === 'recent_auth_required'
+          ? 'Vuelve a confirmar tu identidad para completar esta acción.'
+          : message,
       ctaLabel: 'Abrir seguridad',
       route: buildSetupAccountHref('security', {
         returnTo: 'previous',
@@ -353,12 +425,12 @@ function resolveBlockedAction(
 }
 
 export function showBlockedActionAlert(
-  message: string,
+  error: unknown,
   navigation: AlertNavigation,
   context?: BlockedActionContext,
 ) {
-  const resolution = resolveBlockedAction(message, context);
-  if (!resolution) {
+  const resolution = resolveBlockedAction(error, context);
+  if (!resolution || resolution.presentation === 'inline') {
     return false;
   }
 

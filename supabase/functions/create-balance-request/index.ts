@@ -1,4 +1,5 @@
 import { requireAuthorizedDeviceSession } from '../_shared/authorized-device-session.ts';
+import { runBackgroundTask } from '../_shared/background-task.ts';
 import {
   handleRpc,
   requireString,
@@ -61,7 +62,12 @@ Deno.serve((request) =>
       throw error;
     }
 
-    await notifyFinancialRequestPending(client, actorUserId, readPayloadString(data, 'requestId'));
+    const requestId = readPayloadString(data, 'requestId');
+    await runBackgroundTask(
+      () => notifyFinancialRequestPending(client, actorUserId, requestId),
+      'financial_request_push_failed',
+      { actorUserId, requestId },
+    );
 
     return data;
   }),

@@ -4,6 +4,7 @@ import {
   availableIdentityConfirmationMethods,
   canReuseIdentityConfirmation,
   IdentityConfirmationRequests,
+  IdentityConfirmationUnavailableError,
 } from './identity-confirmation-state';
 
 const sensitiveAction = { actionLabel: 'aprobar este movimiento', purpose: 'sensitive' } as const;
@@ -119,7 +120,20 @@ describe('identity confirmation request lifecycle', () => {
     const first = requests.begin('user-a', sensitiveAction)!;
     expect(requests.isCurrent(first.request, 'user-b')).toBe(false);
     requests.finish(first.request, 'user-b', true);
-    await expect(first.promise).resolves.toBe(false);
+    await expect(first.promise).rejects.toMatchObject({ code: 'auth_required' });
     expect(requests.begin(null, sensitiveAction)).toBeNull();
+  });
+
+  it('reports infrastructure failures distinctly from explicit cancellation and ignores late results', async () => {
+    const requests = new IdentityConfirmationRequests();
+    const first = requests.begin('user-a', sensitiveAction)!;
+    const failure = new IdentityConfirmationUnavailableError();
+    expect(requests.fail(failure, first.request)).toBe(true);
+    await expect(first.promise).rejects.toBe(failure);
+    const next = requests.begin('user-a', sensitiveAction)!;
+    expect(requests.fail(failure, first.request)).toBe(false);
+    expect(requests.finish(first.request, 'user-a', true)).toBe(false);
+    requests.cancel();
+    await expect(next.promise).resolves.toBe(false);
   });
 });

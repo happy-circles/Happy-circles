@@ -63,6 +63,7 @@ import { ProfileDeviceRevokeModal } from './profile-device-revoke-modal';
 import { useProfileFocusController } from './profile-focus-controller';
 import { ProfileLegalDangerSection } from './profile-legal-danger-section';
 import { ProfileStatusRow } from './profile-status-row';
+import { confirmProfileIdentity } from './profile-identity-confirmation';
 
 import { ProfileSetupReminderSection } from './profile-setup-reminder-section';
 import { ThemePreferenceSection } from './theme-preference-section';
@@ -410,11 +411,11 @@ export function ProfileScreen() {
   async function handleLinkSocial(target: 'google' | 'apple') {
     if (busyActionRef.current) return;
     const providerLabel = target === 'google' ? 'Google' : 'Apple';
-    const confirmed = await confirmIdentity({
-      actionLabel: `añadir ${providerLabel}`,
-      purpose: 'sensitive',
-      force: true,
-    });
+    const confirmed = await confirmProfileIdentity(
+      confirmIdentity,
+      { actionLabel: `añadir ${providerLabel}`, purpose: 'sensitive', force: true },
+      showActionMessage,
+    );
     if (!confirmed) return;
     const result = await runAction(`link-${target}`, () =>
       target === 'google' ? session.linkGoogle() : session.linkApple(),
@@ -430,11 +431,11 @@ export function ProfileScreen() {
       showActionMessage(formatValidationMessage(validation.error));
       return;
     }
-    const confirmed = await confirmIdentity({
-      actionLabel: 'agregar una contraseña',
-      purpose: 'sensitive',
-      force: true,
-    });
+    const confirmed = await confirmProfileIdentity(
+      confirmIdentity,
+      { actionLabel: 'agregar una contraseña', purpose: 'sensitive', force: true },
+      showActionMessage,
+    );
     if (!confirmed) return;
     await runAction('attach-password', () => session.attachEmailPassword(validation.data));
   }
