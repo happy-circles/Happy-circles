@@ -305,15 +305,15 @@ describe('avatar-prefetch', () => {
     const selected = ensureAvatarImageRef('selected.jpg');
     const duplicate = ensureAvatarImageRef('/selected.jpg');
     expect(duplicate).toBe(selected);
-    await Promise.resolve();
-    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
-
-    activeLoads.get(activePaths[0])?.resolve(image);
-    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(5));
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(5, 'selected.jpg');
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(4));
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(4, 'selected.jpg');
     expect(mocks.loadAsync).toHaveBeenLastCalledWith(
       { uri: 'https://signed.test/selected.jpg', cacheKey: 'selected.jpg' },
       { maxWidth: 1024, maxHeight: 1024 },
+    );
+    activeLoads.get(activePaths[0])?.resolve(image);
+    await vi.waitFor(() =>
+      expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(5, 'critical.jpg'),
     );
     selectedLoad.resolve(image);
     for (const load of activeLoads.values()) {
@@ -324,11 +324,11 @@ describe('avatar-prefetch', () => {
     await expect(critical).resolves.toBe(true);
     await expect(selected).resolves.toBe(image);
     await expect(duplicate).resolves.toBe(image);
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(6, 'critical.jpg');
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(5, 'critical.jpg');
     expect(mocks.loadAsync).toHaveBeenCalledTimes(8);
   });
 
-  it('limits image loads to four globally across concurrent callers', async () => {
+  it('limits background image loads to three globally across concurrent callers', async () => {
     const image = { width: 512, height: 512 };
     const loads = new Map<string, ReturnType<typeof deferred<typeof image>>>();
     let activeLoads = 0;
@@ -345,15 +345,19 @@ describe('avatar-prefetch', () => {
 
     const first = prefetchAvatarPaths(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
     const second = prefetchAvatarPaths(['e.jpg', 'f.jpg', 'g.jpg', 'h.jpg']);
-    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(3));
 
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
-    expect(peakLoads).toBe(4);
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(3);
+    expect(peakLoads).toBe(3);
+    for (const load of loads.values()) {
+      load.resolve(image);
+    }
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(6));
+    expect(peakLoads).toBe(3);
     for (const load of loads.values()) {
       load.resolve(image);
     }
     await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(8));
-    expect(peakLoads).toBe(4);
     for (const load of loads.values()) {
       load.resolve(image);
     }
@@ -361,7 +365,69 @@ describe('avatar-prefetch', () => {
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(true);
     expect(activeLoads).toBe(0);
+    expect(peakLoads).toBe(3);
+  });
+
+  it('starts an explicit request in the reserved fourth slot while three background loads are held', async () => {
+    const image = { width: 512, height: 512 };
+    const backgroundLoad = deferred<typeof image>();
+    const selectedLoad = deferred<typeof image>();
+    let activeLoads = 0;
+    let peakLoads = 0;
+    let activeBackgroundLoads = 0;
+    let peakBackgroundLoads = 0;
+    mocks.loadAsync.mockImplementation(({ cacheKey }: { cacheKey: string }) => {
+      const isBackground = cacheKey !== 'selected.jpg';
+      activeLoads += 1;
+      peakLoads = Math.max(peakLoads, activeLoads);
+      if (isBackground) {
+        activeBackgroundLoads += 1;
+        peakBackgroundLoads = Math.max(peakBackgroundLoads, activeBackgroundLoads);
+      }
+      return (isBackground ? backgroundLoad.promise : selectedLoad.promise).finally(() => {
+        activeLoads -= 1;
+        if (isBackground) {
+          activeBackgroundLoads -= 1;
+        }
+      });
+    });
+    const background = prefetchAvatarPaths(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg']);
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(3));
+
+    const selected = ensureAvatarImageRef('selected.jpg');
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(4));
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(4, 'selected.jpg');
+    expect(activeLoads).toBe(4);
+    expect(activeBackgroundLoads).toBe(3);
+    selectedLoad.resolve(image);
+    await expect(selected).resolves.toBe(image);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
+
+    backgroundLoad.resolve(image);
+    await expect(background).resolves.toBe(true);
     expect(peakLoads).toBe(4);
+    expect(peakBackgroundLoads).toBe(3);
+    expect(activeLoads).toBe(0);
+  });
+
+  it('allows four explicit requests and queues a fifth until a slot is released', async () => {
+    const image = { width: 512, height: 512 };
+    const paths = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg'];
+    const loads = new Map(paths.map((path) => [path, deferred<typeof image>()]));
+    mocks.loadAsync.mockImplementation(
+      ({ cacheKey }: { cacheKey: string }) => loads.get(cacheKey)?.promise,
+    );
+    const requests = paths.map(ensureAvatarImageRef);
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(4));
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
+
+    loads.get(paths[0])?.resolve(image);
+    await vi.waitFor(() => expect(mocks.loadAsync).toHaveBeenCalledTimes(5));
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenNthCalledWith(5, paths[4]);
+    for (const load of loads.values()) {
+      load.resolve(image);
+    }
+    await expect(Promise.all(requests)).resolves.toEqual(paths.map(() => image));
   });
 
   it('counts URL resolution against the same global concurrency limit', async () => {
@@ -374,14 +440,16 @@ describe('avatar-prefetch', () => {
 
     const first = prefetchAvatarPaths(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
     const second = prefetchAvatarPaths(['e.jpg']);
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(3);
     expect(mocks.loadAsync).not.toHaveBeenCalled();
     for (const [path, signedUrl] of signedUrls) {
       signedUrl.resolve(`https://signed.test/${path}`);
     }
 
     await vi.waitFor(() => expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(5));
-    signedUrls.get('e.jpg')?.resolve('https://signed.test/e.jpg');
+    for (const [path, signedUrl] of signedUrls) {
+      signedUrl.resolve(`https://signed.test/${path}`);
+    }
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(true);
     expect(mocks.loadAsync).toHaveBeenCalledTimes(5);
@@ -395,7 +463,7 @@ describe('avatar-prefetch', () => {
     const queued = prefetchAvatarPaths(['queued.jpg']);
     const duplicate = prefetchAvatarPaths(['/queued.jpg']);
     await Promise.resolve();
-    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(3);
 
     mocks.isAvatarImageReady.mockImplementation((path: string) => path.endsWith('queued.jpg'));
     activeLoad.resolve(image);
@@ -420,10 +488,12 @@ describe('avatar-prefetch', () => {
 
     await vi.advanceTimersByTimeAsync(10);
     await expect(queued).resolves.toBe(false);
-    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(4);
+    expect(mocks.resolveSignedAvatarUrl).toHaveBeenCalledTimes(3);
     expect(mocks.rememberAvatarImageReady).not.toHaveBeenCalled();
 
     const retry = ensureAvatarImageRef('queued.jpg');
+    await expect(retry).resolves.toBe(image);
+    expect(mocks.loadAsync).toHaveBeenCalledTimes(4);
     activeLoad.resolve(image);
     await expect(first).resolves.toBe(true);
     await expect(retry).resolves.toBe(image);

@@ -13,6 +13,7 @@ const DEFERRED_AVATAR_PREFETCH_DELAY_MS = 250;
 const MAX_PREFETCHED_AVATAR_IMAGES = 16;
 const MAX_PREFETCHED_AVATAR_SIZE = 1024;
 const MAX_CONCURRENT_AVATAR_LOADS = 4;
+const MAX_CONCURRENT_PREFETCH_LOADS = MAX_CONCURRENT_AVATAR_LOADS - 1;
 const MAX_RECENT_AVATAR_IMAGES = 8;
 const MAX_WARMED_AVATAR_KEYS = 512;
 const BACKGROUND_LOAD_PRIORITY = 0;
@@ -34,14 +35,27 @@ const warmedAvatarImageKeys = new Set<string>();
 const pendingAvatarLoads = new Map<string, Promise<ImageRef | undefined>>();
 const queuedAvatarLoads: QueuedAvatarLoad[] = [];
 let activeAvatarLoads = 0;
+let activePrefetchLoads = 0;
 
 function startQueuedAvatarLoads(): void {
   while (activeAvatarLoads < MAX_CONCURRENT_AVATAR_LOADS && queuedAvatarLoads.length > 0) {
-    let nextJobIndex = 0;
-    for (let index = 1; index < queuedAvatarLoads.length; index += 1) {
-      if (queuedAvatarLoads[index].priority > queuedAvatarLoads[nextJobIndex].priority) {
+    let nextJobIndex = -1;
+    for (let index = 0; index < queuedAvatarLoads.length; index += 1) {
+      const job = queuedAvatarLoads[index];
+      // Leave one slot available so an explicit profile/viewer request can start
+      // while three slow startup or background loads are still in progress.
+      if (
+        job.priority !== USER_LOAD_PRIORITY &&
+        activePrefetchLoads >= MAX_CONCURRENT_PREFETCH_LOADS
+      ) {
+        continue;
+      }
+      if (nextJobIndex < 0 || job.priority > queuedAvatarLoads[nextJobIndex].priority) {
         nextJobIndex = index;
       }
+    }
+    if (nextJobIndex < 0) {
+      return;
     }
     const [job] = queuedAvatarLoads.splice(nextJobIndex, 1);
     if (!job) {
@@ -49,6 +63,10 @@ function startQueuedAvatarLoads(): void {
     }
 
     activeAvatarLoads += 1;
+    const isPrefetchLoad = job.priority !== USER_LOAD_PRIORITY;
+    if (isPrefetchLoad) {
+      activePrefetchLoads += 1;
+    }
     void (async () => {
       let result: ImageRef | undefined;
       try {
@@ -57,6 +75,9 @@ function startQueuedAvatarLoads(): void {
         result = undefined;
       } finally {
         activeAvatarLoads -= 1;
+        if (isPrefetchLoad) {
+          activePrefetchLoads -= 1;
+        }
         startQueuedAvatarLoads();
         job.resolve(result);
       }
@@ -79,6 +100,7 @@ function promoteQueuedAvatarLoad(cacheKey: string, priority: AvatarLoadPriority)
   const job = queuedAvatarLoads.find((entry) => entry.cacheKey === cacheKey);
   if (job && job.priority < priority) {
     job.priority = priority;
+    startQueuedAvatarLoads();
   }
 }
 
@@ -344,4 +366,5 @@ export function clearAvatarPrefetchCacheForTests(): void {
   pendingAvatarLoads.clear();
   queuedAvatarLoads.length = 0;
   activeAvatarLoads = 0;
+  activePrefetchLoads = 0;
 }

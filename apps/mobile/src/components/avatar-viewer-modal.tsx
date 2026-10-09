@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/lib/theme';
 import { useAvatarViewerImage } from '@/lib/use-avatar-viewer-image';
@@ -16,6 +16,10 @@ export interface AvatarViewerModalProps {
 
 export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarViewerModalProps) {
   const imageRef = useAvatarViewerImage(imageUrl, visible);
+  // Wait for the shared native image instead of downloading a cold photo again
+  // through a separate URL source while that load is still pending.
+  // Browser image elements also support external URLs whose CORS policy blocks loadAsync.
+  const preparedImageUrl = Platform.OS === 'web' || imageRef ? imageUrl : undefined;
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
@@ -34,7 +38,7 @@ export function AvatarViewerModal({ imageUrl, label, onClose, visible }: AvatarV
             <AppAvatar
               fallbackBackgroundColor={theme.colors.primarySoft}
               fallbackTextColor={theme.colors.primary}
-              imageUrl={imageUrl}
+              imageUrl={preparedImageUrl}
               imageRef={imageRef}
               label={label}
               priority="high"
