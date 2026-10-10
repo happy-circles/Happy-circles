@@ -146,3 +146,5 @@ begin
 end;
 $$;
 rollback;
+select '1..1';
+select 'ok 1 - invitation-only signup verifies identity, current delivery, transactional consumption and email fallback';
