@@ -315,8 +315,7 @@ export function AccountCreateAccountScreen() {
         source: 'account_invite_signup',
       });
 
-      const result =
-        provider === 'google' ? await session.signInWithGoogle() : await session.signInWithApple();
+      const result = await session.registerSocialAccount({ provider, deliveryToken: token });
 
       if (result === 'Sesión iniciada.') {
         await session.refreshAccountState({

@@ -32,6 +32,10 @@ export interface NativeAppleResult {
 }
 
 export async function performNativeAppleAuth(input: {
+  readonly beforeSignIn?: (credential: {
+    readonly idToken: string;
+    readonly nonce: string;
+  }) => Promise<string | null>;
   readonly client: SupabaseClient;
   readonly mode: NativeAppleMode;
   readonly reportFailure: (failure: NativeAppleFailureReport) => void;
@@ -116,6 +120,14 @@ export async function performNativeAppleAuth(input: {
         };
       }
     } else {
+      const authorizationMessage = await input.beforeSignIn?.({
+        idToken: credential.identityToken,
+        nonce,
+      });
+      if (authorizationMessage) {
+        return { message: authorizationMessage, userId: null };
+      }
+
       const { error } = await input.client.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,

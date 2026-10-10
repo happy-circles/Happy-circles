@@ -19,6 +19,7 @@ export type NativeGoogleFailureCode =
   | 'native_unavailable'
   | 'play_services_unavailable'
   | 'provider_disabled'
+  | 'registration_not_authorized'
   | 'supabase_token_rejected'
   | 'unexpected';
 type NativeGoogleStage =
@@ -113,6 +114,7 @@ function classifySupabaseGoogleFailure(message: string): {
 }
 
 export async function performNativeGoogleAuth(input: {
+  readonly beforeSignIn?: (credential: { readonly idToken: string }) => Promise<string | null>;
   readonly client: SupabaseClient;
   readonly mode: NativeGoogleMode;
   readonly reportFailure: (failure: NativeGoogleFailureReport) => void;
@@ -194,6 +196,16 @@ export async function performNativeGoogleAuth(input: {
         };
       }
     } else {
+      const authorizationMessage = await input.beforeSignIn?.({ idToken: credential.idToken });
+      if (authorizationMessage) {
+        return {
+          failureCode: 'registration_not_authorized',
+          message: authorizationMessage,
+          shouldFallbackToOAuth: false,
+          userId: null,
+        };
+      }
+
       const { error } = await input.client.auth.signInWithIdToken({
         provider: 'google',
         token: credential.idToken,

@@ -55,6 +55,14 @@ export function formatSupabaseAuthErrorMessage(
   const normalized = message.trim().toLocaleLowerCase('en-US');
 
   if (
+    normalized.includes('account_invite_required') ||
+    normalized.includes('signup requires a valid invitation') ||
+    normalized.includes('a valid invitation is required')
+  ) {
+    return 'Para crear una cuenta necesitas una invitación válida. Abre tu enlace o pega el código.';
+  }
+
+  if (
     normalized.includes('email rate limit exceeded') ||
     normalized.includes('over_email_send_rate_limit') ||
     normalized.includes('too many requests') ||

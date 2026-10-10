@@ -23,7 +23,7 @@ import { recordProductEventSafe } from '@/lib/analytics-client';
 import { buildEmailAuthRedirect } from '@/lib/auth-redirects';
 import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { removeStoredItem, setStoredItem } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { publicEdgeSupabase, supabase } from '@/lib/supabase';
 import {
   createSupportId,
   readFunctionErrorDetails,
@@ -34,6 +34,7 @@ import { performNativeAppleAuth } from './apple-native-auth';
 import { traceAuthDebugEvent } from './auth-debug';
 import { performGoogleAuthFlow } from './google-auth-flow';
 import { reportSocialAuthFailure } from './social-auth-reporting';
+import { performSocialAccountRegistration } from './social-registration';
 import { loadSessionAccountState } from './session-account-loader';
 import { createSessionAuthorizationActions } from './session-authorization-actions';
 import {
@@ -97,6 +98,7 @@ import type {
   SessionLoadingStage,
   SessionStatus,
   SetupState,
+  SocialAccountRegistrationInput,
   TrustCurrentDeviceInput,
   TrustedDeviceRow,
   UserProfileRow,
@@ -1005,6 +1007,18 @@ export function useSessionController(): SessionContextValue {
     }
   }, [finishAuthenticatedSignIn, performAppleAuth]);
 
+  const registerSocialAccount = useCallback(
+    (registration: SocialAccountRegistrationInput) =>
+      performSocialAccountRegistration({
+        client: supabase,
+        finishAuthenticatedSignIn,
+        platform: Platform.OS,
+        publicClient: publicEdgeSupabase,
+        registration,
+      }),
+    [finishAuthenticatedSignIn],
+  );
+
   const requestPasswordReset = useCallback(async (email: string) => {
     try {
       const parsed = passwordResetRequestSchema.parse({ email });
@@ -1848,6 +1862,7 @@ export function useSessionController(): SessionContextValue {
       updatePassword,
       signInWithPassword,
       registerAccount,
+      registerSocialAccount,
       signInWithGoogle,
       signInWithApple,
       completeProfile,
@@ -1910,6 +1925,7 @@ export function useSessionController(): SessionContextValue {
       refreshBiometricSupport,
       retrySession,
       registerAccount,
+      registerSocialAccount,
       revokeTrustedDevice,
       session,
       setBiometricsEnabled,

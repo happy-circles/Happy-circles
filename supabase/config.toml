@@ -32,6 +32,11 @@ enable_signup = true
 enable_confirmations = true
 otp_length = 8
 
+# Rollout opt-in only, after the mobile invited-social flow and proof endpoint are available:
+# [auth.hook.before_user_created]
+# enabled = true
+# uri = "pg-functions://postgres/app_private/require_invited_signup"
+
 [auth.email.template.confirmation]
 subject = "Confirma tu cuenta de Happy Circles"
 content_path = "./supabase/templates/auth/confirmation.html"
@@ -110,6 +115,11 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.get-account-invite-preview-public]
+verify_jwt = false
+
+# Deploy the proof endpoint before enabling auth.hook.before_user_created.
+# The hook stays disabled until the mobile invited-social signup flow is released.
+[functions.prepare-social-registration]
 verify_jwt = false
 
 [functions.activate-account-from-invite]

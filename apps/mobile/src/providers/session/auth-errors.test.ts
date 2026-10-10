@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { formatSupabaseAuthErrorMessage } from './auth-errors';
 
 describe('auth error formatting', () => {
+  it.each([
+    'account_invite_required',
+    'Signup requires a valid invitation.',
+    'A valid invitation is required to create an account.',
+  ])('explains invitation-gated signup rejection: %s', (message) => {
+    expect(formatSupabaseAuthErrorMessage(message, 'google')).toBe(
+      'Para crear una cuenta necesitas una invitación válida. Abre tu enlace o pega el código.',
+    );
+  });
+
   it('maps provider nonce failures to stable copy', () => {
     expect(formatSupabaseAuthErrorMessage('Nonces mismatch', 'apple')).toBe(
       'No pudimos validar Apple. Intenta de nuevo.',

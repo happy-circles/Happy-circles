@@ -7,6 +7,7 @@ import {
   resolveAccountInviteEntryParams,
   resolveAuthLogoCopy,
   resolveSecondaryAuthAction,
+  resolveSignInCompletionAction,
   resolveTokenFieldError,
   resolveTokenLogoSubtitle,
   validateEmailForAuth,
@@ -14,6 +15,64 @@ import {
 } from './account-invite-entry-helpers';
 
 describe('account invite entry helpers', () => {
+  const completionInput = {
+    status: 'signed_in_unlocked' as const,
+    accountAccessState: 'active' as const,
+    profileCompletionState: 'complete' as const,
+    setupState: { requiredComplete: true, pendingRequiredSteps: [], securityPending: false },
+    pendingToken: null,
+  };
+
+  it.each(['needs_invite', 'needs_activation'] as const)(
+    'returns %s accounts without a token to usable invitation entry',
+    (accountAccessState) => {
+      expect(resolveSignInCompletionAction({ ...completionInput, accountAccessState })).toEqual({
+        action: 'invite_entry',
+      });
+    },
+  );
+
+  it('keeps required setup before account gating and pending invitations before Home', () => {
+    expect(
+      resolveSignInCompletionAction({
+        ...completionInput,
+        accountAccessState: 'needs_invite',
+        setupState: {
+          requiredComplete: false,
+          pendingRequiredSteps: ['profile'],
+          securityPending: false,
+        },
+        pendingToken: 'invite-token-123456',
+      }),
+    ).toEqual({
+      action: 'navigate',
+      destination: { pathname: '/setup-account', params: { step: 'profile' } },
+    });
+    expect(
+      resolveSignInCompletionAction({ ...completionInput, pendingToken: 'invite-token-123456' }),
+    ).toEqual({
+      action: 'navigate',
+      destination: { pathname: '/join/[token]', params: { token: 'invite-token-123456' } },
+    });
+    expect(resolveSignInCompletionAction(completionInput)).toEqual({
+      action: 'navigate',
+      destination: '/home',
+    });
+  });
+
+  it('waits for session and account loading or a locked session before completing login', () => {
+    for (const state of [
+      { status: 'loading' as const },
+      { status: 'signed_out' as const },
+      { status: 'signed_in_locked' as const },
+      { accountAccessState: 'loading' as const },
+      { profileCompletionState: 'loading' as const },
+    ]) {
+      expect(resolveSignInCompletionAction({ ...completionInput, ...state })).toEqual({
+        action: 'wait',
+      });
+    }
+  });
   it('extracts invite tokens from links and copied paths', () => {
     expect(extractAccountInviteToken('https://happy.test/join/token-123')).toBe('token-123');
     expect(extractAccountInviteToken('happycircles://join/token-456')).toBe('token-456');

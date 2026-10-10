@@ -39,8 +39,6 @@ import {
 import { writePendingInviteIntent } from '@/lib/invite-intent';
 import { useAccountInvitePreviewQuery } from '@/lib/live-data';
 import { pushRoute, returnToRoute } from '@/lib/navigation';
-import { resolveRequiredSetupStep } from '@/lib/pre-home-routing';
-import { buildSetupAccountHref } from '@/lib/setup-account';
 import { beginSetupEntryHandoff } from '@/lib/setup-entry-handoff';
 import { useSession } from '@/providers/session-provider';
 import { useAppTheme } from '@/providers/theme-provider';
@@ -67,7 +65,9 @@ import {
   PASSWORD_RESET_SENT_MESSAGE,
   biometricMessage,
   isRecoveryCodeValid,
+  isSetupAccountDestination,
   resolveAuthLogoCopy,
+  resolveSignInCompletionAction,
   resolveSecondaryAuthAction,
   resolveTokenFieldError,
   resolveTokenLogoSubtitle,
@@ -90,12 +90,6 @@ const AUTH_PASSWORD_KEYBOARD_ACTION_CLEARANCE = 148;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-function isSetupAccountDestination(destination: Href) {
-  return typeof destination === 'string'
-    ? destination.startsWith('/setup-account')
-    : destination.pathname === '/setup-account';
 }
 
 export function AccountSignInEntry({
@@ -410,34 +404,20 @@ export function AccountSignInEntry({
       successNavigationTimerRef.current = null;
     }
 
-    if (
-      session.status === 'loading' ||
-      session.status === 'signed_out' ||
-      session.status === 'signed_in_locked'
-    ) {
+    const completion = resolveSignInCompletionAction({
+      status: session.status,
+      accountAccessState: session.accountAccessState,
+      profileCompletionState: session.profileCompletionState,
+      setupState: session.setupState,
+      pendingToken,
+    });
+    if (completion.action === 'wait') return undefined;
+    if (completion.action === 'invite_entry') {
+      showInviteEntry();
       return undefined;
     }
-
-    if (session.accountAccessState === 'loading') {
-      return undefined;
-    }
-
-    if (session.profileCompletionState === 'loading') {
-      return undefined;
-    }
-
     let cancelled = false;
-    const setupStep = resolveRequiredSetupStep(session.setupState);
-    const destination = setupStep
-      ? buildSetupAccountHref(setupStep)
-      : pendingToken
-        ? ({
-            pathname: '/join/[token]',
-            params: { token: pendingToken },
-          } as unknown as Href)
-        : session.accountAccessState === 'active'
-          ? ('/home' as Href)
-          : ('/join' as Href);
+    const { destination } = completion;
 
     successNavigationTimerRef.current = setTimeout(() => {
       successNavigationTimerRef.current = null;
@@ -527,6 +507,10 @@ export function AccountSignInEntry({
     }
 
     triggerIdentitySelectionHaptic();
+    showInviteEntry();
+  }
+
+  function showInviteEntry() {
     Keyboard.dismiss();
     clearAuthRouteTransitionHold();
     clearSuccessCompletionTimer();

@@ -153,4 +153,57 @@ describe('performNativeGoogleAuth', () => {
     });
     expect(reportFailure).not.toHaveBeenCalled();
   });
+
+  it('requires registration authorization before exchanging the native credential', async () => {
+    const { client, signInWithIdToken } = createClient();
+    const beforeSignIn = vi.fn(async () => {
+      expect(signInWithIdToken).not.toHaveBeenCalled();
+      return null;
+    });
+
+    const result = await performNativeGoogleAuth({
+      beforeSignIn,
+      client: client as never,
+      mode: 'sign-in',
+      reportFailure: vi.fn(),
+    });
+
+    expect(beforeSignIn).toHaveBeenCalledWith({ idToken: credential.idToken });
+    expect(signInWithIdToken).toHaveBeenCalledOnce();
+    expect(result.userId).toBe('user-1');
+  });
+
+  it('does not exchange a credential or fallback when registration authorization is denied', async () => {
+    const { client, signInWithIdToken } = createClient();
+    const reportFailure = vi.fn();
+    const result = await performNativeGoogleAuth({
+      beforeSignIn: async () => 'Invitación no disponible.',
+      client: client as never,
+      mode: 'sign-in',
+      reportFailure,
+    });
+
+    expect(signInWithIdToken).not.toHaveBeenCalled();
+    expect(reportFailure).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      failureCode: 'registration_not_authorized',
+      message: 'Invitación no disponible.',
+      shouldFallbackToOAuth: false,
+      userId: null,
+    });
+  });
+
+  it('leaves existing identity linking independent of registration authorization', async () => {
+    const { client, linkIdentity } = createClient();
+    const beforeSignIn = vi.fn(async () => 'Not permitted');
+    await performNativeGoogleAuth({
+      beforeSignIn,
+      client: client as never,
+      mode: 'link',
+      reportFailure: vi.fn(),
+    });
+
+    expect(linkIdentity).toHaveBeenCalledOnce();
+    expect(beforeSignIn).not.toHaveBeenCalled();
+  });
 });

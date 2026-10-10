@@ -60,6 +60,11 @@ export interface RegistrationInput extends EmailPasswordCredentials {
   readonly phoneNationalNumber: string;
 }
 
+export interface SocialAccountRegistrationInput {
+  readonly provider: 'google' | 'apple';
+  readonly deliveryToken: string;
+}
+
 export interface AccountRegistrationPreviewResult {
   readonly deliveryStatus?: string | null;
   readonly reason?: string | null;
@@ -167,6 +172,7 @@ export interface SessionContextValue {
   updatePassword(input: PasswordResetInput): Promise<string>;
   signInWithPassword(input: EmailPasswordCredentials): Promise<string>;
   registerAccount(input: RegistrationInput): Promise<string>;
+  registerSocialAccount(input: SocialAccountRegistrationInput): Promise<string>;
   signInWithGoogle(): Promise<string>;
   signInWithApple(): Promise<string>;
   completeProfile(input: CompleteProfileInput): Promise<string>;

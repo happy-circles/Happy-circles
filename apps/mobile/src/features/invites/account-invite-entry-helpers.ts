@@ -1,3 +1,13 @@
+import type { Href } from 'expo-router';
+
+import {
+  resolveRequiredSetupStep,
+  type PreHomeAccountAccessState,
+  type PreHomeProfileCompletionState,
+  type PreHomeSessionStatus,
+  type PreHomeSetupState,
+} from '@/lib/pre-home-routing';
+import { buildSetupAccountHref } from '@/lib/setup-account';
 import { MIN_ACCOUNT_INVITE_TOKEN_LENGTH, extractAccountInviteToken } from './account-invite-utils';
 
 export type SocialProvider = 'google' | 'apple';
@@ -16,6 +26,50 @@ export const PASSWORD_RESET_SENT_MESSAGE =
   'Si el correo existe, enviamos un enlace para restablecer la contraseña.';
 export const PASSWORD_RECOVERY_CODE_VERIFIED_MESSAGE = 'Código verificado.';
 export const PASSWORD_RESET_RESEND_SECONDS = 60;
+
+export type SignInCompletionAction =
+  | { readonly action: 'wait' }
+  | { readonly action: 'invite_entry' }
+  | { readonly action: 'navigate'; readonly destination: Href };
+
+export function resolveSignInCompletionAction(input: {
+  readonly status: PreHomeSessionStatus;
+  readonly accountAccessState: PreHomeAccountAccessState;
+  readonly profileCompletionState: PreHomeProfileCompletionState;
+  readonly setupState: PreHomeSetupState;
+  readonly pendingToken: string | null;
+}): SignInCompletionAction {
+  if (
+    input.status === 'loading' ||
+    input.status === 'signed_out' ||
+    input.status === 'signed_in_locked' ||
+    input.accountAccessState === 'loading' ||
+    input.profileCompletionState === 'loading'
+  ) {
+    return { action: 'wait' };
+  }
+
+  const setupStep = resolveRequiredSetupStep(input.setupState);
+  if (setupStep) return { action: 'navigate', destination: buildSetupAccountHref(setupStep) };
+  if (input.pendingToken) {
+    return {
+      action: 'navigate',
+      destination: {
+        pathname: '/join/[token]',
+        params: { token: input.pendingToken },
+      } as unknown as Href,
+    };
+  }
+  return input.accountAccessState === 'active'
+    ? { action: 'navigate', destination: '/home' }
+    : { action: 'invite_entry' };
+}
+
+export function isSetupAccountDestination(destination: Href) {
+  return typeof destination === 'string'
+    ? destination.startsWith('/setup-account')
+    : destination.pathname === '/setup-account';
+}
 
 export function biometricMessage(error: string | null, label: string): string {
   if (error === 'user_cancel') {

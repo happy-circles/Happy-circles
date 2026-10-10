@@ -72,6 +72,7 @@ for (const migrationFile of migrationFiles) {
 const config = readFile('supabase/config.toml');
 const publicFunctionAllowlist = new Set([
   'get-account-invite-preview-public',
+  'prepare-social-registration',
   'process-graph-cycle-jobs',
   'send-push-notifications',
 ]);
