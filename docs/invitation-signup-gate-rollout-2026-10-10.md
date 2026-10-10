@@ -2,6 +2,8 @@
 
 The migration `20261010173949_invitation_required_registration.sql` and public Edge Function `prepare-social-registration` prepare the server-side signup gate. They do not enable the Auth hook or its final INSERT enforcement switch. Ordinary Google login keeps its existing OAuth flow; invited Google signup obtains a native Google identity token first. Apple signup uses its existing native token and nonce. Browser-only/new-user Google fallback uses invited email registration.
 
+Production enforcement was enabled on October 10 after publishing the compatible mobile updates. See [the production release record](invitation-signup-gate-release-2026-10-10.md) for exact artifacts, completed checks and the live-provider/test-project validation limits. The steps below describe the intended rollout order; the release record describes what was actually executed.
+
 ## Server configuration
 
 Configure these server-only Edge Function environment values, independently for production and test/demo:
