@@ -213,3 +213,5 @@ begin
 end;
 $$;
 rollback;
+select '1..1';
+select 'ok 1 - durable history preserves complete pagination, privacy, ownership, mutable closures and transactional revisions';
