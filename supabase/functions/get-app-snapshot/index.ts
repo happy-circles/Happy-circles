@@ -1,4 +1,5 @@
 import { createServiceRoleClient, handleRpc } from '../_shared/http.ts';
+import { parseHistorySyncRequest, withEffectiveInviteStatus } from './history-sync.ts';
 
 const LIMITS = {
   financialRequestHistory: 250,
@@ -255,6 +256,7 @@ type QueryResult<T> = {
   readonly data: T[] | null;
   readonly error: { readonly message: string } | null;
 };
+type IdentifiedRow = Record<string, unknown> & { readonly id: string };
 
 type SignedAvatarBatchRow = {
   readonly error?: string | null;
@@ -269,13 +271,23 @@ type SettlementMovementRecord = {
   readonly debtor_user_id: string;
 };
 
-async function expectRows<T>(query: PromiseLike<QueryResult<T>>, label: string): Promise<T[]> {
+async function expectRows<T extends Record<string, unknown>>(
+  query: PromiseLike<QueryResult<unknown>>,
+  label: string,
+): Promise<T[]> {
   const { data, error } = await query;
   if (error) {
     throw new Error(`${label}: ${error.message}`);
   }
 
-  return data ?? [];
+  if (data === null) return [];
+  if (
+    !Array.isArray(data) ||
+    data.some((row) => !row || typeof row !== 'object' || Array.isArray(row))
+  ) {
+    throw new Error(`${label}: invalid rows payload`);
+  }
+  return data as T[];
 }
 
 function mergeRowsById<T extends { readonly id: string }>(...groups: readonly T[][]): T[] {
@@ -489,7 +501,9 @@ async function createSignedAvatarUrlsByPath(
     ] as const;
   });
 
-  return Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry));
+  return Object.fromEntries(
+    entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+  );
 }
 
 function participantScope(actorUserId: string) {
@@ -514,8 +528,9 @@ function accountInviteScope(actorUserId: string) {
 }
 
 Deno.serve((request) =>
-  handleRpc(request, async (_body, actorUserId) => {
+  handleRpc(request, async (body, actorUserId) => {
     const client = createServiceRoleClient();
+    const historySyncRequest = parseHistorySyncRequest(body);
     const snapshotStartedAt = performance.now();
     const serverTimings: Record<string, number> = {};
     async function timed<T>(label: string, promise: Promise<T>): Promise<T> {
@@ -525,6 +540,26 @@ Deno.serve((request) =>
       } finally {
         serverTimings[label] = Math.max(0, Math.round(performance.now() - startedAt));
       }
+    }
+
+    // Resolve the durable feed before reading the latest dynamic state/profiles.
+    // Legacy callers never touch the new RPC, including during staged rollout.
+    let historySync: Record<string, unknown> | undefined;
+    if (historySyncRequest) {
+      const page = await timed(
+        'history_sync_page',
+        Promise.resolve(
+          client.rpc('get_history_sync_page', {
+            p_actor_user_id: actorUserId,
+            p_cursor: historySyncRequest.cursor,
+            p_page_size: historySyncRequest.pageSize,
+          }),
+        ),
+      );
+      if (page.error) throw new Error(`history_sync_page: ${page.error.message}`);
+      if (!page.data || typeof page.data !== 'object')
+        throw new Error('history_sync_page: missing payload');
+      historySync = page.data as Record<string, unknown>;
     }
 
     const relationships = await timed(
@@ -563,15 +598,17 @@ Deno.serve((request) =>
                   .order('relationship_id', { ascending: true }),
                 'open_debts',
               ),
-              expectRows<Record<string, unknown>>(
-                client
-                  .from('v_relationship_history')
-                  .select(RELATIONSHIP_HISTORY_SELECT)
-                  .in('relationship_id', relationshipIds)
-                  .order('happened_at', { ascending: false })
-                  .limit(LIMITS.relationshipHistory),
-                'relationship_history',
-              ),
+              historySyncRequest
+                ? Promise.resolve([])
+                : expectRows<Record<string, unknown>>(
+                    client
+                      .from('v_relationship_history')
+                      .select(RELATIONSHIP_HISTORY_SELECT)
+                      .in('relationship_id', relationshipIds)
+                      .order('happened_at', { ascending: false })
+                      .limit(LIMITS.relationshipHistory),
+                    'relationship_history',
+                  ),
             ]).then(([openDebts, history]) => ({ openDebts, history })),
           );
 
@@ -589,131 +626,150 @@ Deno.serve((request) =>
       happyCircleScoreEvents,
       notificationViews,
       auditEvents,
-    ] = await timed('initial_parallel_queries', Promise.all([
-      relationshipScopedRows,
-      expectRows<Record<string, unknown>>(
-        client
-          .from('financial_requests')
-          .select(FINANCIAL_REQUEST_SELECT)
-          .or(participantScope(actorUserId))
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false }),
-        'pending_financial_requests',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('financial_requests')
-          .select(FINANCIAL_REQUEST_SELECT)
-          .or(participantScope(actorUserId))
-          .neq('status', 'pending')
-          .order('updated_at', { ascending: false })
-          .limit(LIMITS.financialRequestHistory),
-        'financial_request_history',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('v_inbox_items')
-          .select(INBOX_ITEM_SELECT)
-          .eq('owner_user_id', actorUserId)
-          .order('created_at', { ascending: false }),
-        'inbox_items',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('v_friendship_invites_live')
-          .select(FRIENDSHIP_INVITE_SELECT)
-          .or(friendshipScope(actorUserId))
-          .in('status', ACTIVE_FRIENDSHIP_INVITE_STATUSES)
-          .order('updated_at', { ascending: false }),
-        'active_friendship_invites',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('v_friendship_invites_live')
-          .select(FRIENDSHIP_INVITE_SELECT)
-          .or(friendshipScope(actorUserId))
-          .in('status', HISTORY_FRIENDSHIP_INVITE_STATUSES)
-          .order('updated_at', { ascending: false })
-          .limit(LIMITS.friendshipInviteHistory),
-        'friendship_invite_history',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('v_account_invites_live')
-          .select(ACCOUNT_INVITE_SELECT)
-          .or(accountInviteScope(actorUserId))
-          .in('status', ACTIVE_ACCOUNT_INVITE_STATUSES)
-          .order('updated_at', { ascending: false }),
-        'active_account_invites',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('v_account_invites_live')
-          .select(ACCOUNT_INVITE_SELECT)
-          .or(accountInviteScope(actorUserId))
-          .in('status', HISTORY_ACCOUNT_INVITE_STATUSES)
-          .order('updated_at', { ascending: false })
-          .limit(LIMITS.accountInviteHistory),
-        'account_invite_history',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('settlement_proposals')
-          .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
-          .eq('settlement_proposal_participants.participant_user_id', actorUserId)
-          .in('status', ACTIVE_SETTLEMENT_STATUSES)
-          .order('updated_at', { ascending: false }),
-        'active_settlement_proposals',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('settlement_proposals')
-          .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
-          .eq('settlement_proposal_participants.participant_user_id', actorUserId)
-          .in('status', HISTORY_SETTLEMENT_STATUSES)
-          .order('updated_at', { ascending: false })
-          .limit(LIMITS.settlementHistory),
-        'settlement_proposal_history',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('happy_circle_score_events')
-          .select(HAPPY_CIRCLE_SCORE_EVENT_SELECT)
-          .eq('user_id', actorUserId)
-          .order('awarded_at', { ascending: false }),
-        'happy_circle_score_events',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('notification_views')
-          .select(NOTIFICATION_VIEW_SELECT)
-          .eq('user_id', actorUserId)
-          .order('viewed_at', { ascending: false })
-          .limit(LIMITS.notificationViews),
-        'notification_views',
-      ),
-      expectRows<Record<string, unknown>>(
-        client
-          .from('audit_events')
-          .select(AUDIT_EVENT_SELECT)
-          .eq('actor_user_id', actorUserId)
-          .order('created_at', { ascending: false })
-          .limit(LIMITS.auditEvents),
-        'audit_events',
-      ),
-    ]));
+    ] = await timed(
+      'initial_parallel_queries',
+      Promise.all([
+        relationshipScopedRows,
+        expectRows<Record<string, unknown>>(
+          client
+            .from('financial_requests')
+            .select(FINANCIAL_REQUEST_SELECT)
+            .or(participantScope(actorUserId))
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false }),
+          'pending_financial_requests',
+        ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('financial_requests')
+                .select(FINANCIAL_REQUEST_SELECT)
+                .or(participantScope(actorUserId))
+                .neq('status', 'pending')
+                .order('updated_at', { ascending: false })
+                .limit(LIMITS.financialRequestHistory),
+              'financial_request_history',
+            ),
+        expectRows<Record<string, unknown>>(
+          client
+            .from('v_inbox_items')
+            .select(INBOX_ITEM_SELECT)
+            .eq('owner_user_id', actorUserId)
+            .order('created_at', { ascending: false }),
+          'inbox_items',
+        ),
+        expectRows<Record<string, unknown>>(
+          client
+            .from(historySyncRequest ? 'friendship_invites' : 'v_friendship_invites_live')
+            .select(FRIENDSHIP_INVITE_SELECT)
+            .or(friendshipScope(actorUserId))
+            .in('status', ACTIVE_FRIENDSHIP_INVITE_STATUSES)
+            .order('updated_at', { ascending: false }),
+          'active_friendship_invites',
+        ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('v_friendship_invites_live')
+                .select(FRIENDSHIP_INVITE_SELECT)
+                .or(friendshipScope(actorUserId))
+                .in('status', HISTORY_FRIENDSHIP_INVITE_STATUSES)
+                .order('updated_at', { ascending: false })
+                .limit(LIMITS.friendshipInviteHistory),
+              'friendship_invite_history',
+            ),
+        expectRows<Record<string, unknown>>(
+          client
+            .from(historySyncRequest ? 'account_invites' : 'v_account_invites_live')
+            .select(ACCOUNT_INVITE_SELECT)
+            .or(accountInviteScope(actorUserId))
+            .in('status', ACTIVE_ACCOUNT_INVITE_STATUSES)
+            .order('updated_at', { ascending: false }),
+          'active_account_invites',
+        ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('v_account_invites_live')
+                .select(ACCOUNT_INVITE_SELECT)
+                .or(accountInviteScope(actorUserId))
+                .in('status', HISTORY_ACCOUNT_INVITE_STATUSES)
+                .order('updated_at', { ascending: false })
+                .limit(LIMITS.accountInviteHistory),
+              'account_invite_history',
+            ),
+        expectRows<Record<string, unknown>>(
+          client
+            .from('settlement_proposals')
+            .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
+            .eq('settlement_proposal_participants.participant_user_id', actorUserId)
+            .in('status', ACTIVE_SETTLEMENT_STATUSES)
+            .order('updated_at', { ascending: false }),
+          'active_settlement_proposals',
+        ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('settlement_proposals')
+                .select(SETTLEMENT_PROPOSAL_WITH_ACTOR_SELECT)
+                .eq('settlement_proposal_participants.participant_user_id', actorUserId)
+                .in('status', HISTORY_SETTLEMENT_STATUSES)
+                .order('updated_at', { ascending: false })
+                .limit(LIMITS.settlementHistory),
+              'settlement_proposal_history',
+            ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('happy_circle_score_events')
+                .select(HAPPY_CIRCLE_SCORE_EVENT_SELECT)
+                .eq('user_id', actorUserId)
+                .order('awarded_at', { ascending: false }),
+              'happy_circle_score_events',
+            ),
+        expectRows<Record<string, unknown>>(
+          client
+            .from('notification_views')
+            .select(NOTIFICATION_VIEW_SELECT)
+            .eq('user_id', actorUserId)
+            .order('viewed_at', { ascending: false })
+            .limit(LIMITS.notificationViews),
+          'notification_views',
+        ),
+        historySyncRequest
+          ? Promise.resolve([])
+          : expectRows<Record<string, unknown>>(
+              client
+                .from('audit_events')
+                .select(AUDIT_EVENT_SELECT)
+                .eq('actor_user_id', actorUserId)
+                .order('created_at', { ascending: false })
+                .limit(LIMITS.auditEvents),
+              'audit_events',
+            ),
+      ]),
+    );
 
     const financialRequests = mergeRowsById(
-      pendingFinancialRequests as { readonly id: string }[],
-      historicalFinancialRequests as { readonly id: string }[],
+      pendingFinancialRequests as IdentifiedRow[],
+      historicalFinancialRequests as IdentifiedRow[],
     );
     const friendshipInvites = mergeRowsById(
-      activeFriendshipInvites as { readonly id: string }[],
-      historicalFriendshipInvites as { readonly id: string }[],
+      (historySyncRequest
+        ? withEffectiveInviteStatus(activeFriendshipInvites, Date.now())
+        : activeFriendshipInvites) as IdentifiedRow[],
+      historicalFriendshipInvites as IdentifiedRow[],
     );
     const accountInvites = mergeRowsById(
-      activeAccountInvites as { readonly id: string }[],
-      historicalAccountInvites as { readonly id: string }[],
+      (historySyncRequest
+        ? withEffectiveInviteStatus(activeAccountInvites, Date.now())
+        : activeAccountInvites) as IdentifiedRow[],
+      historicalAccountInvites as IdentifiedRow[],
     );
 
     const friendshipInviteIds = friendshipInvites.map((invite) => invite.id);
@@ -757,7 +813,7 @@ Deno.serve((request) =>
       ),
     );
     const caseSettlementProposals =
-      settlementCaseIds.length === 0
+      historySyncRequest || settlementCaseIds.length === 0
         ? []
         : await timed(
             'settlement_proposal_versions',
@@ -857,6 +913,14 @@ Deno.serve((request) =>
       addIds(visibleUserIds, participant.participant_user_id);
     }
 
+    // Signed avatars and fresh profiles are also provided for this delta page.
+    if (Array.isArray(historySync?.changes)) {
+      for (const change of historySync.changes as Record<string, unknown>[]) {
+        const row = change.row as Record<string, unknown> | null;
+        if (change.collection === 'profiles' && row) addIds(visibleUserIds, row.id);
+      }
+    }
+
     const profiles = await timed(
       'profiles',
       expectRows<Record<string, unknown>>(
@@ -894,6 +958,7 @@ Deno.serve((request) =>
       limits: LIMITS,
       serverTimings,
       fetchedAt: new Date().toISOString(),
+      ...(historySync ? { historySync } : {}),
     };
   }),
 );

@@ -8,6 +8,7 @@ import type {
   PersonDetailDto,
 } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
+import type { HistorySyncPage } from './history-sync';
 
 import type {
   AccountInviteDeliveryRow,
@@ -84,6 +85,7 @@ export interface LiveSnapshotLimits {
 }
 
 export interface LiveSnapshotRows {
+  readonly historySync?: HistorySyncPage;
   readonly profiles: readonly UserProfileRow[];
   readonly avatarSignedUrlsByPath: SignedAvatarUrlRecord;
   readonly relationships: readonly RelationshipRow[];

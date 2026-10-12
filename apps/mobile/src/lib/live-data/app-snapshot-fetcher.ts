@@ -1,37 +1,63 @@
 import { hydrateSignedAvatarUrlCache } from '../avatar';
 import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '../avatar-prefetch';
 import { recordSnapshotNetworkResolved } from '../performance-metrics';
+import { appConfig } from '../config';
 import { reportAndCreateSupportError } from '../support-errors';
 import { buildPeopleOverviewFromAppSnapshot } from './build-people-overview';
 import { buildLiveSnapshot } from './build-snapshot';
-import { createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
+import { assertSupabaseClient, createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
 import { persistCachedPeopleOverview } from './people-overview-cache';
 import { persistCachedAppSnapshot } from './snapshot-cache';
+import { readCachedHistory, persistCachedHistory, withHistorySyncLock } from './history-sync-cache';
+import { synchronizeHistorySnapshot } from './history-sync-runner';
 import type { AppSnapshot, LiveSnapshotRows } from './types';
 
 async function fetchLiveSnapshot(
   currentUserId: string,
   requestSignal?: AbortSignal,
 ): Promise<AppSnapshot> {
-  const snapshotAbort = createSnapshotAbortSignal(requestSignal);
+  return withHistorySyncLock(currentUserId, appConfig.supabaseUrl, () =>
+    fetchLiveSnapshotLocked(currentUserId, requestSignal),
+  );
+}
+
+async function assertCurrentActor(currentUserId: string, signal?: AbortSignal) {
+  if (signal?.aborted) throw new Error('Sincronización cancelada.');
+  const { data } = await assertSupabaseClient().auth.getSession();
+  if (data.session?.user.id !== currentUserId)
+    throw new Error('La sesión cambió. Vuelve a consultar el estado.');
+}
+
+async function fetchLiveSnapshotLocked(
+  currentUserId: string,
+  requestSignal?: AbortSignal,
+): Promise<AppSnapshot> {
   const fetchStartedAt = Date.now();
 
   try {
-    const rowsPromise = invokeSupabaseFunction<Record<string, never>, LiveSnapshotRows>(
-      'get-app-snapshot',
-      {},
-    );
-    void rowsPromise.catch(() => undefined);
+    const scope = appConfig.supabaseUrl;
+    const rows = await synchronizeHistorySnapshot({
+      read: () => readCachedHistory(currentUserId, scope),
+      persist: (state) => persistCachedHistory(currentUserId, scope, state),
+      signal: requestSignal,
+      request: async (cursor) => {
+        // Bound each page independently. A large first download can resume
+        // from its last durable page without one global timeout discarding it.
+        const snapshotAbort = createSnapshotAbortSignal(requestSignal);
+        try {
+          const rowsPromise = invokeSupabaseFunction<Record<string, unknown>, LiveSnapshotRows>(
+            'get-app-snapshot',
+            { historySync: { protocol: 1, cursor, pageSize: 250 } },
+            { expectedUserId: currentUserId },
+          );
+          return await Promise.race([rowsPromise, snapshotAbort.timeoutPromise]);
+        } finally {
+          snapshotAbort.cleanup();
+        }
+      },
+    });
 
-    const rows = await Promise.race([rowsPromise, snapshotAbort.timeoutPromise]);
-
-    if (snapshotAbort.wasTimedOut()) {
-      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
-    }
-
-    if (requestSignal?.aborted) {
-      throw new Error('Sincronizacion cancelada.');
-    }
+    await assertCurrentActor(currentUserId, requestSignal);
 
     hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
 
@@ -41,11 +67,7 @@ async function fetchLiveSnapshot(
     });
     const peopleOverview = buildPeopleOverviewFromAppSnapshot(snapshot, rows.fetchedAt);
     try {
-      await persistCachedPeopleOverview(
-        currentUserId,
-        peopleOverview,
-        rows.avatarSignedUrlsByPath,
-      );
+      await persistCachedPeopleOverview(currentUserId, peopleOverview, rows.avatarSignedUrlsByPath);
     } catch (cacheError) {
       console.warn(
         'Failed to persist people overview from app snapshot',
@@ -54,9 +76,10 @@ async function fetchLiveSnapshot(
     }
     void prefetchCriticalAvatarImages(snapshot).catch(() => undefined);
     scheduleDeferredAvatarPrefetch(snapshot);
-    void persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(
+    await persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(
       () => undefined,
     );
+    await assertCurrentActor(currentUserId, requestSignal);
     recordSnapshotNetworkResolved({
       durationMs: Date.now() - fetchStartedAt,
       snapshotVersion: new Date().toISOString(),
@@ -70,17 +93,11 @@ async function fetchLiveSnapshot(
       status: 'error',
     });
 
-    if (snapshotAbort.wasTimedOut()) {
-      throw new Error('La sincronizacion tardo demasiado. Revisa tu conexion e intenta de nuevo.');
-    }
-
     if (requestSignal?.aborted) {
       throw new Error('Sincronizacion cancelada.');
     }
 
     throw error;
-  } finally {
-    snapshotAbort.cleanup();
   }
 }
 

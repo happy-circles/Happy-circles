@@ -1,13 +1,22 @@
-import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { hydrateSignedAvatarUrlCache } from '../avatar';
 import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '../avatar-prefetch';
-import {
-  recordSnapshotCacheRestored,
-} from '../performance-metrics';
+import { recordSnapshotCacheRestored } from '../performance-metrics';
 import { useSession } from '@/providers/session-provider';
 import { APP_SNAPSHOT_QUERY_KEY } from './constants';
+import { appConfig } from '../config';
+import { buildLiveSnapshot } from './build-snapshot';
+import { readCachedHistory } from './history-sync-cache';
+import { mergeHistoryWithLiveRows } from './history-sync';
 import { readCachedAppSnapshot } from './snapshot-cache';
 import type { AppSnapshot } from './types';
 
@@ -51,9 +60,7 @@ function parsedUpdatedAt(value: string | null): number | null {
 export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
   const { userId } = useSession();
   const queryClient = useQueryClient();
-  const [state, setState] = useState<AppSnapshotCacheHydrationState>(
-    DEFAULT_CACHE_HYDRATION_STATE,
-  );
+  const [state, setState] = useState<AppSnapshotCacheHydrationState>(DEFAULT_CACHE_HYDRATION_STATE);
   const queryKey = useMemo(
     () => [APP_SNAPSHOT_QUERY_KEY, userId ?? 'signed-out'] as const,
     [userId],
@@ -98,7 +105,26 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
       );
     }, SNAPSHOT_CACHE_RESTORE_SOFT_TIMEOUT_MS);
 
-    void readCachedAppSnapshot(userId)
+    // The history mirror includes its last live context in the same SQLite
+    // commit. It remains rebuildable if the older derived cache write failed.
+    void readCachedHistory(userId, appConfig.supabaseUrl)
+      .catch(() => null)
+      .then(async (historyState) => {
+        const derived = historyState?.bootstrapComplete
+          ? null
+          : await readCachedAppSnapshot(userId);
+        if (derived) return derived;
+        if (historyState?.liveRows) {
+          const rows = mergeHistoryWithLiveRows(historyState.liveRows, historyState);
+          hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
+          return {
+            snapshot: buildLiveSnapshot({ ...rows, currentUserId: userId }),
+            updatedAt: rows.fetchedAt,
+            avatarSignedUrlsByPath: rows.avatarSignedUrlsByPath,
+          };
+        }
+        return historyState?.bootstrapComplete ? readCachedAppSnapshot(userId) : null;
+      })
       .then((cachedSnapshot) => {
         if (cancelled) {
           return;
