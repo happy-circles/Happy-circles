@@ -1,5 +1,7 @@
 {
-  "database": "sender_request_final",
+  "database": "sender_request_verified_fix",
+  "sourceRoot": "C:/Users/Samuel/.codex/worktrees/sender-request-release/Happy_circles",
+  "baseSourceRevision": "2c25c7e4191fe874e53c61678a2a99cccbeab8af",
   "postgres": "17.11",
   "migrationCount": 95,
   "backfill": {
@@ -9,5 +11,14 @@
   },
   "sqlTests": 34,
   "concurrencyCases": 25,
-  "migrationSha256": "a6de0feaa6ea4544e68b20fcef7f2671887791b4e304f01e8e221adf981126f5"
+  "legacyCrlfBefore": 3,
+  "post95CoherencePassed": true,
+  "legacyCrlfAfter": 0,
+  "migrationSha256": "63e472d87fb5dceb319b5a9e213668f4bf4ddbea6dedbc01ffb489616986f0d5",
+  "sql33Sha256": "9e7b4f288df5355fc6a04c39da6f91c89df119553c5dcb3f961e56bf2272577b",
+  "workingDiffSha256": "12a9f35a88949812adf1d65ed6cd50a5095c10999f749aac13952c1611de254f",
+  "validatedFiles": [
+    "supabase/migrations/20261012172020_sender_pending_request_controls.sql",
+    "supabase/tests/33_sender_pending_request_controls.sql"
+  ]
 }

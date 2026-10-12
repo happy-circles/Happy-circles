@@ -19,6 +19,8 @@ declare a uuid:='00000000-0000-0000-0000-00000000fc01'; b uuid:='00000000-0000-0
   accept_id uuid:=gen_random_uuid(); reject_id uuid:=gen_random_uuid(); counter_id uuid:=gen_random_uuid();
   reversal_id uuid:=gen_random_uuid(); target_id uuid; reversal_before jsonb;
   legacy_cancel_id uuid:=gen_random_uuid(); system_cancel_id uuid:=gen_random_uuid(); receiver_cancel_id uuid:=gen_random_uuid();
+  corrected_accept_id uuid:=gen_random_uuid(); corrected_accept_child uuid; corrected_accept_ledger uuid;
+  cursor_a text; cursor_b text; delta jsonb; expected_history jsonb;
   ack jsonb; replay jsonb; request public.financial_requests%rowtype; owner_id uuid; event record;
 begin
   if has_function_privilege('authenticated','public.correct_financial_request(uuid,text,uuid,bigint,text,public.transaction_category,integer)','execute')
@@ -32,7 +34,7 @@ begin
   insert into public.financial_requests(id,relationship_id,request_type,status,creator_user_id,responder_user_id,
     debtor_user_id,creditor_user_id,amount_minor,description)
   select id,rel,'balance_increase','pending',a,b,a,b,1000,'Initial' from
-    unnest(array[root_id,cancel_id,accept_id,reject_id,counter_id,system_cancel_id,receiver_cancel_id]) id;
+    unnest(array[root_id,cancel_id,accept_id,reject_id,counter_id,system_cancel_id,receiver_cancel_id,corrected_accept_id]) id;
   insert into public.financial_requests(id,relationship_id,request_type,status,creator_user_id,responder_user_id,
     debtor_user_id,creditor_user_id,amount_minor,description)
     values(legacy_cancel_id,rel,'balance_increase','canceled',a,b,a,b,1000,'Legacy cancellation');
@@ -140,6 +142,10 @@ begin
     perform public.cancel_financial_request(a,'cancel-direct',accept_id,1);
     raise exception 'cancel key reused with another request';
   exception when others then if sqlerrm<>'idempotency_key_reused' then raise; end if; end;
+  select epoch.epoch::text||':'||head.revision::text into cursor_a from app_private.history_sync_epoch epoch
+    cross join app_private.history_sync_heads head where head.user_id=a;
+  select epoch.epoch::text||':'||head.revision::text into cursor_b from app_private.history_sync_epoch epoch
+    cross join app_private.history_sync_heads head where head.user_id=b;
   perform public.accept_financial_request(b,'accept-current',accept_id);
   perform public.reject_financial_request(b,'reject-current',reject_id);
   if (select count(*) from public.ledger_transactions where origin_request_id=accept_id)<>1
@@ -151,6 +157,39 @@ begin
   -- Reversals post the target's exact entries rather than the requested amount.
   -- Do not offer sender correction for them; cancellation must remain available.
   select id into target_id from public.ledger_transactions where origin_request_id=accept_id;
+  select app_private.history_sync_project('history',to_jsonb(history)) into expected_history from public.v_relationship_history history
+    where history.item_kind='ledger_transaction' and history.item_id=target_id and history.relationship_id=rel;
+  foreach owner_id in array array[a,b] loop
+    if (select row_data from app_private.history_sync_rows where user_id=owner_id and collection='history'
+        and row_key='ledger_transaction:'||rel::text||':'||target_id::text) is distinct from expected_history then
+      raise exception 'accept ledger history omitted the final resolution metadata';
+    end if;
+    delta:=public.get_history_sync_page(owner_id,case when owner_id=a then cursor_a else cursor_b end,500);
+    if (select count(*) from jsonb_array_elements(delta->'changes') change where change->>'collection'='history'
+        and change->>'key'='ledger_transaction:'||rel::text||':'||target_id::text
+        and change->'row'->>'resolved_by_user_id'=b::text and change->'row'->'resolved_at'<>'null'::jsonb)<>1 then
+      raise exception 'accept delta must return the ledger key once with final actor and time';
+    end if;
+  end loop;
+  ack:=public.correct_financial_request(a,'correct-before-accept',corrected_accept_id,2500,'Accepted correction','other',1);
+  corrected_accept_child:=(ack->>'correctedRequestId')::uuid;
+  perform public.accept_financial_request(b,'accept-corrected-child',corrected_accept_child);
+  select id into corrected_accept_ledger from public.ledger_transactions where origin_request_id=corrected_accept_child;
+  select app_private.history_sync_project('history',to_jsonb(history)) into expected_history from public.v_relationship_history history
+    where history.item_kind='ledger_transaction' and history.item_id=corrected_accept_ledger and history.relationship_id=rel;
+  if expected_history->>'amendment_kind'<>'sender_correction' or expected_history->>'request_case_id'<>corrected_accept_id::text
+    or expected_history->>'version_number'<>'2' or expected_history->>'resolved_by_user_id'<>b::text then
+    raise exception 'accepted corrected version lost its stable origin and resolution';
+  end if;
+  foreach owner_id in array array[a,b] loop
+    if (select row_data from app_private.history_sync_rows where user_id=owner_id and collection='history'
+        and row_key='ledger_transaction:'||rel::text||':'||corrected_accept_ledger::text) is distinct from expected_history then
+      raise exception 'accepted corrected ledger differs from final authoritative history';
+    end if;
+  end loop;
+  if exists(select 1 from app_private.history_sync_rows where user_id=c and collection='history'
+      and row_key in('ledger_transaction:'||rel::text||':'||target_id::text,'ledger_transaction:'||rel::text||':'||corrected_accept_ledger::text)
+      and row_data is not null) then raise exception 'ledger resolution history leaked to outsider'; end if;
   insert into public.financial_requests(id,relationship_id,request_type,status,creator_user_id,responder_user_id,
     debtor_user_id,creditor_user_id,amount_minor,description,target_ledger_transaction_id)
     values(reversal_id,rel,'transaction_reversal','pending',a,b,b,a,1000,'Undo movement',target_id);

@@ -136,6 +136,15 @@ se ejecutó en una base local limpia: seed y casos antiguos antes de la migraci�
 95, incluidos cancelaciones sin actor comprobable y contrapropuestas. Se
 conservaron sus versiones, participantes e historial.
 
+La aceptación refresca los metadatos finales del movimiento en el journal de
+ambas personas. La prueba SQL incluye aceptar una corrección, conservar su
+origen y devolver una sola fila por clave en el delta. El backfill también
+refresca movimientos de círculos sin solicitud de origen y limita cada lectura
+a los dueños o contrapartes del ledger. La
+[comprobación de coherencia](verification/sender-request-journal-20261012.json)
+verificó filas autoritativas, copias y páginas del journal sin diferencias ni
+duplicados. Las definiciones anteriores con CRLF también pasaron la migración.
+
 La suite completa pasó: 159 archivos y 1.233 pruebas, incluidos los límites
 de arquitectura. Lint, typecheck, seguridad y los siete checks de EAS Update
 pasaron. Los exports finales de Android e iOS se generaron con el environment

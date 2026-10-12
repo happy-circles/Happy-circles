@@ -173,6 +173,9 @@ begin
     'public.reject_financial_request(uuid,text,uuid)',
     'public.amend_financial_request(uuid,text,uuid,bigint,text,public.transaction_category)'] loop
     select pg_get_functiondef(v_signature::regprocedure) into v_definition;
+    -- Migration sources can have Windows CRLF while this marker uses LF.
+    -- Normalize definition formatting before matching; keep the drift guard.
+    v_definition:=replace(v_definition,chr(13)||chr(10),chr(10));
     if strpos(v_definition,v_marker)=0 then raise exception 'financial_request_command_definition_drift: %',v_signature; end if;
     v_updated:=replace(v_definition,v_marker,v_marker||E'\n  perform app_private.lock_current_financial_request(p_request_id,null);');
     execute v_updated;
@@ -214,6 +217,20 @@ returns jsonb language sql stable security definer set search_path='' as $$
     and p_actor_user_id in(request.creator_user_id,request.responder_user_id);
 $$;
 revoke all on function app_private.financial_request_ack_rows(uuid,jsonb) from public,anon,authenticated,service_role;
+
+-- Acceptance posts ledger entries before closing the request. Refresh that
+-- ledger's origin metadata after the request changes, under the same owner's
+-- already-held head lock. The ledger branch retains its own scope and current
+-- relationship visibility; do not fan out to other owners from inside this lock.
+do $$
+declare v_definition text;
+  v_marker text := '    perform app_private.history_sync_replace(p_user_id,''history'',''request:''||p_source_id,v_rows);';
+begin
+  select pg_get_functiondef('app_private.history_sync_source(uuid,text,text)'::regprocedure) into v_definition;
+  if strpos(v_definition,v_marker)=0 then raise exception 'financial_request_history_source_definition_drift'; end if;
+  v_definition:=replace(v_definition,v_marker,v_marker||E'\n    for v_item in select id from public.ledger_transactions where origin_request_id=p_source_id::uuid order by id loop\n      perform app_private.history_sync_source(p_user_id,''ledger_transaction'',v_item.id::text);\n    end loop;');
+  execute v_definition;
+end $$;
 
 create function public.correct_financial_request(
   p_actor_user_id uuid,p_idempotency_key text,p_request_id uuid,p_amount_minor bigint,
@@ -317,7 +334,12 @@ begin
       v_owner in(creator_user_id,responder_user_id,debtor_user_id,creditor_user_id) order by id loop
       perform app_private.history_sync_source(v_owner,'financial_request',v_request.id::text);
     end loop;
-    for v_request in select id from public.ledger_transactions where origin_request_id is not null order by id loop
+    -- Cover historical ledger owners even if an administrative role correction
+    -- changed a request's participants. Skip unrelated ledgers for this owner.
+    for v_request in select distinct transaction.id from public.ledger_transactions transaction
+      join public.ledger_entries entry on entry.ledger_transaction_id=transaction.id
+      join public.ledger_accounts account on account.id=entry.ledger_account_id
+      where v_owner in(account.owner_user_id,account.counterparty_user_id) order by transaction.id loop
       perform app_private.history_sync_source(v_owner,'ledger_transaction',v_request.id::text);
     end loop;
   end loop;

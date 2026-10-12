@@ -1,0 +1,23 @@
+[
+  {
+    "section": "source-mirror",
+    "data": {
+      "history_extra": 0,
+      "financial_extra": 0,
+      "history_mismatches": 0,
+      "duplicate_revisions": 0,
+      "revision_mismatches": 0,
+      "financial_mismatches": 0,
+      "closed_history_copies": 236,
+      "closed_request_copies": 118
+    }
+  },
+  {
+    "section": "journal-pages",
+    "data": {
+      "owners_checked": 25,
+      "tail_mismatches": 0,
+      "bootstrap_mismatches": 0
+    }
+  }
+]
