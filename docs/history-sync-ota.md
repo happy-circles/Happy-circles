@@ -1,8 +1,8 @@
 # Historial local e incremental: preparación para OTA
 
-Fecha de preparación: 11 de octubre de 2026. Este documento describe el cambio
-y el orden de validación y despliegue; no acredita una publicación en Supabase
-ni en EAS, ni la recepción de una OTA en dispositivos.
+Preparación local: 11 de octubre de 2026. Entrega en producción: 12 de octubre
+de 2026. El registro de entrega al final distingue las publicaciones y pruebas
+completadas de las verificaciones nativas que todavía están pendientes.
 
 ## Comportamiento
 
@@ -160,7 +160,67 @@ Node; los bytes aleatorios provienen de UUID y el cifrado de contraseñas es
 un sustituto de prueba, por lo que no valida inicio de sesión real. No
 ejecuta las ramas de servicios gestionados `cron`, `net` y `vault` ausentes.
 
-La evidencia local usa una sola conexión PGlite; no acredita concurrencia
-entre sesiones de PostgreSQL, un despliegue de Supabase ni persistencia o
-recepción OTA en dispositivos instalados. Esas verificaciones se completan
-en el proyecto de pruebas y los builds preview antes de producción.
+La evidencia local usa una sola conexión PGlite. Las pruebas remotas y la
+recepción de OTA realizadas después se registran a continuación; las pruebas
+locales por sí solas no acreditan ejecución en dispositivos.
+
+## Entrega del 12 de octubre de 2026
+
+Fuente publicada: `753359ca2e73fc75bc7a4530fccbb292169347f8`.
+[Security CI 38263691659](https://github.com/happy-circles/Happy-circles/actions/runs/38263691659)
+pasó completo, incluida la suite de Supabase con el reporte TAP corregido.
+
+Supabase de producción `vknfhyfdtlvvfzptpqpj` tiene la migración
+`20261011170500` y su entrada de historial confirmadas en la misma transacción:
+94 migraciones en total. El backfill inicial materializó 1.953 filas en las
+11 colecciones. Las comparaciones de claves y payloads con las fuentes,
+la privacidad, los permisos y la paginación pasaron tanto en el preflight
+revertido como después del commit. `get-app-snapshot` quedó en versión 11,
+`ACTIVE`, con verificación JWT habilitada.
+
+La prueba de concurrencia usó sesiones PostgreSQL reales mediante HTTPS.
+La segunda sesión esperó el bloqueo del contador mientras otra lectura no
+vio filas sin confirmar. Ambas escrituras sintéticas, limitadas al journal
+privado, hicieron rollback: el contador y las filas quedaron iguales al
+estado inicial. El RPC está registrado en la API y rechaza acceso anónimo
+con SQLSTATE `42501`; el snapshot sin sesión devuelve HTTP 401. Advisors no
+reportaron nuevas alertas bloqueantes relevantes para este cambio.
+
+Se publicó mediante EAS CLI 21.7.1 local, conservando las guardas de fuente
+limpia, SHA exacto, CI aprobado, runtime, entorno y backend del workflow.
+El acceso GitHub disponible permite lectura de Actions; el entorno preview
+carece de URL y builds compatibles, y el acceso Supabase actual no incluye
+el proyecto de pruebas. La comprobación previa usó `production-smoke`.
+
+| Canal            | Plataforma | Grupo publicado                        | Update ID                              |
+| ---------------- | ---------- | -------------------------------------- | -------------------------------------- |
+| production-smoke | Android    | `98348ae8-c4f7-489d-bcaf-9e58f111d8b1` | `01a13090-1991-707e-b5d2-d40f678f8ed0` |
+| production       | Android    | `5739ca11-ebfa-4c58-9c0d-05c9a7b3e0b0` | `01a1309d-9242-7423-ac43-0123b3044104` |
+| production       | iOS        | `13648e2b-4325-4315-a956-0bb8eb79745b` | `01a1309f-763c-7274-81e9-5e3eefc85cac` |
+
+Los tres manifiestos servidos y bundles del CDN coinciden con los resultados
+y exports del mismo commit, runtime `hc-sdk54-20260928-1` y backend de
+producción. El bundle Android de producción es idéntico al de smoke.
+SHA-256 base64url de Android: `rr6mKIKnXxUzTvSsd3AKiomQPU4r5komKezWlkV3iDk`;
+de iOS: `I_YgmSnUyK81aESbJwqDW76T8Eew_p8S_lP7K5OoeVA`.
+
+El APK Android smoke 1.0.3 (23), con firma y hash comprobados, recibió el
+update exacto por Expo Updates en un clon temporal del emulador. Lo ejecutó
+al reabrir con red y luego sin ninguna red, con cero fallos y sin Metro.
+El entorno de pruebas necesitó una CA ya confiada por Windows para el
+antivirus local: la verificación TLS permaneció activa y el overlay se
+descartó al cerrar el clon. El AVD original y la confianza del host quedaron
+intactos.
+
+La ejecución nativa fue sin sesión. Falta comprobar el historial dentro de
+la app instalada con una cuenta QA vigente: las contraseñas de Ana y Bruno
+del seed fueron rechazadas. Tampoco hubo un iPhone/iPad disponible. No se
+representan esas pruebas como completadas ni se cambiaron las contraseñas
+o datos financieros de las cuentas para obtenerlas.
+
+Recibos sanitizados y exports están en
+`.tmp/history-sync-release-20261012/`; las pruebas y entrega del backend en
+`.tmp/history-db-remote/`. Para una reversión, los grupos anteriores de
+producción son Android `d6609b5e-f096-4639-ab6a-6eb18a31fe41` e iOS
+`1ee0ddd6-3231-4cbb-9801-ba46286eb062`. Consultar los grupos actuales y seguir
+el runbook antes de ejecutar una reversión.
