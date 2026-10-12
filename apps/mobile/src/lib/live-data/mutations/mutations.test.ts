@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   createSupportId: vi.fn(() => 'HC-TEST-0000-0000'),
   confirmIdentity: vi.fn(),
   confirmCreatedRequestInCache: vi.fn(),
+  confirmSenderRequestInCache: vi.fn(async () => undefined),
   invalidateAppSnapshot: vi.fn(),
   invokeSupabaseFunction: vi.fn(),
   readFunctionErrorDetails: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock('./confirmed-request-cache', () => ({
   confirmCreatedRequestInCache: mocks.confirmCreatedRequestInCache,
 }));
 
+vi.mock('./confirmed-sender-request-cache', () => ({
+  confirmSenderRequestInCache: mocks.confirmSenderRequestInCache,
+}));
+
 vi.mock('../../avatar-prefetch', () => ({ prefetchAvatarPaths: vi.fn() }));
 vi.mock('../snapshot-cache', () => ({
   replaceCurrentUserAvatarInSnapshot: vi.fn(),
@@ -90,6 +95,8 @@ import { invokeParsedEdgeFunction, withIdempotencyKey } from './edge-action';
 import {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
+  useCorrectFinancialRequestMutation,
+  useCancelFinancialRequestMutation,
   useCreateRequestMutation,
   useRejectFinancialRequestMutation,
 } from './financial-requests';
@@ -642,6 +649,80 @@ describe('live-data mutation hooks', () => {
     await expect(mutation.mutationFn('44444444-4444-4444-8444-444444444444')).rejects.toBe(failure);
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
     expect(mocks.confirmIdentity).not.toHaveBeenCalled();
+  });
+
+  it('corrects only the selected sender version and persists the confirmed response', async () => {
+    const response = { correctedRequestId: 'new-version', status: 'pending', financialRequests: [] };
+    mocks.invokeSupabaseFunction.mockResolvedValueOnce(response);
+    const mutation = useCorrectFinancialRequestMutation() as unknown as MutationOptions;
+    await expect(
+      mutation.mutationFn({
+        requestId: '55555555-5555-4555-8555-555555555555',
+        expectedVersion: 3,
+        amountMinor: 15000,
+        description: '  Almuerzo corregido  ',
+        category: 'food_drinks',
+      }),
+    ).resolves.toBe(response);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledExactlyOnceWith(
+      'correct-financial-request',
+      {
+        requestId: '55555555-5555-4555-8555-555555555555',
+        expectedVersion: 3,
+        amountMinor: 15000,
+        description: 'Almuerzo corregido',
+        category: 'food_drinks',
+        idempotencyKey: 'correct-financial-request_fixed',
+      },
+      { expectedUserId: 'user-1' },
+    );
+    expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith('user-1', response);
+  });
+
+  it('retains the same cancellation intention across a lost response and a manual retry', async () => {
+    const failure = new Error('Network request failed');
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(failure).mockResolvedValueOnce({
+      status: 'canceled',
+    });
+    const input = { requestId: '66666666-6666-4666-8666-666666666666', expectedVersion: 2 };
+    const mutation = useCancelFinancialRequestMutation() as unknown as MutationOptions;
+    await expect(mutation.mutationFn(input)).rejects.toBe(failure);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+    const remounted = useCancelFinancialRequestMutation() as unknown as MutationOptions;
+    await remounted.mutationFn(input);
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
+      mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+    );
+    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
+    expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes a stale version conflict without retrying it on a replacement request', async () => {
+    const conflict = Object.assign(new Error('La solicitud ya cambió'), {
+      status: 409,
+      code: 'financial_request_not_current',
+    });
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(conflict);
+    const mutation = useCancelFinancialRequestMutation() as unknown as MutationOptions;
+    await expect(
+      mutation.mutationFn({ requestId: '77777777-7777-4777-8777-777777777777', expectedVersion: 1 }),
+    ).rejects.toBe(conflict);
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+    expect(mocks.invalidateAppSnapshot).toHaveBeenCalledOnce();
+    expect(mocks.confirmSenderRequestInCache).not.toHaveBeenCalled();
+  });
+
+  it('does not turn committed cancellation into a financial failure when synchronization fails', async () => {
+    const response = { status: 'canceled' };
+    mocks.invokeSupabaseFunction.mockResolvedValueOnce(response);
+    mocks.confirmSenderRequestInCache.mockRejectedValueOnce(new Error('Disk write failed'));
+    mocks.invalidateAppSnapshot.mockRejectedValueOnce(new Error('Offline'));
+    const mutation = useCancelFinancialRequestMutation() as unknown as MutationOptions;
+    await expect(
+      mutation.mutationFn({ requestId: '88888888-8888-4888-8888-888888888888', expectedVersion: 1 }),
+    ).resolves.toBe(response);
+    await expect(Promise.resolve(mutation.onSuccess?.(response))).resolves.toBeUndefined();
+    expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
   });
 
   it('binds account deletion to the initiating account without repeating identity confirmation', async () => {

@@ -5,16 +5,17 @@ export function resolveRootRequestId(
   requestsById: ReadonlyMap<string, FinancialRequestRow>,
 ): string {
   let currentId = requestId;
-  let guard = 0;
+  const seen = new Set<string>();
 
-  while (guard < 20) {
+  while (!seen.has(currentId)) {
+    seen.add(currentId);
     const request = requestsById.get(currentId);
+    if (request?.request_case_id) return request.request_case_id;
     if (!request?.parent_request_id) {
       return request?.id ?? currentId;
     }
 
     currentId = request.parent_request_id;
-    guard += 1;
   }
 
   return currentId;

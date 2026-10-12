@@ -8,6 +8,8 @@ export {
 export {
   useAcceptFinancialRequestMutation,
   useAmendFinancialRequestMutation,
+  useCorrectFinancialRequestMutation,
+  useCancelFinancialRequestMutation,
   useCreateRequestMutation,
   useRejectFinancialRequestMutation,
 } from './mutations/financial-requests';

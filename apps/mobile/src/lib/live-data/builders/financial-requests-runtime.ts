@@ -18,7 +18,9 @@ import {
   buildRequestResolutionTitle,
   requestToneForStatus,
   userLabelForRequest,
+  pendingRequestHistoryTitle,
 } from './financial-request-labels';
+export { pendingRequestHistoryTitle } from './financial-request-labels';
 import { requestDirectionForUser } from '../utils/money-and-direction';
 import {
   buildHistorySubtitle,
@@ -76,22 +78,6 @@ export function formatPendingRequestSubtitle(
   ].join(' | ');
 }
 
-export function pendingRequestHistoryTitle(index: number, total: number): string {
-  if (total <= 1) {
-    return 'Propuesta actual';
-  }
-
-  if (index === 0) {
-    return 'Propuesta inicial';
-  }
-
-  if (index === total - 1) {
-    return 'Monto actual';
-  }
-
-  return 'Cambio propuesto';
-}
-
 export function buildPendingRequestHistorySteps(input: {
   readonly request: FinancialRequestRow;
   readonly requestsById: ReadonlyMap<string, FinancialRequestRow>;
@@ -104,7 +90,7 @@ export function buildPendingRequestHistorySteps(input: {
   const seenIds = new Set<string>();
   let currentRequest: FinancialRequestRow | undefined = input.request;
 
-  while (currentRequest && !seenIds.has(currentRequest.id) && chain.length < 20) {
+  while (currentRequest && !seenIds.has(currentRequest.id)) {
     chain.push(currentRequest);
     seenIds.add(currentRequest.id);
     currentRequest = currentRequest.parent_request_id
@@ -116,7 +102,12 @@ export function buildPendingRequestHistorySteps(input: {
 
   return chronologicalChain.map((request, index) => ({
     id: request.id,
-    title: pendingRequestHistoryTitle(index, chronologicalChain.length),
+    title:
+      request.amendment_kind === 'sender_correction'
+        ? request.id === input.request.id
+          ? 'Solicitud corregida actual'
+          : 'Solicitud corregida'
+        : pendingRequestHistoryTitle(index, chronologicalChain.length),
     description: request.description ?? 'Sin descripcion',
     amountMinor: request.amount_minor,
     category: normalizeTransactionCategory(request.category),
@@ -146,6 +137,7 @@ export function buildPersonPendingRequest(input: {
 
   return {
     id: request.id,
+    versionNumber: request.version_number,
     requestKind,
     responseState:
       request.responder_user_id === currentUserId ? 'requires_you' : 'waiting_other_side',
@@ -395,6 +387,8 @@ export function buildPendingFinancialRequestItems(input: {
         category: normalizeTransactionCategory(request.category),
         counterpartyLabel: counterparty?.displayName,
         createdByCurrentUser: request.creator_user_id === input.currentUserId,
+        requestKind: request.request_type,
+        versionNumber: request.version_number,
         tone:
           requestDirectionForUser(request, input.currentUserId) === 'owes_me'
             ? 'positive'

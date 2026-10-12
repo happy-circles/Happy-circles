@@ -29,6 +29,10 @@ import { TransactionCategoryPicker } from './transaction-category-picker';
 import { AppText } from '@/components/app-text';
 import { moneyStatusCopy } from '@/lib/card-language';
 import { useAppTheme } from '@/providers/theme-provider';
+import {
+  canCorrectSenderFinancialRequest,
+  pendingFinancialRequestActionRole,
+} from './pending-financial-request-actions';
 
 export interface PendingFinancialRequestHistoryStep {
   readonly id: string;
@@ -46,6 +50,8 @@ export interface PendingFinancialRequestCardProps {
   readonly actorAvatarUrl?: string | null;
   readonly counterpartyName: string;
   readonly responseState: 'requires_you' | 'waiting_other_side';
+  readonly createdByCurrentUser?: boolean;
+  readonly requestKind?: 'balance_increase' | 'transaction_reversal';
   readonly amountTone?: 'positive' | 'negative' | 'neutral' | 'danger';
   readonly title: string;
   readonly description: string;
@@ -59,6 +65,8 @@ export interface PendingFinancialRequestCardProps {
   readonly busyAccept?: boolean;
   readonly busyReject?: boolean;
   readonly busyAmendment?: boolean;
+  readonly busyCancel?: boolean;
+  readonly actionsDisabled?: boolean;
   readonly actionsVisible?: boolean;
   readonly showAmendment?: boolean;
   readonly amendmentAmount?: string;
@@ -68,6 +76,8 @@ export interface PendingFinancialRequestCardProps {
   readonly amendmentDescriptionError?: string | null;
   readonly onAccept?: () => void;
   readonly onReject?: () => void;
+  readonly onEdit?: () => void;
+  readonly onCancel?: () => void;
   readonly onToggleAmendment?: () => void;
   readonly onChangeAmendmentAmount?: (value: string) => void;
   readonly onChangeAmendmentDescription?: (value: string) => void;
@@ -113,6 +123,9 @@ function ResponseActionButton({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={
         disabled
@@ -148,7 +161,7 @@ function ResponseActionButton({
       ]}
     >
       <Ionicons color={iconColor} name={icon} size={15} />
-      <AppText numberOfLines={1} style={[styles.responseActionText, { color: labelColor }]}>
+      <AppText numberOfLines={2} style={[styles.responseActionText, { color: labelColor }]}>
         {label}
       </AppText>
     </Pressable>
@@ -231,7 +244,7 @@ function pendingHistoryStepTitle(
     return step.title;
   }
 
-  return `Instancia ${index + 1}: ${step.title}`;
+  return `Propuesta ${index + 1}: ${step.title}`;
 }
 
 function pendingTimelineTone(
@@ -275,6 +288,8 @@ export function PendingFinancialRequestCard({
   actorAvatarUrl = null,
   counterpartyName,
   responseState,
+  createdByCurrentUser = false,
+  requestKind,
   amountTone = 'neutral',
   title,
   description,
@@ -288,6 +303,8 @@ export function PendingFinancialRequestCard({
   busyAccept = false,
   busyReject = false,
   busyAmendment = false,
+  busyCancel = false,
+  actionsDisabled = false,
   actionsVisible = true,
   showAmendment = false,
   amendmentAmount = '',
@@ -297,6 +314,8 @@ export function PendingFinancialRequestCard({
   amendmentDescriptionError = null,
   onAccept,
   onReject,
+  onEdit,
+  onCancel,
   onToggleAmendment,
   onChangeAmendmentAmount,
   onChangeAmendmentDescription,
@@ -307,6 +326,13 @@ export function PendingFinancialRequestCard({
   onToggle,
 }: PendingFinancialRequestCardProps) {
   const activeTheme = useAppTheme();
+  const actionRole = pendingFinancialRequestActionRole({ createdByCurrentUser, responseState });
+  const canEdit = canCorrectSenderFinancialRequest({
+    createdByCurrentUser,
+    responseState,
+    requestKind,
+  });
+  const requestBusy = actionsDisabled || busyAccept || busyReject || busyAmendment || busyCancel;
   const amendmentAmountMinor = Math.max(Number.parseInt(amendmentAmount || '0', 10) * 100, 0);
   const safeCategory = isUserTransactionCategory(category)
     ? category
@@ -386,18 +412,18 @@ export function PendingFinancialRequestCard({
       title={title}
       tone={pendingCardTone(amountTone, responseState)}
     >
-      {actionsVisible && responseState === 'requires_you' ? (
+      {actionsVisible && actionRole === 'receiver' ? (
         <>
           <View style={styles.responseActionRail}>
             <ResponseActionButton
-              disabled={busyAccept || busyReject || busyAmendment}
+              disabled={requestBusy || !onAccept}
               icon={busyAccept ? 'ellipsis-horizontal-circle-outline' : 'checkmark-circle'}
               label={busyAccept ? 'Aceptando' : 'Aceptar'}
               onPress={onAccept}
               tone="primary"
             />
             <ResponseActionButton
-              disabled={busyAccept || busyReject || busyAmendment}
+              disabled={requestBusy || !onReject}
               icon={busyReject ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
               label={busyReject ? 'Enviando' : 'No aceptar'}
               haptic="none"
@@ -405,9 +431,9 @@ export function PendingFinancialRequestCard({
               tone="danger"
             />
             <ResponseActionButton
-              disabled={busyAccept || busyReject || busyAmendment}
+              disabled={requestBusy || !onToggleAmendment}
               icon={showAmendment ? 'chevron-up-circle-outline' : 'create-outline'}
-              label={showAmendment ? 'Ocultar' : 'Editar'}
+              label={showAmendment ? 'Ocultar' : 'Proponer cambio'}
               haptic="selection"
               onPress={onToggleAmendment}
             />
@@ -417,6 +443,7 @@ export function PendingFinancialRequestCard({
             <View style={styles.amendmentPanel}>
               <FieldBlock error={amendmentAmountError} label="Monto">
                 <AppTextInput
+                  editable={!requestBusy}
                   hasError={Boolean(amendmentAmountError)}
                   keyboardType="number-pad"
                   onChangeText={onChangeAmendmentAmount}
@@ -431,6 +458,7 @@ export function PendingFinancialRequestCard({
 
               <FieldBlock error={amendmentDescriptionError} label="Concepto">
                 <AppTextInput
+                  editable={!requestBusy}
                   hasError={Boolean(amendmentDescriptionError)}
                   multiline
                   onChangeText={onChangeAmendmentDescription}
@@ -442,7 +470,9 @@ export function PendingFinancialRequestCard({
 
               <FieldBlock label="Categoría">
                 <TransactionCategoryPicker
-                  onChange={onChangeAmendmentCategory ?? (() => undefined)}
+                  onChange={
+                    requestBusy ? () => undefined : (onChangeAmendmentCategory ?? (() => undefined))
+                  }
                   value={amendmentCategory}
                 />
               </FieldBlock>
@@ -450,11 +480,12 @@ export function PendingFinancialRequestCard({
               <View style={styles.actionRow}>
                 <View style={styles.actionSlot}>
                   <PrimaryAction
+                    disabled={requestBusy}
                     label={busyAmendment ? 'Enviando...' : 'Enviar'}
                     compact
                     loading={busyAmendment}
                     onPress={
-                      busyAccept || busyReject || busyAmendment
+                      requestBusy
                         ? undefined
                         : () => {
                             triggerAppActionHaptic();
@@ -467,6 +498,27 @@ export function PendingFinancialRequestCard({
             </View>
           ) : null}
         </>
+      ) : null}
+      {actionsVisible && actionRole === 'sender' ? (
+        <View style={styles.responseActionRail}>
+          {canEdit ? (
+            <ResponseActionButton
+              disabled={requestBusy || !onEdit}
+              haptic="selection"
+              icon="create-outline"
+              label="Editar solicitud"
+              onPress={onEdit}
+            />
+          ) : null}
+          <ResponseActionButton
+            disabled={requestBusy || !onCancel}
+            haptic="none"
+            icon={busyCancel ? 'ellipsis-horizontal-circle-outline' : 'close-circle-outline'}
+            label={busyCancel ? 'Cancelando...' : 'Cancelar solicitud'}
+            onPress={onCancel}
+            tone="danger"
+          />
+        </View>
       ) : null}
     </HistoryCaseCard>
   );

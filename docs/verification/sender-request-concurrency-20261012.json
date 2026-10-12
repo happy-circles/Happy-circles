@@ -1,0 +1,231 @@
+{
+  "postgres": "17.11",
+  "cases": 25,
+  "receipt": [
+    {
+      "winner": "accept",
+      "loser": "reject",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 1
+    },
+    {
+      "winner": "reject",
+      "loser": "accept",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "accept",
+      "loser": "amend",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 1
+    },
+    {
+      "winner": "amend",
+      "loser": "accept",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "accept",
+      "loser": "correct",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 1
+    },
+    {
+      "winner": "correct",
+      "loser": "accept",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "accept",
+      "loser": "cancel",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 1
+    },
+    {
+      "winner": "cancel",
+      "loser": "accept",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "reject",
+      "loser": "amend",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "amend",
+      "loser": "reject",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "reject",
+      "loser": "correct",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "correct",
+      "loser": "reject",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "reject",
+      "loser": "cancel",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "cancel",
+      "loser": "reject",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "amend",
+      "loser": "correct",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "correct",
+      "loser": "amend",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "amend",
+      "loser": "cancel",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "cancel",
+      "loser": "amend",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "correct",
+      "loser": "cancel",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "cancel",
+      "loser": "correct",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "accept",
+      "loser": "accept",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 1
+    },
+    {
+      "winner": "reject",
+      "loser": "reject",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    },
+    {
+      "winner": "amend",
+      "loser": "amend",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "correct",
+      "loser": "correct",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 1,
+      "versions": 2,
+      "ledger": 0
+    },
+    {
+      "winner": "cancel",
+      "loser": "cancel",
+      "observedLockWait": true,
+      "loserConflict": "financial_request_not_pending",
+      "pending": 0,
+      "versions": 1,
+      "ledger": 0
+    }
+  ]
+}

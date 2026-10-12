@@ -4,6 +4,13 @@ import type { FinancialRequestRow } from '../types';
 import { formatRelativeLabel } from '../utils/dates';
 import { requestDirectionForUser } from '../utils/money-and-direction';
 
+export function pendingRequestHistoryTitle(index: number, total: number): string {
+  if (total <= 1) return 'Propuesta actual';
+  if (index === 0) return 'Propuesta inicial';
+  if (index === total - 1) return 'Monto actual';
+  return 'Cambio propuesto';
+}
+
 export function userLabelForRequest(
   userId: string | null | undefined,
   currentUserId: string,
@@ -57,6 +64,9 @@ export function buildRequestCreatedTitle(
   );
 
   if (request.parent_request_id) {
+    if (request.amendment_kind === 'sender_correction') {
+      return `${creator} corrigió su solicitud`;
+    }
     return `${creator} propuso un nuevo monto`;
   }
 
@@ -74,7 +84,8 @@ export function buildRequestResolutionTitle(
   names: Map<string, string>,
 ): string | null {
   const responder = userLabelForRequest(
-    request.responder_user_id,
+    request.resolved_by_user_id ??
+      (request.status === 'canceled' ? request.creator_user_id : request.responder_user_id),
     currentUserId,
     counterpartyName,
     names,
@@ -82,6 +93,9 @@ export function buildRequestResolutionTitle(
   );
 
   if (request.status === 'accepted') {
+    if (request.amendment_kind === 'sender_correction') {
+      return `${responder} aceptó la solicitud corregida`;
+    }
     if (request.parent_request_id) {
       return `${responder} aceptó el nuevo monto`;
     }
@@ -94,6 +108,9 @@ export function buildRequestResolutionTitle(
   }
 
   if (request.status === 'rejected') {
+    if (request.amendment_kind === 'sender_correction') {
+      return `${responder} no aceptó la solicitud corregida`;
+    }
     if (request.parent_request_id) {
       return `${responder} no aceptó el nuevo monto`;
     }
@@ -106,7 +123,8 @@ export function buildRequestResolutionTitle(
   }
 
   if (request.status === 'canceled') {
-    return 'La propuesta fue cancelada';
+    if (!request.resolved_by_user_id) return 'La propuesta fue cancelada';
+    return `${responder} canceló su solicitud`;
   }
 
   if (request.status === 'expired') {
@@ -114,6 +132,9 @@ export function buildRequestResolutionTitle(
   }
 
   if (request.status === 'amended') {
+    if (request.resolved_by_user_id === request.creator_user_id) {
+      return `${responder} corrigió su solicitud`;
+    }
     return `${responder} propuso un nuevo monto`;
   }
 

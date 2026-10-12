@@ -11,7 +11,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation, useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppAvatar } from '@/components/app-avatar';
@@ -38,6 +38,8 @@ import {
   useAmendFinancialRequestMutation,
   useAppSnapshot,
   useCreateRequestMutation,
+  useCorrectFinancialRequestMutation,
+  isFinancialRequestConflict,
 } from '@/lib/live-data';
 import { directionVisual } from '@/lib/direction-ui';
 import { backOrReturnTo, pushRoute, returnToRoute } from '@/lib/navigation';
@@ -58,12 +60,16 @@ import {
   formatAmountInput,
   personRelevanceScore,
   resolveRegisterRouteParams,
+  resolveRegisterEditAction,
+  acknowledgedRequestEditId,
   sanitizeAmountInput,
   type Direction,
-  type RegisterPerson,
 } from './register-flow-helpers';
 import { styles } from './register-flow-screen-styles';
 import { RegisterFooter } from './register-footer';
+import { QuickPersonChip } from './register-quick-person-chip';
+import { useRegisterCorrectionPrefill } from './use-register-correction-prefill';
+import { buildRegisterSuccessHref, readStringField } from './register-flow-results';
 import {
   isRegisterAccessFailure,
   registerRetryConfirmation,
@@ -89,51 +95,6 @@ interface BannerState {
   readonly tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 }
 
-function buildRegisterSuccessHref(input: {
-  readonly focusId?: string | null;
-  readonly panel: 'pending' | 'history';
-  readonly personId: string;
-}): Href {
-  const focusParam = input.focusId ? `&focus=${encodeURIComponent(input.focusId)}` : '';
-
-  return `/person/${encodeURIComponent(input.personId)}?panel=${input.panel}${focusParam}` as Href;
-}
-
-function readStringField(value: unknown, key: string): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === 'string' && field.length > 0 ? field : null;
-}
-
-function QuickPersonChip({
-  person,
-  onPress,
-}: {
-  readonly person: RegisterPerson;
-  readonly onPress: (personId: string) => void;
-}) {
-  const activeTheme = useAppTheme();
-
-  return (
-    <Pressable
-      onPress={() => onPress(person.userId)}
-      style={({ pressed }) => [
-        styles.quickPersonChip,
-        { backgroundColor: activeTheme.colors.surface, borderColor: activeTheme.colors.border },
-        pressed ? styles.quickPersonChipPressed : null,
-      ]}
-    >
-      <AppAvatar imageUrl={person.avatarUrl ?? null} label={person.displayName} size={30} />
-      <AppText numberOfLines={1} style={styles.quickPersonLabel}>
-        {person.displayName}
-      </AppText>
-    </Pressable>
-  );
-}
-
 export function RegisterFlowScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -156,6 +117,9 @@ export function RegisterFlowScreen() {
   const amendRequest = useAmendFinancialRequestMutation({
     runRequest: (action) => runSaveRequest('amendMovement', action),
   });
+  const correctRequest = useCorrectFinancialRequestMutation({
+    runRequest: (action) => runSaveRequest('amendMovement', action),
+  });
 
   const { correctionRequestId, contextualPersonId, initialDirection, mode } =
     resolveRegisterRouteParams({
@@ -164,7 +128,8 @@ export function RegisterFlowScreen() {
       personId: params.personId,
       requestId: params.requestId,
     });
-  const isCorrectionMode = mode === 'correction';
+  const isSenderCorrectionMode = mode === 'sender_correction';
+  const isCorrectionMode = mode !== 'create';
 
   const [query, setQuery] = useState('');
   const [personSearchExpanded, setPersonSearchExpanded] = useState(false);
@@ -188,7 +153,6 @@ export function RegisterFlowScreen() {
   const keyboardOverlapRef = useRef(0);
   const keyboardInsetRef = useRef(0);
   const scrollViewportHeightRef = useRef(0);
-  const correctionPrefillKeyRef = useRef<string | null>(null);
   const fieldMetricsRef = useRef<Record<RegisterFocusTarget, FieldMetrics>>({
     amount: { height: 0, y: 0 },
     person: { height: 0, y: 0 },
@@ -220,6 +184,7 @@ export function RegisterFlowScreen() {
     () => (correctionItem ? buildCorrectionDraft(correctionItem) : null),
     [correctionItem],
   );
+  const editAction = resolveRegisterEditAction(mode, correctionItem);
   const correctionPendingContent = useMemo(
     () => (correctionItem ? buildCorrectionPendingContent(correctionItem) : null),
     [correctionItem],
@@ -293,10 +258,12 @@ export function RegisterFlowScreen() {
       : null;
   const footerSummaryText = isCorrectionMode
     ? selectedPerson
-      ? `Correccion con ${selectedPerson.displayName}: ${
+      ? `${isSenderCorrectionMode ? 'Solicitud' : 'Propuesta'} con ${selectedPerson.displayName}: ${
           amountMinor > 0 ? formatCop(amountMinor) : 'sin monto'
         }`
-      : 'Correccion del movimiento'
+      : isSenderCorrectionMode
+        ? 'Editar solicitud'
+        : 'Proponer cambio'
     : summaryText
       ? summaryText
       : draftPreview
@@ -314,11 +281,13 @@ export function RegisterFlowScreen() {
     };
   }, [amountMinor, description, direction, isCorrectionMode]);
   const correctionUnavailable =
-    isCorrectionMode && !snapshotQuery.isLoading && !snapshotQuery.error && !correctionItem;
+    isCorrectionMode && !snapshotQuery.isLoading && !snapshotQuery.error && !editAction;
   const canShowForm =
     !snapshotQuery.isLoading &&
     !snapshotQuery.error &&
-    (isCorrectionMode ? Boolean(correctionItem && selectedPerson) : allPeople.length > 0);
+    (isCorrectionMode
+      ? Boolean(editAction && correctionItem && selectedPerson)
+      : allPeople.length > 0);
   const isCorrectionDraftDirty =
     isCorrectionMode && correctionDraft
       ? amount !== correctionDraft.amount ||
@@ -357,7 +326,11 @@ export function RegisterFlowScreen() {
         }
       : null,
   ];
-  const isSubmitting = savePhase !== null || createRequest.isPending || amendRequest.isPending;
+  const isSubmitting =
+    savePhase !== null ||
+    createRequest.isPending ||
+    amendRequest.isPending ||
+    correctRequest.isPending;
   const accessIssue = resolveRegisterAccessIssue(session, accessError, isCorrectionMode);
 
   useEffect(() => {
@@ -378,11 +351,12 @@ export function RegisterFlowScreen() {
         personId !== contextualPersonId ||
         direction !== initialDirection;
 
-  usePreventRemove(isDirty && !isSubmitting, ({ data }) => {
+  usePreventRemove(isDirty || isSubmitting, ({ data }) => {
     if (completedSaveRef.current) {
       navigation.dispatch(data.action as Parameters<typeof navigation.dispatch>[0]);
       return;
     }
+    if (isSubmitting) return;
 
     setUnsavedChangesAlertVisible(true);
     Alert.alert(
@@ -438,39 +412,23 @@ export function RegisterFlowScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isCorrectionMode) {
-      correctionPrefillKeyRef.current = null;
-      return;
-    }
-
-    if (!correctionItem || !correctionDraft) {
-      return;
-    }
-
-    const nextPrefillKey = [
-      correctionRequestId,
-      correctionDraft.amount,
-      correctionDraft.category,
-      correctionDraft.description,
-      correctionDraft.direction,
-    ].join(':');
-
-    if (correctionPrefillKeyRef.current === nextPrefillKey) {
-      return;
-    }
-
-    correctionPrefillKeyRef.current = nextPrefillKey;
-    setPersonId(contextualPersonId);
-    setDirection(correctionDraft.direction);
-    setAmount(correctionDraft.amount);
-    setCategory(correctionDraft.category);
-    setDescription(correctionDraft.description);
-    setQuery('');
-    setPersonSearchExpanded(false);
-    setErrors({});
-    setBanner(null);
-  }, [contextualPersonId, correctionDraft, correctionItem, correctionRequestId, isCorrectionMode]);
+  useRegisterCorrectionPrefill({
+    mode,
+    personId: contextualPersonId,
+    requestId: correctionRequestId,
+    draft: correctionDraft,
+    onPrefill: (draft) => {
+      setPersonId(contextualPersonId);
+      setDirection(draft.direction);
+      setAmount(draft.amount);
+      setCategory(draft.category);
+      setDescription(draft.description);
+      setQuery('');
+      setPersonSearchExpanded(false);
+      setErrors({});
+      setBanner(null);
+    },
+  });
 
   function updateKeyboardOverlap(nextKeyboardInset = keyboardInsetRef.current): number {
     const nextOverlap = Math.max(0, nextKeyboardInset - footerHeightRef.current - theme.spacing.lg);
@@ -647,22 +605,27 @@ export function RegisterFlowScreen() {
       const successPersonId = selectedPerson?.userId ?? personId;
 
       if (isCorrectionMode) {
-        if (!correctionRequestId || !correctionItem) {
+        if (!correctionRequestId || !correctionItem || !editAction) {
           setBanner({
-            message: 'No encontramos la solicitud pendiente para corregir.',
+            message:
+              'Esta solicitud ya cambió o no te corresponde editarla. Revisa su estado actual.',
             tone: 'danger',
           });
           return;
         }
 
-        const response = await amendRequest.mutateAsync({
-          forceConfirmation,
+        const editPayload = {
           requestId: correctionRequestId,
           amountMinor,
           category,
           description: description.trim(),
-        });
-        successFocusId = readStringField(response, 'amendedRequestId') ?? correctionRequestId;
+          expectedVersion: correctionItem.versionNumber,
+        };
+        const response =
+          editAction === 'correct'
+            ? await correctRequest.mutateAsync({ ...editPayload, forceConfirmation })
+            : await amendRequest.mutateAsync({ ...editPayload, forceConfirmation });
+        successFocusId = acknowledgedRequestEditId(editAction, response);
       } else {
         const debtorUserId = direction === 'i_owe' ? userId : personId;
         const creditorUserId = direction === 'i_owe' ? personId : userId;
@@ -702,13 +665,27 @@ export function RegisterFlowScreen() {
 
       setTimeout(() => {
         showGlobalFeedback({
-          title: isCorrectionMode ? 'Correccion enviada' : 'Movimiento creado',
+          title: isSenderCorrectionMode
+            ? 'Solicitud actualizada'
+            : isCorrectionMode
+              ? 'Propuesta enviada'
+              : 'Movimiento creado',
           message: `Con ${selectedPerson?.displayName ?? 'la otra persona'}.`,
           tone: 'success',
         });
       }, 220);
     } catch (error) {
       if (isIdentityConfirmationCancelled(error)) return;
+      if (isCorrectionMode && isFinancialRequestConflict(error)) {
+        setAccessError(null);
+        setBanner({
+          message:
+            'La solicitud ya cambió. Conservamos tu borrador; revisa la versión actual en el detalle.',
+          tone: 'warning',
+        });
+        await snapshotQuery.refetch();
+        return;
+      }
       if (isRegisterAccessFailure(error)) {
         setAccessError(error);
         return;
@@ -777,12 +754,18 @@ export function RegisterFlowScreen() {
           <View style={[styles.sheetHandle, { backgroundColor: activeTheme.colors.accent }]} />
           <View style={styles.heroRow}>
             <AppText style={styles.heroTitle}>
-              {isCorrectionMode ? 'Correccion del movimiento' : 'Nuevo movimiento'}
+              {isSenderCorrectionMode
+                ? 'Editar solicitud'
+                : isCorrectionMode
+                  ? 'Proponer cambio'
+                  : 'Nuevo movimiento'}
             </AppText>
             <Pressable
               accessibilityLabel="Cerrar movimiento"
               accessibilityRole="button"
-              onPress={closeRegister}
+              accessibilityState={{ disabled: isSubmitting }}
+              disabled={isSubmitting}
+              onPress={isSubmitting ? undefined : closeRegister}
               style={({ pressed }) => [
                 styles.closeButton,
                 { backgroundColor: activeTheme.colors.surfaceMuted },
@@ -850,20 +833,22 @@ export function RegisterFlowScreen() {
                 <View style={styles.emptyState}>
                   <EmptyState
                     description="Puede que ya haya sido respondida o reemplazada por otra propuesta."
-                    title="Correccion no disponible"
+                    title="Esta versión ya no se puede editar"
                   />
                 </View>
               ) : null}
 
               {canShowForm ? (
                 <>
-                  <View style={styles.formContent}>
+                  <View pointerEvents={isSubmitting ? 'none' : 'auto'} style={styles.formContent}>
                     {isCorrectionMode &&
                     selectedPerson &&
                     correctionItem &&
                     correctionPendingContent ? (
                       <PendingFinancialRequestCard
                         actionsVisible={false}
+                        createdByCurrentUser={correctionItem.createdByCurrentUser}
+                        requestKind={correctionItem.requestKind}
                         actorAvatarUrl={selectedPerson.avatarUrl ?? null}
                         amountMinor={correctionItem.amountMinor ?? 0}
                         amountTone={
@@ -905,6 +890,7 @@ export function RegisterFlowScreen() {
                           $
                         </AppText>
                         <AppTextInput
+                          editable={!isSubmitting}
                           chrome="plain"
                           keyboardType="number-pad"
                           onFocus={() => scrollFormToField('amount')}
@@ -927,6 +913,7 @@ export function RegisterFlowScreen() {
                             label={`${value / 1000}k`}
                             labelStyle={styles.amountSuggestionLabel}
                             onPress={() => {
+                              if (isSubmitting) return;
                               setAmount(String(value));
                               clearFieldError('amount');
                             }}
@@ -937,6 +924,7 @@ export function RegisterFlowScreen() {
                         <ChoiceChip
                           label="Otro"
                           onPress={() => {
+                            if (isSubmitting) return;
                             setAmount('');
                             clearFieldError('amount');
                             amountInputRef.current?.focus();
@@ -1121,7 +1109,9 @@ export function RegisterFlowScreen() {
                     <View style={styles.fieldStack}>
                       <AppText style={styles.sectionLabel}>Categoría</AppText>
                       <TransactionCategoryPicker
-                        onChange={setCategory}
+                        onChange={(nextCategory) => {
+                          if (!isSubmitting) setCategory(nextCategory);
+                        }}
                         value={category}
                         variant="carousel"
                       />
@@ -1136,6 +1126,7 @@ export function RegisterFlowScreen() {
                       </View>
                       <AppTextInput
                         density="compact"
+                        editable={!isSubmitting}
                         hasError={Boolean(errors.description)}
                         onFocus={() => scrollFormToField('description')}
                         onChangeText={(value) => {
@@ -1163,6 +1154,14 @@ export function RegisterFlowScreen() {
             hasSelectedPerson={Boolean(selectedPerson)}
             isCorrection={isCorrectionMode}
             isSubmitting={isSubmitting}
+            disabled={isCorrectionMode && !editAction}
+            submitLabel={
+              isSenderCorrectionMode
+                ? 'Guardar cambios'
+                : isCorrectionMode
+                  ? 'Enviar propuesta'
+                  : undefined
+            }
             onLayout={(event) => {
               footerHeightRef.current = event.nativeEvent.layout.height;
               updateKeyboardOverlap();

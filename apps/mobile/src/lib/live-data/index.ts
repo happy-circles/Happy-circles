@@ -47,6 +47,8 @@ export {
   useActivateAccountFromInviteMutation,
   useResumeAccountInviteMutation,
   useAmendFinancialRequestMutation,
+  useCorrectFinancialRequestMutation,
+  useCancelFinancialRequestMutation,
   useApproveSettlementMutation,
   useCancelAccountInviteMutation,
   useCancelFriendshipInviteMutation,
@@ -68,3 +70,4 @@ export {
   useReviewExternalFriendshipInviteMutation,
   useUpdateProfileAvatarMutation,
 } from './mutations';
+export { isFinancialRequestConflict } from './mutations/financial-requests';

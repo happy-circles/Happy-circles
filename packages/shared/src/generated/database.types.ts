@@ -906,6 +906,7 @@ export type Database = {
       };
       financial_requests: {
         Row: {
+          amendment_kind: string | null;
           amount_minor: number;
           category: Database['public']['Enums']['transaction_category'];
           created_at: string;
@@ -917,14 +918,18 @@ export type Database = {
           id: string;
           parent_request_id: string | null;
           relationship_id: string;
+          request_case_id: string;
           request_type: Database['public']['Enums']['request_type'];
           resolved_at: string | null;
+          resolved_by_user_id: string | null;
           responder_user_id: string;
           status: Database['public']['Enums']['request_status'];
           target_ledger_transaction_id: string | null;
           updated_at: string;
+          version_number: number;
         };
         Insert: {
+          amendment_kind?: string | null;
           amount_minor: number;
           category?: Database['public']['Enums']['transaction_category'];
           created_at?: string;
@@ -936,14 +941,18 @@ export type Database = {
           id?: string;
           parent_request_id?: string | null;
           relationship_id: string;
+          request_case_id?: string;
           request_type: Database['public']['Enums']['request_type'];
           resolved_at?: string | null;
+          resolved_by_user_id?: string | null;
           responder_user_id: string;
           status?: Database['public']['Enums']['request_status'];
           target_ledger_transaction_id?: string | null;
           updated_at?: string;
+          version_number?: number;
         };
         Update: {
+          amendment_kind?: string | null;
           amount_minor?: number;
           category?: Database['public']['Enums']['transaction_category'];
           created_at?: string;
@@ -955,12 +964,15 @@ export type Database = {
           id?: string;
           parent_request_id?: string | null;
           relationship_id?: string;
+          request_case_id?: string;
           request_type?: Database['public']['Enums']['request_type'];
           resolved_at?: string | null;
+          resolved_by_user_id?: string | null;
           responder_user_id?: string;
           status?: Database['public']['Enums']['request_status'];
           target_ledger_transaction_id?: string | null;
           updated_at?: string;
+          version_number?: number;
         };
         Relationships: [
           {
@@ -4208,6 +4220,7 @@ export type Database = {
       };
       v_relationship_history: {
         Row: {
+          amendment_kind: string | null;
           amount_minor: number | null;
           category: string | null;
           creator_user_id: string | null;
@@ -4219,11 +4232,16 @@ export type Database = {
           item_kind: string | null;
           origin_request_id: string | null;
           origin_settlement_proposal_id: string | null;
+          parent_request_id: string | null;
           relationship_id: string | null;
+          request_case_id: string | null;
+          resolved_at: string | null;
+          resolved_by_user_id: string | null;
           responder_user_id: string | null;
           source_type: string | null;
           status: string | null;
           subtype: string | null;
+          version_number: number | null;
         };
         Relationships: [];
       };
@@ -4493,6 +4511,27 @@ export type Database = {
           p_actor_user_id: string;
           p_idempotency_key: string;
           p_invite_id: string;
+        };
+        Returns: Json;
+      };
+      cancel_financial_request: {
+        Args: {
+          p_actor_user_id: string;
+          p_idempotency_key: string;
+          p_request_id: string;
+          p_expected_version?: number;
+        };
+        Returns: Json;
+      };
+      correct_financial_request: {
+        Args: {
+          p_actor_user_id: string;
+          p_idempotency_key: string;
+          p_request_id: string;
+          p_amount_minor: number;
+          p_description: string;
+          p_category?: Database['public']['Enums']['transaction_category'];
+          p_expected_version?: number;
         };
         Returns: Json;
       };

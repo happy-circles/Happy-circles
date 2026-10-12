@@ -176,5 +176,11 @@ verify_jwt = true
 [functions.reject-financial-request]
 verify_jwt = true
 
+[functions.correct-financial-request]
+verify_jwt = true
+
+[functions.cancel-financial-request]
+verify_jwt = true
+
 [functions.review-external-friendship-invite]
 verify_jwt = true

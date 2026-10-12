@@ -156,6 +156,9 @@ export function buildPeopleState(input: {
             amountMinor: request.amount_minor,
             category: normalizeTransactionCategory(request.category),
             counterpartyLabel: person.displayName,
+            createdByCurrentUser: request.creator_user_id === input.currentUserId,
+            requestKind: request.request_type,
+            versionNumber: request.version_number,
             tone:
               requestDirectionForUser(request, input.currentUserId) === 'owes_me'
                 ? 'positive'

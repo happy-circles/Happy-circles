@@ -1,0 +1,13 @@
+{
+  "database": "sender_request_final",
+  "postgres": "17.11",
+  "migrationCount": 95,
+  "backfill": {
+    "legacy_cancel_unattributed": true,
+    "legacy_counterproposal_preserved": true,
+    "unattributed_journal_owners": 2
+  },
+  "sqlTests": 34,
+  "concurrencyCases": 25,
+  "migrationSha256": "a6de0feaa6ea4544e68b20fcef7f2671887791b4e304f01e8e221adf981126f5"
+}

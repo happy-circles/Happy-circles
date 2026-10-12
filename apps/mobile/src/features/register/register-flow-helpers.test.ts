@@ -9,9 +9,92 @@ import {
   personRelevanceScore,
   resolveRegisterRouteParams,
   sanitizeAmountInput,
+  acknowledgedRequestEditId,
+  registerCorrectionPrefillKey,
+  resolveRegisterEditAction,
 } from './register-flow-helpers';
 
 describe('register flow helpers', () => {
+  it('routes sender corrections separately from receiver counterproposals', () => {
+    expect(
+      resolveRegisterRouteParams({
+        mode: ['sender_correction'],
+        personId: 'person',
+        requestId: 'old',
+      }).mode,
+    ).toBe('sender_correction');
+    const sender = {
+      kind: 'financial_request' as const,
+      status: 'waiting_other_side',
+      createdByCurrentUser: true,
+      requestKind: 'balance_increase' as const,
+    };
+    const receiver = { ...sender, status: 'requires_you', createdByCurrentUser: false };
+    expect(resolveRegisterEditAction('sender_correction', sender)).toBe('correct');
+    expect(resolveRegisterEditAction('correction', receiver)).toBe('amend');
+    expect(resolveRegisterEditAction('sender_correction', receiver)).toBeNull();
+    expect(resolveRegisterEditAction('correction', sender)).toBeNull();
+    expect(
+      resolveRegisterEditAction('sender_correction', { ...sender, status: 'amended' }),
+    ).toBeNull();
+    expect(resolveRegisterEditAction('sender_correction', null)).toBeNull();
+  });
+
+  it('blocks a forced sender edit route for reversals or old caches without a known request type', () => {
+    const sender = {
+      kind: 'financial_request' as const,
+      status: 'waiting_other_side',
+      createdByCurrentUser: true,
+    };
+    expect(resolveRegisterEditAction('sender_correction', sender)).toBeNull();
+    expect(
+      resolveRegisterEditAction('sender_correction', {
+        ...sender,
+        requestKind: 'transaction_reversal',
+      }),
+    ).toBeNull();
+    expect(
+      resolveRegisterEditAction('correction', {
+        ...sender,
+        createdByCurrentUser: false,
+        status: 'requires_you',
+        requestKind: 'transaction_reversal',
+      }),
+    ).toBe('amend');
+  });
+
+  it('requires the backend acknowledgement of the new pending version before focusing success', () => {
+    expect(
+      acknowledgedRequestEditId('correct', {
+        originalRequestId: 'old',
+        correctedRequestId: 'new',
+        status: 'pending',
+      }),
+    ).toBe('new');
+    expect(
+      acknowledgedRequestEditId('amend', { amendedRequestId: 'counter', status: 'pending' }),
+    ).toBe('counter');
+    expect(() =>
+      acknowledgedRequestEditId('correct', { requestId: 'old', status: 'pending' }),
+    ).toThrow('no confirmó');
+    expect(() =>
+      acknowledgedRequestEditId('correct', { correctedRequestId: 'new', status: 'canceled' }),
+    ).toThrow();
+    expect(() => acknowledgedRequestEditId('amend', null)).toThrow();
+  });
+
+  it('identifies prefill by mode and request identity instead of refreshed content', () => {
+    const identity = { mode: 'sender_correction' as const, personId: 'person', requestId: 'old' };
+    expect(registerCorrectionPrefillKey(identity)).toBe(
+      registerCorrectionPrefillKey({ ...identity }),
+    );
+    expect(registerCorrectionPrefillKey(identity)).not.toBe(
+      registerCorrectionPrefillKey({ ...identity, requestId: 'new' }),
+    );
+    expect(registerCorrectionPrefillKey(identity)).not.toBe(
+      registerCorrectionPrefillKey({ ...identity, mode: 'correction' }),
+    );
+  });
   it('normalizes amount input without screen state', () => {
     expect(sanitizeAmountInput('$ 120.500 cop')).toBe('120500');
     expect(formatAmountInput('')).toBe('');

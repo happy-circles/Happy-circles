@@ -183,6 +183,7 @@ export interface PendingActionDto {
   readonly replacedByProposalId?: string | null;
   readonly staleReason?: string | null;
   readonly createdByCurrentUser?: boolean;
+  readonly versionNumber?: number;
 }
 
 export interface PendingRequestHistoryStepDto {
@@ -221,6 +222,8 @@ export interface ActivityItemDto {
   readonly participantUserIds?: readonly string[];
   readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
   readonly createdByCurrentUser?: boolean;
+  readonly requestKind?: 'balance_increase' | 'transaction_reversal';
+  readonly versionNumber?: number;
   readonly kind:
     | 'financial_request'
     | 'settlement_proposal'
@@ -268,6 +271,7 @@ export interface PersonTimelineItemDto {
 
 export interface PersonPendingRequestDto {
   readonly id: string;
+  readonly versionNumber?: number;
   readonly requestKind: 'balance_increase' | 'transaction_reversal';
   readonly responseState: 'requires_you' | 'waiting_other_side';
   readonly tone: 'positive' | 'negative';

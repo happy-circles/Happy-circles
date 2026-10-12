@@ -209,6 +209,14 @@ export const requestDecisionSchema = z.object({
   requestId: uuidSchema,
 });
 
+export const correctFinancialRequestSchema = amendFinancialRequestSchema.extend({
+  expectedVersion: z.number().int().positive().max(2147483647).optional(),
+});
+
+export const cancelFinancialRequestSchema = requestDecisionSchema.extend({
+  expectedVersion: z.number().int().positive().max(2147483647).optional(),
+});
+
 export const createInternalFriendshipInviteSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   targetUserId: uuidSchema,

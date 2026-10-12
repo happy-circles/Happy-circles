@@ -229,6 +229,39 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
+  if (normalized.includes('financial_request_correction_not_supported')) {
+    return {
+      status: 409,
+      code: 'financial_request_correction_not_supported',
+      message: 'Este tipo de movimiento permite cancelar la solicitud pendiente.',
+    };
+  }
+
+  for (const conflict of [
+    'financial_request_not_pending',
+    'financial_request_not_current',
+    'financial_request_version_conflict',
+  ]) {
+    if (normalized.includes(conflict)) {
+      return {
+        status: 409,
+        code: conflict,
+        message: 'Este movimiento ya cambió. Actualiza su estado.',
+      };
+    }
+  }
+
+  if (
+    normalized.includes('request_not_visible_to_actor') ||
+    normalized.includes('account_access_restricted')
+  ) {
+    return {
+      status: 403,
+      code: 'forbidden',
+      message: 'No tienes permisos para realizar esta acción.',
+    };
+  }
+
   if (normalized.includes('account_invite_reservation_active')) {
     return {
       status: 409,

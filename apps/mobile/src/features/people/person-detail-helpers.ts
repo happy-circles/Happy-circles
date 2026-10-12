@@ -6,7 +6,7 @@ import type { HistoryCaseItem } from '@/lib/history-cases';
 import { circleStatusCopy, moneyStatusCopy } from '@/lib/card-language';
 
 export type PersonSegmentKey = 'pending' | 'history';
-export type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute';
+export type PendingActionKey = 'accept' | 'reject' | 'approve' | 'execute' | 'cancel';
 
 export const PERSON_SEGMENT_KEYS: readonly PersonSegmentKey[] = ['pending', 'history'];
 
@@ -128,11 +128,15 @@ export function buildPersonRegisterHref(personId: string, direction: 'i_owe' | '
   } as Href;
 }
 
-export function buildPersonCorrectionHref(personId: string, requestId: string): Href {
+export function buildPersonCorrectionHref(
+  personId: string,
+  requestId: string,
+  mode: 'correction' | 'sender_correction' = 'correction',
+): Href {
   return {
     pathname: '/register',
     params: {
-      mode: 'correction',
+      mode,
       personId,
       requestId,
     },

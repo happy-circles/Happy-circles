@@ -40,6 +40,11 @@ export type LivePersonDetailDto = PersonDetailDto & {
 };
 
 export interface AppSnapshot {
+  /** Confirmed rows retained when the history database cannot be written. */
+  readonly confirmedFinancialRequests?: {
+    readonly backendScope: string;
+    readonly rows: readonly FinancialRequestRow[];
+  };
   readonly dashboard: DashboardDto;
   readonly balanceOverview: BalanceOverviewDto;
   readonly balanceAnalytics: BalanceAnalyticsDto;

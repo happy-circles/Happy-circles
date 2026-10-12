@@ -99,5 +99,9 @@ describe('person detail helpers', () => {
         requestId: 'request-1',
       },
     });
+    expect(buildPersonCorrectionHref('user-1', 'request-1', 'sender_correction')).toEqual({
+      pathname: '/register',
+      params: { mode: 'sender_correction', personId: 'user-1', requestId: 'request-1' },
+    });
   });
 });

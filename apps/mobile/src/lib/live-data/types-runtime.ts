@@ -1,11 +1,7 @@
-import type {
-  ActivityItemDto,
-  PendingActionDto,
-  PendingRequestHistoryStepDto,
-  PersonTimelineItemDto,
-} from '@happy-circles/application';
+import type { ActivityItemDto, PersonTimelineItemDto } from '@happy-circles/application';
 import type { Database, TransactionCategory } from '@happy-circles/shared';
-
+export type { FinancialRequestRow } from './financial-request-types';
+export type { ActionableItem } from './actionable-item-types';
 export type {
   SettlementDetailDecision,
   SettlementDetailDto,
@@ -54,7 +50,6 @@ export type AccountInviteDeliveryRow = NonNullFields<
   GeneratedAccountInviteDeliveryRow,
   'channel' | 'created_at' | 'id' | 'invite_id' | 'status'
 >;
-export type FinancialRequestRow = Database['public']['Tables']['financial_requests']['Row'];
 export type HappyCircleScoreEventRow =
   Database['public']['Tables']['happy_circle_score_events']['Row'];
 export type AuditEventRow = Database['public']['Tables']['audit_events']['Row'];
@@ -431,32 +426,6 @@ export interface PeopleOutreachResult {
   readonly friendshipDirection?: 'incoming' | 'outgoing';
   readonly result?: FriendshipInviteActionResult | AccountInviteDeliveryResult;
   readonly deliveryValidation?: CurrentOutreachDeliveryValidation;
-}
-
-export interface ActionableItem {
-  readonly id: PendingActionDto['id'];
-  readonly kind: Extract<
-    PendingActionDto['kind'],
-    'financial_request' | 'settlement_proposal' | 'friendship_invite' | 'account_invite'
-  >;
-  readonly title: PendingActionDto['title'];
-  readonly subtitle: PendingActionDto['subtitle'];
-  readonly status: PendingActionDto['status'];
-  readonly ctaLabel: PendingActionDto['ctaLabel'];
-  readonly href: PendingActionDto['href'];
-  readonly amountMinor?: PendingActionDto['amountMinor'];
-  readonly category?: TransactionCategory;
-  readonly originSettlementProposalId?: string | null;
-  readonly happyCircleCaseId?: string | null;
-  readonly replacesProposalId?: string | null;
-  readonly replacedByProposalId?: string | null;
-  readonly staleReason?: string | null;
-  readonly counterpartyLabel?: string;
-  readonly tone?: ActivityItemDto['tone'];
-  readonly participantUserIds?: readonly string[];
-  readonly pendingHistorySteps?: readonly PendingRequestHistoryStepDto[];
-  readonly createdByCurrentUser?: boolean;
-  readonly createdAt: string;
 }
 
 export interface InviteProfilePresentation {

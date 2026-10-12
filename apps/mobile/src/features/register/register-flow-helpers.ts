@@ -2,9 +2,13 @@ import type { ActivityItemDto } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 
 import { formatCop } from '@/lib/data';
+import {
+  canCorrectSenderFinancialRequest,
+  pendingFinancialRequestActionRole,
+} from '@/components/pending-financial-request-actions';
 
 export type Direction = 'i_owe' | 'owes_me';
-export type RegisterMode = 'create' | 'correction';
+export type RegisterMode = 'create' | 'correction' | 'sender_correction';
 export type RegisterUserTransactionCategory = Exclude<TransactionCategory, 'cycle'>;
 
 export const DEFAULT_DIRECTION: Direction = 'i_owe';
@@ -135,8 +139,47 @@ export function resolveRegisterRouteParams(input: {
     contextualDirection,
     contextualPersonId: typeof input.personId === 'string' ? input.personId : '',
     initialDirection: contextualDirection ?? DEFAULT_DIRECTION,
-    mode: rawMode === 'correction' ? 'correction' : 'create',
+    mode: rawMode === 'correction' || rawMode === 'sender_correction' ? rawMode : 'create',
   };
+}
+
+export function resolveRegisterEditAction(
+  mode: RegisterMode,
+  item: Pick<ActivityItemDto, 'kind' | 'status' | 'createdByCurrentUser' | 'requestKind'> | null,
+): 'correct' | 'amend' | null {
+  if (!item || item.kind !== 'financial_request') return null;
+  const role = pendingFinancialRequestActionRole({
+    createdByCurrentUser: item.createdByCurrentUser,
+    responseState: item.status,
+  });
+  if (
+    mode === 'sender_correction' &&
+    canCorrectSenderFinancialRequest({
+      createdByCurrentUser: item.createdByCurrentUser,
+      responseState: item.status,
+      requestKind: item.requestKind,
+    })
+  )
+    return 'correct';
+  if (mode === 'correction' && role === 'receiver') return 'amend';
+  return null;
+}
+
+export function registerCorrectionPrefillKey(input: {
+  readonly mode: RegisterMode;
+  readonly personId: string;
+  readonly requestId: string;
+}): string {
+  return JSON.stringify([input.mode, input.personId, input.requestId]);
+}
+
+export function acknowledgedRequestEditId(action: 'correct' | 'amend', response: unknown): string {
+  if (response && typeof response === 'object' && !Array.isArray(response)) {
+    const record = response as Record<string, unknown>;
+    const id = record[action === 'correct' ? 'correctedRequestId' : 'amendedRequestId'];
+    if (record.status === 'pending' && typeof id === 'string' && id.length > 0) return id;
+  }
+  throw new Error('El servidor no confirmó la nueva solicitud. Revisa el estado actualizado.');
 }
 
 export function directionFromTransactionTone(value: ActivityItemDto['tone']): Direction {

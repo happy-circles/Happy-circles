@@ -78,6 +78,10 @@ const FINANCIAL_REQUEST_SELECT = [
   'created_at',
   'updated_at',
   'resolved_at',
+  'request_case_id',
+  'version_number',
+  'resolved_by_user_id',
+  'amendment_kind',
 ].join(', ');
 
 const RELATIONSHIP_HISTORY_SELECT = [
@@ -97,6 +101,12 @@ const RELATIONSHIP_HISTORY_SELECT = [
   'origin_request_id',
   'origin_settlement_proposal_id',
   'happened_at',
+  'request_case_id',
+  'version_number',
+  'resolved_by_user_id',
+  'amendment_kind',
+  'parent_request_id',
+  'resolved_at',
 ].join(', ');
 
 const INBOX_ITEM_SELECT = [

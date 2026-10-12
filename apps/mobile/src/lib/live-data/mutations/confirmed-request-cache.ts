@@ -113,6 +113,7 @@ export function confirmCreatedRequestInCache(
         href: LIVE_DATA_ROUTES.person(personId),
         counterpartyLabel: person.displayName,
         createdByCurrentUser: true,
+        requestKind: 'balance_increase',
         pendingHistorySteps: [
           {
             id: requestId,

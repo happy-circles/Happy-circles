@@ -154,6 +154,13 @@ export function friendlyHistoryStepLabel(item: HistoryCaseItem): string {
     return `No aceptaste ${selfRejected[1]}`;
   }
 
+  if (/^T[uú] corrigi[oó] su solicitud$/i.test(item.title)) {
+    return 'Corregiste tu solicitud';
+  }
+  if (/^T[uú] cancel[oó] su solicitud$/i.test(item.title)) {
+    return 'Cancelaste tu solicitud';
+  }
+
   const selfAction = item.title.match(
     /^T[uú] (cre[oó]|acept[oó]|rechaz[oó]|registr[oó]|confirm[oó]|aplic[oó]) (.+)$/i,
   );

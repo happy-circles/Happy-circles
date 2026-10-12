@@ -105,6 +105,9 @@ export function actionableItemToActivityItem(item: ActionableItem): ActivityItem
     participantUserIds: item.participantUserIds,
     tone: item.tone,
     pendingHistorySteps: item.pendingHistorySteps,
+    createdByCurrentUser: item.createdByCurrentUser,
+    requestKind: item.requestKind,
+    versionNumber: item.versionNumber,
   };
 }
 

@@ -16,8 +16,8 @@ import { APP_SNAPSHOT_QUERY_KEY } from './constants';
 import { appConfig } from '../config';
 import { buildLiveSnapshot } from './build-snapshot';
 import { readCachedHistory } from './history-sync-cache';
-import { mergeHistoryWithLiveRows } from './history-sync';
 import { readCachedAppSnapshot } from './snapshot-cache';
+import { prepareSnapshotCacheHydration } from './app-snapshot-hydration';
 import type { AppSnapshot } from './types';
 
 interface AppSnapshotCacheHydrationState {
@@ -110,12 +110,16 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
     void readCachedHistory(userId, appConfig.supabaseUrl)
       .catch(() => null)
       .then(async (historyState) => {
-        const derived = historyState?.bootstrapComplete
-          ? null
-          : await readCachedAppSnapshot(userId);
-        if (derived) return derived;
-        if (historyState?.liveRows) {
-          const rows = mergeHistoryWithLiveRows(historyState.liveRows, historyState);
+        const cached = await readCachedAppSnapshot(userId).catch(() => null);
+        const plan = prepareSnapshotCacheHydration(
+          historyState,
+          cached,
+          userId,
+          appConfig.supabaseUrl,
+        );
+        if (plan.kind === 'derived') return plan.cached;
+        if (plan.kind === 'raw') {
+          const { rows } = plan;
           hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
           return {
             snapshot: buildLiveSnapshot({ ...rows, currentUserId: userId }),
@@ -123,7 +127,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
             avatarSignedUrlsByPath: rows.avatarSignedUrlsByPath,
           };
         }
-        return historyState?.bootstrapComplete ? readCachedAppSnapshot(userId) : null;
+        return null;
       })
       .then((cachedSnapshot) => {
         if (cancelled) {

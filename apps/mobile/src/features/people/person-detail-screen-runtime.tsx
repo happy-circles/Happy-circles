@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, View } from 'react-native';
@@ -18,7 +18,10 @@ import {
 import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
 import { standardHappyCircleParticipants } from '@/components/happy-circle-ring';
 import { MessageBanner } from '@/components/message-banner';
-import { PendingFinancialRequestCard } from '@/components/pending-financial-request-card';
+import {
+  assertCancellationAcknowledged,
+  pendingFinancialRequestActionRole,
+} from '@/components/pending-financial-request-actions';
 import { PrimaryAction } from '@/components/primary-action';
 import { Snackbar } from '@/components/snackbar';
 import { SwipePager } from '@/components/swipe-pager';
@@ -55,6 +58,8 @@ import {
   useExecuteSettlementMutation,
   useRejectFinancialRequestMutation,
   useRejectSettlementMutation,
+  useCancelFinancialRequestMutation,
+  isFinancialRequestConflict,
 } from '@/lib/live-data';
 import { toneVisual, type LedgerDirection } from '@/lib/direction-ui';
 import { backOrReturnTo, pushRoute } from '@/lib/navigation';
@@ -75,7 +80,6 @@ import {
 import { useSession } from '@/providers/session-provider';
 import {
   PERSON_SEGMENT_KEYS,
-  buildFinancialRequestPendingContent,
   buildFocusCandidates,
   buildPersonCorrectionHref,
   buildPersonRegisterHref,
@@ -88,6 +92,10 @@ import {
   type PersonSegmentKey,
 } from './person-detail-helpers';
 import { PersonDetailSegmentTabs } from './person-detail-segment-tabs';
+import {
+  confirmPendingAction,
+  PersonPendingFinancialRequestCard,
+} from './person-pending-financial-request-card';
 import {
   PersonDetailErrorState,
   PersonDetailLoadingState,
@@ -119,12 +127,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const refresh = useSnapshotRefresh(snapshotQuery);
   const acceptRequest = useAcceptFinancialRequestMutation();
   const rejectRequest = useRejectFinancialRequestMutation();
+  const cancelRequest = useCancelFinancialRequestMutation();
   const approveSettlement = useApproveSettlementMutation();
   const rejectSettlement = useRejectSettlementMutation();
   const executeSettlement = useExecuteSettlementMutation();
   const person = snapshotQuery.data?.peopleById[userId] ?? null;
   const [banner, setBanner] = useState<PersonDetailBannerState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const pendingActionInFlightRef = useRef(false);
   const [expandedPendingItemIds, setExpandedPendingItemIds] = useState<string[]>([]);
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
@@ -447,6 +457,21 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     status: string,
     action: PendingActionKey,
   ) {
+    if (pendingActionInFlightRef.current) return;
+    const request = pendingItems.find((item) => item.id === itemId);
+    if (
+      action === 'cancel' &&
+      (!request ||
+        pendingFinancialRequestActionRole({
+          createdByCurrentUser: request.createdByCurrentUser,
+          responseState: request.status,
+        }) !== 'sender')
+    ) {
+      setBanner({ message: 'Esta solicitud ya cambió. Revisa su estado actual.', tone: 'warning' });
+      await snapshotQuery.refetch();
+      return;
+    }
+    pendingActionInFlightRef.current = true;
     const key = `${itemId}:${action}`;
     const blockingActionKey =
       kind === 'financial_request' && action === 'accept'
@@ -462,7 +487,16 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
 
     try {
       if (kind === 'financial_request') {
-        if (action === 'accept') {
+        if (action === 'cancel') {
+          const response = await cancelRequest.mutateAsync({
+            requestId: itemId,
+            expectedVersion: request?.versionNumber,
+          });
+          assertCancellationAcknowledged(itemId, response);
+          appHaptics.triggerAppWarningHaptic();
+          showSnackbar('Solicitud cancelada.', 'neutral');
+          pushRoute(router, buildPersonPanelHref({ focusId: itemId, panel: 'history', userId }));
+        } else if (action === 'accept') {
           const response = await actionFeedback.runBlockingAction('acceptFinancialRequest', () =>
             acceptRequest.mutateAsync(itemId),
           );
@@ -545,6 +579,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       }
     } catch (error) {
       if (isIdentityConfirmationCancelled(error)) return;
+      if (kind === 'financial_request' && isFinancialRequestConflict(error)) {
+        setBanner({
+          message: 'La solicitud ya fue respondida o reemplazada. Revisa el estado actualizado.',
+          tone: 'warning',
+        });
+        await snapshotQuery.refetch();
+        return;
+      }
       const nextMessage =
         error instanceof Error ? error.message : 'No se pudo completar la acción.';
       if (
@@ -574,25 +616,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
         });
       }
     } finally {
+      pendingActionInFlightRef.current = false;
       setBusyKey(null);
     }
-  }
-
-  function confirmPendingAction(input: {
-    readonly title: string;
-    readonly message: string;
-    readonly confirmLabel: string;
-    readonly onConfirm: () => void;
-  }) {
-    appHaptics.triggerAppSelectionHaptic();
-    Alert.alert(input.title, input.message, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: input.confirmLabel,
-        style: 'destructive',
-        onPress: input.onConfirm,
-      },
-    ]);
   }
 
   function renderPendingItem(item: ActivityItemDto) {
@@ -602,48 +628,22 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       !notificationViewedKeys.has(notificationViewKeyForItem(item));
 
     if (item.kind === 'financial_request') {
-      const financialRequestContent = buildFinancialRequestPendingContent(item);
       return (
-        <PendingFinancialRequestCard
+        <PersonPendingFinancialRequestCard
           actorAvatarUrl={person?.avatarUrl ?? null}
-          amountMinor={item.amountMinor ?? 0}
-          amountTone={item.tone === 'positive' || item.tone === 'negative' ? item.tone : 'neutral'}
-          busyAccept={busyKey === `${item.id}:accept`}
-          busyReject={busyKey === `${item.id}:reject`}
+          busyKey={busyKey}
           counterpartyName={person?.displayName ?? 'Persona'}
-          category={item.category}
-          createdAtLabel={financialRequestContent.createdAtLabel}
-          createdByLabel={financialRequestContent.createdByLabel}
-          description={financialRequestContent.detail}
+          expanded={expandedPendingItemIds[0] === item.id}
           focused={isFocused}
-          historySteps={item.pendingHistorySteps}
-          isExpanded={expandedPendingItemIds[0] === item.id}
+          item={item}
           key={item.id}
-          onAccept={
-            busyKey
-              ? undefined
-              : () => void handlePendingItemAction(item.id, item.kind, item.status, 'accept')
+          onAction={(action) =>
+            void handlePendingItemAction(item.id, item.kind, item.status, action)
           }
-          onReject={
-            busyKey
-              ? undefined
-              : () =>
-                  confirmPendingAction({
-                    title: 'No aceptar',
-                    message: 'No se aplicara este movimiento.',
-                    confirmLabel: 'No aceptar',
-                    onConfirm: () =>
-                      void handlePendingItemAction(item.id, item.kind, item.status, 'reject'),
-                  })
-          }
-          onToggleAmendment={
-            busyKey
-              ? undefined
-              : () => pushRoute(router, buildPersonCorrectionHref(userId, item.id))
+          onCorrection={(mode) =>
+            pushRoute(router, buildPersonCorrectionHref(userId, item.id, mode))
           }
           onToggle={() => togglePendingItem(item.id)}
-          responseState={item.status === 'requires_you' ? 'requires_you' : 'waiting_other_side'}
-          title={item.title}
           unread={unread}
         />
       );

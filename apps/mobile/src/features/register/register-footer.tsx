@@ -24,6 +24,8 @@ export function RegisterFooter({
   onSubmit,
   savePhase,
   summary,
+  submitLabel,
+  disabled = false,
 }: {
   readonly accessIssue: RegisterAccessIssue | null;
   readonly category: UserTransactionCategory;
@@ -34,6 +36,8 @@ export function RegisterFooter({
   readonly onSubmit: () => void;
   readonly savePhase: 'authorizing' | 'saving' | null;
   readonly summary: string;
+  readonly submitLabel?: string;
+  readonly disabled?: boolean;
 }) {
   const activeTheme = useAppTheme();
   const label = isSubmitting
@@ -42,7 +46,9 @@ export function RegisterFooter({
       : isCorrection
         ? 'Enviando...'
         : 'Creando...'
-    : (accessIssue?.actionLabel ?? (isCorrection ? 'Enviar correccion' : 'Registrar'));
+    : (accessIssue?.actionLabel ??
+      submitLabel ??
+      (isCorrection ? 'Enviar correccion' : 'Registrar'));
 
   return (
     <View onLayout={onLayout} style={styles.footer}>
@@ -83,11 +89,11 @@ export function RegisterFooter({
       </View>
       <PrimaryAction
         compact
-        disabled={isSubmitting}
+        disabled={isSubmitting || disabled}
         icon="checkmark"
         label={label}
         loading={isSubmitting}
-        onPress={isSubmitting ? undefined : onSubmit}
+        onPress={isSubmitting || disabled ? undefined : onSubmit}
         style={{ borderRadius: activeTheme.radius.pill, minHeight: 48 }}
       />
     </View>
