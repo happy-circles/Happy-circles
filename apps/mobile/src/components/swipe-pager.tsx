@@ -5,11 +5,13 @@ import PagerView, {
   type PagerViewOnPageScrollEvent,
   type PagerViewOnPageSelectedEvent,
 } from 'react-native-pager-view';
+import { useVisitedPagerPages } from './swipe-pager-lazy';
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
   readonly animateProgrammaticTransitions?: boolean;
   readonly commitPreviewChanges?: boolean;
+  readonly lazy?: boolean;
   readonly loop?: boolean;
   readonly offscreenPageLimit?: number;
   readonly onChange: (value: T) => void;
@@ -38,6 +40,7 @@ export function SwipePager<T extends string>({
   accessibilityLabel,
   animateProgrammaticTransitions = true,
   commitPreviewChanges = false,
+  lazy = false,
   loop = false,
   offscreenPageLimit,
   onChange,
@@ -74,6 +77,7 @@ export function SwipePager<T extends string>({
 
   const activeIndex = clampIndex(values.indexOf(value), values.length - 1);
   const activePageIndex = shouldLoop ? activeIndex + 1 : activeIndex;
+  const { shouldMountPage, visitPage } = useVisitedPagerPages(value, lazy);
 
   useEffect(() => {
     valuesRef.current = values;
@@ -223,6 +227,7 @@ export function SwipePager<T extends string>({
     previewIndexRef.current = valueIndex;
 
     if (nextPreviewValue && valueIndex !== previousPreviewIndex) {
+      if (lazy) visitPage(nextPreviewValue);
       onPreviewChangeRef.current?.(nextPreviewValue);
     }
   }
@@ -253,6 +258,9 @@ export function SwipePager<T extends string>({
     if (!fromValue || !toValue) {
       return;
     }
+
+    // Mount the neighbor as soon as a swipe starts, before the preview commits.
+    if (lazy && progress > 0) visitPage(toValue);
 
     onProgressChangeRef.current?.({
       from: fromValue,
@@ -356,7 +364,9 @@ export function SwipePager<T extends string>({
             key={`${pageIndex}:${pageValue}`}
             style={[styles.page, pageStyle]}
           >
-            {renderPage(pageValue, valueIndexForPagerIndex(pageIndex))}
+            {shouldMountPage(pageValue)
+              ? renderPage(pageValue, valueIndexForPagerIndex(pageIndex))
+              : null}
           </View>
         ))}
       </PagerView>

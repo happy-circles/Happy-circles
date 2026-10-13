@@ -1,10 +1,13 @@
 import { type ReactNode, useEffect } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useVisitedPagerPages } from './swipe-pager-lazy';
 
 export interface SwipePagerProps<T extends string> {
   readonly accessibilityLabel?: string;
   readonly animateProgrammaticTransitions?: boolean;
   readonly commitPreviewChanges?: boolean;
+  readonly lazy?: boolean;
+  readonly offscreenPageLimit?: number;
   readonly loop?: boolean;
   readonly onChange: (value: T) => void;
   readonly onInteractionStateChange?: (isInteracting: boolean) => void;
@@ -30,6 +33,7 @@ function clampIndex(index: number, maxIndex: number): number {
 
 export function SwipePager<T extends string>({
   accessibilityLabel,
+  lazy = false,
   onInteractionStateChange,
   onProgressChange,
   onPreviewChange,
@@ -41,6 +45,7 @@ export function SwipePager<T extends string>({
 }: SwipePagerProps<T>) {
   const activeIndex = clampIndex(values.indexOf(value), values.length - 1);
   const activeValue = values[activeIndex];
+  const { shouldMountPage } = useVisitedPagerPages(value, lazy);
 
   useEffect(() => {
     onInteractionStateChange?.(false);
@@ -55,7 +60,18 @@ export function SwipePager<T extends string>({
 
   return (
     <View accessibilityLabel={accessibilityLabel} style={[styles.root, style]}>
-      {activeValue ? (
+      {lazy ? (
+        values.map((pageValue, index) =>
+          shouldMountPage(pageValue) ? (
+            <View
+              key={pageValue}
+              style={[styles.page, pageStyle, pageValue !== activeValue ? styles.hiddenPage : null]}
+            >
+              {renderPage(pageValue, index)}
+            </View>
+          ) : null,
+        )
+      ) : activeValue ? (
         <View style={[styles.page, pageStyle]}>{renderPage(activeValue, activeIndex)}</View>
       ) : null}
     </View>
@@ -70,5 +86,8 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
+  },
+  hiddenPage: {
+    display: 'none',
   },
 });

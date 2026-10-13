@@ -6,6 +6,11 @@ import {
   createServiceRoleClient,
   createVerifiedUserClient,
 } from '../_shared/http.ts';
+import {
+  FINANCIAL_REQUEST_SELECT,
+  hydrateControlResponse,
+} from '../_shared/financial-request-controls.ts';
+import { hydrateAcceptedProjection } from '../_shared/accepted-request-projection.ts';
 
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId, authContext) => {
@@ -24,7 +29,21 @@ Deno.serve((request) =>
     triggerGraphCycleWorker(1);
 
     if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-      return data;
+      const observedAt = new Date().toISOString();
+      const signal = AbortSignal.timeout(2000);
+      const hydrated = await hydrateControlResponse(
+        async (ids) => {
+          const result = await client
+            .from('financial_requests')
+            .select(FINANCIAL_REQUEST_SELECT)
+            .in('id', ids)
+            .abortSignal(signal);
+          return { data: result.data as unknown, error: result.error as unknown };
+        },
+        actorUserId,
+        data,
+      );
+      return hydrateAcceptedProjection(client, actorUserId, hydrated, { observedAt, signal });
     }
 
     return {

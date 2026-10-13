@@ -1,4 +1,6 @@
 import { parseHistorySyncState, type HistorySyncState } from './history-sync';
+import { randomUUID } from 'expo-crypto';
+import { historyCacheReceipt, type HistoryCacheReceipt } from './history-cache-receipt';
 
 // Browser sessions can sync incrementally without adding a native dependency.
 // Reloading starts a full bootstrap; mobile uses durable SQLite storage.
@@ -48,10 +50,23 @@ export async function persistCachedHistory(
   userId: string,
   scope: string,
   state: HistorySyncState,
-): Promise<void> {
-  const payload = JSON.stringify(state);
+): Promise<HistoryCacheReceipt> {
+  const generation = randomUUID();
+  const payload = JSON.stringify({ ...state, cacheGeneration: generation });
   if (!parseHistorySyncState(JSON.parse(payload))) {
     throw new Error('Cannot persist an invalid history sync state.');
   }
   historyByScopeAndUser.set(JSON.stringify([scope, userId]), payload);
+  return historyCacheReceipt(userId, scope, generation, state);
+}
+
+export async function readCachedHistoryReceipt(
+  userId: string,
+  scope: string,
+): Promise<HistoryCacheReceipt | null> {
+  const payload = historyByScopeAndUser.get(JSON.stringify([scope, userId]));
+  if (!payload) return null;
+  const value = JSON.parse(payload) as HistorySyncState & { cacheGeneration?: string };
+  const state = parseHistorySyncState(value);
+  return state ? historyCacheReceipt(userId, scope, value.cacheGeneration ?? null, state) : null;
 }

@@ -15,9 +15,9 @@ import { useSession } from '@/providers/session-provider';
 import { APP_SNAPSHOT_QUERY_KEY } from './constants';
 import { appConfig } from '../config';
 import { buildLiveSnapshot } from './build-snapshot';
-import { readCachedHistory } from './history-sync-cache';
+import { readCachedHistory, readCachedHistoryReceipt } from './history-sync-cache';
 import { readCachedAppSnapshot } from './snapshot-cache';
-import { prepareSnapshotCacheHydration } from './app-snapshot-hydration';
+import { restoreCachedAppSnapshot } from './app-snapshot-hydration';
 import type { AppSnapshot } from './types';
 
 interface AppSnapshotCacheHydrationState {
@@ -105,30 +105,22 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
       );
     }, SNAPSHOT_CACHE_RESTORE_SOFT_TIMEOUT_MS);
 
-    // The history mirror includes its last live context in the same SQLite
-    // commit. It remains rebuildable if the older derived cache write failed.
-    void readCachedHistory(userId, appConfig.supabaseUrl)
-      .catch(() => null)
-      .then(async (historyState) => {
-        const cached = await readCachedAppSnapshot(userId).catch(() => null);
-        const plan = prepareSnapshotCacheHydration(
-          historyState,
-          cached,
-          userId,
-          appConfig.supabaseUrl,
-        );
-        if (plan.kind === 'derived') return plan.cached;
-        if (plan.kind === 'raw') {
-          const { rows } = plan;
-          hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
-          return {
-            snapshot: buildLiveSnapshot({ ...rows, currentUserId: userId }),
-            updatedAt: rows.fetchedAt,
-            avatarSignedUrlsByPath: rows.avatarSignedUrlsByPath,
-          };
-        }
-        return null;
-      })
+    void restoreCachedAppSnapshot({
+      userId,
+      backendScope: appConfig.supabaseUrl,
+      readDerived: () => readCachedAppSnapshot(userId),
+      readReceipt: () => readCachedHistoryReceipt(userId, appConfig.supabaseUrl),
+      readHistory: () => readCachedHistory(userId, appConfig.supabaseUrl),
+      canRestore: () => !cancelled && !queryClient.getQueryData<AppSnapshot>(queryKey),
+      buildSnapshot: (rows) => {
+        hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
+        return {
+          snapshot: buildLiveSnapshot({ ...rows, currentUserId: userId }),
+          updatedAt: rows.fetchedAt,
+          avatarSignedUrlsByPath: rows.avatarSignedUrlsByPath,
+        };
+      },
+    })
       .then((cachedSnapshot) => {
         if (cancelled) {
           return;

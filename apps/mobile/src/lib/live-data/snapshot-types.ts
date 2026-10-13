@@ -9,6 +9,8 @@ import type {
 } from '@happy-circles/application';
 import type { TransactionCategory } from '@happy-circles/shared';
 import type { HistorySyncPage } from './history-sync';
+import type { AppSnapshotLocalState } from './snapshot-local-state';
+import type { ConfirmedRequestOutcome } from './confirmed-request-outcomes';
 
 import type {
   AccountInviteDeliveryRow,
@@ -39,12 +41,7 @@ export type LivePersonDetailDto = PersonDetailDto & {
   readonly relationshipStatus?: 'active' | 'pending_invite';
 };
 
-export interface AppSnapshot {
-  /** Confirmed rows retained when the history database cannot be written. */
-  readonly confirmedFinancialRequests?: {
-    readonly backendScope: string;
-    readonly rows: readonly FinancialRequestRow[];
-  };
+export interface AppSnapshot extends AppSnapshotLocalState {
   readonly dashboard: DashboardDto;
   readonly balanceOverview: BalanceOverviewDto;
   readonly balanceAnalytics: BalanceAnalyticsDto;
@@ -90,6 +87,10 @@ export interface LiveSnapshotLimits {
 }
 
 export interface LiveSnapshotRows {
+  /** Local exact-version closures; canonical source rows remain intact. */
+  readonly confirmedRequestOutcomes?: readonly ConfirmedRequestOutcome[];
+  /** Local watermark for partial, server-confirmed balance responses. */
+  readonly acceptedProjectionObservedAtByRelationshipId?: Readonly<Record<string, string>>;
   readonly historySync?: HistorySyncPage;
   readonly profiles: readonly UserProfileRow[];
   readonly avatarSignedUrlsByPath: SignedAvatarUrlRecord;

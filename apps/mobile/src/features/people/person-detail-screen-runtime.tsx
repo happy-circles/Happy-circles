@@ -5,7 +5,7 @@ import { Alert, Pressable, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ActivityItemDto } from '@happy-circles/application';
 
-import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
+import { HistoryVirtualizedList } from '@/components/history-virtualized-list';
 import { DirectionPill } from '@/components/direction-pill';
 import { EmptyState } from '@/components/empty-state';
 import { AppAvatar } from '@/components/app-avatar';
@@ -15,7 +15,7 @@ import {
   CircleActionFeedbackOverlay,
   type CircleActionFeedbackAction,
 } from '@/components/circle-action-feedback-overlay';
-import { HistoryCaseCard, type HistoryCaseTone } from '@/components/history-case-card';
+import { HistoryCaseCard } from '@/components/history-case-card';
 import { standardHappyCircleParticipants } from '@/components/happy-circle-ring';
 import { MessageBanner } from '@/components/message-banner';
 import {
@@ -34,19 +34,7 @@ import {
 import * as appHaptics from '@/lib/app-haptics';
 import { isIdentityConfirmationCancelled } from '@/lib/live-data/mutations/sensitive-action-check';
 import { formatCop } from '@/lib/data';
-import {
-  buildHistoryCases,
-  friendlyHistoryStepLabel,
-  historyAmountIsVoided,
-  historyCardTitle,
-  historyCaseAmountLabel,
-  historyCaseMeta,
-  historyCaseStatusLabel,
-  historyCaseStatusTone,
-  historyCaseVisualCategory,
-  historyImpactTone,
-  toHistoryFeedItem,
-} from '@/lib/history-cases';
+import { buildHistoryCases, toHistoryFeedItem } from '@/lib/history-cases';
 import {
   markNotificationItemsViewed,
   notificationItemCanAlert,
@@ -103,7 +91,6 @@ import {
 } from './person-detail-states';
 import { CircleDetailLink } from './person-detail-circle-link';
 import {
-  buildPersonHistoryConversationSteps,
   buildPersonPanelHref,
   fallbackCircleFeedbackParticipants,
   pendingCaseTone,
@@ -115,6 +102,7 @@ import {
 } from './person-detail-runtime-utils';
 import { personDetailScreenStyles as styles } from './person-detail-screen.styles';
 import { AppText } from '@/components/app-text';
+import { PersonHistoryCaseCard } from './person-history-case-card';
 
 export type { PersonDetailScreenProps } from './person-detail-runtime-utils';
 
@@ -135,12 +123,14 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   const [banner, setBanner] = useState<PersonDetailBannerState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const pendingActionInFlightRef = useRef(false);
+  const financialFeedbackItemRef = useRef<ActivityItemDto | null>(null);
   const [expandedPendingItemIds, setExpandedPendingItemIds] = useState<string[]>([]);
   const [expandedCaseIds, setExpandedCaseIds] = useState<string[]>([]);
   const [optimisticNotificationViewedKeys, setOptimisticNotificationViewedKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
   const [panelSegment, setPanelSegment] = useState<PersonSegmentKey>(initialPanel ?? 'history');
+  const [hasVisitedHistory, setHasVisitedHistory] = useState(initialPanel !== 'pending');
   const [visualPanelSegment, setVisualPanelSegment] = useState<PersonSegmentKey>(panelSegment);
   const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const [focusedLandingActive, setFocusedLandingActive] = useState(false);
@@ -291,7 +281,8 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       return null;
     }
 
-    const pendingItem = pendingItems.find((item) => item.id === itemId);
+    const pendingItem =
+      pendingItems.find((item) => item.id === itemId) ?? financialFeedbackItemRef.current;
     if (!pendingItem || pendingItem.kind !== 'financial_request') {
       return null;
     }
@@ -323,6 +314,10 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
   }, [session.userId]);
 
   useEffect(() => {
+    if (panelSegment === 'history') setHasVisitedHistory(true);
+  }, [panelSegment]);
+
+  useEffect(() => {
     if (!session.userId || pendingItemsToMarkViewed.length === 0) {
       return;
     }
@@ -350,18 +345,20 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     });
   }, [pendingItemsToMarkViewed, session.userId]);
 
+  const shouldBuildHistory =
+    hasVisitedHistory ||
+    panelSegment === 'history' ||
+    (focusCandidates.size > 0 && !focusedPendingItemId);
+  const personTimeline = person?.timeline;
+  const personDisplayName = person?.displayName;
   const historyItems = useMemo(
     () =>
-      person ? person.timeline.map((item) => toHistoryFeedItem(item, person.displayName)) : [],
-    [person],
+      shouldBuildHistory && personTimeline && personDisplayName
+        ? personTimeline.map((item) => toHistoryFeedItem(item, personDisplayName))
+        : [],
+    [personDisplayName, personTimeline, shouldBuildHistory],
   );
-  const historyCases = useMemo(() => {
-    if (!person) {
-      return [];
-    }
-
-    return buildHistoryCases(historyItems);
-  }, [historyItems, person]);
+  const historyCases = useMemo(() => buildHistoryCases(historyItems), [historyItems]);
   const focusedHistoryCaseId = useMemo(() => {
     if (focusCandidates.size === 0) {
       return null;
@@ -472,6 +469,9 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       return;
     }
     pendingActionInFlightRef.current = true;
+    // Retain the confirmed action's presentation after its pending row is removed.
+    financialFeedbackItemRef.current =
+      kind === 'financial_request' && action === 'accept' ? (request ?? null) : null;
     const key = `${itemId}:${action}`;
     const blockingActionKey =
       kind === 'financial_request' && action === 'accept'
@@ -617,6 +617,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
       }
     } finally {
       pendingActionInFlightRef.current = false;
+      financialFeedbackItemRef.current = null;
       setBusyKey(null);
     }
   }
@@ -821,77 +822,57 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
     );
   }
 
-  function renderPanelSegmentContent(segment: PersonSegmentKey) {
-    if (segment === 'pending') {
-      return orderedPendingItems.length > 0 ? (
-        orderedPendingItems.map((item) => renderPendingItem(item))
-      ) : (
-        <EmptyState
-          description="Cuando haya algo pendiente con esta persona, aparecerá aquí."
-          title="Nada pendiente"
-        />
-      );
-    }
-
-    if (historyCases.length === 0) {
-      return (
-        <EmptyState
-          description="Cuando haya propuestas o movimientos confirmados con esta persona, aparecerán aquí."
-          title="Sin movimientos todavía"
-        />
-      );
-    }
-
-    return historyCases.map((itemCase) => {
-      const isExpanded = expandedCaseIds[0] === itemCase.id;
-      const isFocused = focusedLandingActive && focusedHistoryCaseId === itemCase.id;
-      const latest = itemCase.latest;
-      const caseAmountLabel = historyCaseAmountLabel(latest);
-      const caseTone = historyImpactTone(latest) as HistoryCaseTone;
-      const caseTitle = friendlyHistoryStepLabel(latest);
-      const caseDescription = historyCardTitle(itemCase);
-
-      return (
-        <HistoryCaseCard
-          actorAvatarUrl={person?.avatarUrl ?? null}
-          amountLabel={caseAmountLabel}
-          amountStruckThrough={historyAmountIsVoided(latest)}
-          category={historyCaseVisualCategory(itemCase)}
-          description={null}
-          eyebrow={person?.displayName ?? null}
-          focused={isFocused}
-          isCycleSnippet={itemCase.isCycleSnippet}
-          isExpanded={isExpanded}
-          key={itemCase.id}
-          meta={historyCaseMeta(itemCase)}
-          onToggle={() => toggleHistoryCase(itemCase.id)}
-          statusLabel={historyCaseStatusLabel(itemCase)}
-          statusTone={historyCaseStatusTone(itemCase)}
-          stepPresentation="conversation"
-          steps={buildPersonHistoryConversationSteps({
-            caseAmountLabel,
-            counterpartyLabel: person?.displayName ?? 'Persona',
-            itemCase,
-          })}
-          title={caseDescription || caseTitle}
-          tone={caseTone}
-        />
-      );
-    });
-  }
-
   function renderPanelSegmentPage(segment: PersonSegmentKey) {
+    if (segment === 'pending') {
+      return (
+        <HistoryVirtualizedList
+          contentContainerStyle={styles.panelScrollContent}
+          data={orderedPendingItems}
+          emptyComponent={
+            <EmptyState
+              description="Cuando haya algo pendiente con esta persona, aparecerá aquí."
+              title="Nada pendiente"
+            />
+          }
+          extraData={{
+            busyKey,
+            expandedPendingItemIds,
+            focusedLandingActive,
+            notificationViewedKeys,
+          }}
+          focusedId={focusedPendingItemId}
+          refresh={refresh}
+          renderItem={({ item }) => renderPendingItem(item)}
+          style={[styles.panelPageScroll, screenBackgroundStyle]}
+        />
+      );
+    }
+
     return (
-      <BrandedRefreshScrollView
-        fillViewport
+      <HistoryVirtualizedList
         contentContainerStyle={styles.panelScrollContent}
-        keyboardShouldPersistTaps="handled"
+        data={historyCases}
+        emptyComponent={
+          <EmptyState
+            description="Cuando haya propuestas o movimientos confirmados con esta persona, aparecerán aquí."
+            title="Sin movimientos todavía"
+          />
+        }
+        extraData={{ expandedCaseIds, focusedLandingActive }}
+        focusedId={focusedHistoryCaseId}
         refresh={refresh}
-        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <PersonHistoryCaseCard
+            avatarUrl={person?.avatarUrl ?? null}
+            counterpartyLabel={person?.displayName ?? 'Persona'}
+            focused={focusedLandingActive && focusedHistoryCaseId === item.id}
+            isExpanded={expandedCaseIds[0] === item.id}
+            itemCase={item}
+            onToggle={() => toggleHistoryCase(item.id)}
+          />
+        )}
         style={[styles.panelPageScroll, screenBackgroundStyle]}
-      >
-        {renderPanelSegmentContent(segment)}
-      </BrandedRefreshScrollView>
+      />
     );
   }
 
@@ -1053,6 +1034,7 @@ export function PersonDetailScreen({ focusItemId, initialPanel, userId }: Person
           <SwipePager
             accessibilityLabel="Paneles de la relación"
             animateProgrammaticTransitions={false}
+            lazy
             offscreenPageLimit={1}
             onChange={changePanelSegment}
             pageStyle={[styles.panelPage, screenBackgroundStyle]}

@@ -21,6 +21,7 @@ const sqliteMocks = vi.hoisted(() => ({
 vi.mock('expo-sqlite', () => ({
   openDatabaseAsync: sqliteMocks.openDatabaseAsync,
 }));
+vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
 
 const scope = 'https://production.supabase.co';
 const epoch = 'a70edac3-8a51-4488-91e9-73e4b3a0f301';
@@ -190,7 +191,8 @@ describe('durable history synchronization cache', () => {
   });
 
   it('keeps the previous rows and cursor when SQLite rejects a write, then retries safely', async () => {
-    await cache.persistCachedHistory('user-a', scope, state(1));
+    const receipt = await cache.persistCachedHistory('user-a', scope, state(1));
+    await expect(cache.readCachedHistoryReceipt('user-a', scope)).resolves.toEqual(receipt);
     database.exec(`
       CREATE TRIGGER reject_history_update BEFORE UPDATE ON history_sync_cache
       BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END;
@@ -200,9 +202,12 @@ describe('durable history synchronization cache', () => {
       'simulated disk failure',
     );
     await expect(cache.readCachedHistory('user-a', scope)).resolves.toEqual(state(1));
+    await expect(cache.readCachedHistoryReceipt('user-a', scope)).resolves.toEqual(receipt);
 
     database.exec('DROP TRIGGER reject_history_update');
-    await cache.persistCachedHistory('user-a', scope, state(2));
+    const nextReceipt = await cache.persistCachedHistory('user-a', scope, state(2));
+    expect(nextReceipt.generation).not.toBe(receipt.generation);
+    await expect(cache.readCachedHistoryReceipt('user-a', scope)).resolves.toEqual(nextReceipt);
     await cache.persistCachedHistory('user-a', scope, state(2));
 
     await expect(cache.readCachedHistory('user-a', scope)).resolves.toEqual(state(2));

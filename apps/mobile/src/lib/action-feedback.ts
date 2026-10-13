@@ -185,7 +185,7 @@ export function useDelayedBusy(active: boolean, delayMs = 350) {
 
 export function useActionFeedbackOverlay({
   delayMs = 350,
-  resultDurationMs = 1400,
+  resultDurationMs = 250,
 }: ActionFeedbackOverlayOptions = {}) {
   const resultOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultResolveRef = useRef<(() => void) | null>(null);
@@ -214,6 +214,8 @@ export function useActionFeedbackOverlay({
   }, [clearResultTimeout]);
 
   const showResult = useCallback(
+    // Awaiting success only holds the next step for its brief completion cue.
+    // The caller must await runBlockingAction first to keep server confirmation authoritative.
     (nextResult: ActionFeedbackResult) => {
       clearResultTimeout();
       setBusyActionKey(null);

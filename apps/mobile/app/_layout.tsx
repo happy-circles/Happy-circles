@@ -111,18 +111,17 @@ import { AppText } from '@/components/app-text';
 const IS_EXPO_GO = String(Constants.appOwnership) === 'expo';
 
 if (!IS_EXPO_GO) {
-  SplashScreen.setOptions({ duration: 140, fade: true });
+  SplashScreen.setOptions({ duration: 90, fade: true });
 }
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
-const LAUNCH_INTRO_MIN_MS = 760;
-const LAUNCH_LAND_MS = 700;
-const LAUNCH_ROUTE_SETTLE_MS = 120;
-const LAUNCH_REDUCED_MOTION_EXIT_MS = 180;
-const LAUNCH_TARGET_WAIT_MS = 540;
-const LAUNCH_HOME_TARGET_WAIT_MS = 1400;
+// Route readiness owns the wait; branding only gets a short transition once it is ready.
+const LAUNCH_LAND_MS = 220;
+const LAUNCH_REDUCED_MOTION_EXIT_MS = 120;
+const LAUNCH_TARGET_WAIT_MS = 250;
+const LAUNCH_HOME_TARGET_WAIT_MS = 350;
 const LAUNCH_SESSION_MAX_WAIT_MS = 3200;
 const LAUNCH_VISUAL_MAX_MS = 6500;
 const LAUNCH_TARGET_STABLE_SAMPLES = 4;
@@ -131,22 +130,17 @@ const LAUNCH_LOGO_SIZE = IDENTITY_FLOW_STAGE_SIZE;
 const LAUNCH_AVATAR_EDIT_PENCIL_OFFSET = 35;
 const LAUNCH_AVATAR_EDIT_PENCIL_SIZE = 32;
 const LAUNCH_EASING = BRAND_VERIFICATION_EASING;
-const HOME_ENTRY_SPIN_MS = 360;
-const HOME_ENTRY_SOURCE_CENTER_MS = 260;
+const HOME_ENTRY_SOURCE_CENTER_MS = 120;
 const HOME_ENTRY_SOURCE_CENTER_THRESHOLD = 18;
-const HOME_ENTRY_ROUTE_SETTLE_MS = 120;
-const HOME_ENTRY_LAND_MS = 720;
-const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
+const HOME_ENTRY_LAND_MS = 220;
+const HOME_ENTRY_REDUCED_MOTION_EXIT_MS = 120;
 const HOME_ENTRY_FADE_MS = 120;
 const HOME_ENTRY_READY_WAIT_MS = 2400;
 const HOME_ENTRY_VISUAL_MAX_MS = 6500;
-const SETUP_ENTRY_SPIN_MS = 420;
-const SETUP_ENTRY_SUCCESS_MS = 220;
-const SETUP_ENTRY_ROUTE_SETTLE_MS = 120;
-const SETUP_ENTRY_LAND_MS = 760;
-const SETUP_ENTRY_REDUCED_MOTION_EXIT_MS = 180;
-const SETUP_ENTRY_FADE_MS = 140;
-const SETUP_ENTRY_TARGET_WAIT_MS = 1200;
+const SETUP_ENTRY_LAND_MS = 220;
+const SETUP_ENTRY_REDUCED_MOTION_EXIT_MS = 120;
+const SETUP_ENTRY_FADE_MS = 120;
+const SETUP_ENTRY_TARGET_WAIT_MS = 350;
 const SETUP_ENTRY_VISUAL_MAX_MS = 4000;
 
 function useReducedMotion() {
@@ -643,7 +637,6 @@ function LaunchIntroOverlay({
   const [landingTarget, setLandingTarget] = useState<LaunchIntroTargetSnapshot | null>(null);
   const [landingTargetLocked, setLandingTargetLocked] = useState(false);
   const [lockupState, setLockupState] = useState<BrandVerificationState>('loading');
-  const mountedAtRef = useRef(Date.now());
   const finishDeadlineRef = useRef<number | null>(null);
   const homeReadyVersionAtStartRef = useRef(getHomeEntryReadyVersion());
   const latestTargetRef = useRef<LaunchIntroTargetSnapshot | null>(target);
@@ -667,7 +660,7 @@ function LaunchIntroOverlay({
 
     setLockupState('loading');
     Animated.timing(introMotion, {
-      duration: 620,
+      duration: 180,
       easing: LAUNCH_EASING,
       toValue: 1,
       useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
@@ -722,11 +715,6 @@ function LaunchIntroOverlay({
     }
 
     async function finishIntro() {
-      const elapsed = Date.now() - mountedAtRef.current;
-      if (!reducedMotion && elapsed < LAUNCH_INTRO_MIN_MS) {
-        await transition.wait(LAUNCH_INTRO_MIN_MS - elapsed);
-      }
-
       if (!active) {
         return;
       }
@@ -750,7 +738,7 @@ function LaunchIntroOverlay({
               return;
             }
 
-            const fadeDuration = reducedMotion ? 90 : 140;
+            const fadeDuration = reducedMotion ? 90 : 120;
             const fadeFallbackTimer = setTimeout(() => {
               completionTimers.delete(fadeFallbackTimer);
               if (!active) {
@@ -843,7 +831,7 @@ function LaunchIntroOverlay({
       }
 
       if (reducedMotion) {
-        await transition.wait(LAUNCH_ROUTE_SETTLE_MS);
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -890,7 +878,7 @@ function LaunchIntroOverlay({
         return;
       }
 
-      await transition.wait(LAUNCH_ROUTE_SETTLE_MS);
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -923,7 +911,7 @@ function LaunchIntroOverlay({
         return;
       }
 
-      const landDuration = nextLandingTarget ? LAUNCH_LAND_MS : LAUNCH_REDUCED_MOTION_EXIT_MS + 220;
+      const landDuration = nextLandingTarget ? LAUNCH_LAND_MS : LAUNCH_REDUCED_MOTION_EXIT_MS;
       const completionOptions = { immediate: Boolean(nextLandingTarget) };
       const completionTimer = scheduleCompletionFallback(landDuration, completionOptions);
       Animated.timing(landMotion, {
@@ -1210,7 +1198,7 @@ function HomeEntryHandoffOverlay({
 
         if (!nextSourceTarget) {
           Animated.timing(entryMotion, {
-            duration: reducedMotion ? 80 : 180,
+            duration: reducedMotion ? 80 : 120,
             easing: Easing.out(Easing.quad),
             toValue: 1,
             useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
@@ -1376,7 +1364,7 @@ function HomeEntryHandoffOverlay({
 
     async function runHandoff() {
       if (reducedMotion) {
-        await transition.wait(HOME_ENTRY_ROUTE_SETTLE_MS);
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -1417,13 +1405,7 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      await transition.wait(HOME_ENTRY_SPIN_MS);
-
-      if (!active) {
-        return;
-      }
-
-      await transition.wait(HOME_ENTRY_ROUTE_SETTLE_MS);
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -1450,7 +1432,7 @@ function HomeEntryHandoffOverlay({
         return;
       }
 
-      const duration = nextTarget ? HOME_ENTRY_LAND_MS : HOME_ENTRY_REDUCED_MOTION_EXIT_MS + 220;
+      const duration = nextTarget ? HOME_ENTRY_LAND_MS : HOME_ENTRY_REDUCED_MOTION_EXIT_MS;
       const completionOptions = { immediate: Boolean(nextTarget) };
       const completionTimer = scheduleCompletionFallback(duration, completionOptions);
       Animated.timing(landMotion, {
@@ -1767,7 +1749,7 @@ function SetupEntryHandoffOverlay({
 
         if (!nextSourceTarget) {
           Animated.timing(entryMotion, {
-            duration: reducedMotion ? 80 : 180,
+            duration: reducedMotion ? 80 : 120,
             easing: Easing.out(Easing.quad),
             toValue: 1,
             useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
@@ -1899,7 +1881,7 @@ function SetupEntryHandoffOverlay({
 
     async function runHandoff() {
       if (reducedMotion) {
-        await transition.wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
+        await transition.waitForFrame();
 
         if (!active) {
           return;
@@ -1939,17 +1921,8 @@ function SetupEntryHandoffOverlay({
         return;
       }
 
-      await transition.wait(SETUP_ENTRY_SPIN_MS);
-
-      if (!active) {
-        return;
-      }
-
-      setLockupState('success');
-      await transition.wait(SETUP_ENTRY_SUCCESS_MS);
-      if (!active) return;
       setLockupState('idle');
-      await transition.wait(SETUP_ENTRY_ROUTE_SETTLE_MS);
+      await transition.waitForFrame();
 
       if (!active) {
         return;
@@ -1968,7 +1941,7 @@ function SetupEntryHandoffOverlay({
         return;
       }
 
-      const duration = nextTarget ? SETUP_ENTRY_LAND_MS : SETUP_ENTRY_REDUCED_MOTION_EXIT_MS + 220;
+      const duration = nextTarget ? SETUP_ENTRY_LAND_MS : SETUP_ENTRY_REDUCED_MOTION_EXIT_MS;
       const completionOptions = { immediate: Boolean(nextTarget) };
       const completionTimer = scheduleCompletionFallback(duration, completionOptions);
       Animated.timing(landMotion, {

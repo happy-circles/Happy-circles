@@ -1,4 +1,5 @@
 import type { LiveSnapshotRows } from './types';
+import type { ConfirmedRequestOutcome } from './confirmed-request-outcomes';
 
 export const HISTORY_COLLECTIONS = [
   'financialRequests',
@@ -19,6 +20,8 @@ export type HistoryRow = Readonly<Record<string, unknown>>;
 export type HistorySyncCollections = Record<HistoryCollection, Record<string, HistoryRow>>;
 
 export interface HistorySyncState {
+  /** Exact request versions acknowledged closed by the server; never journal cursors. */
+  readonly confirmedRequestOutcomes?: readonly ConfirmedRequestOutcome[];
   readonly protocol: 1;
   readonly cursor: string | null;
   readonly collections: HistorySyncCollections;
@@ -105,6 +108,20 @@ export function parseHistorySyncState(value: unknown): HistorySyncState | null {
   if (value.liveRows !== undefined && !isLiveRows(value.liveRows)) return null;
   if (value.bootstrapComplete !== undefined && typeof value.bootstrapComplete !== 'boolean')
     return null;
+  if (
+    value.confirmedRequestOutcomes !== undefined &&
+    (!Array.isArray(value.confirmedRequestOutcomes) ||
+      !value.confirmedRequestOutcomes.every(
+        (outcome: unknown) =>
+          isRecord(outcome) &&
+          typeof outcome.requestId === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            outcome.requestId,
+          ) &&
+          ['accepted', 'rejected', 'canceled', 'amended'].includes(String(outcome.status)),
+      ))
+  )
+    return null;
   return {
     protocol: 1,
     cursor: value.cursor as string | null,
@@ -113,6 +130,12 @@ export function parseHistorySyncState(value: unknown): HistorySyncState | null {
     ...(value.bootstrapComplete === undefined
       ? {}
       : { bootstrapComplete: value.bootstrapComplete }),
+    ...(value.confirmedRequestOutcomes === undefined
+      ? {}
+      : {
+          confirmedRequestOutcomes:
+            value.confirmedRequestOutcomes as readonly ConfirmedRequestOutcome[],
+        }),
   };
 }
 
@@ -218,6 +241,9 @@ export function applyHistorySyncPage(state: HistorySyncState, input: unknown): H
     collections,
     ...(before.liveRows ? { liveRows: before.liveRows } : {}),
     bootstrapComplete: !page.hasMore || (!page.reset && state.bootstrapComplete === true),
+    ...(state.confirmedRequestOutcomes
+      ? { confirmedRequestOutcomes: state.confirmedRequestOutcomes }
+      : {}),
   };
 }
 
@@ -243,5 +269,11 @@ export function mergeHistoryWithLiveRows(
     }
     Object.assign(merged, { [name]: [...byId.values()] });
   }
-  return { ...rows, ...merged };
+  return {
+    ...rows,
+    ...merged,
+    ...(state.confirmedRequestOutcomes?.length
+      ? { confirmedRequestOutcomes: state.confirmedRequestOutcomes }
+      : {}),
+  };
 }

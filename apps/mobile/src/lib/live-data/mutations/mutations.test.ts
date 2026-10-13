@@ -478,6 +478,35 @@ describe('live-data mutation hooks', () => {
     expect(calls[1]?.[2]).toEqual({ expectedUserId: 'user-1' });
   });
 
+  it('reuses a creation intention after a lost response across remounts and gives a later deliberate creation a new key', async () => {
+    let sequence = 0;
+    mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_${++sequence}`);
+    const input = {
+      amountMinor: 1300,
+      creditorUserId: '33333333-3333-4333-8333-333333333333',
+      debtorUserId: '22222222-2222-4222-8222-222222222222',
+      description: 'Creation response lost after commit',
+      responderUserId: '11111111-1111-4111-8111-111111111111',
+    };
+    const lost = new Error('Response lost');
+    const confirmed = { requestId: 'created-once', status: 'pending' };
+    mocks.invokeSupabaseFunction.mockRejectedValueOnce(lost).mockResolvedValue(confirmed);
+    const first = useCreateRequestMutation() as unknown as MutationOptions;
+    await expect(first.mutationFn(input)).rejects.toBe(lost);
+    expect(mocks.confirmCreatedRequestInCache).not.toHaveBeenCalled();
+    const remounted = useCreateRequestMutation() as unknown as MutationOptions;
+    await remounted.mutationFn(input);
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
+      mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+    );
+    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
+    await remounted.mutationFn(input);
+    expect(mocks.createIdempotencyKey).toHaveBeenCalledTimes(2);
+    expect(mocks.invokeSupabaseFunction.mock.calls[2]?.[1]).not.toEqual(
+      mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+    );
+  });
+
   it.each(['pending', 'failed'] as const)(
     'finishes confirmed movement creation while screen synchronization is %s',
     async (refreshState) => {
@@ -652,7 +681,11 @@ describe('live-data mutation hooks', () => {
   });
 
   it('corrects only the selected sender version and persists the confirmed response', async () => {
-    const response = { correctedRequestId: 'new-version', status: 'pending', financialRequests: [] };
+    const response = {
+      correctedRequestId: 'new-version',
+      status: 'pending',
+      financialRequests: [],
+    };
     mocks.invokeSupabaseFunction.mockResolvedValueOnce(response);
     const mutation = useCorrectFinancialRequestMutation() as unknown as MutationOptions;
     await expect(
@@ -697,6 +730,71 @@ describe('live-data mutation hooks', () => {
     expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['accept', useAcceptFinancialRequestMutation],
+    ['reject', useRejectFinancialRequestMutation],
+    ['amend', useAmendFinancialRequestMutation],
+  ] as const)(
+    'finishes confirmed %s without waiting for general synchronization and reuses a lost-response intention',
+    async (operation, hook) => {
+      const requestId = '99999999-9999-4999-8999-999999999999';
+      const input =
+        operation === 'amend'
+          ? {
+              requestId,
+              amountMinor: 1400,
+              description: 'Updated lunch',
+              category: 'food_drinks' as const,
+            }
+          : requestId;
+      const response = {
+        requestId,
+        status:
+          operation === 'accept' ? 'accepted' : operation === 'reject' ? 'rejected' : 'amended',
+        financialRequests: [],
+      };
+      const lost = new Error('Response lost after commit');
+      mocks.invokeSupabaseFunction.mockRejectedValueOnce(lost).mockResolvedValueOnce(response);
+      mocks.invalidateAppSnapshot.mockImplementation(() => new Promise(() => undefined));
+      const first = hook() as unknown as MutationOptions;
+      await expect(first.mutationFn(input)).rejects.toBe(lost);
+      expect(mocks.confirmSenderRequestInCache).not.toHaveBeenCalled();
+      const retry = hook() as unknown as MutationOptions;
+      const data = await retry.mutationFn(input);
+      await retry.onSuccess?.(data, input);
+      expect(data).toBe(response);
+      expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
+      expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
+        mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+      );
+      expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith('user-1', response);
+      expect(mocks.invalidateAppSnapshot).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([
+    useAcceptFinancialRequestMutation,
+    useRejectFinancialRequestMutation,
+    useAmendFinancialRequestMutation,
+  ])(
+    'keeps a committed receiver command successful when background refresh and derived cache fail',
+    async (hook) => {
+      const requestId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const input =
+        hook === useAmendFinancialRequestMutation
+          ? { requestId, amountMinor: 1400, description: 'Correction', category: 'other' as const }
+          : requestId;
+      const response = { requestId, status: 'accepted' };
+      mocks.invokeSupabaseFunction.mockResolvedValue(response);
+      mocks.confirmSenderRequestInCache.mockRejectedValueOnce(new Error('Disk unavailable'));
+      mocks.invalidateAppSnapshot.mockRejectedValue(new Error('Offline'));
+      const mutation = hook() as unknown as MutationOptions;
+      const data = await mutation.mutationFn(input);
+      await mutation.onSuccess?.(data, input);
+      expect(data).toBe(response);
+      expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+    },
+  );
+
   it('refreshes a stale version conflict without retrying it on a replacement request', async () => {
     const conflict = Object.assign(new Error('La solicitud ya cambió'), {
       status: 409,
@@ -705,7 +803,10 @@ describe('live-data mutation hooks', () => {
     mocks.invokeSupabaseFunction.mockRejectedValueOnce(conflict);
     const mutation = useCancelFinancialRequestMutation() as unknown as MutationOptions;
     await expect(
-      mutation.mutationFn({ requestId: '77777777-7777-4777-8777-777777777777', expectedVersion: 1 }),
+      mutation.mutationFn({
+        requestId: '77777777-7777-4777-8777-777777777777',
+        expectedVersion: 1,
+      }),
     ).rejects.toBe(conflict);
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
     expect(mocks.invalidateAppSnapshot).toHaveBeenCalledOnce();
@@ -719,7 +820,10 @@ describe('live-data mutation hooks', () => {
     mocks.invalidateAppSnapshot.mockRejectedValueOnce(new Error('Offline'));
     const mutation = useCancelFinancialRequestMutation() as unknown as MutationOptions;
     await expect(
-      mutation.mutationFn({ requestId: '88888888-8888-4888-8888-888888888888', expectedVersion: 1 }),
+      mutation.mutationFn({
+        requestId: '88888888-8888-4888-8888-888888888888',
+        expectedVersion: 1,
+      }),
     ).resolves.toBe(response);
     await expect(Promise.resolve(mutation.onSuccess?.(response))).resolves.toBeUndefined();
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();

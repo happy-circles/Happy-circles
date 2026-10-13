@@ -31,6 +31,7 @@ export function createSnapshotAbortSignal(parentSignal?: AbortSignal) {
 
   const abortFromParent = () => {
     controller.abort();
+    rejectTimeout(new Error('Sincronización cancelada.'));
   };
 
   if (parentSignal?.aborted) {
@@ -61,6 +62,7 @@ export function assertSupabaseClient() {
 export interface InvokeSupabaseFunctionOptions {
   readonly authorization?: 'session' | 'omit';
   readonly expectedUserId?: string;
+  readonly signal?: AbortSignal;
 }
 
 function assertPublicEdgeSupabaseClient() {
@@ -130,6 +132,7 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       timeout: EDGE_FUNCTION_TIMEOUT_MS,
+      ...(options.signal ? { signal: options.signal } : {}),
     });
     if (options.expectedUserId) {
       const { data } = await client.auth.getSession();

@@ -8,7 +8,8 @@ import type { LiveSnapshotRows } from './types';
 
 interface HistorySyncOperations {
   readonly read: () => Promise<HistorySyncState | null>;
-  readonly persist: (state: HistorySyncState) => Promise<void>;
+  readonly persist: (state: HistorySyncState) => Promise<unknown>;
+  readonly reconcile?: (state: HistorySyncState) => HistorySyncState;
   readonly request: (cursor: string | null) => Promise<LiveSnapshotRows>;
   readonly signal?: AbortSignal | undefined;
 }
@@ -36,7 +37,7 @@ export async function synchronizeHistorySnapshot(
     }
     const liveRows = { ...rows };
     delete liveRows.historySync;
-    const next = {
+    const incoming = {
       ...applyHistorySyncPage(state, rows.historySync),
       liveRows: {
         ...liveRows,
@@ -46,6 +47,10 @@ export async function synchronizeHistorySnapshot(
         },
       },
     };
+    // Confirmed local receipts can survive a reset or a stale partial context
+    // without changing which server cursor is durably acknowledged.
+    const next = operations.reconcile ? operations.reconcile(incoming) : incoming;
+    if (!next.liveRows) throw new Error('La sincronización no devolvió el contexto del historial.');
     await operations.persist(next);
     state = next;
     savedPages += 1;

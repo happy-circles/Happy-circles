@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -9,7 +9,6 @@ import type { ActivityItemDto, PersonCardDto } from '@happy-circles/application'
 import { ActivityItemCard } from '@/components/activity-item-card';
 import { AppAvatar } from '@/components/app-avatar';
 import { AppText } from '@/components/app-text';
-import { BrandedRefreshScrollView } from '@/components/branded-refresh-control';
 import { CardActorAvatar } from '@/components/card-actor-avatar';
 import { CardPressable } from '@/components/card-shell';
 import { EmptyState } from '@/components/empty-state';
@@ -70,6 +69,21 @@ import {
 import { ActivityInviteRequestCard } from './activity-invite-request-card';
 import { activityScreenStyles as styles } from './activity-screen.styles';
 import { useAppTheme } from '@/providers/theme-provider';
+import { ActivityVirtualizedList } from './activity-virtualized-list';
+import {
+  activityRowKey,
+  inviteActivityRowKey,
+  nonEmptyActivitySections,
+  type ActivityListSection,
+} from './activity-list-sections';
+
+interface InviteActivitySection extends ActivityListSection<InviteRequestItem> {
+  readonly key: InviteRequestsTab;
+}
+
+interface NotificationActivitySection extends ActivityListSection<ActivityItemDto> {
+  readonly unread: boolean;
+}
 
 interface PendingSnippetContent {
   readonly detail?: string;
@@ -413,21 +427,6 @@ function NotificationCategoryTab({
         </View>
       ) : null}
     </Pressable>
-  );
-}
-
-function NotificationSection({
-  children,
-  title,
-}: {
-  readonly children: ReactNode;
-  readonly title: string;
-}) {
-  return (
-    <View style={styles.notificationSection}>
-      <AppText style={styles.notificationSectionTitle}>{title}</AppText>
-      <View style={styles.notificationSectionContent}>{children}</View>
-    </View>
   );
 }
 
@@ -1053,70 +1052,52 @@ export function ActivityScreen() {
     );
   }
 
-  function renderInviteRequestSection(tab: InviteRequestsTab, items: readonly InviteRequestItem[]) {
-    if (items.length === 0) {
-      return null;
-    }
+  function renderFriendRequestsPage() {
+    const sectionInputs = [
+      { key: 'received', data: inviteRequests.receivedItems },
+      { key: 'sent', data: inviteRequests.sentItems },
+      { key: 'history', data: inviteRequests.historyItems },
+    ] as const;
+    const sections = nonEmptyActivitySections<InviteRequestItem, InviteActivitySection>(
+      sectionInputs.map(({ key, data }) => ({
+        key,
+        data,
+        title: `${inviteRequestSectionTitle(key, data.length)} (${data.length})`,
+      })),
+    );
 
     return (
-      <NotificationSection
-        title={`${inviteRequestSectionTitle(tab, items.length)} (${items.length})`}
-      >
-        {items.map((item) => (
+      <ActivityVirtualizedList<InviteRequestItem, InviteActivitySection>
+        refresh={refresh}
+        emptyComponent={
+          <EmptyState
+            description={inviteRequestEmptyDescription('received')}
+            title={inviteRequestEmptyTitle('received')}
+          />
+        }
+        headerComponent={
+          inviteRequests.message ? (
+            <MessageBanner message={inviteRequests.message} tone="neutral" />
+          ) : null
+        }
+        extraData={inviteRequests.busyKey}
+        keyExtractor={inviteActivityRowKey}
+        renderItem={({ item }) => (
           <ActivityInviteRequestCard
             busyKey={inviteRequests.busyKey}
             item={item}
-            key={`${tab}:${item.kind}:${item.inviteId}`}
             onAction={async (requestItem, action) => {
               const didCreateConnection = await inviteRequests.handleAction(requestItem, action);
               const href = didCreateConnection
                 ? inviteRequestPersonHrefAfterSuccessfulAction(requestItem, action)
                 : null;
-              if (href) {
-                openInvitePersonTarget(href);
-              }
+              if (href) openInvitePersonTarget(href);
             }}
             onOpenPerson={openInvitePersonTarget}
           />
-        ))}
-      </NotificationSection>
-    );
-  }
-
-  function renderFriendRequestsPage() {
-    const hasRequestContent =
-      inviteRequests.receivedItems.length > 0 ||
-      inviteRequests.sentItems.length > 0 ||
-      inviteRequests.historyItems.length > 0;
-
-    return (
-      <BrandedRefreshScrollView
-        fillViewport
-        contentContainerStyle={[
-          styles.sheetScrollContent,
-          { backgroundColor: activeTheme.colors.surface },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        refresh={refresh}
-        showsVerticalScrollIndicator={false}
-        style={[styles.pageScroll, { backgroundColor: activeTheme.colors.surface }]}
-      >
-        {inviteRequests.message ? (
-          <MessageBanner message={inviteRequests.message} tone="neutral" />
-        ) : null}
-        {!hasRequestContent ? (
-          <EmptyState
-            description={inviteRequestEmptyDescription('received')}
-            title={inviteRequestEmptyTitle('received')}
-          />
-        ) : (
-          <>
-            {renderInviteRequestSection('received', inviteRequests.receivedItems)}
-            {renderInviteRequestSection('sent', inviteRequests.sentItems)}
-            {renderInviteRequestSection('history', inviteRequests.historyItems)}
-          </>
         )}
-      </BrandedRefreshScrollView>
+        sections={sections}
+      />
     );
   }
 
@@ -1134,21 +1115,15 @@ export function ActivityScreen() {
     const categoryMeta =
       NOTIFICATION_CATEGORIES.find((option) => option.key === categoryKey) ??
       NOTIFICATION_CATEGORIES[0];
-    const hasNotifications = categoryPendingItems.length > 0 || categoryReviewedItems.length > 0;
+    const sections = nonEmptyActivitySections<ActivityItemDto, NotificationActivitySection>([
+      { key: 'new', title: 'Nuevas', data: categoryPendingItems, unread: true },
+      { key: 'reviewed', title: 'Revisadas', data: categoryReviewedItems, unread: false },
+    ]);
 
     return (
-      <BrandedRefreshScrollView
-        fillViewport
-        contentContainerStyle={[
-          styles.sheetScrollContent,
-          { backgroundColor: activeTheme.colors.surface },
-        ]}
-        keyboardShouldPersistTaps="handled"
+      <ActivityVirtualizedList<ActivityItemDto, NotificationActivitySection>
         refresh={refresh}
-        showsVerticalScrollIndicator={false}
-        style={[styles.pageScroll, { backgroundColor: activeTheme.colors.surface }]}
-      >
-        {!hasNotifications ? (
+        emptyComponent={
           <EmptyState
             description={
               categoryKey === 'all'
@@ -1163,21 +1138,12 @@ export function ActivityScreen() {
                 : `Sin ${categoryMeta.label.toLocaleLowerCase('es-CO')}`
             }
           />
-        ) : (
-          <>
-            {categoryPendingItems.length > 0 ? (
-              <NotificationSection title="Nuevas">
-                {categoryPendingItems.map((item) => renderPendingCard(item, true))}
-              </NotificationSection>
-            ) : null}
-            {categoryReviewedItems.length > 0 ? (
-              <NotificationSection title="Revisadas">
-                {categoryReviewedItems.map((item) => renderPendingCard(item, false))}
-              </NotificationSection>
-            ) : null}
-          </>
-        )}
-      </BrandedRefreshScrollView>
+        }
+        extraData={activeTheme}
+        keyExtractor={activityRowKey}
+        renderItem={({ item, section }) => renderPendingCard(item, section.unread)}
+        sections={sections}
+      />
     );
   }
 
@@ -1202,10 +1168,7 @@ export function ActivityScreen() {
         edges={['left', 'right']}
         style={[styles.safeArea, { backgroundColor: activeTheme.colors.overlay }]}
       >
-        <ActivitySheetStatus
-          message={snapshotQuery.error.message}
-          onClose={closeNotifications}
-        />
+        <ActivitySheetStatus message={snapshotQuery.error.message} onClose={closeNotifications} />
       </SafeAreaView>
     );
   }
@@ -1260,6 +1223,7 @@ export function ActivityScreen() {
               accessibilityLabel="Categorias de notificaciones"
               animateProgrammaticTransitions={false}
               commitPreviewChanges
+              lazy
               offscreenPageLimit={1}
               onChange={changeActiveCategoryFromPager}
               onInteractionStateChange={handleNotificationPagerInteractionStateChange}

@@ -5,6 +5,10 @@ import {
   createServiceRoleClient,
   createVerifiedUserClient,
 } from '../_shared/http.ts';
+import {
+  FINANCIAL_REQUEST_SELECT,
+  hydrateControlResponse,
+} from '../_shared/financial-request-controls.ts';
 
 Deno.serve((request) =>
   handleRpc(request, async (body, actorUserId, authContext) => {
@@ -20,6 +24,17 @@ Deno.serve((request) =>
       throw error;
     }
 
-    return data;
+    return hydrateControlResponse(
+      async (ids) => {
+        const result = await client
+          .from('financial_requests')
+          .select(FINANCIAL_REQUEST_SELECT)
+          .in('id', ids)
+          .abortSignal(AbortSignal.timeout(2000));
+        return { data: result.data as unknown, error: result.error as unknown };
+      },
+      actorUserId,
+      data,
+    );
   }),
 );

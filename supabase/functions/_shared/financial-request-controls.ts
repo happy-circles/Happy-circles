@@ -94,20 +94,29 @@ export async function hydrateControlResponse(
 ) {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return data;
   const ack = data as Record<string, unknown>;
-  const ids = [ack.requestId, ack.originalRequestId, ack.correctedRequestId].filter(
-    (id): id is string => typeof id === 'string' && UUID.test(id),
-  );
+  const ids = [
+    ack.requestId,
+    ack.originalRequestId,
+    ack.correctedRequestId,
+    ack.amendedRequestId,
+  ].filter((id): id is string => typeof id === 'string' && UUID.test(id));
   if (!ids.length) return data;
   try {
     const result = await readRequests(ids);
     if (result.error || !Array.isArray(result.data)) return data;
+    const requestedIds = new Set(ids);
     const rows = result.data.filter(
       (row) =>
         typeof row === 'object' &&
         row !== null &&
+        requestedIds.has(row.id) &&
         (row.creator_user_id === actorUserId || row.responder_user_id === actorUserId),
     );
-    if (rows.length !== new Set(ids).size) return data;
+    if (
+      rows.length !== requestedIds.size ||
+      new Set(rows.map((row) => row.id)).size !== rows.length
+    )
+      return data;
     return { ...ack, financialRequests: rows };
   } catch {
     return data;

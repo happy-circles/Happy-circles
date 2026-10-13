@@ -50,9 +50,28 @@ vi.mock('../support-errors', () => ({
 }));
 
 import { EDGE_FUNCTION_TIMEOUT_MS } from './constants';
-import { invokeSupabaseFunction } from './client';
+import { createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
 
 describe('live-data client', () => {
+  it('releases a canceled snapshot reader immediately without waiting for its network timeout', async () => {
+    const parent = new AbortController();
+    const snapshot = createSnapshotAbortSignal(parent.signal);
+    const stopped = expect(snapshot.timeoutPromise).rejects.toThrow('cancelada');
+    parent.abort();
+    await stopped;
+    expect(snapshot.signal.aborted).toBe(true);
+    expect(snapshot.wasTimedOut()).toBe(false);
+    snapshot.cleanup();
+  });
+  it('passes a snapshot cancellation signal to the underlying read transport', async () => {
+    mocks.invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    const controller = new AbortController();
+    await invokeSupabaseFunction('get-app-snapshot', {}, { signal: controller.signal });
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      'get-app-snapshot',
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isJwtAuthError.mockReturnValue(false);

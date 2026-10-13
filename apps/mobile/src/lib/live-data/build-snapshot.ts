@@ -20,6 +20,7 @@ import { buildActivitySections, LIVE_DATA_ROUTES } from './presentation';
 import type { AppSnapshot, LiveSnapshotRows } from './types';
 import { buildLiveSnapshotContext, groupBy } from './utils/context';
 import { periodRange } from './utils/dates';
+import { suppressConfirmedRequestOutcomes } from './confirmed-request-outcomes';
 
 type BuildLiveSnapshotInput = Omit<
   LiveSnapshotRows,
@@ -194,8 +195,7 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
   });
   const currentUserProfileRow = context.profileByUserId.get(input.currentUserId);
   const happyCircleScore = buildHappyCircleScore(input);
-
-  return {
+  const snapshot: AppSnapshot = {
     dashboard: {
       summary,
       urgentCount: activityState.pendingItems.length,
@@ -245,4 +245,5 @@ export function buildLiveSnapshot(input: BuildLiveSnapshotInput): AppSnapshot {
     auditEvents: buildAuditItems(input.auditEvents, snapshotNowMs),
     settlementsById,
   };
+  return suppressConfirmedRequestOutcomes(snapshot, input.confirmedRequestOutcomes ?? []);
 }

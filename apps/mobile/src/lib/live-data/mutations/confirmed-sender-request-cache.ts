@@ -8,10 +8,11 @@ import { cachedSnapshotMatchesBackend } from '../confirmed-request-overlay';
 import { APP_SNAPSHOT_QUERY_KEY, PEOPLE_OVERVIEW_QUERY_KEY } from '../constants';
 import {
   readCachedHistory,
+  readCachedHistoryReceipt,
   persistCachedHistory,
   withHistorySyncLock,
 } from '../history-sync-cache';
-import { mergeHistoryWithLiveRows } from '../history-sync';
+import { mergeHistoryWithLiveRows, type HistorySyncState } from '../history-sync';
 import {
   authoritativeRows,
   applicableDerivedRows,
@@ -22,6 +23,18 @@ import {
 import { persistCachedPeopleOverview } from '../people-overview-cache';
 import { readCachedAppSnapshot, persistCachedAppSnapshot } from '../snapshot-cache';
 import type { AppSnapshot, PeopleOverview } from '../types';
+import type { HistoryCacheReceipt } from '../history-cache-receipt';
+import {
+  reconcileAcceptedProjection,
+  acceptedProjectionResponse,
+  mergeAcceptedProjectionResponses,
+} from '../accepted-request-projection';
+import {
+  readConfirmedRequestOutcomes,
+  outcomesForConfirmedRows,
+  mergeConfirmedRequestOutcomes,
+  suppressConfirmedRequestOutcomes,
+} from '../confirmed-request-outcomes';
 
 async function sameActor(userId: string): Promise<boolean> {
   const { data } = await assertSupabaseClient().auth.getSession();
@@ -42,7 +55,11 @@ export async function confirmSenderRequestInCache(
 ): Promise<void> {
   try {
     const rows = authoritativeRows(response, userId);
-    if (rows.length === 0 || !(await sameActor(userId))) return;
+    const outcomes = mergeConfirmedRequestOutcomes(
+      readConfirmedRequestOutcomes(response),
+      outcomesForConfirmedRows(rows),
+    );
+    if ((rows.length === 0 && outcomes.length === 0) || !(await sameActor(userId))) return;
     const snapshotKey = [APP_SNAPSHOT_QUERY_KEY, userId] as const;
     const overviewKey = [PEOPLE_OVERVIEW_QUERY_KEY, userId] as const;
     // Abort readers before waiting for their lock, so an older fetch cannot
@@ -83,11 +100,46 @@ export async function confirmSenderRequestInCache(
           return null;
         },
       );
-      const next = state ? reconcile(state, confirmedRows) : null;
+      const combinedOutcomes = mergeConfirmedRequestOutcomes(
+        state?.confirmedRequestOutcomes ?? [],
+        [cached?.snapshot.confirmedRequestOutcomes, current?.confirmedRequestOutcomes].flatMap(
+          (overlay) =>
+            overlay?.backendScope === appConfig.supabaseUrl && overlay.userId === userId
+              ? overlay.outcomes
+              : [],
+        ),
+      );
+      const confirmedOutcomes = mergeConfirmedRequestOutcomes(combinedOutcomes, outcomes);
+      const incomingProjection = acceptedProjectionResponse(response, userId);
+      const previousProjections = [
+        cached?.snapshot.confirmedAcceptedProjections,
+        current?.confirmedAcceptedProjections,
+      ].flatMap((overlay) =>
+        overlay?.backendScope === appConfig.supabaseUrl && overlay.userId === userId
+          ? overlay.responses.flatMap((item) => {
+              const sanitized = acceptedProjectionResponse(item, userId);
+              return sanitized ? [sanitized] : [];
+            })
+          : [],
+      );
+      const confirmedProjections = mergeAcceptedProjectionResponses(
+        previousProjections,
+        incomingProjection ? [incomingProjection] : [],
+      );
+      const next = state
+        ? confirmedProjections.reduce<HistorySyncState>(
+            (before, item) => reconcileAcceptedProjection(before, item, userId),
+            {
+              ...reconcile(state, confirmedRows),
+              confirmedRequestOutcomes: confirmedOutcomes,
+            },
+          )
+        : null;
       let rawDurable = false;
+      let receipt: HistoryCacheReceipt | undefined;
       if (next) {
         try {
-          await persistCachedHistory(userId, appConfig.supabaseUrl, next);
+          receipt = await persistCachedHistory(userId, appConfig.supabaseUrl, next);
           rawDurable = Boolean(next.liveRows);
         } catch (error) {
           warn(error);
@@ -102,7 +154,11 @@ export async function confirmSenderRequestInCache(
           currentUserId: userId,
         });
       } else {
-        if (current) snapshot = reconcileDerivedSnapshot(userId, current, confirmedRows);
+        if (current)
+          snapshot = suppressConfirmedRequestOutcomes(
+            reconcileDerivedSnapshot(userId, current, confirmedRows),
+            confirmedOutcomes,
+          );
         avatars = cached?.avatarSignedUrlsByPath ?? avatars;
         fetchedAt = new Date().toISOString();
       }
@@ -116,6 +172,15 @@ export async function confirmSenderRequestInCache(
         : mergeConfirmedRows([], confirmedRows);
       snapshot = {
         ...snapshot,
+        localHistoryCache: rawDurable ? receipt : undefined,
+        confirmedRequestOutcomes:
+          rawDurable || !confirmedOutcomes.length
+            ? undefined
+            : { backendScope: appConfig.supabaseUrl, userId, outcomes: confirmedOutcomes },
+        confirmedAcceptedProjections:
+          (rawDurable && next?.bootstrapComplete === true) || !confirmedProjections.length
+            ? undefined
+            : { backendScope: appConfig.supabaseUrl, userId, responses: confirmedProjections },
         confirmedFinancialRequests: rawDurable
           ? undefined
           : {
@@ -124,11 +189,33 @@ export async function confirmSenderRequestInCache(
             },
       };
       const overview: PeopleOverview = buildPeopleOverviewFromAppSnapshot(snapshot, fetchedAt);
-      await persistCachedAppSnapshot(userId, snapshot, avatars).catch(warn);
-      await persistCachedPeopleOverview(userId, overview, avatars).catch(warn);
       if (!(await sameActor(userId))) return;
       queryClient.setQueryData(snapshotKey, snapshot);
       queryClient.setQueryData(overviewKey, overview);
+      const confirmedSnapshot = snapshot;
+      const persistDerived = async () => {
+        await Promise.all([
+          persistCachedAppSnapshot(userId, confirmedSnapshot, avatars).catch(warn),
+          persistCachedPeopleOverview(userId, overview, avatars).catch(warn),
+        ]);
+      };
+      if (rawDurable && receipt?.generation) {
+        const generation = receipt.generation;
+        // Enqueue while still holding the journal lock so later commands and
+        // refreshes retain order. The action can finish before redundant writes.
+        void withHistorySyncLock(userId, appConfig.supabaseUrl, async () => {
+          if (!(await sameActor(userId))) return;
+          const latest = await readCachedHistoryReceipt(userId, appConfig.supabaseUrl);
+          if (latest?.generation !== generation) return;
+          const memory = queryClient.getQueryData<AppSnapshot>(snapshotKey);
+          if (memory && memory !== confirmedSnapshot) return;
+          await persistDerived();
+        }).catch(warn);
+      } else {
+        // If the raw journal failed, this is the only durable acknowledgement;
+        // keep its fallback write on the command path before reporting success.
+        await persistDerived();
+      }
     });
   } catch (error) {
     // Server success stays success even if a local observer or SQLite fails.

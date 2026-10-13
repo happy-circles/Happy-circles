@@ -10,11 +10,15 @@ const state = vi.hoisted(() => ({
   body: {} as Record<string, unknown>,
   authorize: vi.fn(),
   rpc: vi.fn<(...args: unknown[]) => Promise<{ data: unknown; error: unknown }>>(),
-  readRows: vi.fn(),
+  readRows: vi.fn<(ids: string[]) => Promise<{ data: unknown; error: unknown }>>(),
   push: vi.fn(),
   verified: vi.fn(),
 }));
 vi.mock('../supabase/functions/_shared/http.ts', () => ({
+  requireString: (value: unknown, key: string) => {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`Invalid ${key}`);
+    return value;
+  },
   handleRpc: (
     _request: Request,
     handler: (body: Record<string, unknown>, actor: string, context: unknown) => Promise<unknown>,
@@ -30,7 +34,14 @@ vi.mock('../supabase/functions/_shared/http.ts', () => ({
   },
   createServiceRoleClient: () => ({
     rpc: state.rpc,
-    from: () => ({ select: () => ({ in: state.readRows }) }),
+    from: () => ({
+      select: () => ({
+        in: (ids: string[]) => {
+          const result = state.readRows(ids);
+          return Object.assign(result, { abortSignal: () => result });
+        },
+      }),
+    }),
   }),
 }));
 vi.mock('../supabase/functions/_shared/authorized-device-session.ts', () => ({
@@ -40,8 +51,15 @@ vi.mock('../supabase/functions/_shared/push-notifications.ts', () => ({
   notifyFinancialRequestPending: state.push,
   readPayloadString: (data: Record<string, unknown>, key: string) => data[key] ?? null,
 }));
+vi.mock('../supabase/functions/_shared/cycle-worker.ts', () => ({
+  triggerGraphCycleWorker: vi.fn(),
+}));
+vi.mock('../supabase/functions/_shared/accepted-request-projection.ts', () => ({
+  hydrateAcceptedProjection: async (_client: unknown, _actor: string, data: unknown) => data,
+}));
 let correct: (request: Request) => Promise<unknown>;
 let cancel: (request: Request) => Promise<unknown>;
+const receivers: Record<string, typeof cancel> = {};
 const id = '00000000-0000-0000-0000-00000000fc11';
 const corrected = '00000000-0000-0000-0000-00000000fc12';
 
@@ -58,6 +76,19 @@ beforeAll(async () => {
     },
   });
   await import('../supabase/functions/cancel-financial-request/index.ts');
+  for (const operation of ['accept', 'reject', 'amend']) {
+    vi.stubGlobal('Deno', {
+      serve: (handler: typeof cancel) => {
+        receivers[operation] = handler;
+      },
+    });
+    if (operation === 'accept')
+      await import('../supabase/functions/accept-financial-request/index.ts');
+    if (operation === 'reject')
+      await import('../supabase/functions/reject-financial-request/index.ts');
+    if (operation === 'amend')
+      await import('../supabase/functions/amend-financial-request/index.ts');
+  }
   vi.unstubAllGlobals();
 });
 beforeEach(() => {
@@ -197,6 +228,36 @@ describe('authorized sender Edge commands', () => {
 });
 
 describe('fresh authoritative row hydration', () => {
+  it('hydrates both immutable versions after a counterproposal and rejects duplicate or unsolicited rows', async () => {
+    const data = { originalRequestId: id, amendedRequestId: corrected, status: 'pending' };
+    const parent = {
+      id,
+      status: 'amended',
+      creator_user_id: state.actor,
+      responder_user_id: 'other',
+    };
+    const child = { ...parent, id: corrected, status: 'pending' };
+    const read = vi.fn(async () => ({ data: [parent, child], error: null }));
+    expect(await hydrateControlResponse(read, state.actor, data)).toEqual({
+      ...data,
+      financialRequests: [parent, child],
+    });
+    expect(read).toHaveBeenCalledWith([id, corrected]);
+    expect(
+      await hydrateControlResponse(
+        async () => ({ data: [parent, parent], error: null }),
+        state.actor,
+        data,
+      ),
+    ).toBe(data);
+    expect(
+      await hydrateControlResponse(
+        async () => ({ data: [parent, { ...child, id: 'unsolicited' }], error: null }),
+        state.actor,
+        data,
+      ),
+    ).toBe(data);
+  });
   it('replaces an earlier pending state with the current completed state on replay', async () => {
     const data = {
       requestId: id,
@@ -225,4 +286,59 @@ describe('fresh authoritative row hydration', () => {
     });
     expect(await hydrateControlResponse(foreign, state.actor, data)).toBe(data);
   });
+});
+
+describe('confirmed receiver commands', () => {
+  it.each(['accept', 'reject', 'amend'])(
+    'keeps %s bound to the verified actor and hydrates only after a committed RPC',
+    async (operation) => {
+      const data =
+        operation === 'amend'
+          ? { originalRequestId: id, amendedRequestId: corrected, status: 'pending' }
+          : { requestId: id, status: operation === 'accept' ? 'accepted' : 'rejected' };
+      state.rpc.mockResolvedValue({ data, error: null });
+      const rows = (operation === 'amend' ? [id, corrected] : [id]).map((requestId) => ({
+        id: requestId,
+        creator_user_id: 'other',
+        responder_user_id: state.actor,
+        status:
+          requestId === corrected ? 'pending' : operation === 'amend' ? 'amended' : data.status,
+      }));
+      state.readRows.mockResolvedValue({ data: rows, error: null });
+      state.body.actorUserId = 'spoofed-user';
+      expect(await receivers[operation]!(new Request('https://example.test'))).toEqual({
+        ...data,
+        financialRequests: rows,
+      });
+      expect(state.rpc.mock.calls[0]?.[1]).toMatchObject({
+        p_actor_user_id: state.actor,
+        p_request_id: id,
+      });
+      expect(state.authorize).toHaveBeenCalledOnce();
+      state.rpc.mockResolvedValue({
+        data: null,
+        error: new Error('financial_request_not_pending'),
+      });
+      state.readRows.mockClear();
+      await expect(receivers[operation]!(new Request('https://example.test'))).rejects.toThrow(
+        'not_pending',
+      );
+      expect(state.readRows).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['accept', 'reject', 'amend'])(
+    'preserves committed %s if enrichment fails and blocks unauthorized devices before RPC',
+    async (operation) => {
+      const data = { requestId: id, status: 'accepted' };
+      state.rpc.mockResolvedValue({ data, error: null });
+      state.readRows.mockRejectedValue(new Error('read timeout'));
+      expect(await receivers[operation]!(new Request('https://example.test'))).toBe(data);
+      state.authorize.mockRejectedValue(new Error('device_authorization_required'));
+      state.rpc.mockClear();
+      await expect(receivers[operation]!(new Request('https://example.test'))).rejects.toThrow(
+        'device_authorization_required',
+      );
+      expect(state.rpc).not.toHaveBeenCalled();
+    },
+  );
 });

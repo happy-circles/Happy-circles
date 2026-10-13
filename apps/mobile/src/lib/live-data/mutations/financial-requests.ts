@@ -13,7 +13,7 @@ import { DEFAULT_TRANSACTION_CATEGORY } from '../../transaction-categories';
 import { RetriableActionRegistry } from '../../retriable-action';
 import { invalidateAppSnapshot, invokeSupabaseFunction } from '../client';
 import type { CreateRequestInput } from '../types';
-import { parseEdgePayload, withIdempotencyKey } from './edge-action';
+import { parseEdgePayload } from './edge-action';
 import { confirmCreatedRequestInCache } from './confirmed-request-cache';
 import { confirmSenderRequestInCache } from './confirmed-sender-request-cache';
 import {
@@ -32,6 +32,7 @@ interface ConfirmationRecovery {
 }
 
 const senderRequestIntentions = new RetriableActionRegistry();
+const creationRequestIntentions = new RetriableActionRegistry();
 
 interface SenderRequestInput extends ConfirmationRecovery {
   readonly requestId: string;
@@ -55,15 +56,20 @@ export function isFinancialRequestConflict(error: unknown): boolean {
   );
 }
 
-async function sendSenderRequestCommand(
+async function sendFinancialRequestCommand(
   expectedUserId: string,
   name: string,
   intent: Record<string, unknown>,
-  schema: typeof cancelFinancialRequestSchema | typeof correctFinancialRequestSchema,
+  schema:
+    | typeof cancelFinancialRequestSchema
+    | typeof correctFinancialRequestSchema
+    | typeof requestDecisionSchema
+    | typeof amendFinancialRequestSchema,
+  keyPrefix = name,
 ): Promise<unknown> {
   const signature = JSON.stringify([expectedUserId, name, intent]);
   try {
-    return await senderRequestIntentions.run(signature, name, async (idempotencyKey) => {
+    return await senderRequestIntentions.run(signature, keyPrefix, async (idempotencyKey) => {
       const payload = parseEdgePayload(schema, { ...intent, idempotencyKey });
       const response = await invokeSupabaseFunction(name, payload, { expectedUserId });
       // A committed command remains successful even if the next network refresh fails.
@@ -86,7 +92,7 @@ export function useCorrectFinancialRequestMutation(options: FinancialRequestMuta
         'corregir la solicitud',
         (expectedUserId) => {
           const sendRequest = () =>
-            sendSenderRequestCommand(
+            sendFinancialRequestCommand(
               expectedUserId,
               'correct-financial-request',
               {
@@ -117,7 +123,7 @@ export function useCancelFinancialRequestMutation() {
       guardSensitiveAction(
         'cancelar la solicitud',
         (expectedUserId) =>
-          sendSenderRequestCommand(
+          sendFinancialRequestCommand(
             expectedUserId,
             'cancel-financial-request',
             {
@@ -143,29 +149,36 @@ export function useCreateRequestMutation(options: FinancialRequestMutationOption
     mutationFn: async (input: CreateRequestInput & ConfirmationRecovery) => {
       const category = input.category ?? DEFAULT_TRANSACTION_CATEGORY;
       recordFinancialRequestStarted(category);
-      const payload = parseEdgePayload(
-        createBalanceRequestSchema,
-        withIdempotencyKey('mobile_balance_increase', {
-          responderUserId: input.responderUserId,
-          debtorUserId: input.debtorUserId,
-          creditorUserId: input.creditorUserId,
-          amountMinor: input.amountMinor,
-          description: input.description,
-          category,
-          requestKind: 'balance_increase',
-        }),
-      );
+      const intent = {
+        responderUserId: input.responderUserId,
+        debtorUserId: input.debtorUserId,
+        creditorUserId: input.creditorUserId,
+        amountMinor: input.amountMinor,
+        description: input.description,
+        category,
+        requestKind: 'balance_increase',
+      };
 
       return guardSensitiveAction(
         'crear el movimiento',
         (expectedUserId) => {
-          const sendRequest = async () => {
-            const response = await invokeSupabaseFunction('create-balance-request', payload, {
-              expectedUserId,
-            });
-            confirmCreatedRequestInCache(expectedUserId, input, response);
-            return response;
-          };
+          const signature = JSON.stringify([expectedUserId, 'create-balance-request', intent]);
+          const sendRequest = () =>
+            creationRequestIntentions.run(
+              signature,
+              'mobile_balance_increase',
+              async (idempotencyKey) => {
+                const payload = parseEdgePayload(createBalanceRequestSchema, {
+                  ...intent,
+                  idempotencyKey,
+                });
+                const response = await invokeSupabaseFunction('create-balance-request', payload, {
+                  expectedUserId,
+                });
+                confirmCreatedRequestInCache(expectedUserId, input, response);
+                return response;
+              },
+            );
           return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
         },
         input.forceConfirmation,
@@ -185,20 +198,19 @@ export function useAcceptFinancialRequestMutation() {
 
   return useMutation({
     mutationFn: async (requestId: string) => {
-      const payload = parseEdgePayload(
-        requestDecisionSchema,
-        withIdempotencyKey('accept_request', {
-          requestId,
-        }),
-      );
-
       return guardSensitiveAction('aceptar la solicitud', (expectedUserId) =>
-        invokeSupabaseFunction('accept-financial-request', payload, { expectedUserId }),
+        sendFinancialRequestCommand(
+          expectedUserId,
+          'accept-financial-request',
+          { requestId },
+          requestDecisionSchema,
+          'accept_request',
+        ),
       );
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       recordFinancialRequestAccepted();
-      await invalidateAppSnapshot();
+      void invalidateAppSnapshot().catch(() => undefined);
     },
   });
 }
@@ -208,18 +220,19 @@ export function useRejectFinancialRequestMutation() {
 
   return useMutation({
     mutationFn: async (requestId: string) => {
-      const payload = parseEdgePayload(
-        requestDecisionSchema,
-        withIdempotencyKey('reject_request', {
-          requestId,
-        }),
-      );
-
       return guardSensitiveAction('rechazar la solicitud', (expectedUserId) =>
-        invokeSupabaseFunction('reject-financial-request', payload, { expectedUserId }),
+        sendFinancialRequestCommand(
+          expectedUserId,
+          'reject-financial-request',
+          { requestId },
+          requestDecisionSchema,
+          'reject_request',
+        ),
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: () => {
+      void invalidateAppSnapshot().catch(() => undefined);
+    },
   });
 }
 
@@ -234,26 +247,29 @@ export function useAmendFinancialRequestMutation(options: FinancialRequestMutati
       readonly category?: TransactionCategory;
       readonly forceConfirmation?: ConfirmationRecovery['forceConfirmation'];
     }) => {
-      const payload = parseEdgePayload(
-        amendFinancialRequestSchema,
-        withIdempotencyKey('amend_request', {
-          requestId: input.requestId,
-          amountMinor: input.amountMinor,
-          description: input.description,
-          category: input.category ?? DEFAULT_TRANSACTION_CATEGORY,
-        }),
-      );
-
       return guardSensitiveAction(
         'proponer un nuevo monto',
         (expectedUserId) => {
           const sendRequest = () =>
-            invokeSupabaseFunction('amend-financial-request', payload, { expectedUserId });
+            sendFinancialRequestCommand(
+              expectedUserId,
+              'amend-financial-request',
+              {
+                requestId: input.requestId,
+                amountMinor: input.amountMinor,
+                description: input.description,
+                category: input.category ?? DEFAULT_TRANSACTION_CATEGORY,
+              },
+              amendFinancialRequestSchema,
+              'amend_request',
+            );
           return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
         },
         input.forceConfirmation,
       );
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: () => {
+      void invalidateAppSnapshot().catch(() => undefined);
+    },
   });
 }

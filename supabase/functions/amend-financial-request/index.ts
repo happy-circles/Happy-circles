@@ -1,4 +1,5 @@
 import { requireAuthorizedDeviceSession } from '../_shared/authorized-device-session.ts';
+import { runBackgroundTask } from '../_shared/background-task.ts';
 import {
   handleRpc,
   requireString,
@@ -6,6 +7,10 @@ import {
   createVerifiedUserClient,
 } from '../_shared/http.ts';
 import { notifyFinancialRequestPending, readPayloadString } from '../_shared/push-notifications.ts';
+import {
+  FINANCIAL_REQUEST_SELECT,
+  hydrateControlResponse,
+} from '../_shared/financial-request-controls.ts';
 
 const TRANSACTION_CATEGORIES = new Set([
   'food_drinks',
@@ -50,12 +55,24 @@ Deno.serve((request) =>
       throw error;
     }
 
-    await notifyFinancialRequestPending(
-      client,
-      actorUserId,
-      readPayloadString(data, 'amendedRequestId'),
+    const requestId = readPayloadString(data, 'amendedRequestId');
+    await runBackgroundTask(
+      () => notifyFinancialRequestPending(client, actorUserId, requestId),
+      'financial_request_push_failed',
+      { actorUserId, requestId },
     );
 
-    return data;
+    return hydrateControlResponse(
+      async (ids) => {
+        const result = await client
+          .from('financial_requests')
+          .select(FINANCIAL_REQUEST_SELECT)
+          .in('id', ids)
+          .abortSignal(AbortSignal.timeout(2000));
+        return { data: result.data as unknown, error: result.error as unknown };
+      },
+      actorUserId,
+      data,
+    );
   }),
 );

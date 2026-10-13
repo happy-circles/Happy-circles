@@ -309,12 +309,8 @@ export function reconcile(
       ? {
           liveRows: {
             ...state.liveRows,
-            fetchedAt: new Date(
-              Math.max(
-                Date.parse(state.liveRows.fetchedAt),
-                ...accepted.map((row) => Date.parse(row.updated_at)),
-              ),
-            ).toISOString(),
+            // A partial financial acknowledgement does not refresh the
+            // balances or other domains of this full snapshot context.
             financialRequests: [...known.values()],
             history: state.liveRows.history.filter(
               (row) => row.item_kind !== 'financial_request' || !affected.has(row.item_id),

@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
+import { randomUUID } from 'expo-crypto';
 
 import { parseHistorySyncState, type HistorySyncState } from './history-sync';
+import { historyCacheReceipt, type HistoryCacheReceipt } from './history-cache-receipt';
 
 const HISTORY_CACHE_DB_NAME = 'happy-circles-history-cache.db';
 const HISTORY_CACHE_SCHEMA_VERSION = 1;
@@ -102,8 +104,9 @@ export async function persistCachedHistory(
   userId: string,
   scope: string,
   state: HistorySyncState,
-): Promise<void> {
-  const payload = JSON.stringify(state);
+): Promise<HistoryCacheReceipt> {
+  const generation = randomUUID();
+  const payload = JSON.stringify({ ...state, cacheGeneration: generation });
   if (!parseHistorySyncState(JSON.parse(payload))) {
     throw new Error('Cannot persist an invalid history sync state.');
   }
@@ -123,4 +126,38 @@ export async function persistCachedHistory(
     HISTORY_CACHE_SCHEMA_VERSION,
     payload,
   );
+  return historyCacheReceipt(userId, scope, generation, state);
+}
+
+/** Read only compact metadata, without transferring/parsing the full history. */
+export async function readCachedHistoryReceipt(
+  userId: string,
+  scope: string,
+): Promise<HistoryCacheReceipt | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{
+    generation: string | null;
+    cursor: string | null;
+    bootstrap_complete: number | null;
+    fetched_at: string | null;
+  }>(
+    `SELECT json_extract(state_json, '$.cacheGeneration') AS generation,
+      json_extract(state_json, '$.cursor') AS cursor,
+      json_extract(state_json, '$.bootstrapComplete') AS bootstrap_complete,
+      json_extract(state_json, '$.liveRows.fetchedAt') AS fetched_at
+     FROM history_sync_cache
+     WHERE backend_scope = ? AND user_id = ? AND schema_version = ? LIMIT 1`,
+    scope,
+    userId,
+    HISTORY_CACHE_SCHEMA_VERSION,
+  );
+  if (!row) return null;
+  return {
+    userId,
+    backendScope: scope,
+    generation: typeof row.generation === 'string' ? row.generation : null,
+    cursor: typeof row.cursor === 'string' ? row.cursor : null,
+    bootstrapComplete: row.bootstrap_complete === 1,
+    fetchedAt: typeof row.fetched_at === 'string' ? row.fetched_at : null,
+  };
 }
