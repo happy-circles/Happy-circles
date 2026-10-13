@@ -217,6 +217,7 @@ export async function performSupabaseGoogleOAuth(
         ? await input.client.auth.linkIdentity({
             provider: 'google',
             options: {
+              queryParams: { prompt: 'select_account' },
               redirectTo,
               skipBrowserRedirect: true,
             },
@@ -224,6 +225,7 @@ export async function performSupabaseGoogleOAuth(
         : await input.client.auth.signInWithOAuth({
             provider: 'google',
             options: {
+              queryParams: { prompt: 'select_account' },
               redirectTo,
               skipBrowserRedirect: true,
             },

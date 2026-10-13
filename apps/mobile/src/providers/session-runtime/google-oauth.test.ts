@@ -122,6 +122,7 @@ describe('performSupabaseGoogleOAuth', () => {
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: 'google',
       options: {
+        queryParams: { prompt: 'select_account' },
         redirectTo: REDIRECT_URL,
         skipBrowserRedirect: true,
       },
@@ -140,8 +141,9 @@ describe('performSupabaseGoogleOAuth', () => {
     expect(result).toEqual({ message: 'Sesión iniciada.', userId: 'user-web' });
   });
 
-  it('keeps the native auth-session callback path outside web', async () => {
-    const { client, getSession } = createClient({
+  it.each(['ios', 'android'])('requests account selection on %s', async (platform) => {
+    mocks.platform.OS = platform;
+    const { client, getSession, signInWithOAuth } = createClient({
       session: { user: { id: 'user-1' } },
     });
     const applySessionFromUrl = vi.fn(async () => true);
@@ -157,6 +159,14 @@ describe('performSupabaseGoogleOAuth', () => {
       reportFailure,
     });
 
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: {
+        queryParams: { prompt: 'select_account' },
+        redirectTo: REDIRECT_URL,
+        skipBrowserRedirect: true,
+      },
+    });
     expect(mocks.dismissBrowser).toHaveBeenCalledTimes(1);
     expect(mocks.openAuthSessionAsync).toHaveBeenCalledWith(OAUTH_URL, REDIRECT_URL);
     expect(applySessionFromUrl).toHaveBeenCalledWith(CALLBACK_URL);
@@ -215,6 +225,7 @@ describe('performSupabaseGoogleOAuth', () => {
     expect(linkIdentity).toHaveBeenCalledWith({
       provider: 'google',
       options: {
+        queryParams: { prompt: 'select_account' },
         redirectTo: LINK_REDIRECT_URL,
         skipBrowserRedirect: true,
       },
