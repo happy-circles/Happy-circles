@@ -69,6 +69,21 @@ describe('authenticated Edge HTTP recovery errors', () => {
     });
   });
 
+  it('preserves the server rejection of disabled transaction reversals', async () => {
+    const response = await handleRpc(
+      request(),
+      () => Promise.reject(new Error('transaction_reversal_disabled')),
+      { rateLimit: false },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      code: 'transaction_reversal_disabled',
+      error: 'Los reversos de movimientos están deshabilitados.',
+      requestId: 'request-1',
+    });
+  });
+
   it('keeps recent identity confirmation separate from authentication failures', async () => {
     const response = await handleRpc(
       request(),

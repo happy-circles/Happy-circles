@@ -144,6 +144,14 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
+  if (normalized.includes('transaction_reversal_disabled')) {
+    return {
+      status: 403,
+      code: 'transaction_reversal_disabled',
+      message: 'Los reversos de movimientos están deshabilitados.',
+    };
+  }
+
   if (normalized.includes('permission denied') || normalized.includes('not allowed')) {
     return {
       status: 403,
