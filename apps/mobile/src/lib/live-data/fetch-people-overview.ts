@@ -3,9 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useSession } from '@/providers/session-provider';
 import { hydrateSignedAvatarUrlCache } from '../avatar';
+import { isSessionDataGenerationCurrent, useSessionDataGeneration } from '../session-data-boundary';
 import { PEOPLE_OVERVIEW_QUERY_KEY } from './constants';
 import { fetchPeopleOverviewForUser } from './people-overview-fetcher';
 import { readCachedPeopleOverview } from './people-overview-cache';
+import { restorePeopleOverviewForSession } from './people-overview-hydration';
 import type { PeopleOverview } from './types';
 
 const PEOPLE_OVERVIEW_STALE_TIME_MS = 5 * 60_000;
@@ -15,12 +17,14 @@ interface CacheHydrationState {
   readonly complete: boolean;
   readonly restored: boolean;
   readonly userId: string | null;
+  readonly generation: number;
 }
 
 const EMPTY_HYDRATION_STATE: CacheHydrationState = {
   complete: false,
   restored: false,
   userId: null,
+  generation: -1,
 };
 
 function parsedUpdatedAt(value: string): number {
@@ -30,6 +34,7 @@ function parsedUpdatedAt(value: string): number {
 
 export function usePeopleOverview() {
   const { userId } = useSession();
+  const generation = useSessionDataGeneration();
   const queryClient = useQueryClient();
   const [hydration, setHydration] = useState<CacheHydrationState>(EMPTY_HYDRATION_STATE);
   const queryKey = useMemo(
@@ -39,6 +44,7 @@ export function usePeopleOverview() {
 
   useEffect(() => {
     let cancelled = false;
+    const isCurrent = () => !cancelled && isSessionDataGenerationCurrent(generation);
 
     if (!userId) {
       setHydration(EMPTY_HYDRATION_STATE);
@@ -51,48 +57,51 @@ export function usePeopleOverview() {
       complete: false,
       restored: false,
       userId,
+      generation,
     });
 
     const restoreTimeout = setTimeout(() => {
-      if (!cancelled) {
+      if (isCurrent()) {
         setHydration({
           complete: true,
           restored: false,
           userId,
+          generation,
         });
       }
     }, PEOPLE_OVERVIEW_CACHE_RESTORE_TIMEOUT_MS);
 
-    void readCachedPeopleOverview(userId)
-      .then((cached) => {
-        if (cancelled) {
+    void restorePeopleOverviewForSession({
+      read: () => readCachedPeopleOverview(userId),
+      canRestore: () => isCurrent() && !queryClient.getQueryData<PeopleOverview>(queryKey),
+      publish: (cached) => {
+        hydrateSignedAvatarUrlCache(cached.avatarSignedUrlsByPath);
+        queryClient.setQueryData(queryKey, cached.overview, {
+          updatedAt: parsedUpdatedAt(cached.updatedAt),
+        });
+      },
+    })
+      .then((restored) => {
+        if (!isCurrent()) {
           return;
         }
 
         clearTimeout(restoreTimeout);
-        if (cached) {
-          hydrateSignedAvatarUrlCache(cached.avatarSignedUrlsByPath);
-          const existing = queryClient.getQueryData<PeopleOverview>(queryKey);
-          if (!existing) {
-            queryClient.setQueryData(queryKey, cached.overview, {
-              updatedAt: parsedUpdatedAt(cached.updatedAt),
-            });
-          }
-        }
-
         setHydration({
           complete: true,
-          restored: Boolean(cached),
+          restored,
           userId,
+          generation,
         });
       })
       .catch(() => {
-        if (!cancelled) {
+        if (isCurrent()) {
           clearTimeout(restoreTimeout);
           setHydration({
             complete: true,
             restored: false,
             userId,
+            generation,
           });
         }
       });
@@ -101,13 +110,18 @@ export function usePeopleOverview() {
       cancelled = true;
       clearTimeout(restoreTimeout);
     };
-  }, [queryClient, queryKey, userId]);
+  }, [queryClient, queryKey, userId, generation]);
 
-  const hydrationComplete = Boolean(userId && hydration.userId === userId && hydration.complete);
+  const hydrationComplete = Boolean(
+    userId &&
+    hydration.userId === userId &&
+    hydration.generation === generation &&
+    hydration.complete,
+  );
   const query = useQuery({
     enabled: hydrationComplete,
     gcTime: 24 * 60 * 60_000,
-    queryFn: () => fetchPeopleOverviewForUser(userId),
+    queryFn: ({ signal }) => fetchPeopleOverviewForUser(userId, signal),
     queryKey,
     staleTime: PEOPLE_OVERVIEW_STALE_TIME_MS,
   });

@@ -194,8 +194,10 @@ export async function persistCachedAppSnapshot(
   userId: string,
   snapshot: AppSnapshot,
   avatarSignedUrlsByPath: SignedAvatarUrlRecord = {},
+  options: { readonly assertCurrent?: () => void } = {},
 ): Promise<void> {
   const database = await getDatabase();
+  options.assertCurrent?.();
   const updatedAt = new Date().toISOString();
 
   await database.runAsync(

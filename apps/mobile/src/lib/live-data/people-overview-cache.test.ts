@@ -12,6 +12,7 @@ const sqliteMocks = vi.hoisted(() => ({
 vi.mock('expo-sqlite', () => ({
   openDatabaseAsync: sqliteMocks.openDatabaseAsync,
 }));
+vi.mock('../config', () => ({ appConfig: { supabaseUrl: 'https://production.supabase.co' } }));
 
 import type { PeopleOverview } from './types';
 import { persistCachedPeopleOverview, readCachedPeopleOverview } from './people-overview-cache';
@@ -39,9 +40,10 @@ describe('people overview cache', () => {
     await persistCachedPeopleOverview('user-a', overview, {});
 
     expect(sqliteMocks.database.runAsync).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO people_overview_cache'),
+      expect.stringContaining('INSERT INTO people_overview_cache_v2'),
+      'https://production.supabase.co',
       'user-a',
-      1,
+      2,
       JSON.stringify(overview),
       '{}',
       overview.fetchedAt,
@@ -81,7 +83,8 @@ describe('people overview cache', () => {
 
     await expect(readCachedPeopleOverview('user-a')).resolves.toBeNull();
     expect(sqliteMocks.database.runAsync).toHaveBeenCalledWith(
-      'DELETE FROM people_overview_cache WHERE user_id = ?',
+      'DELETE FROM people_overview_cache_v2 WHERE backend_scope = ? AND user_id = ?',
+      'https://production.supabase.co',
       'user-a',
     );
   });

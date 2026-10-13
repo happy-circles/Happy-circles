@@ -9,6 +9,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { hydrateSignedAvatarUrlCache } from '../avatar';
+import { isSessionDataGenerationCurrent, useSessionDataGeneration } from '../session-data-boundary';
 import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '../avatar-prefetch';
 import { recordSnapshotCacheRestored } from '../performance-metrics';
 import { useSession } from '@/providers/session-provider';
@@ -21,6 +22,7 @@ import { restoreCachedAppSnapshot } from './app-snapshot-hydration';
 import type { AppSnapshot } from './types';
 
 interface AppSnapshotCacheHydrationState {
+  readonly generation: number;
   readonly cacheUpdatedAt: string | null;
   readonly cacheUpdatedAtMs: number | null;
   readonly didRestore: boolean;
@@ -32,6 +34,7 @@ interface AppSnapshotCacheHydrationState {
 }
 
 const DEFAULT_CACHE_HYDRATION_STATE: AppSnapshotCacheHydrationState = {
+  generation: -1,
   cacheUpdatedAt: null,
   cacheUpdatedAtMs: null,
   didRestore: false,
@@ -59,6 +62,7 @@ function parsedUpdatedAt(value: string | null): number | null {
 
 export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
   const { userId } = useSession();
+  const generation = useSessionDataGeneration();
   const queryClient = useQueryClient();
   const [state, setState] = useState<AppSnapshotCacheHydrationState>(DEFAULT_CACHE_HYDRATION_STATE);
   const queryKey = useMemo(
@@ -68,6 +72,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let cancelled = false;
+    const isCurrent = () => !cancelled && isSessionDataGenerationCurrent(generation);
     let cancelDeferredAvatarPrefetch: (() => void) | null = null;
     const restoreStartedAt = Date.now();
 
@@ -80,6 +85,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
     }
 
     setState({
+      generation,
       cacheUpdatedAt: null,
       cacheUpdatedAtMs: null,
       didRestore: false,
@@ -91,7 +97,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
     });
 
     const restoreTimeout = setTimeout(() => {
-      if (cancelled) {
+      if (!isCurrent()) {
         return;
       }
 
@@ -111,7 +117,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
       readDerived: () => readCachedAppSnapshot(userId),
       readReceipt: () => readCachedHistoryReceipt(userId, appConfig.supabaseUrl),
       readHistory: () => readCachedHistory(userId, appConfig.supabaseUrl),
-      canRestore: () => !cancelled && !queryClient.getQueryData<AppSnapshot>(queryKey),
+      canRestore: () => isCurrent() && !queryClient.getQueryData<AppSnapshot>(queryKey),
       buildSnapshot: (rows) => {
         hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
         return {
@@ -122,7 +128,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
       },
     })
       .then((cachedSnapshot) => {
-        if (cancelled) {
+        if (!isCurrent()) {
           return;
         }
 
@@ -144,6 +150,7 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
 
         const cacheUpdatedAt = cachedSnapshot?.updatedAt ?? null;
         const nextState: AppSnapshotCacheHydrationState = {
+          generation,
           cacheUpdatedAt,
           cacheUpdatedAtMs: parsedUpdatedAt(cacheUpdatedAt),
           didRestore: Boolean(cachedSnapshot),
@@ -162,12 +169,13 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
         });
       })
       .catch(() => {
-        if (cancelled) {
+        if (!isCurrent()) {
           return;
         }
 
         clearTimeout(restoreTimeout);
         setState({
+          generation,
           cacheUpdatedAt: null,
           cacheUpdatedAtMs: null,
           didRestore: false,
@@ -189,10 +197,21 @@ export function AppSnapshotCacheProvider({ children }: PropsWithChildren) {
       clearTimeout(restoreTimeout);
       cancelDeferredAvatarPrefetch?.();
     };
-  }, [queryClient, queryKey, userId]);
+  }, [queryClient, queryKey, userId, generation]);
 
   return (
-    <AppSnapshotCacheHydrationContext.Provider value={state}>
+    <AppSnapshotCacheHydrationContext.Provider
+      value={
+        state.generation === generation
+          ? state
+          : {
+              ...DEFAULT_CACHE_HYDRATION_STATE,
+              generation,
+              userId,
+              isRestoringCache: Boolean(userId),
+            }
+      }
+    >
       {children}
     </AppSnapshotCacheHydrationContext.Provider>
   );

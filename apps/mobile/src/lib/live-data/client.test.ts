@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   explicitInvoke: vi.fn(),
   getSession: vi.fn(),
   invoke: vi.fn(),
+  invalidateQueries: vi.fn(),
   isJwtAuthError: vi.fn(() => false),
   publicInvoke: vi.fn(),
   readFunctionErrorDetails: vi.fn(
@@ -22,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../query-client', () => ({
-  queryClient: { invalidateQueries: vi.fn() },
+  queryClient: { invalidateQueries: mocks.invalidateQueries },
 }));
 
 vi.mock('../supabase', () => ({
@@ -50,9 +51,29 @@ vi.mock('../support-errors', () => ({
 }));
 
 import { EDGE_FUNCTION_TIMEOUT_MS } from './constants';
-import { createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
+import { createSnapshotAbortSignal, invalidateAppSnapshot, invokeSupabaseFunction } from './client';
+import { captureSessionDataGeneration, invalidateSessionData } from '../session-data-boundary';
 
 describe('live-data client', () => {
+  it('does not invalidate new session data for an obsolete command acknowledgement', async () => {
+    const generation = captureSessionDataGeneration();
+    invalidateSessionData();
+    await expect(invalidateAppSnapshot('actor-a', generation)).rejects.toThrow('La sesión cambió');
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('invalidates only the confirmed actor snapshot and overview', async () => {
+    await invalidateAppSnapshot('actor-a');
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['app-snapshot', 'actor-a'],
+      exact: true,
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['people-overview', 'actor-a'],
+      exact: true,
+    });
+  });
+
   it('releases a canceled snapshot reader immediately without waiting for its network timeout', async () => {
     const parent = new AbortController();
     const snapshot = createSnapshotAbortSignal(parent.signal);
@@ -65,8 +86,15 @@ describe('live-data client', () => {
   });
   it('passes a snapshot cancellation signal to the underlying read transport', async () => {
     mocks.invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-a' }, access_token: 'actor-a-token' } },
+    });
     const controller = new AbortController();
-    await invokeSupabaseFunction('get-app-snapshot', {}, { signal: controller.signal });
+    await invokeSupabaseFunction(
+      'get-app-snapshot',
+      {},
+      { expectedUserId: 'actor-a', signal: controller.signal },
+    );
     expect(mocks.invoke).toHaveBeenCalledWith(
       'get-app-snapshot',
       expect.objectContaining({ signal: controller.signal }),
@@ -439,5 +467,57 @@ describe('live-data client', () => {
       invokeSupabaseFunction('cancel-friendship-invite', {}, { expectedUserId: 'actor-a' }),
     ).rejects.toThrow('Tu sesión ya no es válida');
     expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it.each(['get-app-snapshot', 'get-people-overview'])(
+    'requires an explicit actor for private read %s',
+    async (name) => {
+      await expect(invokeSupabaseFunction(name, {})).rejects.toThrow('cuenta esperada');
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    },
+  );
+
+  it('discards a response from an earlier incarnation of the same account', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-a' }, access_token: 'token-a' } },
+    });
+    mocks.invoke.mockImplementation(async () => {
+      invalidateSessionData();
+      return { data: { secret: 'old-a' }, error: null };
+    });
+    await expect(
+      invokeSupabaseFunction('get-people-overview', {}, { expectedUserId: 'actor-a' }),
+    ).rejects.toThrow('La sesión cambió');
+    expect(mocks.refreshSession).not.toHaveBeenCalled();
+  });
+
+  it('does not retry or sign out after a session change while refresh is pending', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'actor-a' }, access_token: 'token-a' } },
+    });
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('jwt expired') });
+    mocks.isJwtAuthError.mockReturnValue(true);
+    mocks.refreshSession.mockImplementation(async () => {
+      invalidateSessionData();
+      return { data: { session: null }, error: new Error('refresh failed') };
+    });
+    await expect(
+      invokeSupabaseFunction('get-people-overview', {}, { expectedUserId: 'actor-a' }),
+    ).rejects.toThrow('La sesión cambió');
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it('does not send a private read that was canceled before transport', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      invokeSupabaseFunction(
+        'get-people-overview',
+        {},
+        { expectedUserId: 'actor-a', signal: controller.signal },
+      ),
+    ).rejects.toThrow('cancelada');
+    expect(mocks.invoke).not.toHaveBeenCalled();
   });
 });

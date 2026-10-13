@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   useMutation: vi.fn((options: unknown) => options),
   useQuery: vi.fn((options: unknown) => options),
   useSession: vi.fn(),
+  durableIntentions: new Map<string, { key: string; status: 'pending' | 'confirmed' }>(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -36,8 +37,27 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('expo-constants', () => ({
-  default: { expoConfig: { extra: {} } },
+  default: { expoConfig: { extra: { supabaseUrl: 'https://test.supabase.co' } } },
 }));
+
+vi.mock('../../durable-action-store', () => ({
+  durableActionStore: {
+    acquire: async (signature: string, candidateKey: string, retiredKey?: string) => {
+      const current = mocks.durableIntentions.get(signature);
+      const key =
+        current?.status === 'pending' && current.key !== retiredKey ? current.key : candidateKey;
+      mocks.durableIntentions.set(signature, { key, status: 'pending' });
+      return key;
+    },
+    confirm: async (signature: string, key: string) => {
+      if (mocks.durableIntentions.get(signature)?.key === key) {
+        mocks.durableIntentions.set(signature, { key, status: 'confirmed' });
+      }
+    },
+  },
+}));
+
+beforeEach(() => mocks.durableIntentions.clear());
 
 vi.mock('@/features/home/people-target-resolution-cache', () => ({
   invalidatePeopleTargetResolutionCache: vi.fn(async () => undefined),
@@ -499,9 +519,7 @@ describe('live-data mutation hooks', () => {
     expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
       mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
     );
-    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
     await remounted.mutationFn(input);
-    expect(mocks.createIdempotencyKey).toHaveBeenCalledTimes(2);
     expect(mocks.invokeSupabaseFunction.mock.calls[2]?.[1]).not.toEqual(
       mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
     );
@@ -666,8 +684,7 @@ describe('live-data mutation hooks', () => {
     });
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledTimes(2);
     const firstBody = mocks.invokeSupabaseFunction.mock.calls[0]?.[1] as unknown;
-    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toBe(firstBody);
-    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(firstBody);
     expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[2]).toEqual({ expectedUserId: 'user-1' });
   });
 
@@ -678,6 +695,122 @@ describe('live-data mutation hooks', () => {
     await expect(mutation.mutationFn('44444444-4444-4444-8444-444444444444')).rejects.toBe(failure);
     expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
     expect(mocks.confirmIdentity).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'create-balance-request',
+      async () => (await import('./financial-requests')).useCreateRequestMutation(),
+      {
+        amountMinor: 1300,
+        creditorUserId: '33333333-3333-4333-8333-333333333333',
+        debtorUserId: '22222222-2222-4222-8222-222222222222',
+        description: 'Restarted creation',
+        responderUserId: '11111111-1111-4111-8111-111111111111',
+      },
+    ],
+    [
+      'accept-financial-request',
+      async () => (await import('./financial-requests')).useAcceptFinancialRequestMutation(),
+      '55555555-5555-4555-8555-555555555555',
+    ],
+    [
+      'reject-financial-request',
+      async () => (await import('./financial-requests')).useRejectFinancialRequestMutation(),
+      '55555555-5555-4555-8555-555555555555',
+    ],
+    [
+      'amend-financial-request',
+      async () => (await import('./financial-requests')).useAmendFinancialRequestMutation(),
+      {
+        requestId: '55555555-5555-4555-8555-555555555555',
+        amountMinor: 1400,
+        description: 'Updated amount',
+      },
+    ],
+    [
+      'correct-financial-request',
+      async () => (await import('./financial-requests')).useCorrectFinancialRequestMutation(),
+      {
+        requestId: '55555555-5555-4555-8555-555555555555',
+        expectedVersion: 1,
+        amountMinor: 1400,
+        description: 'Corrected amount',
+      },
+    ],
+    [
+      'cancel-financial-request',
+      async () => (await import('./financial-requests')).useCancelFinancialRequestMutation(),
+      { requestId: '55555555-5555-4555-8555-555555555555', expectedVersion: 1 },
+    ],
+    [
+      'approve-cycle-settlement',
+      async () => (await import('./settlements')).useApproveSettlementMutation(),
+      '44444444-4444-4444-8444-444444444444',
+    ],
+    [
+      'reject-cycle-settlement',
+      async () => (await import('./settlements')).useRejectSettlementMutation(),
+      '44444444-4444-4444-8444-444444444444',
+    ],
+    [
+      'execute-approved-cycle-settlement',
+      async () => (await import('./settlements')).useExecuteSettlementMutation(),
+      '44444444-4444-4444-8444-444444444444',
+    ],
+  ] as const)(
+    'persists %s through a runtime restart and separates the next confirmed intention',
+    async (operation, load, input) => {
+      let sequence = 0;
+      mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_${++sequence}`);
+      mocks.invokeSupabaseFunction
+        .mockRejectedValueOnce(new Error('Response lost'))
+        .mockResolvedValue({ status: 'confirmed' });
+      vi.resetModules();
+      const first = (await load()) as unknown as MutationOptions;
+      await expect(first.mutationFn(input)).rejects.toThrow('Response lost');
+      const firstPayload = mocks.invokeSupabaseFunction.mock.calls[0]?.[1] as Record<
+        string,
+        unknown
+      >;
+      vi.resetModules();
+      const restarted = (await load()) as unknown as MutationOptions;
+      expect(mocks.invokeSupabaseFunction).toHaveBeenCalledOnce();
+      await restarted.mutationFn(input);
+      expect(mocks.invokeSupabaseFunction).toHaveBeenLastCalledWith(operation, firstPayload, {
+        expectedUserId: 'user-1',
+      });
+      mocks.invalidateAppSnapshot.mockRejectedValueOnce(new Error('Refresh failed after commit'));
+      await expect(Promise.resolve(restarted.onSuccess?.())).resolves.toBeUndefined();
+      await restarted.mutationFn(input);
+      const nextPayload = mocks.invokeSupabaseFunction.mock.calls[2]?.[1] as Record<
+        string,
+        unknown
+      >;
+      expect(nextPayload.idempotencyKey).not.toBe(firstPayload.idempotencyKey);
+      expect({ ...nextPayload, idempotencyKey: firstPayload.idempotencyKey }).toEqual(firstPayload);
+    },
+  );
+
+  it('uses the normalized request payload when recovering a creation after a lost response', async () => {
+    let sequence = 0;
+    mocks.createIdempotencyKey.mockImplementation((prefix: string) => `${prefix}_${++sequence}`);
+    mocks.invokeSupabaseFunction
+      .mockRejectedValueOnce(new Error('Response lost'))
+      .mockResolvedValue({ status: 'pending' });
+    const input = {
+      amountMinor: 1300,
+      creditorUserId: '33333333-3333-4333-8333-333333333333',
+      debtorUserId: '22222222-2222-4222-8222-222222222222',
+      description: '  Cena  ',
+      responderUserId: '11111111-1111-4111-8111-111111111111',
+    };
+    const mutation = useCreateRequestMutation() as unknown as MutationOptions;
+    await expect(mutation.mutationFn(input)).rejects.toThrow('Response lost');
+    await mutation.mutationFn({ ...input, description: 'Cena', category: 'other' });
+    expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
+      mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
+    );
   });
 
   it('corrects only the selected sender version and persists the confirmed response', async () => {
@@ -709,7 +842,11 @@ describe('live-data mutation hooks', () => {
       },
       { expectedUserId: 'user-1' },
     );
-    expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith('user-1', response);
+    expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith(
+      'user-1',
+      response,
+      0,
+    );
   });
 
   it('retains the same cancellation intention across a lost response and a manual retry', async () => {
@@ -726,7 +863,6 @@ describe('live-data mutation hooks', () => {
     expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
       mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
     );
-    expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
     expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledOnce();
   });
 
@@ -763,11 +899,14 @@ describe('live-data mutation hooks', () => {
       const data = await retry.mutationFn(input);
       await retry.onSuccess?.(data, input);
       expect(data).toBe(response);
-      expect(mocks.createIdempotencyKey).toHaveBeenCalledOnce();
       expect(mocks.invokeSupabaseFunction.mock.calls[1]?.[1]).toEqual(
         mocks.invokeSupabaseFunction.mock.calls[0]?.[1],
       );
-      expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith('user-1', response);
+      expect(mocks.confirmSenderRequestInCache).toHaveBeenCalledExactlyOnceWith(
+        'user-1',
+        response,
+        0,
+      );
       expect(mocks.invalidateAppSnapshot).toHaveBeenCalledOnce();
     },
   );

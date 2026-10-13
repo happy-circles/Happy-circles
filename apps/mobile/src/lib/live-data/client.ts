@@ -1,4 +1,9 @@
 import { queryClient } from '../query-client';
+import {
+  assertSessionDataGeneration,
+  captureSessionDataGeneration,
+  currentSessionDataUserId,
+} from '../session-data-boundary';
 import { explicitTokenEdgeSupabase, publicEdgeSupabase, supabase } from '../supabase';
 import {
   createSupportId,
@@ -101,6 +106,9 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
   options: InvokeSupabaseFunctionOptions = {},
 ): Promise<TResult> {
   const shouldOmitAuthorization = options.authorization === 'omit';
+  if (['get-app-snapshot', 'get-people-overview'].includes(name) && !options.expectedUserId) {
+    throw new Error('Una consulta privada requiere la cuenta esperada.');
+  }
   if (shouldOmitAuthorization && options.expectedUserId) {
     throw new Error('Una acción de cuenta requiere una sesión autenticada.');
   }
@@ -110,15 +118,22 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
   const useExplicitTokenTransport =
     name === 'create-people-outreach' && Boolean(options.expectedUserId);
   const supportId = createSupportId();
+  const sessionGeneration = captureSessionDataGeneration();
+  const assertCurrentInvocation = () => {
+    if (!shouldOmitAuthorization) assertSessionDataGeneration(sessionGeneration, options.signal);
+    else if (options.signal?.aborted) throw new Error('Sincronización cancelada.');
+  };
   const invoke = async () => {
+    assertCurrentInvocation();
     let accessToken: string | undefined;
     if (options.expectedUserId) {
       const { data } = await client.auth.getSession();
+      assertCurrentInvocation();
       if (data.session?.user.id !== options.expectedUserId)
         throw new Error('La sesión cambió. Vuelve a intentar la acción.');
       accessToken = data.session.access_token;
     }
-    if (useExplicitTokenTransport && !accessToken?.trim()) {
+    if (options.expectedUserId && !accessToken?.trim()) {
       throw new Error('Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.');
     }
     // Keep session validation/refresh on the main client. The functions-only
@@ -134,8 +149,10 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
       timeout: EDGE_FUNCTION_TIMEOUT_MS,
       ...(options.signal ? { signal: options.signal } : {}),
     });
+    assertCurrentInvocation();
     if (options.expectedUserId) {
       const { data } = await client.auth.getSession();
+      assertCurrentInvocation();
       if (data.session?.user.id !== options.expectedUserId)
         throw new Error('La sesión cambió. Vuelve a consultar el estado.');
     }
@@ -157,24 +174,34 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
     }
 
     const details = await readFunctionErrorDetails(result.error);
+    assertCurrentInvocation();
     if (isJwtAuthError(details) && !shouldOmitAuthorization) {
       if (options.expectedUserId) {
         const { data } = await client.auth.getSession();
+        assertCurrentInvocation();
         if (data.session?.user.id !== options.expectedUserId) {
           throw new Error('La sesión cambió. Vuelve a consultar el estado.');
         }
       }
       const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
+      assertCurrentInvocation();
+      if (
+        refreshData.session &&
+        options.expectedUserId &&
+        refreshData.session.user.id !== options.expectedUserId
+      ) {
+        throw new Error('La sesión cambió. Vuelve a consultar el estado.');
+      }
       if (refreshError || !refreshData.session) {
         // An account switch can race token renewal. Never sign out the new
         // account because a request that belonged to the previous one failed.
-        if (!options.expectedUserId) await client.auth.signOut();
         throw new Error('Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.');
       }
 
       result = await invoke();
       if (result.error) {
         const retryDetails = await readFunctionErrorDetails(result.error);
+        assertCurrentInvocation();
         throw reportAndCreateSupportError({
           error: new Error(retryDetails.message),
           errorCode: retryDetails.code,
@@ -229,13 +256,20 @@ export async function invokeSupabaseFunction<TBody extends Record<string, unknow
   return result.data;
 }
 
-export async function invalidateAppSnapshot() {
+export async function invalidateAppSnapshot(
+  userId = currentSessionDataUserId(),
+  generation = captureSessionDataGeneration(),
+) {
+  assertSessionDataGeneration(generation);
+  if (!userId) return;
   await Promise.all([
     queryClient.invalidateQueries({
-      queryKey: [APP_SNAPSHOT_QUERY_KEY],
+      queryKey: [APP_SNAPSHOT_QUERY_KEY, userId],
+      exact: true,
     }),
     queryClient.invalidateQueries({
-      queryKey: [PEOPLE_OVERVIEW_QUERY_KEY],
+      queryKey: [PEOPLE_OVERVIEW_QUERY_KEY, userId],
+      exact: true,
     }),
   ]);
 }

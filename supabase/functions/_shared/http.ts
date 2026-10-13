@@ -237,6 +237,14 @@ function normalizeError(error: unknown): SafeError {
     };
   }
 
+  if (normalized.includes('idempotency_legacy_unverifiable')) {
+    return {
+      status: 409,
+      code: 'idempotency_legacy_unverifiable',
+      message: 'Actualiza el estado de la operación antes de volver a intentarlo.',
+    };
+  }
+
   if (normalized.includes('financial_request_correction_not_supported')) {
     return {
       status: 409,

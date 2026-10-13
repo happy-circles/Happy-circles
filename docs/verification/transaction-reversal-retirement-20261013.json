@@ -1,0 +1,164 @@
+{
+  "verifiedAt": "2026-10-13T17:26:38.421Z",
+  "timezone": "America/Bogota",
+  "projectRef": "vknfhyfdtlvvfzptpqpj",
+  "baseCommit": "1911b1e492ccd90c218965d937d7f6f9e53cbcb2",
+  "scope": "Disable transaction reversal creation, acceptance and amendment; preserve existing requests and ledger.",
+  "delivery": "backend-only",
+  "otaPublished": false,
+  "newNativeBuild": false,
+  "migration": {
+    "name": "disable_transaction_reversals",
+    "version": "20261013171032",
+    "sha256": "4798f4b27105528c37478f47cdc4a8c3094f5e389d99c71e962e753309e83213"
+  },
+  "rpcGuards": [
+    {
+      "name": "accept_financial_request",
+      "guard": true,
+      "anon_execute": false,
+      "service_execute": true,
+      "authenticated_execute": false
+    },
+    {
+      "name": "amend_financial_request",
+      "guard": true,
+      "anon_execute": false,
+      "service_execute": true,
+      "authenticated_execute": false
+    },
+    {
+      "name": "create_balance_request",
+      "guard": true,
+      "anon_execute": false,
+      "service_execute": true,
+      "authenticated_execute": false
+    }
+  ],
+  "financialDataPreservedDuringMigration": true,
+  "inventory": {
+    "requests": 119,
+    "ledgerEntries": 184,
+    "migrationCount": 96,
+    "ledgerReversals": 0,
+    "pendingReversals": 0,
+    "reversalRequests": 0,
+    "ledgerTransactions": 92
+  },
+  "functions": [
+    {
+      "slug": "propose-transaction-reversal",
+      "version": 14,
+      "status": "ACTIVE",
+      "verifyJwt": true,
+      "sourceSha256": "cdbfdc00df842b2e193b635cc8800293b1130a26b04f10a67c904f697975a0e9",
+      "reportedBundleSha256": null,
+      "downloadFourBytePrefixOmitted": true,
+      "sourceMatchesPackagedArtifact": true
+    },
+    {
+      "slug": "accept-financial-request",
+      "version": 19,
+      "status": "ACTIVE",
+      "verifyJwt": true,
+      "sourceSha256": "31cf90a67c916ee3926742f89b72d32d7e803f04d70bac8bd236959508b0f3c6",
+      "reportedBundleSha256": null,
+      "downloadFourBytePrefixOmitted": true,
+      "sourceMatchesPackagedArtifact": true
+    },
+    {
+      "slug": "amend-financial-request",
+      "version": 17,
+      "status": "ACTIVE",
+      "verifyJwt": true,
+      "sourceSha256": "c1fa214614da403bb350463a90c6b6ffeb93a552e07da31ed06b9882da20fbea",
+      "reportedBundleSha256": null,
+      "downloadFourBytePrefixOmitted": true,
+      "sourceMatchesPackagedArtifact": true
+    }
+  ],
+  "productionHttpChecks": [
+    {
+      "slug": "propose-transaction-reversal",
+      "check": "anonymous",
+      "status": 401,
+      "requestIdPresent": false
+    },
+    {
+      "slug": "propose-transaction-reversal",
+      "check": "preflight",
+      "status": 204,
+      "requestIdPresent": true
+    },
+    {
+      "slug": "accept-financial-request",
+      "check": "anonymous",
+      "status": 401,
+      "requestIdPresent": false
+    },
+    {
+      "slug": "accept-financial-request",
+      "check": "preflight",
+      "status": 204,
+      "requestIdPresent": true
+    },
+    {
+      "slug": "amend-financial-request",
+      "check": "anonymous",
+      "status": 401,
+      "requestIdPresent": false
+    },
+    {
+      "slug": "amend-financial-request",
+      "check": "preflight",
+      "status": 204,
+      "requestIdPresent": true
+    }
+  ],
+  "advisors": {
+    "newSecurityWarningsOrErrors": [],
+    "newPerformanceWarningsOrErrors": []
+  },
+  "validation": {
+    "vitestFiles": 160,
+    "vitestTests": 1242,
+    "sqlMigrations": 96,
+    "sqlTests": 35,
+    "postgresVersion": "PostgreSQL 17.11 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit",
+    "lint": true,
+    "typecheck": true,
+    "denoSourceCheck": true,
+    "denoVersion": "2.9.6",
+    "securityCheck": true,
+    "easUpdateTests": 7,
+    "prettier": true,
+    "independentReview": true
+  },
+  "sourceFiles": [
+    {
+      "path": "supabase/migrations/20261013171032_disable_transaction_reversals.sql",
+      "sha256": "4798f4b27105528c37478f47cdc4a8c3094f5e389d99c71e962e753309e83213"
+    },
+    {
+      "path": "supabase/functions/_shared/http.ts",
+      "sha256": "323b0e408b600d9f318dcc5b79084b8a407e3c85e3e426452f32e41d4d0422ab"
+    },
+    {
+      "path": "supabase/functions/propose-transaction-reversal/index.ts",
+      "sha256": "72110e0f5dffc13d81c45d7c8e9d8f3b846c0b0e66005680c369757b7565955a"
+    },
+    {
+      "path": "supabase/tests/34_disabled_transaction_reversals.sql",
+      "sha256": "3becbf0a6553ae9025b654f4e0bb55c352946f7f1700560ef24b5873d92d924e"
+    },
+    {
+      "path": "tests/edge-auth/propose-transaction-reversal-disabled.test.ts",
+      "sha256": "434ceee3ab64939835b55659d073569ad65a44215564bf9a1b1d67564d8d3f37"
+    }
+  ],
+  "limitations": [
+    "The remote test/demo project returned HTTP 403; SQL tests ran on an isolated local PostgreSQL 17 database with Supabase infrastructure fixtures.",
+    "No authenticated user financial operations or new user sessions were executed in production. Authenticated disabled-response tests used the real HTTP wrapper with mocked Auth transport.",
+    "The Management body download omitted four leading bytes for raw ESModule sources; source verification compares the remaining bytes and runtime boot checks."
+  ]
+}

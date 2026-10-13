@@ -37,6 +37,21 @@ function request() {
 }
 
 describe('authenticated Edge HTTP recovery errors', () => {
+  it('returns a recoverable conflict when a legacy replay cannot be verified', async () => {
+    const response = await handleRpc(
+      request(),
+      () => Promise.reject(new Error('idempotency_legacy_unverifiable')),
+      { rateLimit: false },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      code: 'idempotency_legacy_unverifiable',
+      error: 'Actualiza el estado de la operación antes de volver a intentarlo.',
+      requestId: 'request-1',
+    });
+  });
+
   it.each(['Auth session missing!', 'JWT has expired', 'JWT expired', 'Invalid JWT'])(
     'returns an authentication error for %s without invoking the mutation',
     async (message) => {

@@ -104,6 +104,7 @@ export async function persistCachedHistory(
   userId: string,
   scope: string,
   state: HistorySyncState,
+  options: { readonly assertCurrent?: () => void } = {},
 ): Promise<HistoryCacheReceipt> {
   const generation = randomUUID();
   const payload = JSON.stringify({ ...state, cacheGeneration: generation });
@@ -111,6 +112,7 @@ export async function persistCachedHistory(
     throw new Error('Cannot persist an invalid history sync state.');
   }
   const database = await getDatabase();
+  options.assertCurrent?.();
   // One SQLite statement commits historical rows and their cursor together.
   // Any failure propagates so a retry starts from the last durable cursor.
   await database.runAsync(

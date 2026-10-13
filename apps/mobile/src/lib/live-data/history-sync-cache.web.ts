@@ -50,12 +50,14 @@ export async function persistCachedHistory(
   userId: string,
   scope: string,
   state: HistorySyncState,
+  options: { readonly assertCurrent?: () => void } = {},
 ): Promise<HistoryCacheReceipt> {
   const generation = randomUUID();
   const payload = JSON.stringify({ ...state, cacheGeneration: generation });
   if (!parseHistorySyncState(JSON.parse(payload))) {
     throw new Error('Cannot persist an invalid history sync state.');
   }
+  options.assertCurrent?.();
   historyByScopeAndUser.set(JSON.stringify([scope, userId]), payload);
   return historyCacheReceipt(userId, scope, generation, state);
 }

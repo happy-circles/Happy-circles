@@ -229,7 +229,7 @@ describe('snapshot fetch pipeline with durable incremental history', () => {
           backendScope: PRODUCTION,
           outcomes: [{ requestId: id, status: 'accepted' }],
         },
-        } as unknown as AppSnapshot;
+      } as unknown as AppSnapshot;
       (source === 'memory' ? pipeline.memory : pipeline.derived).set('account-a', overlay);
       const incoming = response(1, [], { reset: true });
       pipeline.invoke.mockResolvedValueOnce({
@@ -292,7 +292,9 @@ describe('snapshot fetch pipeline with durable incremental history', () => {
       'avatar-two': 'https://storage.example/two',
     };
     expect(pipeline.hydrateAvatarUrls).toHaveBeenCalledWith(avatarUrls);
-    expect(pipeline.persistSnapshot).toHaveBeenCalledWith('account-a', result, avatarUrls);
+    expect(pipeline.persistSnapshot).toHaveBeenCalledWith('account-a', result, avatarUrls, {
+      assertCurrent: expect.any(Function) as () => void,
+    });
     expect(pipeline.invoke.mock.calls).toEqual([
       [
         'get-app-snapshot',

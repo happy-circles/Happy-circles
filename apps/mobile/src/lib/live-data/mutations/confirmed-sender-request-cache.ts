@@ -1,4 +1,9 @@
 import { queryClient } from '@/lib/query-client';
+import {
+  assertSessionDataGeneration,
+  captureSessionDataGeneration,
+  isSessionDataGenerationCurrent,
+} from '@/lib/session-data-boundary';
 
 import { appConfig } from '../../config';
 import { buildLiveSnapshot } from '../build-snapshot';
@@ -36,9 +41,10 @@ import {
   suppressConfirmedRequestOutcomes,
 } from '../confirmed-request-outcomes';
 
-async function sameActor(userId: string): Promise<boolean> {
+async function sameActor(userId: string, generation: number): Promise<boolean> {
+  if (!isSessionDataGenerationCurrent(generation)) return false;
   const { data } = await assertSupabaseClient().auth.getSession();
-  return data.session?.user.id === userId;
+  return isSessionDataGenerationCurrent(generation) && data.session?.user.id === userId;
 }
 
 function warn(error: unknown) {
@@ -52,14 +58,17 @@ function warn(error: unknown) {
 export async function confirmSenderRequestInCache(
   userId: string,
   response: unknown,
+  generation = captureSessionDataGeneration(),
 ): Promise<void> {
+  const assertCurrent = () => assertSessionDataGeneration(generation);
   try {
     const rows = authoritativeRows(response, userId);
     const outcomes = mergeConfirmedRequestOutcomes(
       readConfirmedRequestOutcomes(response),
       outcomesForConfirmedRows(rows),
     );
-    if ((rows.length === 0 && outcomes.length === 0) || !(await sameActor(userId))) return;
+    if ((rows.length === 0 && outcomes.length === 0) || !(await sameActor(userId, generation)))
+      return;
     const snapshotKey = [APP_SNAPSHOT_QUERY_KEY, userId] as const;
     const overviewKey = [PEOPLE_OVERVIEW_QUERY_KEY, userId] as const;
     // Abort readers before waiting for their lock, so an older fetch cannot
@@ -69,11 +78,12 @@ export async function confirmSenderRequestInCache(
       queryClient.cancelQueries({ queryKey: overviewKey, exact: true }),
     ]).catch(warn);
     await withHistorySyncLock(userId, appConfig.supabaseUrl, async () => {
-      if (!(await sameActor(userId))) return;
+      if (!(await sameActor(userId, generation))) return;
       const loaded = await readCachedAppSnapshot(userId).catch((error: unknown) => {
         warn(error);
         return null;
       });
+      assertCurrent();
       const cached =
         loaded && cachedSnapshotMatchesBackend(loaded.snapshot, appConfig.supabaseUrl)
           ? loaded
@@ -100,6 +110,7 @@ export async function confirmSenderRequestInCache(
           return null;
         },
       );
+      assertCurrent();
       const combinedOutcomes = mergeConfirmedRequestOutcomes(
         state?.confirmedRequestOutcomes ?? [],
         [cached?.snapshot.confirmedRequestOutcomes, current?.confirmedRequestOutcomes].flatMap(
@@ -139,12 +150,15 @@ export async function confirmSenderRequestInCache(
       let receipt: HistoryCacheReceipt | undefined;
       if (next) {
         try {
-          receipt = await persistCachedHistory(userId, appConfig.supabaseUrl, next);
+          receipt = await persistCachedHistory(userId, appConfig.supabaseUrl, next, {
+            assertCurrent,
+          });
           rawDurable = Boolean(next.liveRows);
         } catch (error) {
           warn(error);
         }
       }
+      assertCurrent();
       let snapshot: AppSnapshot | undefined;
       let avatars = next?.liveRows?.avatarSignedUrlsByPath ?? {};
       let fetchedAt = next?.liveRows?.fetchedAt ?? new Date().toISOString();
@@ -189,24 +203,28 @@ export async function confirmSenderRequestInCache(
             },
       };
       const overview: PeopleOverview = buildPeopleOverviewFromAppSnapshot(snapshot, fetchedAt);
-      if (!(await sameActor(userId))) return;
+      if (!(await sameActor(userId, generation))) return;
       queryClient.setQueryData(snapshotKey, snapshot);
       queryClient.setQueryData(overviewKey, overview);
       const confirmedSnapshot = snapshot;
       const persistDerived = async () => {
+        assertCurrent();
         await Promise.all([
-          persistCachedAppSnapshot(userId, confirmedSnapshot, avatars).catch(warn),
-          persistCachedPeopleOverview(userId, overview, avatars).catch(warn),
+          persistCachedAppSnapshot(userId, confirmedSnapshot, avatars, { assertCurrent }).catch(
+            warn,
+          ),
+          persistCachedPeopleOverview(userId, overview, avatars, { assertCurrent }).catch(warn),
         ]);
       };
       if (rawDurable && receipt?.generation) {
-        const generation = receipt.generation;
+        const receiptGeneration = receipt.generation;
         // Enqueue while still holding the journal lock so later commands and
         // refreshes retain order. The action can finish before redundant writes.
         void withHistorySyncLock(userId, appConfig.supabaseUrl, async () => {
-          if (!(await sameActor(userId))) return;
+          if (!(await sameActor(userId, generation))) return;
           const latest = await readCachedHistoryReceipt(userId, appConfig.supabaseUrl);
-          if (latest?.generation !== generation) return;
+          assertCurrent();
+          if (latest?.generation !== receiptGeneration) return;
           const memory = queryClient.getQueryData<AppSnapshot>(snapshotKey);
           if (memory && memory !== confirmedSnapshot) return;
           await persistDerived();

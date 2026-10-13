@@ -104,7 +104,7 @@ Rutas landing en `apps/landing/app`:
 - El repo versiona 40 Edge Functions y la produccion verificada el 2026-08-14
   reporta las 40 como `ACTIVE`.
 - Las Edge Functions se agrupan por proposito:
-  - Solicitudes financieras: crear, aceptar, rechazar, enmendar, revertir.
+  - Solicitudes financieras: crear, aceptar, rechazar, enmendar, corregir y cancelar pendientes. La creación, aceptación y contrapropuesta de reversos están bloqueadas en el servidor.
   - Invitaciones y personas: friendship invites, account invites, previews,
     activacion, resolucion de contactos.
   - Settlements: proponer, aprobar, rechazar, ejecutar, graph worker.

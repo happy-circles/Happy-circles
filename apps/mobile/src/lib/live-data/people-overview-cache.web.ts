@@ -7,10 +7,27 @@ export interface CachedPeopleOverview {
   readonly updatedAt: string;
 }
 
-export async function readCachedPeopleOverview(): Promise<CachedPeopleOverview | null> {
+export interface PeopleOverviewCacheWriteOptions {
+  readonly backendScope?: string;
+  readonly assertCurrent?: () => void;
+}
+
+export async function readCachedPeopleOverview(
+  _userId: string,
+  _backendScope?: string,
+): Promise<CachedPeopleOverview | null> {
+  void _userId;
+  void _backendScope;
   return null;
 }
 
-export async function persistCachedPeopleOverview(): Promise<void> {
+export async function persistCachedPeopleOverview(
+  _userId: string,
+  _overview: PeopleOverview,
+  _avatarSignedUrlsByPath: SignedAvatarUrlRecord = {},
+  options: PeopleOverviewCacheWriteOptions = {},
+): Promise<void> {
+  void _avatarSignedUrlsByPath;
+  options.assertCurrent?.();
   return undefined;
 }

@@ -16,6 +16,11 @@ con el monto, concepto y categoría corregidos. La versión anterior permanece
 en la trayectoria con estado `amended`. No se modifica un hecho aceptado ni
 se elimina su historial.
 
+Desde el 13 de octubre de 2026, la creación, aceptación y contrapropuesta de
+reversos están bloqueadas en producción. Los registros históricos conservan
+su representación; cancelar o rechazar un reverso pendiente antiguo sigue
+permitido. Ver el [registro de verificación](verification/transaction-reversal-retirement-20261013.json).
+
 Cancelar cambia la propuesta pendiente a `canceled`. Desaparece de pendientes
 para ambas personas y conserva la cancelación en sus historiales. Ninguna
 de estas dos acciones cambia los saldos ni escribe un movimiento en el ledger.

@@ -109,7 +109,14 @@ export async function readCachedAppSnapshot(): Promise<CachedAppSnapshot | null>
   return null;
 }
 
-export async function persistCachedAppSnapshot(): Promise<void> {
+export async function persistCachedAppSnapshot(
+  _userId: string,
+  _snapshot: AppSnapshot,
+  _avatarSignedUrlsByPath: SignedAvatarUrlRecord = {},
+  options: { readonly assertCurrent?: () => void } = {},
+): Promise<void> {
+  void _avatarSignedUrlsByPath;
+  options.assertCurrent?.();
   return undefined;
 }
 

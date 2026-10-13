@@ -5,8 +5,9 @@ import {
   cycleSettlementExecutionSchema,
 } from '@happy-circles/shared';
 
+import { runDurableFinancialAction } from '../../durable-financial-action';
 import { assertSupabaseClient, invalidateAppSnapshot, invokeSupabaseFunction } from '../client';
-import { parseEdgePayload, withIdempotencyKey } from './edge-action';
+import { parseEdgePayload } from './edge-action';
 import { recordSettlementApproved, recordSettlementExecuted } from './product-events';
 import { useSensitiveMutationGuard } from './sensitive-action-guard';
 
@@ -63,29 +64,44 @@ export function useClaimHappyCircleTreasureMutation() {
 
       return parseClaimHappyCircleTreasureResult(data);
     },
-    onSuccess: invalidateAppSnapshot,
+    onSuccess: () => {
+      void invalidateAppSnapshot().catch(() => undefined);
+    },
   });
+}
+
+function sendSettlementCommand(
+  expectedUserId: string,
+  name: string,
+  proposalId: string,
+  prefix: string,
+  schema: typeof cycleSettlementDecisionSchema | typeof cycleSettlementExecutionSchema,
+) {
+  const intent = schema.omit({ idempotencyKey: true }).parse({ proposalId });
+  return runDurableFinancialAction(expectedUserId, name, intent, prefix, (idempotencyKey) =>
+    invokeSupabaseFunction(name, parseEdgePayload(schema, { ...intent, idempotencyKey }), {
+      expectedUserId,
+    }),
+  );
 }
 
 export function useApproveSettlementMutation() {
   const guardSensitiveAction = useSensitiveMutationGuard();
 
   return useMutation({
-    mutationFn: async (proposalId: string) => {
-      const payload = parseEdgePayload(
-        cycleSettlementDecisionSchema,
-        withIdempotencyKey('approve_settlement', {
+    mutationFn: (proposalId: string) =>
+      guardSensitiveAction('aprobar el Happy Circle', (expectedUserId) =>
+        sendSettlementCommand(
+          expectedUserId,
+          'approve-cycle-settlement',
           proposalId,
-        }),
-      );
-
-      return guardSensitiveAction('aprobar el Happy Circle', (expectedUserId) =>
-        invokeSupabaseFunction('approve-cycle-settlement', payload, { expectedUserId }),
-      );
-    },
-    onSuccess: async () => {
+          'approve_settlement',
+          cycleSettlementDecisionSchema,
+        ),
+      ),
+    onSuccess: () => {
       recordSettlementApproved();
-      await invalidateAppSnapshot();
+      void invalidateAppSnapshot().catch(() => undefined);
     },
   });
 }
@@ -94,19 +110,19 @@ export function useRejectSettlementMutation() {
   const guardSensitiveAction = useSensitiveMutationGuard();
 
   return useMutation({
-    mutationFn: async (proposalId: string) => {
-      const payload = parseEdgePayload(
-        cycleSettlementDecisionSchema,
-        withIdempotencyKey('reject_settlement', {
+    mutationFn: (proposalId: string) =>
+      guardSensitiveAction('no aprobar el Happy Circle', (expectedUserId) =>
+        sendSettlementCommand(
+          expectedUserId,
+          'reject-cycle-settlement',
           proposalId,
-        }),
-      );
-
-      return guardSensitiveAction('no aprobar el Happy Circle', (expectedUserId) =>
-        invokeSupabaseFunction('reject-cycle-settlement', payload, { expectedUserId }),
-      );
+          'reject_settlement',
+          cycleSettlementDecisionSchema,
+        ),
+      ),
+    onSuccess: () => {
+      void invalidateAppSnapshot().catch(() => undefined);
     },
-    onSuccess: invalidateAppSnapshot,
   });
 }
 
@@ -114,21 +130,19 @@ export function useExecuteSettlementMutation() {
   const guardSensitiveAction = useSensitiveMutationGuard();
 
   return useMutation({
-    mutationFn: async (proposalId: string) => {
-      const payload = parseEdgePayload(
-        cycleSettlementExecutionSchema,
-        withIdempotencyKey('execute_settlement', {
+    mutationFn: (proposalId: string) =>
+      guardSensitiveAction('completar el Happy Circle', (expectedUserId) =>
+        sendSettlementCommand(
+          expectedUserId,
+          'execute-approved-cycle-settlement',
           proposalId,
-        }),
-      );
-
-      return guardSensitiveAction('completar el Happy Circle', (expectedUserId) =>
-        invokeSupabaseFunction('execute-approved-cycle-settlement', payload, { expectedUserId }),
-      );
-    },
-    onSuccess: async () => {
+          'execute_settlement',
+          cycleSettlementExecutionSchema,
+        ),
+      ),
+    onSuccess: () => {
       recordSettlementExecuted();
-      await invalidateAppSnapshot();
+      void invalidateAppSnapshot().catch(() => undefined);
     },
   });
 }

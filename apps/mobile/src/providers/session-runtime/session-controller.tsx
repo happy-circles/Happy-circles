@@ -25,6 +25,12 @@ import { readPendingInviteIntent } from '@/lib/invite-intent';
 import { removeStoredItem, setStoredItem } from '@/lib/storage';
 import { publicEdgeSupabase, supabase } from '@/lib/supabase';
 import {
+  captureSessionDataGeneration,
+  invalidateSessionData,
+  isSessionDataGenerationCurrent,
+  setSessionDataIdentity,
+} from '@/lib/session-data-boundary';
+import {
   createSupportId,
   readFunctionErrorDetails,
   reportClientErrorSafe,
@@ -198,6 +204,17 @@ export function useSessionController(): SessionContextValue {
 
   const adoptSession = useCallback(
     (nextSession: Session) => {
+      const generation = captureSessionDataGeneration();
+      setSessionDataIdentity(
+        readAuthSessionIdentity(nextSession) ?? {
+          userId: nextSession.user.id,
+          sessionId: nextSession.access_token,
+        },
+      );
+      if (!isSessionDataGenerationCurrent(generation)) {
+        accountLoadsInFlightRef.current.clear();
+        accountLoadIdRef.current += 1;
+      }
       if (sessionRef.current && sessionRef.current.user.id !== nextSession.user.id) {
         linkedMethodsRef.current = EMPTY_LINKED_METHODS;
         setLinkedMethods(EMPTY_LINKED_METHODS);
@@ -237,6 +254,8 @@ export function useSessionController(): SessionContextValue {
   }, []);
 
   const clearSignedInState = useCallback(() => {
+    if (!setSessionDataIdentity(null)) invalidateSessionData();
+    accountLoadsInFlightRef.current.clear();
     accountLoadIdRef.current += 1;
     sessionRef.current = null;
     authorizedDeviceSessionRef.current = false;
@@ -385,6 +404,9 @@ export function useSessionController(): SessionContextValue {
       setLinkedMethods(loadedAccountState.linkedMethods);
       setProfileCompletionState(loadedAccountState.profileCompletionState);
       setDeviceTrustState(loadedAccountState.deviceTrustState);
+      if (authorizedDeviceSessionRef.current && !loadedAccountState.isAuthorizedDeviceSession) {
+        invalidateSessionData();
+      }
       authorizedDeviceSessionRef.current = loadedAccountState.isAuthorizedDeviceSession;
       setIsAuthorizedDeviceSession(loadedAccountState.isAuthorizedDeviceSession);
       currentDeviceIdRef.current = loadedAccountState.currentDeviceId;
@@ -626,6 +648,8 @@ export function useSessionController(): SessionContextValue {
         return;
       }
 
+      adoptSession(nextSession);
+
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecoverySessionUserId(nextSession.user.id);
       } else if (
@@ -665,6 +689,7 @@ export function useSessionController(): SessionContextValue {
   }, [
     clearSignedInState,
     hydrated,
+    adoptSession,
     loadAccountStateSingleFlight,
     setPasswordRecoverySessionUserId,
     setSessionStatus,
@@ -1202,9 +1227,13 @@ export function useSessionController(): SessionContextValue {
   );
 
   const signOut = useCallback(async () => {
+    invalidateSessionData();
+    const generation = captureSessionDataGeneration();
     if (supabase) {
       await supabase.auth.signOut();
     }
+
+    if (sessionRef.current && !isSessionDataGenerationCurrent(generation)) return;
 
     clearSignedInState();
     setSessionStatus('signed_out');
@@ -1273,6 +1302,7 @@ export function useSessionController(): SessionContextValue {
         },
         onAuthorizationFailure: (code) => {
           if (!code) return;
+          invalidateSessionData();
           authorizedDeviceSessionRef.current = false;
           setIsAuthorizedDeviceSession(false);
           setStepUpFreshUntil(null);
@@ -1694,6 +1724,7 @@ export function useSessionController(): SessionContextValue {
         }
         if (!revokeResult.ok) return revokeResult.message;
         if (deviceId === originDeviceId) {
+          invalidateSessionData();
           authorizedDeviceSessionRef.current = false;
           setIsAuthorizedDeviceSession(false);
           setStepUpFreshUntil(null);

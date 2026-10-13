@@ -4,6 +4,10 @@ import { prefetchCriticalAvatarImages, scheduleDeferredAvatarPrefetch } from '..
 import { recordSnapshotNetworkResolved } from '../performance-metrics';
 import { appConfig } from '../config';
 import { reportAndCreateSupportError } from '../support-errors';
+import {
+  assertSessionDataGeneration,
+  captureSessionDataGeneration,
+} from '../session-data-boundary';
 import { buildPeopleOverviewFromAppSnapshot } from './build-people-overview';
 import { buildLiveSnapshot } from './build-snapshot';
 import { assertSupabaseClient, createSnapshotAbortSignal, invokeSupabaseFunction } from './client';
@@ -131,15 +135,21 @@ function hasUnobservedAcceptedProjection(
 async function fetchLiveSnapshot(
   currentUserId: string,
   requestSignal?: AbortSignal,
+  generation = captureSessionDataGeneration(),
 ): Promise<AppSnapshot> {
   return withHistorySyncLock(currentUserId, appConfig.supabaseUrl, () =>
-    fetchLiveSnapshotLocked(currentUserId, requestSignal),
+    fetchLiveSnapshotLocked(currentUserId, requestSignal, generation),
   );
 }
 
-async function assertCurrentActor(currentUserId: string, signal?: AbortSignal) {
-  if (signal?.aborted) throw new Error('Sincronización cancelada.');
+async function assertCurrentActor(
+  currentUserId: string,
+  signal: AbortSignal | undefined,
+  generation: number,
+) {
+  assertSessionDataGeneration(generation, signal);
   const { data } = await assertSupabaseClient().auth.getSession();
+  assertSessionDataGeneration(generation, signal);
   if (data.session?.user.id !== currentUserId)
     throw new Error('La sesión cambió. Vuelve a consultar el estado.');
 }
@@ -147,6 +157,7 @@ async function assertCurrentActor(currentUserId: string, signal?: AbortSignal) {
 async function fetchLiveSnapshotLocked(
   currentUserId: string,
   requestSignal?: AbortSignal,
+  generation = captureSessionDataGeneration(),
 ): Promise<AppSnapshot> {
   const fetchStartedAt = Date.now();
 
@@ -156,6 +167,7 @@ async function fetchLiveSnapshotLocked(
     const projectionFallbacks: { value: readonly AcceptedProjectionResponse[] } = { value: [] };
     const rows = await synchronizeHistorySnapshot({
       read: async () => {
+        await assertCurrentActor(currentUserId, requestSignal, generation);
         const state = (await readCachedHistory(currentUserId, scope)) ?? emptyHistorySyncState();
         const memory = queryClient.getQueryData<AppSnapshot>([
           APP_SNAPSHOT_QUERY_KEY,
@@ -174,7 +186,11 @@ async function fetchLiveSnapshotLocked(
         );
       },
       persist: async (state) => {
-        durableReceipt.value = await persistCachedHistory(currentUserId, scope, state);
+        await assertCurrentActor(currentUserId, requestSignal, generation);
+        durableReceipt.value = await persistCachedHistory(currentUserId, scope, state, {
+          assertCurrent: () => assertSessionDataGeneration(generation, requestSignal),
+        });
+        assertSessionDataGeneration(generation, requestSignal);
       },
       reconcile: (state) =>
         projectionFallbacks.value.reduce(
@@ -183,6 +199,7 @@ async function fetchLiveSnapshotLocked(
         ),
       signal: requestSignal,
       request: async (cursor) => {
+        assertSessionDataGeneration(generation, requestSignal);
         // Bound each page independently. A large first download can resume
         // from its last durable page without one global timeout discarding it.
         const snapshotAbort = createSnapshotAbortSignal(requestSignal);
@@ -202,7 +219,7 @@ async function fetchLiveSnapshotLocked(
       },
     });
 
-    await assertCurrentActor(currentUserId, requestSignal);
+    await assertCurrentActor(currentUserId, requestSignal, generation);
 
     hydrateSignedAvatarUrlCache(rows.avatarSignedUrlsByPath);
 
@@ -212,13 +229,13 @@ async function fetchLiveSnapshotLocked(
     };
     void prefetchCriticalAvatarImages(snapshot).catch(() => undefined);
     scheduleDeferredAvatarPrefetch(snapshot);
-    await assertCurrentActor(currentUserId, requestSignal);
+    await assertCurrentActor(currentUserId, requestSignal, generation);
 
     // Queue before releasing the raw journal lock, but let the screen receive
     // its confirmed snapshot without waiting for these rebuildable copies.
     const receipt = durableReceipt.value;
     void withHistorySyncLock(currentUserId, scope, async () => {
-      await assertCurrentActor(currentUserId);
+      await assertCurrentActor(currentUserId, requestSignal, generation);
       const currentReceipt = await readCachedHistoryReceipt(currentUserId, scope);
       if (receipt?.generation && currentReceipt?.generation !== receipt.generation) return;
       const memory = queryClient.getQueryData<AppSnapshot>([APP_SNAPSHOT_QUERY_KEY, currentUserId]);
@@ -233,19 +250,22 @@ async function fetchLiveSnapshotLocked(
         return;
       if (hasUnobservedAcceptedProjection(cached?.snapshot, rows, currentUserId, scope)) return;
       const peopleOverview = buildPeopleOverviewFromAppSnapshot(snapshot, rows.fetchedAt);
+      await assertCurrentActor(currentUserId, requestSignal, generation);
       await persistCachedPeopleOverview(
         currentUserId,
         peopleOverview,
         rows.avatarSignedUrlsByPath,
+        { assertCurrent: () => assertSessionDataGeneration(generation, requestSignal) },
       ).catch((cacheError: unknown) => {
         console.warn(
           'Failed to persist people overview from app snapshot',
           cacheError instanceof Error ? cacheError.message : String(cacheError),
         );
       });
-      await persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath).catch(
-        () => undefined,
-      );
+      await assertCurrentActor(currentUserId, requestSignal, generation);
+      await persistCachedAppSnapshot(currentUserId, snapshot, rows.avatarSignedUrlsByPath, {
+        assertCurrent: () => assertSessionDataGeneration(generation, requestSignal),
+      }).catch(() => undefined);
     }).catch(() => undefined);
     recordSnapshotNetworkResolved({
       durationMs: Date.now() - fetchStartedAt,
@@ -253,6 +273,7 @@ async function fetchLiveSnapshotLocked(
       status: 'success',
     });
 
+    assertSessionDataGeneration(generation, requestSignal);
     return snapshot;
   } catch (error) {
     recordSnapshotNetworkResolved({

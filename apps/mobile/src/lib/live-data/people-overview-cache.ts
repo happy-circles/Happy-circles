@@ -2,9 +2,15 @@ import * as SQLite from 'expo-sqlite';
 
 import type { SignedAvatarUrlRecord } from '../avatar';
 import type { PeopleOverview } from './types';
+import { appConfig } from '../config';
 
 const CACHE_DB_NAME = 'happy-circles-app-cache.db';
-const PEOPLE_OVERVIEW_CACHE_SCHEMA_VERSION = 1;
+const PEOPLE_OVERVIEW_CACHE_SCHEMA_VERSION = 2;
+
+export interface PeopleOverviewCacheWriteOptions {
+  readonly backendScope?: string;
+  readonly assertCurrent?: () => void;
+}
 
 interface CachedPeopleOverviewRow {
   readonly avatar_signed_urls_json: string | null;
@@ -28,12 +34,14 @@ function getDatabase() {
   if (!databasePromise) {
     databasePromise = SQLite.openDatabaseAsync(CACHE_DB_NAME).then(async (database) => {
       await database.execAsync(`
-        CREATE TABLE IF NOT EXISTS people_overview_cache (
-          user_id TEXT PRIMARY KEY NOT NULL,
+        CREATE TABLE IF NOT EXISTS people_overview_cache_v2 (
+          backend_scope TEXT NOT NULL,
+          user_id TEXT NOT NULL,
           schema_version INTEGER NOT NULL,
           overview_json TEXT NOT NULL,
           avatar_signed_urls_json TEXT NOT NULL DEFAULT '{}',
-          updated_at TEXT NOT NULL
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (backend_scope, user_id)
         );
       `);
 
@@ -97,15 +105,17 @@ function parseAvatarUrlsPayload(payload: string | null): SignedAvatarUrlRecord {
 
 export async function readCachedPeopleOverview(
   userId: string,
+  backendScope: string = appConfig.supabaseUrl,
 ): Promise<CachedPeopleOverview | null> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<CachedPeopleOverviewRow>(
     `
       SELECT overview_json, avatar_signed_urls_json, updated_at
-      FROM people_overview_cache
-      WHERE user_id = ? AND schema_version = ?
+      FROM people_overview_cache_v2
+      WHERE backend_scope = ? AND user_id = ? AND schema_version = ?
       LIMIT 1
     `,
+    backendScope,
     userId,
     PEOPLE_OVERVIEW_CACHE_SCHEMA_VERSION,
   );
@@ -116,7 +126,11 @@ export async function readCachedPeopleOverview(
 
   const overview = parseOverviewPayload(row.overview_json);
   if (!overview) {
-    await database.runAsync('DELETE FROM people_overview_cache WHERE user_id = ?', userId);
+    await database.runAsync(
+      'DELETE FROM people_overview_cache_v2 WHERE backend_scope = ? AND user_id = ?',
+      backendScope,
+      userId,
+    );
     return null;
   }
 
@@ -131,26 +145,30 @@ export async function persistCachedPeopleOverview(
   userId: string,
   overview: PeopleOverview,
   avatarSignedUrlsByPath: SignedAvatarUrlRecord = {},
+  options: PeopleOverviewCacheWriteOptions = {},
 ): Promise<void> {
   const database = await getDatabase();
+  options.assertCurrent?.();
   const updatedAt = overview.fetchedAt || new Date().toISOString();
 
   await database.runAsync(
     `
-      INSERT INTO people_overview_cache (
+      INSERT INTO people_overview_cache_v2 (
+        backend_scope,
         user_id,
         schema_version,
         overview_json,
         avatar_signed_urls_json,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(backend_scope, user_id) DO UPDATE SET
         schema_version = excluded.schema_version,
         overview_json = excluded.overview_json,
         avatar_signed_urls_json = excluded.avatar_signed_urls_json,
         updated_at = excluded.updated_at
     `,
+    options.backendScope ?? appConfig.supabaseUrl,
     userId,
     PEOPLE_OVERVIEW_CACHE_SCHEMA_VERSION,
     JSON.stringify(overview),

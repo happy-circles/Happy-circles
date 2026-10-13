@@ -10,7 +10,11 @@ import {
 } from '@happy-circles/shared';
 
 import { DEFAULT_TRANSACTION_CATEGORY } from '../../transaction-categories';
-import { RetriableActionRegistry } from '../../retriable-action';
+import { runDurableFinancialAction } from '../../durable-financial-action';
+import {
+  captureSessionDataGeneration,
+  isSessionDataGenerationCurrent,
+} from '../../session-data-boundary';
 import { invalidateAppSnapshot, invokeSupabaseFunction } from '../client';
 import type { CreateRequestInput } from '../types';
 import { parseEdgePayload } from './edge-action';
@@ -30,9 +34,6 @@ interface FinancialRequestMutationOptions {
 interface ConfirmationRecovery {
   readonly forceConfirmation?: 'device' | 'sensitive';
 }
-
-const senderRequestIntentions = new RetriableActionRegistry();
-const creationRequestIntentions = new RetriableActionRegistry();
 
 interface SenderRequestInput extends ConfirmationRecovery {
   readonly requestId: string;
@@ -66,16 +67,31 @@ async function sendFinancialRequestCommand(
     | typeof requestDecisionSchema
     | typeof amendFinancialRequestSchema,
   keyPrefix = name,
+  generation = captureSessionDataGeneration(),
 ): Promise<unknown> {
-  const signature = JSON.stringify([expectedUserId, name, intent]);
   try {
-    return await senderRequestIntentions.run(signature, keyPrefix, async (idempotencyKey) => {
-      const payload = parseEdgePayload(schema, { ...intent, idempotencyKey });
-      const response = await invokeSupabaseFunction(name, payload, { expectedUserId });
-      // A committed command remains successful even if the next network refresh fails.
-      await confirmSenderRequestInCache(expectedUserId, response).catch(() => undefined);
-      return response;
-    });
+    const normalizedIntent: Record<string, unknown> = {
+      ...parseEdgePayload(schema, { ...intent, idempotencyKey: 'intent_validation' }),
+    };
+    delete normalizedIntent.idempotencyKey;
+    return await runDurableFinancialAction(
+      expectedUserId,
+      name,
+      normalizedIntent,
+      keyPrefix,
+      async (idempotencyKey) => {
+        const payload = parseEdgePayload(schema, { ...normalizedIntent, idempotencyKey });
+        const response = await invokeSupabaseFunction(name, payload, { expectedUserId });
+        // A committed command remains successful even if the next network refresh fails.
+        if (isSessionDataGenerationCurrent(generation)) {
+          await confirmSenderRequestInCache(expectedUserId, response, generation).catch(
+            () => undefined,
+          );
+        }
+        return response;
+      },
+      generation,
+    );
   } catch (error) {
     if (isFinancialRequestConflict(error)) {
       void invalidateAppSnapshot().catch(() => undefined);
@@ -91,6 +107,7 @@ export function useCorrectFinancialRequestMutation(options: FinancialRequestMuta
       guardSensitiveAction(
         'corregir la solicitud',
         (expectedUserId) => {
+          const generation = captureSessionDataGeneration();
           const sendRequest = () =>
             sendFinancialRequestCommand(
               expectedUserId,
@@ -105,6 +122,8 @@ export function useCorrectFinancialRequestMutation(options: FinancialRequestMuta
                   : { expectedVersion: input.expectedVersion }),
               },
               correctFinancialRequestSchema,
+              'correct-financial-request',
+              generation,
             );
           return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
         },
@@ -149,7 +168,7 @@ export function useCreateRequestMutation(options: FinancialRequestMutationOption
     mutationFn: async (input: CreateRequestInput & ConfirmationRecovery) => {
       const category = input.category ?? DEFAULT_TRANSACTION_CATEGORY;
       recordFinancialRequestStarted(category);
-      const intent = {
+      const intent = createBalanceRequestSchema.omit({ idempotencyKey: true }).parse({
         responderUserId: input.responderUserId,
         debtorUserId: input.debtorUserId,
         creditorUserId: input.creditorUserId,
@@ -157,15 +176,17 @@ export function useCreateRequestMutation(options: FinancialRequestMutationOption
         description: input.description,
         category,
         requestKind: 'balance_increase',
-      };
+      });
 
       return guardSensitiveAction(
         'crear el movimiento',
         (expectedUserId) => {
-          const signature = JSON.stringify([expectedUserId, 'create-balance-request', intent]);
+          const generation = captureSessionDataGeneration();
           const sendRequest = () =>
-            creationRequestIntentions.run(
-              signature,
+            runDurableFinancialAction(
+              expectedUserId,
+              'create-balance-request',
+              intent,
               'mobile_balance_increase',
               async (idempotencyKey) => {
                 const payload = parseEdgePayload(createBalanceRequestSchema, {
@@ -175,9 +196,12 @@ export function useCreateRequestMutation(options: FinancialRequestMutationOption
                 const response = await invokeSupabaseFunction('create-balance-request', payload, {
                   expectedUserId,
                 });
-                confirmCreatedRequestInCache(expectedUserId, input, response);
+                if (isSessionDataGenerationCurrent(generation)) {
+                  confirmCreatedRequestInCache(expectedUserId, input, response);
+                }
                 return response;
               },
+              generation,
             );
           return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
         },
@@ -250,6 +274,7 @@ export function useAmendFinancialRequestMutation(options: FinancialRequestMutati
       return guardSensitiveAction(
         'proponer un nuevo monto',
         (expectedUserId) => {
+          const generation = captureSessionDataGeneration();
           const sendRequest = () =>
             sendFinancialRequestCommand(
               expectedUserId,
@@ -262,6 +287,7 @@ export function useAmendFinancialRequestMutation(options: FinancialRequestMutati
               },
               amendFinancialRequestSchema,
               'amend_request',
+              generation,
             );
           return options.runRequest ? options.runRequest(sendRequest) : sendRequest();
         },

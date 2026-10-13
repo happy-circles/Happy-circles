@@ -65,6 +65,7 @@ vi.mock('expo-crypto', () => ({
 }));
 
 import { confirmSenderRequestInCache as confirmRequest } from './confirmed-sender-request-cache';
+import { captureSessionDataGeneration, invalidateSessionData } from '@/lib/session-data-boundary';
 import { withHistorySyncLock } from '../history-sync-cache';
 import { buildLiveSnapshot } from '../build-snapshot';
 import { emptyHistorySyncState, mergeHistoryWithLiveRows } from '../history-sync';
@@ -351,6 +352,33 @@ beforeEach(() => {
 });
 
 describe('server-confirmed sender request cache', () => {
+  it('discards a confirmed response from an earlier session before touching any cache', async () => {
+    const generation = captureSessionDataGeneration();
+    invalidateSessionData();
+    await confirmRequest(ACTOR, acceptedResponse(), generation);
+    expect(cache.cancelQueries).not.toHaveBeenCalled();
+    expect(cache.persistHistory).not.toHaveBeenCalled();
+    expect(cache.setQueryData).not.toHaveBeenCalled();
+  });
+
+  it('discards an acknowledgement after a session boundary during a delayed cache read', async () => {
+    const pause = deferred();
+    const started = deferred();
+    cache.readSnapshot.mockImplementationOnce(async () => {
+      started.resolve();
+      await pause.promise;
+      return { snapshot: cache.disk.get(ACTOR), avatarSignedUrlsByPath: {} };
+    });
+    const pending = confirmRequest(ACTOR, acceptedResponse());
+    await started.promise;
+    invalidateSessionData();
+    pause.resolve();
+    await pending;
+    expect(cache.persistHistory).not.toHaveBeenCalled();
+    expect(cache.persistSnapshot).not.toHaveBeenCalled();
+    expect(cache.setQueryData).not.toHaveBeenCalled();
+  });
+
   it('recovers accepted ledger and balance after raw write failure from durable derived projection, without duplicate replay or reset loss', async () => {
     seedAcceptedPending();
     const oldRaw = cache.raw!;

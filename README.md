@@ -36,7 +36,8 @@ The mobile app is backed by Supabase Auth, Postgres, Row Level Security, Storage
 - The current user can create a balance-increase request with a counterparty, direction, amount, description, and transaction category.
 - The responder can accept, reject, or amend the request.
 - Accepted requests create immutable ledger transactions and entries.
-- Transaction reversals are represented as forward domain actions, not destructive edits.
+- Transaction reversal commands are disabled on the server. Historical reversal records remain readable; pending balance requests can still be corrected, amended, rejected, or canceled.
+- Financial retries persist their account-scoped keys across restarts; the server binds each key to its original payload. See [financial integrity](docs/financial-integrity-release-20261013.md) for session isolation, rollout and verification limits.
 
 ### Ledger and Balance Projection
 
