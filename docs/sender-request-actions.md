@@ -1,7 +1,8 @@
 # Corregir y cancelar solicitudes pendientes enviadas
 
-Preparación: 12 de octubre de 2026. Este cambio se implementa y verifica en
-el repositorio. No se despliega a Supabase ni se publica por OTA en esta fase.
+Implementación y entrega: 12 de octubre de 2026. Backend y OTA de producción
+para Android e iOS publicados. Ver el
+[registro de entrega](sender-request-release-2026-10-12.md).
 
 ## Comportamiento
 
@@ -166,6 +167,8 @@ nativa. Por tanto, esta implementación no requiere otro envío a las tiendas.
    [el runbook existente](eas-update-runbook.md). Conservar los IDs y comprobar
    manifiestos y recepción por plataforma.
 
-No se desplegó ninguna migración o función a un proyecto remoto ni se publicó
-una OTA nueva durante esta fase. Las pruebas locales no acreditan recepción
-en dispositivos.
+La migración y las seis funciones quedaron desplegadas en producción. Las OTA
+de Android e iOS se verificaron contra sus manifiestos y bundles servidos; el
+clon Android recibió y abrió la actualización online y offline. El registro
+de entrega conserva IDs y distingue esta prueba de una sesión autenticada o
+de una prueba en iPhone físico.

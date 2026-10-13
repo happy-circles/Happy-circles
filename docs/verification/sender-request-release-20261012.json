@@ -1,0 +1,156 @@
+{
+  "releasedSource": "c04710bb91641a12333b12f9667ba090d199bb40",
+  "localReleaseDate": "2026-10-12",
+  "recordedAt": "2026-10-13T01:15:39.131Z",
+  "ci": {
+    "id": 38297014112,
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/38297014112",
+    "attempt": 1
+  },
+  "migration": {
+    "version": "20261012172020",
+    "sha256": "63e472d87fb5dceb319b5a9e213668f4bf4ddbea6dedbc01ffb489616986f0d5",
+    "committed": true,
+    "registryMatchesSource": true,
+    "migrationCount": 95
+  },
+  "functions": [
+    {
+      "slug": "correct-financial-request",
+      "version": 1,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    },
+    {
+      "slug": "cancel-financial-request",
+      "version": 1,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    },
+    {
+      "slug": "get-app-snapshot",
+      "version": 12,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    },
+    {
+      "slug": "accept-financial-request",
+      "version": 18,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    },
+    {
+      "slug": "reject-financial-request",
+      "version": 15,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    },
+    {
+      "slug": "amend-financial-request",
+      "version": 16,
+      "status": "ACTIVE",
+      "verify_jwt": true
+    }
+  ],
+  "backend": {
+    "verified": true,
+    "verifiedAt": "2026-10-13T01:10:42.550Z",
+    "sourceMirror": {
+      "history_extra": 0,
+      "financial_extra": 0,
+      "history_mismatches": 0,
+      "duplicate_revisions": 0,
+      "revision_mismatches": 0,
+      "financial_mismatches": 0,
+      "closed_history_copies": 362,
+      "closed_request_copies": 178
+    },
+    "journalPages": {
+      "owners_checked": 40,
+      "tail_mismatches": 0,
+      "bootstrap_mismatches": 0
+    },
+    "unauthenticated401": 6,
+    "newWarningOrErrorCount": 0,
+    "authenticatedSnapshotEndpointExercised": false
+  },
+  "updates": [
+    {
+      "channel": "production-smoke",
+      "platform": "android",
+      "updateId": "01a131b7-01fd-762a-8337-fc219b7eddf7",
+      "groupId": "6a1ee6ed-6e46-472e-9499-61709c1b55b2",
+      "source": "c04710bb91641a12333b12f9667ba090d199bb40",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "njQeGPYSyDRj2XwcYgH_JpC591EbFbdXHaEKcnm-Im4",
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "android",
+      "updateId": "01a132c9-a4f4-712f-9487-ceb0d08e0f26",
+      "groupId": "0f362d98-eaee-4388-a806-33a07a925ee1",
+      "source": "c04710bb91641a12333b12f9667ba090d199bb40",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "njQeGPYSyDRj2XwcYgH_JpC591EbFbdXHaEKcnm-Im4",
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "ios",
+      "updateId": "01a132cc-e28f-769f-ba9f-cdf4b1e67abe",
+      "groupId": "32da189b-f63e-47b4-9bf3-44e0ee9bb4a7",
+      "source": "c04710bb91641a12333b12f9667ba090d199bb40",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "4IxE6HTAkuJcKv5uPOoAjkMDiLhSJimHicfqvP-aaMM",
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    }
+  ],
+  "androidSmoke": {
+    "online": {
+      "idHex": "01A131B701FD762A8337FC219B7EDDF7",
+      "runtime": "hc-sdk54-20260928-1",
+      "status": 1,
+      "successfulLaunches": 1,
+      "failedLaunches": 0
+    },
+    "offline": {
+      "idHex": "01A131B701FD762A8337FC219B7EDDF7",
+      "runtime": "hc-sdk54-20260928-1",
+      "status": 1,
+      "successfulLaunches": 2,
+      "failedLaunches": 0
+    },
+    "launchAsset": {
+      "verifiedAt": "2026-10-12T20:07:34.488Z",
+      "updateId": "01a131b7-01fd-762a-8337-fc219b7eddf7",
+      "sourceCommit": "c04710bb91641a12333b12f9667ba090d199bb40",
+      "nativeLaunchAssetSha256Base64url": "njQeGPYSyDRj2XwcYgH_JpC591EbFbdXHaEKcnm-Im4",
+      "expectedCdnLaunchAssetSha256Base64url": "njQeGPYSyDRj2XwcYgH_JpC591EbFbdXHaEKcnm-Im4",
+      "exactBundleMatches": true,
+      "bundleBytes": 4525388,
+      "source": "Official Expo Updates received asset",
+      "usedMetro": false,
+      "credentialOrPersonalValuesOutput": false
+    },
+    "cleanup": {
+      "verifiedAt": "2026-10-13T01:08:33.1317989Z",
+      "allOriginalHashesMatch": true,
+      "taskOwnedProcessesRemaining": 0,
+      "taskOwnedHelpersRemaining": 0,
+      "connectedDeviceCount": 0,
+      "temporaryCloneTerminated": true,
+      "temporaryCertificateOverlaysDiscardedWithClone": true,
+      "hostTrustChanged": false,
+      "originalAvdDataReset": false,
+      "originalAvdDataWrittenBack": false
+    },
+    "authenticatedFeatureScreensTested": false
+  },
+  "physicalIphoneTested": false
+}
