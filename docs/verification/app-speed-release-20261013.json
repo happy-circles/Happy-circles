@@ -1,0 +1,181 @@
+{
+  "verifiedAt": "2026-10-13T17:52:56.421Z",
+  "sourceCommit": "7f84e0b955c17381beb6755d31810757f46230b8",
+  "implementationCommit": "207716ac5d654571a0be5f77498be1cc3a45c18e",
+  "ci": {
+    "runId": 38439882057,
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/38439882057",
+    "conclusion": "success"
+  },
+  "runtime": "hc-sdk54-20260928-1",
+  "nativeBuildCreated": false,
+  "migrationAppliedByThisRelease": false,
+  "retainedExistingReversalRejection": true,
+  "serverConfirmationRequired": true,
+  "checks": {
+    "unitTestFiles": 167,
+    "unitTests": 1364,
+    "lint": true,
+    "typecheck": true,
+    "sqlTestFiles": 34,
+    "realPostgresConcurrencyCases": 25,
+    "canonicalPostgresProjectionCases": 5,
+    "sqliteAtomicCommitAndRestart": true,
+    "ambiguousResponseReplay": true,
+    "perAccountBackendIsolation": true,
+    "pendingOutcomeSurvivesReset": true,
+    "acceptedLedgerAndBalanceSurviveRawCacheFailure": true,
+    "architecture": true,
+    "easPolicyTests": 7,
+    "securityCi": true,
+    "dependencyAudit": true,
+    "landingBuild": true,
+    "denoSourceCheck": true,
+    "denoVersion": "2.9.6"
+  },
+  "backend": {
+    "projectRef": "vknfhyfdtlvvfzptpqpj",
+    "functions": [
+      {
+        "slug": "accept-financial-request",
+        "version": 20,
+        "status": "ACTIVE",
+        "verifyJwt": true,
+        "artifactSha256": "3fb6809f4997437e289499c6b5e5fdf501a228d12f36976a3e91af46c9ca4685"
+      },
+      {
+        "slug": "reject-financial-request",
+        "version": 16,
+        "status": "ACTIVE",
+        "verifyJwt": true,
+        "artifactSha256": "56adee4b8d7812bc4cd53b3a7b953949e122a7cda76e05ad0f7a6051b5dee8c7"
+      },
+      {
+        "slug": "amend-financial-request",
+        "version": 18,
+        "status": "ACTIVE",
+        "verifyJwt": true,
+        "artifactSha256": "925ebda9d2f39e28b6d6e141da966535ffde98ce2680a6f0ebda859d259b28aa"
+      }
+    ],
+    "deployedSourceReadback": [
+      {
+        "slug": "accept-financial-request",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "expectedArtifactSha256": "3fb6809f4997437e289499c6b5e5fdf501a228d12f36976a3e91af46c9ca4685",
+        "downloadSha256": "798ed89365a21a282d42e4266202408a8532b308f006c453f492dd31739abf7e"
+      },
+      {
+        "slug": "reject-financial-request",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "expectedArtifactSha256": "56adee4b8d7812bc4cd53b3a7b953949e122a7cda76e05ad0f7a6051b5dee8c7",
+        "downloadSha256": "3397134b698b3c0d909043e8ee209854f9039a25cd6a59ea7c1e126420baf469"
+      },
+      {
+        "slug": "amend-financial-request",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "expectedArtifactSha256": "925ebda9d2f39e28b6d6e141da966535ffde98ce2680a6f0ebda859d259b28aa",
+        "downloadSha256": "3b631c734e168ef053164039b85da567df4749866d7e2ba27da2226fcf8a2db8"
+      }
+    ],
+    "journalCoherent": true,
+    "sourceAndMirrorMismatches": 0,
+    "bootstrapMismatches": 0,
+    "unchangedCursorTailMismatches": 0,
+    "sqlReadOnlyConfirmed": true,
+    "gatewayUnauthorizedProbes": 3,
+    "preflightHandlerBootProbes": 3,
+    "authenticatedFinancialCommandExercised": false
+  },
+  "updates": [
+    {
+      "channel": "production-smoke",
+      "platform": "android",
+      "updateId": "01a1365b-c730-7cda-a569-1d1c29466948",
+      "groupId": "c36a4002-81a0-44f5-81fe-9555697a2e0d",
+      "runtime": "hc-sdk54-20260928-1",
+      "exportedBundleHash": "JNMICjGBh4BRsm46PoHVB6eA7btku-UNJT7IiMjwQj4",
+      "servedBundleHash": "JNMICjGBh4BRsm46PoHVB6eA7btku-UNJT7IiMjwQj4",
+      "manifestStatus": 200,
+      "bundleStatus": 200,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "android",
+      "updateId": "01a13662-871b-7762-b933-53b06882fdd9",
+      "groupId": "cd80b5e8-696e-45c2-b521-1fed4cf0a4bd",
+      "runtime": "hc-sdk54-20260928-1",
+      "exportedBundleHash": "JNMICjGBh4BRsm46PoHVB6eA7btku-UNJT7IiMjwQj4",
+      "servedBundleHash": "JNMICjGBh4BRsm46PoHVB6eA7btku-UNJT7IiMjwQj4",
+      "manifestStatus": 200,
+      "bundleStatus": 200,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "ios",
+      "updateId": "01a13664-b7f9-7663-84da-3b946bfceecc",
+      "groupId": "0da880ba-e45b-4529-939f-6e36fa7327d4",
+      "runtime": "hc-sdk54-20260928-1",
+      "exportedBundleHash": "JncjulVwsOCevj5Lsy2Glwy3axERrevrKye1E_Hvvxs",
+      "servedBundleHash": "JncjulVwsOCevj5Lsy2Glwy3axERrevrKye1E_Hvvxs",
+      "manifestStatus": 200,
+      "bundleStatus": 200,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    }
+  ],
+  "androidSmokeAndProductionBundleIdentical": true,
+  "androidQa": {
+    "status": "PASS",
+    "sourceCommit": "7f84e0b955c17381beb6755d31810757f46230b8",
+    "updateId": "01a1365b-c730-7cda-a569-1d1c29466948",
+    "installedVersion": "1.0.3",
+    "installedVersionCode": 23,
+    "apkSha256": "B39AD0D0F3C7A35BEE001657DF6BCC73D271C21132A10801F1C6AEFD1A7C039F",
+    "exactNativeCdnBundleMatch": true,
+    "successfulLaunches": {
+      "online": 4,
+      "offline": 5
+    },
+    "failedLaunches": 0,
+    "nativeFatalErrors": 0,
+    "nativeTlsErrors": 0,
+    "offlineNetworkAgents": 0,
+    "publicUiReadiness": {
+      "baselineMs": [2805, 2988, 2661],
+      "afterMs": [1693, 1794, 1810],
+      "baselineMedianMs": 2805,
+      "afterMedianMs": 1794,
+      "method": "Native UiAutomation connected before launch; SystemClock.elapsedRealtime coldlaunch→known public marker and startup overlay absent;20ms polling",
+      "appliesOnlyToPublicWelcomeOnThisEmulator": true,
+      "authenticatedUiTimingMeasured": false,
+      "physicalIphoneMeasured": false
+    },
+    "temporaryCloneTerminated": true,
+    "originalAvdConfigAndUserdataHashesMatch": true,
+    "taskOwnedProcessesRemaining": 0,
+    "taskOwnedHelpersRemaining": 0
+  },
+  "cost": {
+    "plan": "Free",
+    "estimatedCents": 0,
+    "addonsCreated": false
+  },
+  "limitations": [
+    "Android native verification covers public welcome on an isolated compatible emulator; no authenticated native financial actions were exercised.",
+    "No physical iPhone was measured. iOS verification covers the exact source, runtime, manifest and served bundle.",
+    "The 34 SQL tests and 25 races used isolated PostgreSQL 17.11 at the unchanged 95-migration baseline; the already deployed reversal restriction is preserved separately.",
+    "Projection enrichment uses a two-second shared deadline. An unavailable projection keeps the committed server outcome and completes balance/history through background synchronization.",
+    "Management function-body downloads omit four leading bytes of raw ESModule source. Remaining bytes match the prepared artifact; preflight responses confirm runtime boot."
+  ]
+}

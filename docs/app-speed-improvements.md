@@ -36,3 +36,6 @@ omite si no coincide con la solicitud y se obtiene mediante esa sincronización.
 El cambio conserva el runtime `hc-sdk54-20260928-1`. La entrega requiere CI del
 mismo commit, despliegue de las tres respuestas Edge y OTA de Android e iOS;
 no necesita otro binario de tienda para instalaciones compatibles.
+
+La entrega verificada está registrada en
+[la publicación del 13 de octubre de 2026](app-speed-release-20261013.md).
