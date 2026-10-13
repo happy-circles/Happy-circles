@@ -1,0 +1,268 @@
+{
+  "verifiedAt": "2026-10-13T20:52:18.881Z",
+  "status": "published-and-verified",
+  "sourceCommit": "f9dc65a4271dadf57bd172470a3bfe7ac0ae2400",
+  "ci": {
+    "id": 38463880384,
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/38463880384",
+    "conclusion": "success"
+  },
+  "improvements": [
+    "Durable keys for nine financial actions, reserved before sending",
+    "Canonical payload enforcement under database row locks",
+    "Account and session generation boundaries for private reads and cache writes",
+    "Confirmed results survive local receipt or background refresh failures"
+  ],
+  "compatibility": {
+    "runtime": "hc-sdk54-20260928-1",
+    "newBuildRequired": false,
+    "nativeDependencyChanges": false,
+    "nativeConfigurationChanges": false
+  },
+  "tests": {
+    "vitestFiles": 176,
+    "vitestCases": 1428,
+    "sqlFiles": 36,
+    "migrations": 97,
+    "realPostgresConcurrentRaces": 4,
+    "wrapperRollbackCases": 4,
+    "lintPassed": true,
+    "typecheckPassed": true,
+    "dependencyAuditPassed": true,
+    "securityCheckPassed": true,
+    "easConfigurationPassed": true,
+    "landingBuildPassed": true,
+    "denoSourceTypecheckPassed": true,
+    "denoBundleRegistrationPassed": true
+  },
+  "backend": {
+    "projectRef": "vknfhyfdtlvvfzptpqpj",
+    "migrationVersion": "20261013200001",
+    "migrationSha256": "fd8414e443e5f8f7bb75b12bbe1b3319ecaa95bfd8e248e47711cd996641d717",
+    "functionDefinitionsVerified": 9,
+    "unchangedFinancialTables": [
+      "financial_requests",
+      "ledger_transactions",
+      "ledger_entries",
+      "idempotency_keys",
+      "settlement_proposals",
+      "settlement_proposal_participants",
+      "settlement_executions",
+      "audit_events"
+    ],
+    "financialRowsUnchangedByMigration": true,
+    "inventory": {
+      "requests": 119,
+      "ledger_transactions": 92,
+      "ledger_entries": 184,
+      "idempotency_keys": 528,
+      "reversals": 0,
+      "reverted_transactions": 0
+    },
+    "edgeFunctions": [
+      {
+        "slug": "create-balance-request",
+        "version": 15,
+        "verifyJwt": true,
+        "artifactSha256": "286572c16fbeaa145b61a6846adb1a8ad9eb7df2775c85ee89a56922028a8f92",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "accept-financial-request",
+        "version": 21,
+        "verifyJwt": true,
+        "artifactSha256": "8a7169ae7998887b4348901a87be4f25d3c5d8da0ff67b017cf3a98988da4a2e",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "reject-financial-request",
+        "version": 17,
+        "verifyJwt": true,
+        "artifactSha256": "3033a407edd3a80f6fb5822841c4f086b0041be0918e3e9c05b987da755239c9",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "amend-financial-request",
+        "version": 19,
+        "verifyJwt": true,
+        "artifactSha256": "5cdb54ed47855fbd09eebccb78d4aac2ae42d3e72b9c361698cc650b08fee359",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "approve-cycle-settlement",
+        "version": 17,
+        "verifyJwt": true,
+        "artifactSha256": "e2fcd15cdb88295655faedb4f282daa6b84d82f083abc252c82051903ed7f8f0",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "reject-cycle-settlement",
+        "version": 15,
+        "verifyJwt": true,
+        "artifactSha256": "10748eb7cdf81a0a8a28a9badae321fad8140d523e21fd2a50da2ae622c4b277",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      },
+      {
+        "slug": "execute-approved-cycle-settlement",
+        "version": 17,
+        "verifyJwt": true,
+        "artifactSha256": "472c3ac5a635a1d8dfaceec2be690998b9c476deeaccb6c70e156b8e44c02276",
+        "sourceMatchesPreparedArtifact": true,
+        "completeMatch": false,
+        "knownFourBytePrefixOmission": true,
+        "handlerBoot": true,
+        "unauthenticatedStatus": 401
+      }
+    ],
+    "advisories": {
+      "security": {
+        "before": 12,
+        "after": 12,
+        "added": []
+      },
+      "performance": {
+        "before": 34,
+        "after": 34,
+        "added": []
+      }
+    },
+    "fixturesCreated": false,
+    "authenticatedFinancialCommandsExecuted": false,
+    "reversalsRemainDisabled": true
+  },
+  "ota": [
+    {
+      "channel": "production-smoke",
+      "platform": "android",
+      "updateId": "01a13700-6564-7ccd-8d7d-7d74894aad0c",
+      "groupId": "b1e28b9d-e428-4906-9561-ae692fd2665a",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "IM6aaYsgtO_Z6bX8hi68pdUWkNM0wK3yzOmKttMdeGE",
+      "manifestStatus": 200,
+      "bundleStatus": 200
+    },
+    {
+      "channel": "production",
+      "platform": "android",
+      "updateId": "01a13706-2a49-7dd7-a43d-29ef45e46507",
+      "groupId": "c5d3fffc-e0f8-4d04-a4f3-1b1241a64145",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "IM6aaYsgtO_Z6bX8hi68pdUWkNM0wK3yzOmKttMdeGE",
+      "manifestStatus": 200,
+      "bundleStatus": 200
+    },
+    {
+      "channel": "production",
+      "platform": "ios",
+      "updateId": "01a13707-fd8a-76f7-97d8-947f3b54e065",
+      "groupId": "15b5fcf5-9902-4516-a7b8-4b19d2870882",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "dfu_j-wkB5DLzZ98IGnKEcPE2aK9jTGEO1KTbl0TFek",
+      "manifestStatus": 200,
+      "bundleStatus": 200
+    }
+  ],
+  "nativeAndroid": {
+    "status": "PASS",
+    "verifiedAt": "2026-10-13T20:46:32.734Z",
+    "sourceCommit": "f9dc65a4271dadf57bd172470a3bfe7ac0ae2400",
+    "platform": "android",
+    "channel": "production-smoke",
+    "runtime": "hc-sdk54-20260928-1",
+    "updateId": "01a13700-6564-7ccd-8d7d-7d74894aad0c",
+    "groupId": "b1e28b9d-e428-4906-9561-ae692fd2665a",
+    "installedVersion": "1.0.3",
+    "installedVersionCode": 23,
+    "apkSha256": "B39AD0D0F3C7A35BEE001657DF6BCC73D271C21132A10801F1C6AEFD1A7C039F",
+    "exactCdnBundleReceived": true,
+    "nativeLaunchAssetHash": "IM6aaYsgtO_Z6bX8hi68pdUWkNM0wK3yzOmKttMdeGE",
+    "successfulLaunches": {
+      "online": 1,
+      "offline": 2
+    },
+    "failedLaunches": 0,
+    "nativeFatalErrors": 0,
+    "nativeTlsErrors": 0,
+    "offlineNetworkAgents": 0,
+    "strictTlsHttpStatus": 200,
+    "usedMetro": false,
+    "hostTrustChanged": false,
+    "tlsBypass": false,
+    "temporaryTrustedWindowsCertificateOverlayDiscardedWithClone": true,
+    "temporaryCloneTerminated": true,
+    "originalAvdConfigAndUserdataHashesMatch": true,
+    "accountsChanged": false,
+    "newFinancialMovementsCreated": false,
+    "authenticatedNativeActionsQa": false,
+    "physicalIphoneQa": false,
+    "priorAttempt": "Initial temporary emulator exited with a QEMU thread hang; original data verified unchanged. A fresh isolated attempt passed.",
+    "evidence": [
+      {
+        "file": "artifact-verification.json",
+        "sha256": "287b31f4fc5250d8039dd98e2c4397b5957ef04501f5927b903eaeabfd684c16"
+      },
+      {
+        "file": "original-digests.json",
+        "sha256": "667b2ec7a29a70422d2d2e06205bcc31dfdeabd912f78c6854b6a7657cc142ec"
+      },
+      {
+        "file": "tls-after.json",
+        "sha256": "ec580ec4076fe69bbb1099a389157df26ae9dc09b09a2b516606a65939a0f537"
+      },
+      {
+        "file": "integrity-online-state.json",
+        "sha256": "86079ff0d0368ccf90061bcbabdf7fe8cbc579daf5b427316fad373f6ede08b0"
+      },
+      {
+        "file": "integrity-offline-state.json",
+        "sha256": "7bfa65d167ddd44b85dc0928608afc13631b4bb86a082b04075ff2675acbc788"
+      },
+      {
+        "file": "integrity-launch-asset-verification.json",
+        "sha256": "95ead00fbe52ac119ff66f9dbc69fa01ed5c0eaea1f867ecdbb60ae33cac0d05"
+      },
+      {
+        "file": "cleanup-receipt.json",
+        "sha256": "7683a19c98fb4431a4e63ce56827a2ece5842ff273e82bef43dc08365bf1054d"
+      }
+    ]
+  },
+  "deliveryEnvironment": {
+    "previewManagementStatus": 403,
+    "validation": "Isolated PostgreSQL with synthetic actors, then production-smoke Android before production Android/iOS.",
+    "environmentSubstitution": false,
+    "plan": "Free",
+    "addonsPurchased": false
+  },
+  "limitations": [
+    "A different normalized payload is a new intention; check unknown outcomes before replacing one.",
+    "Clearing app data or uninstalling removes the local intention journal.",
+    "Independent web tabs are not globally coalesced after a confirmed intention.",
+    "Receipt disk failure combined with process death conservatively replays the original key on the next identical submit.",
+    "Physical Android/iPhone authenticated QA with dedicated accounts remains to be performed; no production test movements were executed."
+  ]
+}

@@ -58,6 +58,32 @@ acciones y la suite SQL completa en PostgreSQL 17 con datos ficticios. La
 entrega publicada y sus identificadores se registran en
 `docs/verification/financial-integrity-release-20261013.json`.
 
+La entrega se publicó el 13 de octubre de 2026 desde
+`f9dc65a4271dadf57bd172470a3bfe7ac0ae2400`, con
+[Security CI exitoso](https://github.com/happy-circles/Happy-circles/actions/runs/38463880384).
+Pasaron 1.428 pruebas en 176 archivos, 36 archivos SQL sobre las 97 migraciones
+y cuatro carreras con conexiones PostgreSQL independientes. También pasaron
+lint, tipos, revisión de dependencias, seguridad y configuración OTA.
+
+| Destino          | Plataforma | Grupo publicado                        |
+| ---------------- | ---------- | -------------------------------------- |
+| production smoke | Android    | `b1e28b9d-e428-4906-9561-ae692fd2665a` |
+| production       | Android    | `c5d3fffc-e0f8-4d04-a4f3-1b1241a64145` |
+| production       | iOS        | `15b5fcf5-9902-4516-a7b8-4b19d2870882` |
+
+Las tres entregas se comprobaron contra sus manifiestos y archivos servidos,
+con el backend y runtime previstos. Android smoke recibió el archivo exacto
+por Expo Updates y arrancó con red y sin conexión, sin fallos de arranque.
+El entorno preview devolvió 403 al acceso de administración; la validación usó
+PostgreSQL aislado y después Android smoke. No se sustituyeron entornos.
+
+En producción se comprobaron nueve definiciones de funciones y siete endpoints
+activos con verificación de JWT. La migración conservó las huellas de las ocho
+tablas comprobadas: la lectura posterior mostró 119 solicitudes, 92 movimientos,
+184 asientos y cero reversos. Los avisos de seguridad y rendimiento de Supabase
+no aumentaron frente a la consulta anterior. Se mantuvo el plan Free de EAS,
+sin contratar extras ni generar builds.
+
 ## Límites y siguiente comprobación
 
 La clave corresponde a los mismos datos normalizados. Cambiar esos datos
