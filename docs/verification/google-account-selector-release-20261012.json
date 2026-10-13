@@ -1,0 +1,85 @@
+{
+  "releasedSource": "4e5a7693eb6fae17387cbdb8b0ae0c902c672ec4",
+  "localReleaseDate": "2026-10-12",
+  "recordedAt": "2026-10-13T03:43:26.761Z",
+  "ci": {
+    "id": 38341708284,
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/38341708284",
+    "attempt": 1
+  },
+  "localVerification": {
+    "vitestFiles": 159,
+    "vitestTests": 1234,
+    "lint": true,
+    "typecheck": true,
+    "dependencyAudit": true,
+    "securityCheck": true,
+    "updateConfigurationTests": 7
+  },
+  "updates": [
+    {
+      "channel": "production-smoke",
+      "platform": "android",
+      "updateId": "01a13352-a3f8-7c36-b18f-4f892a5ae6dc",
+      "groupId": "7f2afda4-3536-4e5b-b5f6-c4e2053792fe",
+      "source": "4e5a7693eb6fae17387cbdb8b0ae0c902c672ec4",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "J-6wYfegxxddQM0rp-d5kBo7Z7jnUZnzeZg4y4zlr1w",
+      "manifestVerified": true,
+      "bundleMatchesExport": true,
+      "accountSelectorRequested": true,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "android",
+      "updateId": "01a13355-16c5-7ae5-9368-a722eb25d422",
+      "groupId": "4fdf461c-25b8-4c32-b874-74e6f1c72ea5",
+      "source": "4e5a7693eb6fae17387cbdb8b0ae0c902c672ec4",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "J-6wYfegxxddQM0rp-d5kBo7Z7jnUZnzeZg4y4zlr1w",
+      "manifestVerified": true,
+      "bundleMatchesExport": true,
+      "accountSelectorRequested": true,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    },
+    {
+      "channel": "production",
+      "platform": "ios",
+      "updateId": "01a13359-610b-7a50-91b3-7fbf12b82b4b",
+      "groupId": "ed7b3ac3-4b68-435f-a027-315567275da1",
+      "source": "4e5a7693eb6fae17387cbdb8b0ae0c902c672ec4",
+      "runtime": "hc-sdk54-20260928-1",
+      "servedBundleHash": "3s8wQYbAy8Us5WWfKED2qnbSTBDvs-s96XuV0jcBNbw",
+      "manifestVerified": true,
+      "bundleMatchesExport": true,
+      "accountSelectorRequested": true,
+      "publicKeyAccepted": true,
+      "credentialsCheckPassed": true
+    }
+  ],
+  "oauthForwarding": {
+    "status": 302,
+    "providerHost": "accounts.google.com",
+    "prompt": "select_account",
+    "checkedAt": "2026-10-13T03:38:53.820Z",
+    "googleFollowed": false
+  },
+  "publication": {
+    "tool": "EAS CLI",
+    "cliVersion": "21.7.1",
+    "environment": "production",
+    "plan": "Free",
+    "nativeChanges": false,
+    "backendChanges": false,
+    "smokeVerifiedBeforeProduction": true,
+    "previewUnavailable": true,
+    "workflowDispatchForbidden": true
+  },
+  "physicalDeviceVerified": false,
+  "googleLoginCompleted": false
+}
