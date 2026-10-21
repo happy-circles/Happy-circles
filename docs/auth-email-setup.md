@@ -1,6 +1,6 @@
 # Auth Email Setup
 
-Last reviewed: 2026-08-14.
+Last reviewed: 2026-10-21 (America/Bogota; email activation and delivery checks).
 
 This project uses `Supabase Auth` for email/password accounts and password recovery. The recommended production setup is:
 
@@ -11,18 +11,43 @@ This project uses `Supabase Auth` for email/password accounts and password recov
 
 ## Current production gate
 
-Verified on 2026-08-14:
+Email configuration verified on 2026-10-21 (America/Bogota):
 
 - Supabase custom SMTP is configured for Auth email; confirmation/recovery email
   is separate from the welcome-email API call.
-- `send-welcome-email` is deployed and `ACTIVE` as part of the verified `40/40`
-  Edge Function parity.
-- `RESEND_API_KEY` is not configured. This does not block account activation or
-  store builds, but the optional welcome email will not be sent until the
-  secret is installed and a real account completes the idempotent send flow.
-- Supabase Auth Leaked Password Protection (HIBP) is disabled because the
-  current project plan does not include it. Treat it as a plan-upgrade hardening
-  item, not as a false claim that the current release can enable it.
+- `send-welcome-email` version 4 is deployed and `ACTIVE`.
+- `RESEND_API_KEY` is installed. The Resend key `Happy Circles welcome` has
+  Sending access limited to `happy-circles.com`; its secret value is not stored
+  in this repository.
+- `WELCOME_EMAIL_ENABLED=true`,
+  `WELCOME_EMAIL_FROM="Happy Circles <hola@happy-circles.com>"`, and
+  `APP_WEB_ORIGIN=https://app.happy-circles.com` are configured in production.
+- A real password recovery email reached the authorized test mailbox inbox at
+  `2026-10-21T16:56:59Z`, with SPF and DKIM passing.
+- A separate welcome test email was accepted by Resend at
+  `2026-10-21T16:59:20Z` and reached Gmail inbox (Updates) at
+  `2026-10-21T16:59:22Z` (`11:59:22` America/Bogota), with SPF and DKIM passing
+  for `happy-circles.com`; it was not in Spam. The test sent the exact deployed
+  HTML directly through Resend. It does not verify the onboarding trigger: the
+  existing test account was already marked handled, and that idempotency state
+  was preserved.
+- The original email arrived in Gmail on iPhone, but the user reported that
+  neither keyboard code suggestion nor copying the code worked. Confirmation
+  and recovery templates were updated in production at
+  `2026-10-21T17:08:39Z` to show the token as one continuous text value instead
+  of eight table cells. The hosted HTML was read back and matched the local
+  templates; 8-digit OTP length and `{{ .ConfirmationURL }}` were preserved.
+- A recovery retry using the updated template was accepted at
+  `2026-10-21T17:08:49.726Z` and reached Gmail inbox at
+  `2026-10-21T17:08:52Z` (`12:08:52` America/Bogota), with SPF and DKIM passing.
+  The received MIME includes plain text and HTML; the HTML has one continuous
+  8-digit text node and no single-digit table cells. Copying on the iPhone
+  remains pending verification. AutoFill in Gmail on iPhone is not guaranteed
+  by this change.
+
+The last plan check on 2026-08-14 found Supabase Auth Leaked Password Protection
+(HIBP) disabled because the project plan did not include it. Treat it as a
+plan-upgrade hardening item, separate from email activation.
 
 ## What the app now supports
 
@@ -109,6 +134,12 @@ They use the Happy Circles palette from the app (`brandNavy`, `brandGreen`, `bra
 - `{{ .ConfirmationURL }}` for the primary button.
 - `{{ .Token }}` for the manual 8-digit code fallback.
 
+Keep `{{ .Token }}` as one continuous text value, without per-digit table cells
+or inserted spaces. Both templates introduce it with
+`Tu código de verificación es:`, allow text selection with `user-select: all`,
+and include a copying hint. This change applies to newly sent emails and does
+not require a native app update.
+
 The deep link and the manual code must live in the same email body. Do not configure a separate "link email" and "code email" for the same auth event. If two emails arrive for one sign-up or one recovery request, check for an extra hosted Supabase template/trigger or an accidental resend action.
 
 Local Supabase is configured in `supabase/config.toml`:
@@ -136,7 +167,8 @@ The app invokes it from `apps/mobile/src/providers/session-provider.tsx` only wh
 
 - The user is signed in.
 - The email is confirmed.
-- Required profile requirements are complete: name, phone, photo.
+- Required profile requirements are complete: name and phone; the profile photo
+  is optional.
 - The device is trusted.
 - The account access state is `active`.
 
@@ -157,9 +189,28 @@ Required Edge Function secrets:
 - `WELCOME_EMAIL_REPLY_TO=` optional
 - `WELCOME_EMAIL_ENABLED=true`
 
-## Email OTP length
+## Email OTP length and iPhone AutoFill
 
 The app UI expects 8-digit email codes for confirmation and recovery. Keep Supabase Email OTP length aligned with that value in Auth settings.
+
+Resend transports the Auth email; Supabase generates its code. There is no
+additional Resend setting in this flow that can force the iPhone keyboard to
+suggest it. [Apple's iOS 17 documentation](https://support.apple.com/es-co/118723)
+describes AutoFill in Safari for codes received in Apple Mail. That does not
+establish support for the Gmail app on iPhone. Validate code selection/copying
+and keyboard suggestion separately in the actual email app and device; a
+continuous token improves the fallback without proving AutoFill works.
+
+The public App Store version is `1.0.3`, released on 2026-10-08. Its source
+commit `3a6b8d15` already includes `oneTimeCode`; that hint was not added by
+today's email change. A separate local `OtpCodeInput` change expands the native
+input from a `1x1` transparent control (`opacity: 0`) to the full code row at
+56 px height, normal opacity and transparent text, to expose the native Paste
+menu. Mobile typecheck, file ESLint, browser paste of eight digits and input
+hit testing at five points passed. This input change has not been published
+through OTA or the App Store. The email HTML correction is already in
+production and requires no app update; copying the newly received email on
+the physical iPhone still awaits the user's test.
 
 ## Leaked password protection
 

@@ -253,8 +253,12 @@ Antes de enviar a tiendas, mantener o completar en el proyecto Supabase remoto:
   - `GRAPH_CYCLE_WORKER_SECRET`
   - `PUSH_NOTIFICATION_WORKER_SECRET` o fallback controlado a
     `GRAPH_CYCLE_WORKER_SECRET`
-  - `RESEND_API_KEY`: pendiente para el welcome email opcional; no bloquea la
-    activacion de cuenta ni el build de tienda.
+  - `RESEND_API_KEY`: instalado y confirmado el 2026-10-21 para el welcome
+    email. Clave `Happy Circles welcome`, con Sending access limitado a
+    `happy-circles.com`; no versionar su valor.
+  - `WELCOME_EMAIL_ENABLED=true`,
+    `WELCOME_EMAIL_FROM="Happy Circles <hola@happy-circles.com>"` y
+    `APP_WEB_ORIGIN=https://app.happy-circles.com`: configurados el 2026-10-21.
 - Cron de `process-graph-cycle-jobs` activo.
 - Cron de `send-push-notifications` activo.
 - Cron de analytics activo.
@@ -641,9 +645,38 @@ Antes de enviar:
 
 ## Bloqueos de release
 
-- Si se quiere enviar el welcome email opcional desde esta version, configurar
-  `RESEND_API_KEY` y completar un smoke; Auth SMTP de confirmacion/recovery es
-  un canal separado que ya esta configurado.
+- Correo, revision 2026-10-21 (America/Bogota): bienvenida activada con
+  `send-welcome-email` v4 `ACTIVE` y secrets configurados. Una recuperacion real
+  llego a inbox a las `2026-10-21T16:56:59Z`, con SPF y DKIM correctos. Resend
+  acepto una prueba separada de bienvenida a las `2026-10-21T16:59:20Z` y llego
+  a Gmail inbox (Updates) a las `2026-10-21T16:59:22Z` (`11:59:22` Bogota), sin
+  Spam y con SPF/DKIM correctos para `happy-circles.com`. Esta prueba envio el
+  HTML desplegado directamente mediante Resend; falta completar onboarding
+  con una cuenta nueva para comprobar el envio unico. La cuenta existente ya
+  estaba marcada como atendida y no se reinicio esa marca. Auth SMTP y la API
+  de bienvenida son canales separados; no dar por validado el flujo
+  completo por tener los secrets instalados.
+- Codigo en iPhone, revision 2026-10-21: el usuario recibio el correo en Gmail,
+  pero no pudo copiar el codigo ni vio la sugerencia del teclado. Se publicaron
+  las plantillas de confirmacion/recuperacion con `{{ .Token }}` continuo en
+  lugar de ocho celdas a las `2026-10-21T17:08:39Z`, con texto seleccionable e
+  indicacion para copiar. Se confirmo el HTML remoto y se conservaron OTP de
+  8 digitos y `{{ .ConfirmationURL }}`. Se acepto otra recuperacion a las
+  `2026-10-21T17:08:49.726Z` y llego a Gmail inbox a las
+  `2026-10-21T17:08:52Z` (`12:08:52` Bogota), con SPF/DKIM correctos. El MIME
+  recibido incluye texto plano y HTML con el codigo continuo, sin celdas por
+  digito; falta verificar el copiado en el iPhone.
+  Esto no requiere actualizar la app nativa ni garantiza AutoFill en Gmail:
+  [Apple documenta Mail y Safari](https://support.apple.com/es-co/118723).
+- Estado de app para esta prueba, 2026-10-21: App Store publica `1.0.3` desde
+  el 2026-10-08; su commit `3a6b8d15` ya incluia `oneTimeCode`. El ajuste local
+  de `OtpCodeInput` amplia el input de `1x1` con opacidad cero a toda la fila,
+  56 px de alto, opacidad normal y texto transparente para habilitar el menu
+  nativo Pegar. Pasaron typecheck mobile, ESLint del archivo, pegado de
+  8 digitos y comprobacion de hit testing en cinco puntos del navegador. Este
+  ajuste de input no esta publicado en OTA ni App Store. El HTML de los correos
+  ya esta corregido en produccion; falta la prueba del usuario copiando el
+  correo nuevo en su iPhone.
 - Al subir el proyecto a Supabase Pro, habilitar Leaked Password Protection
   (HIBP) y probar registro y cambio/recuperacion de password.
 - Configurar en EAS la Google Service Account Key de Play Store Submissions. La

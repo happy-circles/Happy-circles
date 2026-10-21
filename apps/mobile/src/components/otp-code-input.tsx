@@ -1,12 +1,5 @@
-import { useRef, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { theme } from '@/lib/theme';
@@ -30,7 +23,6 @@ export function OtpCodeInput({
   value,
 }: OtpCodeInputProps) {
   const activeTheme = useAppTheme();
-  const inputRef = useRef<TextInput | null>(null);
   const [focused, setFocused] = useState(false);
   const digits = Array.from({ length }, (_, index) => value[index] ?? '');
   const activeIndex = Math.min(value.length, length - 1);
@@ -40,28 +32,13 @@ export function OtpCodeInput({
   }
 
   return (
-    <Pressable
-      accessibilityLabel="Código de confirmación"
-      disabled={disabled}
-      onPress={() => inputRef.current?.focus()}
-      style={[styles.container, style, disabled ? styles.disabled : null]}
-    >
-      <TextInput
-        autoCapitalize="none"
-        autoCorrect={false}
-        caretHidden
-        editable={!disabled}
-        keyboardType="number-pad"
-        maxLength={length}
-        onBlur={() => setFocused(false)}
-        onChangeText={handleChangeText}
-        onFocus={() => setFocused(true)}
-        ref={inputRef}
-        style={styles.hiddenInput}
-        textContentType="oneTimeCode"
-        value={value}
-      />
-      <View style={styles.boxRow}>
+    <View style={[styles.container, style, disabled ? styles.disabled : null]}>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={styles.boxRow}
+      >
         {digits.map((digit, index) => {
           const active = focused && index === activeIndex;
           return (
@@ -90,7 +67,25 @@ export function OtpCodeInput({
           );
         })}
       </View>
-    </Pressable>
+      <TextInput
+        accessibilityLabel="Código de confirmación"
+        accessibilityState={{ disabled }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        caretHidden
+        contextMenuHidden={false}
+        editable={!disabled}
+        keyboardType="number-pad"
+        maxLength={length}
+        onBlur={() => setFocused(false)}
+        onChangeText={handleChangeText}
+        onFocus={() => setFocused(true)}
+        style={styles.inputOverlay}
+        textContentType="oneTimeCode"
+        underlineColorAndroid="transparent"
+        value={value}
+      />
+    </View>
   );
 }
 
@@ -101,11 +96,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     width: '100%',
   },
-  hiddenInput: {
-    height: 1,
-    opacity: 0,
-    position: 'absolute',
-    width: 1,
+  inputOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    color: 'transparent',
+    fontSize: 18,
+    padding: 0,
   },
   boxRow: {
     alignItems: 'center',

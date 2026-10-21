@@ -54,6 +54,7 @@
                           font-size: 30px;
                           line-height: 1.12;
                           font-weight: 700;
+                          word-break: break-word;
                         "
                       >
                         Confirma tu correo
@@ -161,146 +162,32 @@
                       <div style="height: 1px; background: #e6ebf3; line-height: 1px">&nbsp;</div>
                       <div style="padding-top: 18px">
                         <div style="font-size: 12px; line-height: 1.4; color: #667085">
-                          Código manual en la app
+                          Tu código de verificación es:
                         </div>
-                        <table
-                          role="presentation"
-                          width="100%"
-                          cellpadding="0"
-                          cellspacing="4"
-                          style="margin-top: 8px; max-width: 360px; table-layout: fixed"
+                        <p
+                          style="
+                            margin: 10px 0;
+                            padding: 14px 12px;
+                            background: #ffffff;
+                            border: 1px solid #dfe5ef;
+                            border-radius: 12px;
+                            color: #1a2744;
+                            font-family: 'Courier New', Courier, monospace;
+                            font-size: 26px;
+                            font-weight: 700;
+                            letter-spacing: 3px;
+                            line-height: 1.4;
+                            text-align: center;
+                            white-space: nowrap;
+                            -webkit-user-select: all;
+                            user-select: all;
+                          "
                         >
-                          <tr>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 0 1 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 1 2 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 2 3 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 3 4 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 4 5 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 5 6 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 6 7 -}}
-                            </td>
-                            <td
-                              style="
-                                height: 34px;
-                                background: #ffffff;
-                                border: 1px solid #dfe5ef;
-                                border-radius: 10px;
-                                color: #1a2744;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 20px;
-                                font-weight: 700;
-                                line-height: 34px;
-                                text-align: center;
-                              "
-                            >
-                              {{- slice .Token 7 8 -}}
-                            </td>
-                          </tr>
-                        </table>
+                          {{ .Token }}
+                        </p>
+                        <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #667085">
+                          Mantén pulsado el código para copiarlo.
+                        </p>
                       </div>
                     </td>
                   </tr>
