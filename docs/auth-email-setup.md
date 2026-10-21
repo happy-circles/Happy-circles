@@ -151,8 +151,8 @@ Local Supabase is configured in `supabase/config.toml`:
 
 For hosted Supabase projects, copy the HTML into `Authentication -> Emails -> Templates` and keep these subjects:
 
-- Confirmation subject: `Confirma tu cuenta de Happy Circles`
-- Recovery subject: `Restablece tu clave de Happy Circles`
+- Confirmation subject: `{{ .Token }} es tu código de Happy Circles`
+- Recovery subject: `{{ .Token }} para restablecer tu clave de Happy Circles`
 
 Do not replace Supabase's generated confirmation or recovery URL with a hardcoded app URL. Supabase must keep generating those action links so the Auth tokens remain valid.
 
@@ -194,13 +194,24 @@ Required Edge Function secrets:
 
 The app UI expects 8-digit email codes for confirmation and recovery. Keep Supabase Email OTP length aligned with that value in Auth settings.
 
-Resend transports the Auth email; Supabase generates its code. There is no
-additional Resend setting in this flow that can force the iPhone keyboard to
-suggest it. [Apple's iOS 17 documentation](https://support.apple.com/es-co/118723)
-describes AutoFill in Safari for codes received in Apple Mail. That does not
-establish support for the Gmail app on iPhone. Validate code selection/copying
-and keyboard suggestion separately in the actual email app and device; a
-continuous token improves the fallback without proving AutoFill works.
+Resend transports the Auth email; Supabase generates its code. The app marks
+its native input as `oneTimeCode`, and iOS supplies keyboard suggestions.
+There is no additional Resend toggle that forces a suggestion. Apple's
+[iOS 26 feature list, page 14](https://www.apple.com/os/pdf/All_New_Features_iOS_26_Sept_2025.pdf#page=14)
+explicitly adds verification-code AutoFill from app notifications. The earlier
+explanation based only on [iOS 17 and Apple Mail](https://support.apple.com/es-co/118723)
+was incomplete for iOS 26. A Gmail notification is therefore a relevant source
+on a supported device; successful delivery alone does not establish that iOS
+received a notification containing a detectable code.
+
+Confirmation and recovery subjects now begin with `{{ .Token }}` so the actual
+eight digits are visible in the notification title. Supabase supports subject
+templates and supplies `Token` to both messages. This improves visibility;
+Apple does not document a Gmail-specific sender format or guarantee recognition.
+[Google's iPhone notification guide](https://support.google.com/mail/answer/1075549?co=GENIE.Platform%3DiOS&hl=en)
+also notes that Gmail notifies for the Primary label by default. Validate the
+phone's iOS version, Gmail notification delivery, focused input, code suggestion
+and manual paste separately.
 
 The public App Store version is `1.0.3`, released on 2026-10-08. Its source
 commit `3a6b8d15` already includes `oneTimeCode`; that hint was not added by
@@ -213,8 +224,14 @@ and iOS on the `production` channel from `256f0064`, with runtime
 `hc-sdk54-20260928-1`. The served manifests and bundle hashes were verified for
 both platforms. Existing compatible `1.0.3` builds receive it through OTA;
 no new store binary was created. See the [release receipt](otp-email-release-2026-10-21.md).
-The email HTML correction requires no app update. Copying/pasting on the
-physical iPhone and Gmail keyboard suggestion still await the user's test.
+The email HTML correction requires no app update. A subsequent user report
+showed that the overlay alone was insufficient. The follow-up removes
+`caretHidden`, retains a native caret and selection menu, normalizes the full
+pasted text before limiting it to eight digits, and adds an explicit Paste
+control. The iOS control uses `UIPasteControl` through the already installed
+`expo-clipboard`; other platforms read the clipboard only on a Paste tap.
+Physical iPhone behavior and Gmail keyboard suggestion still require a device
+test; a successful web paste or published manifest does not establish either.
 
 ## Leaked password protection
 

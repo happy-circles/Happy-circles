@@ -38,11 +38,11 @@ otp_length = 8
 # uri = "pg-functions://postgres/app_private/require_invited_signup"
 
 [auth.email.template.confirmation]
-subject = "Confirma tu cuenta de Happy Circles"
+subject = "{{ .Token }} es tu código de Happy Circles"
 content_path = "./supabase/templates/auth/confirmation.html"
 
 [auth.email.template.recovery]
-subject = "Restablece tu clave de Happy Circles"
+subject = "{{ .Token }} para restablecer tu clave de Happy Circles"
 content_path = "./supabase/templates/auth/recovery.html"
 
 [functions.accept-financial-request]
