@@ -266,7 +266,12 @@ describe('app smoke checks', () => {
     expect(supabaseConfig).toContain('"happycircles://**"');
     expect(supabaseConfig).toContain('"http://localhost:8081/**"');
     expect(supabaseConfig).toContain('"http://127.0.0.1:8081/**"');
-    expect(confirmationTemplate).toContain('Código manual en la app');
+    for (const template of [confirmationTemplate, recoveryTemplate]) {
+      expect(template).toContain('Tu código de verificación es:');
+      expect(template.match(/{{\s*\.Token\s*}}/g)).toHaveLength(1);
+      expect(template).not.toContain('slice .Token');
+      expect(template).toContain('{{ .ConfirmationURL }}');
+    }
     expect(recoveryTemplate).toContain('Restablece tu contraseña');
     expect(`${confirmationTemplate}\n${recoveryTemplate}`).not.toMatch(/Ã|Â|ï¿½/);
   });
