@@ -1,9 +1,22 @@
 # Store Release Readiness
 
-Ultima revision: 2026-10-08.
+Ultima revision: 2026-10-21 (correos, OTA y estado de Google Play).
 
 Objetivo: dejar la nueva version `1.0.3` de Happy Circles publicable en App Store
 y Play Store para su salida en Colombia.
+
+## Estado vigente de Google Play, 2026-10-19
+
+Google ya aprobó el acceso a producción. Se preparó la candidata Android
+`1.0.3 (24)` desde `4f9d193c`, con CI exitoso, para el lanzamiento en Colombia.
+El [registro de preparación](google-play-production-2026-10-19.md) detalla el
+build, las comprobaciones y el borrador de tienda. Este estado reemplaza los
+bloqueos históricos de acceso a producción y testers que se conservan más abajo.
+Los dos cambios (versión y Colombia) ya se enviaron a revisión con autorización
+del titular. Las verificaciones rápidas finalizaron y los cambios siguen en
+revisión de Google; la publicación será automática tras aprobarla. El nuevo perfil de envío
+`play-production` crea un borrador en producción;
+`production` sigue enviando a `alpha`.
 
 ## Fuentes oficiales revisadas
 
