@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-21T20:30:05.245Z",
+  "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+  "appVersion": "1.0.3",
+  "runtimeVersion": "hc-sdk54-20260928-1",
+  "channel": "production",
+  "environment": "production",
+  "nativeDependenciesChanged": false,
+  "newStoreBuilds": false,
+  "ci": {
+    "id": 39669183092,
+    "conclusion": "success",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/39669183092",
+    "applicationTestFiles": 177,
+    "applicationTests": 1432,
+    "sqlFiles": 36,
+    "sqlTests": 45
+  },
+  "fixes": [
+    "remove caretHidden so native caret has geometry",
+    "normalize full pasted text before limiting digits",
+    "explicit iOS UIPasteControl from existing expo-clipboard",
+    "tap-only clipboard fallback for other platforms",
+    "replace existing code on explicit paste",
+    "iOS oneTimeCode and other-platform one-time-code hints"
+  ],
+  "browserQa": {
+    "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+    "authMocked": true,
+    "explicitPasteWithSpaces": true,
+    "explicitPasteWithNewline": true,
+    "replacementAndLeadingZeroes": true,
+    "nonNumericClipboardFeedback": true,
+    "directFieldPasteWithSpaces": true,
+    "nativeMaxLengthAbsent": true,
+    "webAutocompleteOneTimeCode": true,
+    "physicalIosVerified": false
+  },
+  "emailSubjects": {
+    "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+    "appliedAt": "2026-10-21T20:23:38.056Z",
+    "changedKeys": ["mailer_subjects_confirmation", "mailer_subjects_recovery"],
+    "subjects": {
+      "mailer_subjects_confirmation": "{{ .Token }} es tu código de Happy Circles",
+      "mailer_subjects_recovery": "{{ .Token }} para restablecer tu clave de Happy Circles"
+    },
+    "validation": {
+      "subjectsMatchDesired": true,
+      "otpPreservedAt8": true,
+      "htmlHashesPreserved": true,
+      "unrelatedAuthConfigPreserved": true
+    }
+  },
+  "recoveryTest": {
+    "request": {
+      "requestedAt": "2026-10-21T20:24:45.969Z",
+      "completedAt": "2026-10-21T20:24:47.593Z",
+      "status": "accepted",
+      "httpStatus": 200,
+      "count": 1,
+      "redirectPath": "https://app.happy-circles.com/reset-password",
+      "recipientPreviouslyAuthorized": true,
+      "recipientCanonicalMatchesConnected": true
+    },
+    "reception": {
+      "dateHeader": "Wed, 21 Oct 2026 20:24:49 +0000",
+      "verifiedAt": "2026-10-21T20:26:00.843Z",
+      "status": "received",
+      "subjectRedacted": "[OTP] para restablecer tu clave de Happy Circles",
+      "subjectSuffixMatchesExpected": true,
+      "subjectPrefixWithheldByConnector": true,
+      "subjectStartsWithEightDigits": null,
+      "subjectBodyCodeMatches": null,
+      "subjectLiteralTokenAbsentInReturnedRepresentation": true,
+      "bodyHasEightContiguousDigits": true,
+      "spfPass": true,
+      "dkimPass": true,
+      "authenticationResultsPresent": true,
+      "configuredOtpLength": 8,
+      "subjectCodeLengthObserved": null,
+      "bodyCodeLengthObserved": 8,
+      "bodyCodeObservationBasis": "Initial full MIME response was checked in memory for eight contiguous digits after the verification-code label; no code value retained.",
+      "subjectCodePlaceholderObserved": "[one-time authentication code withheld]",
+      "gmailLabels": ["UNREAD", "IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
+      "gmailLabelsCheckedAt": "2026-10-21T20:28:16.933Z",
+      "inbox": true,
+      "spam": false,
+      "gmailCategories": ["CATEGORY_PERSONAL"],
+      "deviceNotificationObserved": null
+    },
+    "verificationLimit": "Gmail connector replaced the authentication-code subject prefix with [one-time authentication code withheld]; exact digit count and subject/body equality could not be checked.",
+    "passwordChanged": false,
+    "accountActivated": false,
+    "welcomeEmailTouched": false,
+    "otpStored": false,
+    "recoveryLinkStored": false
+  },
+  "updates": [
+    {
+      "platform": "ios",
+      "groupId": "bad22069-0542-4d2f-b46c-414c4b2550a9",
+      "updateId": "01a16024-5c3a-7719-abf6-dab8e584017a",
+      "createdAt": "2026-10-21T20:25:58.074Z",
+      "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+      "workingTreeClean": true,
+      "environment": "production",
+      "verification": {
+        "checkedAt": "2026-10-21T20:27:29.200Z",
+        "platform": "ios",
+        "channel": "production",
+        "updateId": "01a16024-5c3a-7719-abf6-dab8e584017a",
+        "groupId": "bad22069-0542-4d2f-b46c-414c4b2550a9",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4562084,
+        "bundleSha256": "pD2SHr_CtDXu6eXMECygfLMYIh_0_WPpN0swnYBOW2c",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    },
+    {
+      "platform": "android",
+      "groupId": "6509d9d5-5a3a-43eb-bc07-3a4c0333edcd",
+      "updateId": "01a16026-97c5-74ae-8882-4505a0b1ecf0",
+      "createdAt": "2026-10-21T20:28:24.389Z",
+      "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+      "workingTreeClean": true,
+      "environment": "production",
+      "verification": {
+        "checkedAt": "2026-10-21T20:29:09.533Z",
+        "platform": "android",
+        "channel": "production",
+        "updateId": "01a16026-97c5-74ae-8882-4505a0b1ecf0",
+        "groupId": "6509d9d5-5a3a-43eb-bc07-3a4c0333edcd",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4557324,
+        "bundleSha256": "TN8CptCoElh6MiSjMUxBdEiMQzD1CkjrJGb3NGQd5yE",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    }
+  ],
+  "easUsage": {
+    "checkedAt": "2026-10-21T20:28:30.922Z",
+    "sourceCommit": "d5814ac694610908af6596ab8c75c4a6e593a805",
+    "readOnly": true,
+    "account": "happy-circles",
+    "plan": "Free",
+    "addons": [],
+    "estimatedTotalCents": 0,
+    "estimatedOverageCents": 0,
+    "otaUsers": {
+      "used": 22,
+      "limit": 1000
+    },
+    "bandwidth": {
+      "usedBytes": 205275595,
+      "limitBytes": 107374182400
+    },
+    "updatesOverageCostCents": 0
+  },
+  "research": {
+    "appleIos26Notifications": "https://www.apple.com/os/pdf/All_New_Features_iOS_26_Sept_2025.pdf#page=14",
+    "gmailNotifications": "https://support.google.com/mail/answer/1075549?co=GENIE.Platform%3DiOS&hl=es-419",
+    "nativeCaret": "https://github.com/react/react-native/blob/v0.81.5/packages/react-native/Libraries/Text/TextInput/Singleline/RCTUITextField.mm#L214-L220",
+    "nativeLengthLimit": "https://github.com/react/react-native/blob/v0.81.5/packages/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm#L451-L467"
+  },
+  "pending": {
+    "iphoneIosVersionReported": false,
+    "physicalNativePaste": false,
+    "physicalKeyboardSuggestion": false,
+    "updateAppliedOnPhysicalDevice": false,
+    "offlineLaunchAfterUpdate": false
+  }
+}

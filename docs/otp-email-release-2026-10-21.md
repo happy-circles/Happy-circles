@@ -1,5 +1,9 @@
 # Códigos de correo y actualización móvil, 2026-10-21
 
+Este registro conserva la primera entrega. La
+[corrección posterior de pegado y notificaciones](otp-paste-follow-up-2026-10-21.md)
+desde `d5814ac6` la reemplaza en el canal production y aclara el soporte de iOS 26.
+
 La corrección del campo de ocho dígitos está publicada por OTA en Android e
 iOS. El campo nativo ocupa toda la fila para permitir el menú de pegado;
 conserva `oneTimeCode`, validación, accesibilidad y estados deshabilitados.

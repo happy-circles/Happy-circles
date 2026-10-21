@@ -232,6 +232,10 @@ control. The iOS control uses `UIPasteControl` through the already installed
 `expo-clipboard`; other platforms read the clipboard only on a Paste tap.
 Physical iPhone behavior and Gmail keyboard suggestion still require a device
 test; a successful web paste or published manifest does not establish either.
+The follow-up was published from `d5814ac6` to both production platforms and
+the new subjects were applied/read back. A real recovery reached Gmail Primary
+with SPF/DKIM passing. See the [follow-up receipt](otp-paste-follow-up-2026-10-21.md)
+for IDs and the explicit limits of the physical-device and redacted-subject checks.
 
 ## Leaked password protection
 

@@ -683,6 +683,12 @@ Antes de enviar:
   La comprobacion fisica en iPhone/Gmail sigue pendiente. El HTML de los correos
   ya esta corregido en produccion; falta la prueba del usuario copiando el
   correo nuevo en su iPhone.
+- Seguimiento de pegado, 2026-10-21: publicada OTA `d5814ac6` para iOS y Android,
+  con boton Pegar explicito, cursor nativo y limpieza antes del limite de ocho
+  digitos. Los asuntos Auth incluyen el codigo al principio. Recuperacion real
+  recibida en Principal a las `20:24:49Z`, con SPF/DKIM correctos. iOS 26 admite
+  sugerencias desde notificaciones de apps; no dar por probada la notificacion
+  ni el teclado del iPhone fisico. Ver [seguimiento](otp-paste-follow-up-2026-10-21.md).
 - Al subir el proyecto a Supabase Pro, habilitar Leaked Password Protection
   (HIBP) y probar registro y cambio/recuperacion de password.
 - Configurar en EAS la Google Service Account Key de Play Store Submissions. La
