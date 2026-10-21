@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-21T19:43:57.687Z",
+  "sourceCommit": "256f0064f2dc8b4011677db72b98179ce7903575",
+  "appVersion": "1.0.3",
+  "runtimeVersion": "hc-sdk54-20260928-1",
+  "channel": "production",
+  "environment": "production",
+  "easProjectId": "9b63f5f3-3c81-4d3d-bc54-1a81b998d20a",
+  "supabaseProjectRef": "vknfhyfdtlvvfzptpqpj",
+  "publication": {
+    "method": "EAS CLI 21.7.1 with existing session",
+    "newStoreBuilds": false,
+    "nativeDependenciesChanged": false,
+    "safeguards": [
+      "main and origin/main match source SHA",
+      "clean working tree",
+      "successful Security CI for exact SHA",
+      "EXPO_NO_DOTENV=1",
+      "production environment validated",
+      "fresh export per platform"
+    ]
+  },
+  "ci": {
+    "id": 39662546738,
+    "conclusion": "success",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/39662546738",
+    "applicationTestFiles": 176,
+    "applicationTests": 1428,
+    "sqlFiles": 36,
+    "sqlTests": 45,
+    "dependencyExploitRegressions": 11
+  },
+  "toolingPatch": {
+    "package": "vite",
+    "from": "6.4.3",
+    "to": "6.4.4",
+    "scope": "Vitest development tooling",
+    "unexpectedAdvisories": 0,
+    "invalidPatchedAdvisories": 0,
+    "existingVerifiedExceptions": 5,
+    "advisories": [
+      "GHSA-698v-4r3x-3vcv",
+      "GHSA-r825-w8mm-5pxw",
+      "GHSA-587h-7wmj-h5pm",
+      "GHSA-9jrq-w75r-8gcw",
+      "GHSA-rq7h-c2jc-7f22"
+    ],
+    "releaseUrl": "https://github.com/vitejs/vite/releases/tag/v6.4.4"
+  },
+  "easUsageBeforePublication": {
+    "checkedAt": "2026-10-21T19:28:46Z",
+    "plan": "Free",
+    "addons": [],
+    "estimatedTotalCents": 0,
+    "estimatedOverageCents": 0,
+    "uniqueUpdaters": 22,
+    "uniqueUpdatersLimit": 1000,
+    "bandwidthBytes": 200848671,
+    "bandwidthLimitGiB": 100
+  },
+  "updates": [
+    {
+      "platform": "android",
+      "groupId": "9e8a0007-7165-4550-a1ff-49d4edcbb8a0",
+      "updateId": "01a15ff9-7266-76db-a024-3a4aa58f0d40",
+      "createdAt": "2026-10-21T19:39:05.702Z",
+      "sourceCommit": "256f0064f2dc8b4011677db72b98179ce7903575",
+      "branch": "production",
+      "environment": "production",
+      "isGitWorkingTreeDirty": false,
+      "verification": {
+        "checkedAt": "2026-10-21T19:40:46.035Z",
+        "platform": "android",
+        "channel": "production",
+        "updateId": "01a15ff9-7266-76db-a024-3a4aa58f0d40",
+        "groupId": "9e8a0007-7165-4550-a1ff-49d4edcbb8a0",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4555016,
+        "bundleSha256": "sGJG7TgETL-xBt1NyUKeh6hOfYI7Eyp-0qiebzbpupc",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    },
+    {
+      "platform": "ios",
+      "groupId": "6d293953-63d7-4efe-a0d2-e0c18edbe83c",
+      "updateId": "01a15ffc-4093-73f7-a91a-dea18adf4e55",
+      "createdAt": "2026-10-21T19:42:09.555Z",
+      "sourceCommit": "256f0064f2dc8b4011677db72b98179ce7903575",
+      "branch": "production",
+      "environment": "production",
+      "isGitWorkingTreeDirty": false,
+      "verification": {
+        "checkedAt": "2026-10-21T19:42:22.156Z",
+        "platform": "ios",
+        "channel": "production",
+        "updateId": "01a15ffc-4093-73f7-a91a-dea18adf4e55",
+        "groupId": "6d293953-63d7-4efe-a0d2-e0c18edbe83c",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4559284,
+        "bundleSha256": "QYiIaNIlBAh8Zd5Aif8t2GhnxpxjzWfg1Yx000tKALk",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    }
+  ],
+  "emails": {
+    "checkedAt": "2026-10-21T19:41:16.749Z",
+    "otpLength": 8,
+    "templates": {
+      "confirmation": {
+        "remotePresent": true,
+        "localSha256": "27e587f904776fd7d8644ff1377d1a02a6c7bfc8967cb038767be0f3f551fc8b",
+        "remoteSha256": "27e587f904776fd7d8644ff1377d1a02a6c7bfc8967cb038767be0f3f551fc8b",
+        "exactMatch": true,
+        "normalizedMatch": true,
+        "contiguousTokenPresent": true,
+        "confirmationUrlPresent": true
+      },
+      "recovery": {
+        "remotePresent": true,
+        "localSha256": "07efa5482c0901f3b72282105232a851e56ff7427663fe5c8bc757ba274fc592",
+        "remoteSha256": "07efa5482c0901f3b72282105232a851e56ff7427663fe5c8bc757ba274fc592",
+        "exactMatch": true,
+        "normalizedMatch": true,
+        "contiguousTokenPresent": true,
+        "confirmationUrlPresent": true
+      }
+    },
+    "welcome": {
+      "verifiedAt": "2026-10-21T19:41:47.684Z",
+      "version": 6,
+      "status": "ACTIVE",
+      "verifyJwt": true,
+      "deployedAt": "2026-10-21T19:40:51.208Z",
+      "sourceCommit": "256f0064f2dc8b4011677db72b98179ce7903575",
+      "allDeployedFilesMatchExactSourceCommit": true,
+      "files": [
+        {
+          "file": "functions/send-welcome-email/index.ts",
+          "deployedSha256": "1183bb1199372a54700a580561455cf45ce421aa9741027f34300027bcb76fd2",
+          "sourceCommitSha256": "1183bb1199372a54700a580561455cf45ce421aa9741027f34300027bcb76fd2",
+          "exactCommitMatch": true,
+          "normalizedLocalMatch": true
+        },
+        {
+          "file": "functions/_shared/http.ts",
+          "deployedSha256": "5f405dab29f6d11ca2233a67269a279b4d334f8dfc594ed10d33406c7b9f724f",
+          "sourceCommitSha256": "5f405dab29f6d11ca2233a67269a279b4d334f8dfc594ed10d33406c7b9f724f",
+          "exactCommitMatch": true,
+          "normalizedLocalMatch": true
+        },
+        {
+          "file": "functions/_shared/project-api-key.ts",
+          "deployedSha256": "46d1cd892a29a4ca968e57f647efefaef68560657e42a3c4911f4c7c46de5696",
+          "sourceCommitSha256": "46d1cd892a29a4ca968e57f647efefaef68560657e42a3c4911f4c7c46de5696",
+          "exactCommitMatch": true,
+          "normalizedLocalMatch": true
+        },
+        {
+          "file": "functions/_shared/rpc-error-message.ts",
+          "deployedSha256": "7589dbad693aaec5b2d329044637bf67b747da961a203ff8afc8660a740177ad",
+          "sourceCommitSha256": "7589dbad693aaec5b2d329044637bf67b747da961a203ff8afc8660a740177ad",
+          "exactCommitMatch": true,
+          "normalizedLocalMatch": true
+        }
+      ],
+      "requiredSecrets": [
+        {
+          "name": "RESEND_API_KEY",
+          "present": true
+        },
+        {
+          "name": "WELCOME_EMAIL_ENABLED",
+          "present": true,
+          "matchesEnabledTrue": true
+        },
+        {
+          "name": "WELCOME_EMAIL_FROM",
+          "present": true
+        },
+        {
+          "name": "APP_WEB_ORIGIN",
+          "present": true
+        }
+      ],
+      "secretsPreserved": true,
+      "authConfigurationPreserved": true,
+      "templatesPreserved": true,
+      "newEmailsSent": false,
+      "freshOnboardingTested": false
+    }
+  },
+  "limits": {
+    "previewDistributionVerified": false,
+    "previewReason": "Missing preview Supabase public environment variables; production variables were not substituted",
+    "physicalDeviceVerified": false,
+    "iphoneGmailKeyboardAutofillVerified": false,
+    "iphoneGmailCopyPasteVerified": false,
+    "offlineLaunchAfterOtaVerified": false
+  }
+}

@@ -1,6 +1,6 @@
 # Auth Email Setup
 
-Last reviewed: 2026-10-21 (America/Bogota; email activation and delivery checks).
+Last reviewed: 2026-10-21 (America/Bogota; email delivery and production OTA).
 
 This project uses `Supabase Auth` for email/password accounts and password recovery. The recommended production setup is:
 
@@ -15,7 +15,8 @@ Email configuration verified on 2026-10-21 (America/Bogota):
 
 - Supabase custom SMTP is configured for Auth email; confirmation/recovery email
   is separate from the welcome-email API call.
-- `send-welcome-email` version 4 is deployed and `ACTIVE`.
+- `send-welcome-email` version 6 is deployed and `ACTIVE`, with JWT verification
+  enabled. Its deployed source was read back and matches commit `256f0064`.
 - `RESEND_API_KEY` is installed. The Resend key `Happy Circles welcome` has
   Sending access limited to `happy-circles.com`; its secret value is not stored
   in this repository.
@@ -203,14 +204,17 @@ continuous token improves the fallback without proving AutoFill works.
 
 The public App Store version is `1.0.3`, released on 2026-10-08. Its source
 commit `3a6b8d15` already includes `oneTimeCode`; that hint was not added by
-today's email change. A separate local `OtpCodeInput` change expands the native
+today's email change. The `OtpCodeInput` update expands the native
 input from a `1x1` transparent control (`opacity: 0`) to the full code row at
 56 px height, normal opacity and transparent text, to expose the native Paste
 menu. Mobile typecheck, file ESLint, browser paste of eight digits and input
-hit testing at five points passed. This input change has not been published
-through OTA or the App Store. The email HTML correction is already in
-production and requires no app update; copying the newly received email on
-the physical iPhone still awaits the user's test.
+hit testing at five points passed. This input change was published to Android
+and iOS on the `production` channel from `256f0064`, with runtime
+`hc-sdk54-20260928-1`. The served manifests and bundle hashes were verified for
+both platforms. Existing compatible `1.0.3` builds receive it through OTA;
+no new store binary was created. See the [release receipt](otp-email-release-2026-10-21.md).
+The email HTML correction requires no app update. Copying/pasting on the
+physical iPhone and Gmail keyboard suggestion still await the user's test.
 
 ## Leaked password protection
 

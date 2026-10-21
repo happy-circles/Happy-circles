@@ -84,8 +84,10 @@ Workflow: `.github/workflows/eas-mobile-release.yml`.
 
 Estado versionado:
 
-- Candidata de tienda: `1.0.3`; siguientes contadores previstos Android `23` e
-  iOS `38`. EAS mantiene los contadores remotos; confirmarlos antes de encolar.
+- Version de tienda vigente: `1.0.3`; iOS `38` publicado y Android `24` enviado
+  a revision de produccion. EAS mantiene los contadores remotos; confirmarlos
+  antes de encolar otro build. La OTA de codigos del 2026-10-21 conserva esta
+  version y el runtime; ver [recibo](otp-email-release-2026-10-21.md).
 - Expo SDK 54 esta alineado en `expo@54.0.36`.
 - Proyecto EAS vinculado en `apps/mobile/app.config.ts`:
   `9b63f5f3-3c81-4d3d-bc54-1a81b998d20a`.
@@ -646,7 +648,8 @@ Antes de enviar:
 ## Bloqueos de release
 
 - Correo, revision 2026-10-21 (America/Bogota): bienvenida activada con
-  `send-welcome-email` v4 `ACTIVE` y secrets configurados. Una recuperacion real
+  `send-welcome-email` actualmente v6 `ACTIVE` y secrets configurados. Su fuente
+  se alineo con `256f0064` y se verifico despues del despliegue. Una recuperacion real
   llego a inbox a las `2026-10-21T16:56:59Z`, con SPF y DKIM correctos. Resend
   acepto una prueba separada de bienvenida a las `2026-10-21T16:59:20Z` y llego
   a Gmail inbox (Updates) a las `2026-10-21T16:59:22Z` (`11:59:22` Bogota), sin
@@ -674,7 +677,10 @@ Antes de enviar:
   56 px de alto, opacidad normal y texto transparente para habilitar el menu
   nativo Pegar. Pasaron typecheck mobile, ESLint del archivo, pegado de
   8 digitos y comprobacion de hit testing en cinco puntos del navegador. Este
-  ajuste de input no esta publicado en OTA ni App Store. El HTML de los correos
+  ajuste de input se publico por OTA en Android e iOS desde `256f0064`, canal
+  `production`, runtime `hc-sdk54-20260928-1`, sin crear otro build. Los manifiestos
+  y hashes servidos coinciden; ver [recibo](otp-email-release-2026-10-21.md).
+  La comprobacion fisica en iPhone/Gmail sigue pendiente. El HTML de los correos
   ya esta corregido en produccion; falta la prueba del usuario copiando el
   correo nuevo en su iPhone.
 - Al subir el proyecto a Supabase Pro, habilitar Leaked Password Protection
