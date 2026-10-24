@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import * as Clipboard from 'expo-clipboard';
+import { useState } from 'react';
 import {
   Platform,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -34,61 +32,11 @@ export function OtpCodeInput({
 }: OtpCodeInputProps) {
   const activeTheme = useAppTheme();
   const [focused, setFocused] = useState(false);
-  const [pasteBusy, setPasteBusy] = useState(false);
-  const [pasteError, setPasteError] = useState<string | null>(null);
-  const pasteEnabledRef = useRef(!disabled);
-  const pasteInFlightRef = useRef(false);
   const digits = Array.from({ length }, (_, index) => value[index] ?? '');
   const activeIndex = Math.min(value.length, length - 1);
-  const pasteDisabled = disabled || pasteBusy;
-  const nativePasteAvailable = Platform.OS === 'ios' && Clipboard.isPasteButtonAvailable;
-
-  useEffect(() => {
-    pasteEnabledRef.current = !disabled;
-    return () => {
-      pasteEnabledRef.current = false;
-    };
-  }, [disabled]);
 
   function handleChangeText(nextValue: string) {
-    setPasteError(null);
     onChangeText(normalizeOtpCode(nextValue, length));
-  }
-
-  function applyPastedText(text: string) {
-    if (!pasteEnabledRef.current) {
-      return;
-    }
-
-    const code = normalizeOtpCode(text, length);
-    if (!code) {
-      setPasteError('Copia el código del correo y vuelve a pegarlo.');
-      return;
-    }
-
-    setPasteError(null);
-    onChangeText(code);
-  }
-
-  async function handlePastePress() {
-    if (!pasteEnabledRef.current || pasteInFlightRef.current) {
-      return;
-    }
-
-    pasteInFlightRef.current = true;
-    setPasteBusy(true);
-    setPasteError(null);
-    try {
-      const text = await Clipboard.getStringAsync();
-      applyPastedText(text);
-    } catch {
-      if (pasteEnabledRef.current) {
-        setPasteError('No pudimos pegar el código. Intenta pegarlo directamente en el campo.');
-      }
-    } finally {
-      pasteInFlightRef.current = false;
-      setPasteBusy(false);
-    }
   }
 
   return (
@@ -148,48 +96,6 @@ export function OtpCodeInput({
           value={value}
         />
       </View>
-      <View
-        pointerEvents={pasteDisabled ? 'none' : 'auto'}
-        style={[styles.pasteAction, pasteDisabled ? styles.disabled : null]}
-      >
-        {nativePasteAvailable ? (
-          <Clipboard.ClipboardPasteButton
-            acceptedContentTypes={['plain-text']}
-            accessibilityHint="Reemplaza el código con el texto copiado."
-            accessibilityState={{ disabled: pasteDisabled }}
-            backgroundColor={activeTheme.colors.primary}
-            cornerStyle="capsule"
-            foregroundColor={activeTheme.colors.onPrimary}
-            onPress={(data) => {
-              if (data.type === 'text') {
-                applyPastedText(data.text);
-              }
-            }}
-            style={styles.nativePasteButton}
-          />
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ busy: pasteBusy, disabled: pasteDisabled }}
-            disabled={pasteDisabled}
-            onPress={() => void handlePastePress()}
-            style={({ pressed }) => [
-              styles.pasteButton,
-              { borderColor: activeTheme.colors.border },
-              pressed ? styles.pressed : null,
-            ]}
-          >
-            <AppText scaleRole="control" style={styles.pasteButtonText}>
-              {pasteBusy ? 'Pegando...' : 'Pegar código'}
-            </AppText>
-          </Pressable>
-        )}
-      </View>
-      {pasteError ? (
-        <AppText accessibilityLiveRegion="polite" style={styles.pasteError} tone="danger">
-          {pasteError}
-        </AppText>
-      ) : null}
     </View>
   );
 }
@@ -210,36 +116,6 @@ const styles = StyleSheet.create({
     color: 'transparent',
     fontSize: 18,
     padding: 0,
-  },
-  pasteAction: {
-    alignSelf: 'center',
-    marginTop: 6,
-  },
-  nativePasteButton: {
-    height: 44,
-    width: 136,
-  },
-  pasteButton: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 18,
-  },
-  pasteButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  pasteError: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 6,
-    paddingHorizontal: 10,
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.76,
   },
   boxRow: {
     alignItems: 'center',

@@ -1,6 +1,6 @@
 # Auth Email Setup
 
-Last reviewed: 2026-10-21 (America/Bogota; email delivery and production OTA).
+Last reviewed: 2026-10-23 (America/Bogota; native code entry without an extra Paste button).
 
 This project uses `Supabase Auth` for email/password accounts and password recovery. The recommended production setup is:
 
@@ -227,12 +227,14 @@ no new store binary was created. See the [release receipt](otp-email-release-202
 The email HTML correction requires no app update. A subsequent user report
 showed that the overlay alone was insufficient. The follow-up removes
 `caretHidden`, retains a native caret and selection menu, normalizes the full
-pasted text before limiting it to eight digits, and adds an explicit Paste
-control. The iOS control uses `UIPasteControl` through the already installed
-`expo-clipboard`; other platforms read the clipboard only on a Paste tap.
+pasted text before limiting it to eight digits, and originally added an explicit
+Paste control. On 2026-10-23 the user requested removing that extra button.
+The current component uses the field's native selection/Paste menu and AutoFill,
+without a custom Paste action or clipboard reads. It retains the full-row input,
+native caret, select-on-focus behavior, eight-digit normalization and platform hints.
 Physical iPhone behavior and Gmail keyboard suggestion still require a device
 test; a successful web paste or published manifest does not establish either.
-The follow-up was published from `d5814ac6` to both production platforms and
+The earlier follow-up with the extra button was published from `d5814ac6` to both production platforms and
 the new subjects were applied/read back. A real recovery reached Gmail Primary
 with SPF/DKIM passing. See the [follow-up receipt](otp-paste-follow-up-2026-10-21.md)
 for IDs and the explicit limits of the physical-device and redacted-subject checks.
