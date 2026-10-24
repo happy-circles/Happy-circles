@@ -6,9 +6,17 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const imageSizeAdvisories = new Set(['GHSA-5p2g-fcmc-qvqq', 'GHSA-w3rx-r6r6-pgpr']);
-// No fixed npm releases exist for these advisories. Every exception requires
+// No compatible fixed releases exist on these pinned dependency lines. Every exception requires
 // this exact package/version, a pinned patch, pnpm configuration and exploit tests.
 const verifiedPatches = new Map([
+  [
+    'GHSA-mrhx-c7xc-m3w5',
+    {
+      name: 'zod',
+      version: '3.25.76',
+      sha256: '1772269535a14b98546c7b7dffadc25f638255659d73ba7450e816325f6f028e',
+    },
+  ],
   [
     'GHSA-86w9-cpqp-85rv',
     {

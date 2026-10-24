@@ -83,3 +83,25 @@ Fuentes primarias: [Next.js 16.3.8](https://github.com/vercel/next.js/releases/t
 [node-forge](https://github.com/advisories/GHSA-86w9-cpqp-85rv),
 [http-cache-semantics](https://github.com/advisories/GHSA-ch52-4w7c-c8xp),
 [braces](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+
+## Revalidación de OTA: 23 de octubre de 2026
+
+La entrega que retira el botón adicional de pegado detectó doce avisos nuevos
+en el control previo de Security CI. Se actualizaron Next.js a 16.4.1,
+Vitest y sus paquetes internos a 4.1.12, fast-uri a 3.1.9 y undici a 6.29.1.
+Estas actualizaciones afectan la landing y las herramientas; se conservan
+Expo SDK 54, React Native 0.81.5, los módulos nativos móviles y el runtime OTA.
+
+Zod 3.25.76 conserva su API y recibe el rechazo temprano de colecciones que
+superan una cota de tamaño, siguiendo la corrección upstream. El parche,
+su hash y sus regresiones se comprueban antes de aceptar únicamente
+`GHSA-mrhx-c7xc-m3w5` para esa versión exacta. Las colecciones sin cota no
+reciben un límite nuevo. Retirar el backport al migrar de forma comprobada
+a una versión corregida de Zod.
+
+Fuentes primarias: [Next.js](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw),
+[Vitest](https://github.com/vitest-dev/vitest/security/advisories/GHSA-qxg6-89mg-rqv8),
+[fast-uri](https://github.com/fastify/fast-uri/security/advisories/GHSA-w74x-v6f9-j3xg),
+[undici](https://github.com/nodejs/undici/security/advisories/GHSA-4qv8-2p9j-2685),
+[corrección de Zod](https://github.com/colinhacks/zod/pull/6652) y
+[seguimiento de Zod 3](https://github.com/colinhacks/zod/issues/6653).

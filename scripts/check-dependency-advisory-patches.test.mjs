@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { evaluateAdvisories } from './audit-dependencies.mjs';
 
 const mobile = createRequire(resolve('apps/mobile/package.json'));
@@ -26,6 +27,9 @@ const metro = createRequire(cli.resolve('@expo/metro/package.json'));
 const filemap = createRequire(metro.resolve('metro-file-map/package.json'));
 const micromatch = createRequire(filemap.resolve('micromatch/package.json'));
 const braces = micromatch('braces');
+const shared = createRequire(resolve('packages/shared/package.json'));
+const zodRoot = resolve(shared.resolve('zod/package.json'), '..');
+const zodRequire = createRequire(join(zodRoot, 'package.json'));
 
 test('Forge accepts native RSA signatures and rejects garbage in nested DigestAlgorithm', () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -187,12 +191,13 @@ const advisory = (id, name, version) => ({
   findings: [{ version }],
 });
 const fixtures = [
+  advisory('GHSA-mrhx-c7xc-m3w5', 'zod', '3.25.76'),
   advisory('GHSA-86w9-cpqp-85rv', 'node-forge', '1.4.0'),
   advisory('GHSA-ch52-4w7c-c8xp', 'http-cache-semantics', '4.2.0'),
   advisory('GHSA-vfj7-8cjw-p6xm', 'braces', '3.0.3'),
 ];
 test('Audit exceptions require exact package/version and reject unknown advisories', () => {
-  assert.equal(evaluateAdvisories(fixtures).allowed.length, 3);
+  assert.equal(evaluateAdvisories(fixtures).allowed.length, 4);
   for (const fixture of fixtures) {
     assert.deepEqual(
       evaluateAdvisories([{ ...fixture, module_name: 'different-package' }])
@@ -218,7 +223,7 @@ test('Audit rejects changed patch bytes or missing pnpm patch configuration', ()
   const scratch = mkdtempSync(join(tmpdir(), 'happy-circles-patch-policy-'));
   try {
     mkdirSync(join(scratch, 'patches'));
-    const fixture = fixtures[0];
+    const fixture = fixtures.find((entry) => entry.module_name === 'node-forge');
     const filename = 'node-forge@1.4.0.patch';
     copyFileSync(resolve('patches', filename), join(scratch, 'patches', filename));
     writeFileSync(
@@ -239,3 +244,127 @@ test('Audit rejects changed patch bytes or missing pnpm patch configuration', ()
     rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+const zodModules = [
+  ['v3 CommonJS', zodRequire('./index.cjs').z],
+  ['v3 ESM', (await import(pathToFileURL(join(zodRoot, 'index.js')).href)).z],
+  ['v4 CommonJS', zodRequire('./v4/index.cjs').z],
+  ['v4 ESM', (await import(pathToFileURL(join(zodRoot, 'v4/index.js')).href)).z],
+];
+
+for (const [name, z] of zodModules) {
+  test(`Zod ${name} rejects oversized bounded collections without reading their elements`, async () => {
+    let walked = 0;
+    let refined = 0;
+    const element = z.preprocess((value) => {
+      walked += 1;
+      return value;
+    }, z.string());
+    for (const [schema, input] of [
+      [
+        z
+          .array(element)
+          .max(2, 'bounded')
+          .refine(() => ++refined),
+        Array(1000).fill(0),
+      ],
+      [z.array(element).length(2, 'bounded'), Array(1000).fill(0)],
+      [
+        z
+          .set(element)
+          .max(2, 'bounded')
+          .refine(() => ++refined),
+        new Set(Array.from({ length: 1000 }, (_, i) => i)),
+      ],
+      [z.set(element).size(2, 'bounded'), new Set(Array.from({ length: 1000 }, (_, i) => i))],
+    ]) {
+      for (const result of [schema.safeParse(input), await schema.safeParseAsync(input)]) {
+        assert.equal(result.success, false);
+        assert.equal(result.error.issues.length, 1);
+        assert.equal(result.error.issues[0].code, 'too_big');
+        assert.equal(result.error.issues[0].maximum, 2);
+        assert.equal(result.error.issues[0].message, 'bounded');
+      }
+    }
+    assert.equal(walked, 0);
+    assert.equal(refined, 0);
+  });
+
+  test(`Zod ${name} preserves valid, unbounded, nested and transformed collection behavior`, async () => {
+    const element = z.string().transform((value) => value.toUpperCase());
+    assert.deepEqual(z.array(element).max(2).parse(['a', 'b']), ['A', 'B']);
+    assert.deepEqual(await z.array(element).length(2).parseAsync(['a', 'b']), ['A', 'B']);
+    assert.deepEqual(
+      z
+        .set(element)
+        .size(2)
+        .parse(new Set(['a', 'b'])),
+      new Set(['A', 'B']),
+    );
+    assert.deepEqual(
+      await z.map(z.string(), element).parseAsync(new Map([['a', 'b']])),
+      new Map([['a', 'B']]),
+    );
+    assert.deepEqual(z.array(z.number()).parse([1, 2, 3]), [1, 2, 3]);
+    assert.equal(
+      z.array(z.string()).max(1).safeParse('wrong').error.issues[0].code,
+      'invalid_type',
+    );
+    assert.equal(z.array(z.string()).length(2).safeParse(['a']).error.issues[0].code, 'too_small');
+    const nested = z
+      .object({ items: z.array(element).max(2) })
+      .safeParse({ items: Array(1000).fill(0) });
+    assert.equal(nested.success, false);
+    assert.equal(nested.error.issues.length, 1);
+    assert.deepEqual(nested.error.issues[0].path, ['items']);
+    let asyncWalked = 0;
+    const asyncElement = z.string().transform(async (value) => {
+      asyncWalked += 1;
+      return value.toUpperCase();
+    });
+    assert.deepEqual(await z.array(asyncElement).max(2).parseAsync(['a', 'b']), ['A', 'B']);
+    assert.equal(asyncWalked, 2);
+    asyncWalked = 0;
+    assert.equal(
+      (await z.array(asyncElement).max(2).safeParseAsync(['a', 'b', 'c'])).success,
+      false,
+    );
+    assert.equal(asyncWalked, 0);
+  });
+
+  if (name.startsWith('v4')) {
+    test(`Zod ${name} caps existing map size checks and respects preceding value rewrites`, async () => {
+      let walked = 0;
+      const element = z.preprocess((value) => {
+        walked += 1;
+        return value;
+      }, z.string());
+      const schema = z.map(element, element).check(z.maxSize(2));
+      const input = new Map(Array.from({ length: 1000 }, (_, i) => [i, i]));
+      for (const result of [schema.safeParse(input), await schema.safeParseAsync(input)]) {
+        assert.equal(result.success, false);
+        assert.equal(result.error.issues.length, 1);
+        assert.equal(result.error.issues[0].code, 'too_big');
+      }
+      assert.equal(walked, 0);
+      assert.deepEqual(schema.parse(new Map([['a', 'b']])), new Map([['a', 'b']]));
+      assert.deepEqual(
+        z
+          .array(z.number())
+          .overwrite((value) => value.slice(0, 2))
+          .max(2)
+          .parse([1, 2, 3]),
+        [1, 2],
+      );
+      assert.deepEqual(
+        z
+          .array(z.number())
+          .max(3)
+          .overwrite((value) => value.slice(0, 2))
+          .max(2)
+          .parse([1, 2, 3]),
+        [1, 2],
+      );
+    });
+  }
+}
