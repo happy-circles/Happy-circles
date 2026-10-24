@@ -2,7 +2,11 @@
 
 Este registro conserva la primera entrega. La
 [corrección posterior de pegado y notificaciones](otp-paste-follow-up-2026-10-21.md)
-desde `d5814ac6` la reemplaza en el canal production y aclara el soporte de iOS 26.
+desde `d5814ac6` la reemplazó en el canal production y aclaró el soporte de iOS 26.
+El [seguimiento de UI del 23 de octubre](otp-native-paste-only-2026-10-23.md)
+documenta la retirada posterior del botón adicional desde `af3d3a29`
+y la fuente final `6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a` con las correcciones de dependencias;
+estado de esa nueva OTA: **publicada y verificada en iOS y Android**.
 
 La corrección del campo de ocho dígitos está publicada por OTA en Android e
 iOS. El campo nativo ocupa toda la fila para permitir el menú de pegado;

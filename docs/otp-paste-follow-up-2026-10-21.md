@@ -1,5 +1,12 @@
 # Pegado explícito y códigos en notificaciones, 2026-10-21
 
+Registro histórico de la entrega `d5814ac6`. El 23 de octubre el usuario
+pidió retirar el botón adicional; el [seguimiento de pegado nativo](otp-native-paste-only-2026-10-23.md)
+documenta esa corrección de UI desde `af3d3a29`, con fuente final
+`6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a` tras las correcciones de dependencias. Estado de la nueva OTA:
+**publicada y verificada en iOS y Android**. Las pruebas e IDs siguientes corresponden
+a la entrega del 21 de octubre.
+
 Después de la primera OTA, el usuario informó que seguía sin poder pegar en
 las casillas. Esta entrega añade un botón **Pegar** nativo en iPhone y corrige
 dos problemas del campo: cursor oculto y límite aplicado antes de limpiar el
@@ -74,6 +81,6 @@ recuperación. No se cambió contraseña, cuenta o bienvenida, ni se reenviaron 
 El [recibo sanitizado](verification/otp-paste-follow-up-20261021.json) conserva
 las comprobaciones. Falta observar la OTA aplicada, el botón nativo y la
 sugerencia de teclado en el iPhone físico; la versión de iOS del usuario no
-se recibió durante esta comprobación. Para reconocer esta entrega, abrir la
-app con red, dejar descargar, cerrarla por completo y abrirla de nuevo:
-aparecerá el botón **Pegar** debajo de las casillas.
+se recibió durante esta comprobación. En esta entrega histórica se añadió
+el botón **Pegar** debajo de las casillas. Para el estado vigente del campo,
+consultar el [seguimiento del 23 de octubre](otp-native-paste-only-2026-10-23.md).

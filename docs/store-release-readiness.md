@@ -1,6 +1,6 @@
 # Store Release Readiness
 
-Ultima revision: 2026-10-21 (correos, OTA y estado de Google Play).
+Ultima revision: 2026-10-23 (UI de pegado nativo; conservar estados de entrega documentados).
 
 Objetivo: dejar la nueva version `1.0.3` de Happy Circles publicable en App Store
 y Play Store para su salida en Colombia.
@@ -689,6 +689,18 @@ Antes de enviar:
   recibida en Principal a las `20:24:49Z`, con SPF/DKIM correctos. iOS 26 admite
   sugerencias desde notificaciones de apps; no dar por probada la notificacion
   ni el teclado del iPhone fisico. Ver [seguimiento](otp-paste-follow-up-2026-10-21.md).
+- UI de pegado, 2026-10-23: se retiro el boton Pegar adicional desde
+  `af3d3a291de0336d070b6129ce41241e91fffe9b`. Se conservan input de toda la
+  fila, cursor y seleccion nativos, normalizacion a ocho digitos y hints
+  de AutoFill. Estado OTA: **publicada y verificada en iOS y Android**. La prueba web
+  confirmo ausencia del boton y pegado con espacios/salto de linea y cero
+  inicial; el iPhone fisico sigue pendiente. La fuente final
+  `6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a` incorpora correcciones de Next,
+  Vitest, fast-uri y undici, mas un backport verificable de Zod en el
+  JavaScript de ejecucion. Auditoria local y 21 regresiones de dependencias
+  pasaron; CI final 40044433755 exitoso. Se conservan runtime y modulos
+  nativos moviles, sin cambios de correo/Auth ni
+  builds nuevos. Ver [entrega](otp-native-paste-only-2026-10-23.md).
 - Al subir el proyecto a Supabase Pro, habilitar Leaked Password Protection
   (HIBP) y probar registro y cambio/recuperacion de password.
 - Configurar en EAS la Google Service Account Key de Play Store Submissions. La

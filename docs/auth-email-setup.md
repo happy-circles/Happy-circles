@@ -238,6 +238,12 @@ The earlier follow-up with the extra button was published from `d5814ac6` to bot
 the new subjects were applied/read back. A real recovery reached Gmail Primary
 with SPF/DKIM passing. See the [follow-up receipt](otp-paste-follow-up-2026-10-21.md)
 for IDs and the explicit limits of the physical-device and redacted-subject checks.
+The 2026-10-23 UI removal is sourced from `af3d3a29`; the final release
+source `6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a` also includes dependency
+security corrections and the verified Zod JavaScript runtime backport.
+OTA delivery and served-bundle verification: **published and served-bundle verified for iOS and Android**. See the
+[native-paste release](otp-native-paste-only-2026-10-23.md) for the current
+delivery record. The earlier JSON receipts remain historical evidence.
 
 ## Leaked password protection
 

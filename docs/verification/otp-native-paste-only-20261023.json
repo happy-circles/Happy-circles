@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-24T00:29:38.584Z",
+  "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+  "uiCommit": "af3d3a291de0336d070b6129ce41241e91fffe9b",
+  "appVersion": "1.0.3",
+  "runtimeVersion": "hc-sdk54-20260928-1",
+  "channel": "production",
+  "environment": "production",
+  "easProjectId": "9b63f5f3-3c81-4d3d-bc54-1a81b998d20a",
+  "supabaseProjectRef": "vknfhyfdtlvvfzptpqpj",
+  "nativeDependenciesChanged": false,
+  "nativeRuntimeChanged": false,
+  "newStoreBuilds": false,
+  "javascriptRuntimeDependenciesChanged": ["zod@3.25.76 verified security backport"],
+  "publication": {
+    "method": "EAS CLI 21.7.1 with existing session",
+    "safeguards": [
+      "main and remote source checked by publisher",
+      "clean source tree",
+      "successful Security CI for exact SHA",
+      "EXPO_NO_DOTENV=1",
+      "production environment validated",
+      "fresh export for each platform",
+      "platform provenance and served bundle hashes verified"
+    ]
+  },
+  "ci": {
+    "id": 40044433755,
+    "conclusion": "success",
+    "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/40044433755",
+    "applicationTests": 1432,
+    "applicationTestFiles": 177,
+    "sqlTests": 45,
+    "sqlFiles": 36
+  },
+  "fixes": [
+    "remove the extra Paste button",
+    "preserve native caret and selection",
+    "retain full-row single input",
+    "normalize pasted text before limiting to eight digits",
+    "preserve leading zeroes and platform AutoFill hints",
+    "remove custom clipboard actions"
+  ],
+  "securityDependencies": {
+    "updates": [
+      {
+        "package": "next",
+        "from": "16.3.8",
+        "to": "16.4.1",
+        "scope": "landing"
+      },
+      {
+        "package": "vitest",
+        "from": "4.1.11",
+        "to": "4.1.12",
+        "scope": "test tooling"
+      },
+      {
+        "package": "fast-uri",
+        "from": "3.1.8",
+        "to": "3.1.9",
+        "scope": "transitive validation tooling"
+      },
+      {
+        "package": "undici",
+        "from": "6.28.1",
+        "to": "6.29.1",
+        "scope": "Expo CLI HTTP client"
+      }
+    ],
+    "zod": {
+      "version": "3.25.76",
+      "scope": "JavaScript runtime validation",
+      "patchPath": "patches/zod@3.25.76.patch",
+      "patchSha256": "1772269535a14b98546c7b7dffadc25f638255659d73ba7450e816325f6f028e",
+      "advisory": "GHSA-mrhx-c7xc-m3w5",
+      "upstreamApiPreserved": true
+    },
+    "unexpectedAdvisories": 0,
+    "verifiedPatchedUpstreamAdvisories": 5,
+    "dependencyExploitRegressions": 21,
+    "documentation": "docs/dependency-security-2026-09.md"
+  },
+  "browserQa": {
+    "uiCommit": "af3d3a291de0336d070b6129ce41241e91fffe9b",
+    "authMocked": true,
+    "nativeInputCount": 1,
+    "extraPasteButtonAbsent": true,
+    "inputCoversEntireRow": true,
+    "directFieldPasteWithSpacesAndNewline": true,
+    "leadingZeroPreserved": true,
+    "eightDigitsDisplayed": true,
+    "nativeMaxLengthAbsent": true,
+    "webAutocompleteOneTimeCode": true,
+    "physicalIosVerified": false
+  },
+  "easUsage": {
+    "checkedAt": "2026-10-24T00:08:54.791Z",
+    "plan": "Free",
+    "addons": [],
+    "estimatedTotalCents": 0,
+    "estimatedOverageCents": 0,
+    "updatesOverageCostCents": 0,
+    "otaUsers": {
+      "used": 24,
+      "limit": 1000
+    },
+    "bandwidth": {
+      "usedBytes": 220599416,
+      "limitBytes": 107374182400
+    }
+  },
+  "updates": [
+    {
+      "platform": "ios",
+      "groupId": "de1046b4-af15-459f-b79f-16b71083e781",
+      "updateId": "01a16b4d-4022-728c-bbd5-9d4d2ddc48ee",
+      "createdAt": "2026-10-24T00:26:27.234Z",
+      "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+      "branch": "production",
+      "environment": "production",
+      "workingTreeClean": true,
+      "publication": {
+        "startedAt": "2026-10-24T00:25:35.986Z",
+        "finishedAt": "2026-10-24T00:26:25.332Z",
+        "exitCode": 0
+      },
+      "provenance": {
+        "checkedAt": "2026-10-24T00:26:44.901Z",
+        "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+        "workingTreeClean": true,
+        "environment": "production",
+        "branch": "production"
+      },
+      "verification": {
+        "checkedAt": "2026-10-24T00:26:47.009Z",
+        "platform": "ios",
+        "channel": "production",
+        "updateId": "01a16b4d-4022-728c-bbd5-9d4d2ddc48ee",
+        "groupId": "de1046b4-af15-459f-b79f-16b71083e781",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "bundleHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleBytes": 4559476,
+        "bundleSha256": "Nzy-YXuSdMxiUT7P-guiqryuITZ9j4hsKg65TYfihCM",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    },
+    {
+      "platform": "android",
+      "groupId": "5586850b-0e73-49a2-a4e8-b2457a63b6e5",
+      "updateId": "01a16b4e-93e8-76d9-9e73-e6d42e486340",
+      "createdAt": "2026-10-24T00:27:54.216Z",
+      "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+      "branch": "production",
+      "environment": "production",
+      "workingTreeClean": true,
+      "publication": {
+        "startedAt": "2026-10-24T00:26:54.909Z",
+        "finishedAt": "2026-10-24T00:27:52.127Z",
+        "exitCode": 0
+      },
+      "provenance": {
+        "checkedAt": "2026-10-24T00:28:17.519Z",
+        "sourceCommit": "6f855eeb6dfc74575756ea51f2ca9bd0afc69c5a",
+        "workingTreeClean": true,
+        "environment": "production",
+        "branch": "production"
+      },
+      "verification": {
+        "checkedAt": "2026-10-24T00:28:19.649Z",
+        "platform": "android",
+        "channel": "production",
+        "updateId": "01a16b4e-93e8-76d9-9e73-e6d42e486340",
+        "groupId": "5586850b-0e73-49a2-a4e8-b2457a63b6e5",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "manifestHttpStatus": 200,
+        "bundleHttpStatus": 200,
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "bundleBytes": 4555060,
+        "bundleSha256": "ZcyFeBu3h-TekHOwcp0lmVe8mIJQEKTyZM3hlFl4hZA",
+        "bundleHashMatches": true,
+        "physicalDeviceVerified": false
+      }
+    }
+  ],
+  "emailScope": {
+    "authConfigurationChanged": false,
+    "templatesChanged": false,
+    "newEmailsSent": false,
+    "freshOnboardingTested": false
+  },
+  "pending": {
+    "physicalNativePaste": false,
+    "physicalKeyboardSuggestion": false,
+    "updateAppliedOnPhysicalDevice": false,
+    "offlineLaunchAfterUpdate": false,
+    "previewDistributionVerified": false
+  }
+}
