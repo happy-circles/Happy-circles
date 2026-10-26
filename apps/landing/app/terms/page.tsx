@@ -1,10 +1,12 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 
-export const metadata: Metadata = {
+import { buildSocialMetadata } from '../../lib/social-preview';
+
+export const metadata = buildSocialMetadata({
+  canonicalPath: '/terms',
   title: 'Términos y condiciones | Happy Circles',
   description: 'Términos y condiciones de uso de Happy Circles en Colombia.',
-};
+});
 
 const sections = [
   ['acceptance', 'Aceptación y alcance'],

@@ -1,10 +1,12 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 
-export const metadata: Metadata = {
+import { buildSocialMetadata } from '../../lib/social-preview';
+
+export const metadata = buildSocialMetadata({
+  canonicalPath: '/support',
   title: 'Soporte | Happy Circles',
   description: 'Soporte, cuenta y solicitudes de datos de Happy Circles.',
-};
+});
 
 export default function SupportPage() {
   return (
@@ -37,10 +39,10 @@ export default function SupportPage() {
             Incluye el correo de tu cuenta para que podamos verificar la solicitud.
           </p>
           <p>
-            Tambien puedes iniciar la eliminacion desde la app en Perfil &gt; Eliminar cuenta.
-            Happy Circles anonimiza los datos personales de perfil y conserva solo los registros
-            minimos necesarios para integridad financiera, prevencion de abuso, auditoria y soporte
-            de disputas.
+            Tambien puedes iniciar la eliminacion desde la app en Perfil &gt; Eliminar cuenta. Happy
+            Circles anonimiza los datos personales de perfil y conserva solo los registros minimos
+            necesarios para integridad financiera, prevencion de abuso, auditoria y soporte de
+            disputas.
           </p>
         </section>
 

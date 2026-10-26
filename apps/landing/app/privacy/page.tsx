@@ -1,10 +1,12 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 
-export const metadata: Metadata = {
+import { buildSocialMetadata } from '../../lib/social-preview';
+
+export const metadata = buildSocialMetadata({
+  canonicalPath: '/privacy',
   title: 'Política de privacidad | Happy Circles',
   description: 'Política de privacidad de Happy Circles para Colombia.',
-};
+});
 
 export default function PrivacyPage() {
   return (

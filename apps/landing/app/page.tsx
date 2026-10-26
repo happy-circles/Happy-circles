@@ -1,5 +1,18 @@
+import {
+  buildSocialMetadata,
+  DEFAULT_SOCIAL_DESCRIPTION,
+  DEFAULT_SOCIAL_TITLE,
+} from '@/lib/social-preview';
+
 import { HappyCirclesMark, StoreButtonGrid } from './_components/brand-assets';
+import { HomeStructuredData } from './_components/home-structured-data';
 import { LandingOpenAppButton } from './_components/landing-open-app-button';
+
+export const metadata = buildSocialMetadata({
+  canonicalPath: '/',
+  description: DEFAULT_SOCIAL_DESCRIPTION,
+  title: `${DEFAULT_SOCIAL_TITLE} | Finanzas entre amigos`,
+});
 
 function FooterIcon({ kind }: Readonly<{ kind: 'privacy' | 'terms' | 'support' }>) {
   if (kind === 'privacy') {
@@ -34,14 +47,15 @@ function FooterIcon({ kind }: Readonly<{ kind: 'privacy' | 'terms' | 'support' }
 export default function LandingPage() {
   return (
     <main className="landingShell">
+      <HomeStructuredData />
       <section className="landingPanel" aria-labelledby="landing-title">
         <div className="brandStack">
           <HappyCirclesMark />
           <div className="brandCopy">
             <h1 id="landing-title">Happy Circles</h1>
             <p>
-              Happy Circles es una aplicación para organizar gastos, deudas y pagos entre amigos
-              de forma clara y segura.
+              Happy Circles es una aplicación para organizar gastos, deudas y pagos entre amigos de
+              forma clara y segura.
             </p>
           </div>
         </div>

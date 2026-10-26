@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 
-const DEFAULT_APP_WEB_ORIGIN = 'https://app.happy-circles.com';
-const SOCIAL_IMAGE_PATH = '/opengraph-image';
+import { PUBLIC_SITE_ORIGIN, publicSiteUrl, type PublicPagePath } from './site-seo';
+
+const SOCIAL_IMAGE_PATH = '/opengraph-image?v=2';
 
 export const DEFAULT_SOCIAL_TITLE = 'Happy Circles';
 export const DEFAULT_SOCIAL_DESCRIPTION =
@@ -15,21 +16,10 @@ export const FRIENDSHIP_INVITE_SOCIAL_TITLE = 'Invitación privada a Happy Circl
 export const FRIENDSHIP_INVITE_SOCIAL_DESCRIPTION =
   'Abre esta invitación para conectarte con una persona de confianza en Happy Circles.';
 
-function readMetadataBase(): URL {
-  const configuredOrigin = process.env.NEXT_PUBLIC_APP_WEB_ORIGIN?.trim();
-
-  try {
-    return new URL(
-      configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : DEFAULT_APP_WEB_ORIGIN,
-    );
-  } catch {
-    return new URL(DEFAULT_APP_WEB_ORIGIN);
-  }
-}
-
 export function buildSocialMetadata(input: {
   readonly description: string;
   readonly title: string;
+  readonly canonicalPath?: PublicPagePath;
 }): Metadata {
   const image = {
     alt: 'Happy Circles',
@@ -37,16 +27,20 @@ export function buildSocialMetadata(input: {
     url: SOCIAL_IMAGE_PATH,
     width: 1200,
   };
+  const canonicalUrl =
+    input.canonicalPath === undefined ? undefined : publicSiteUrl(input.canonicalPath);
 
   return {
+    ...(canonicalUrl ? { alternates: { canonical: canonicalUrl } } : {}),
     description: input.description,
-    metadataBase: readMetadataBase(),
+    metadataBase: new URL(PUBLIC_SITE_ORIGIN),
     openGraph: {
       description: input.description,
       images: [image],
       siteName: 'Happy Circles',
       title: input.title,
       type: 'website',
+      ...(canonicalUrl ? { url: canonicalUrl } : {}),
     },
     title: input.title,
     twitter: {

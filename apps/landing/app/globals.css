@@ -95,11 +95,11 @@ a {
 }
 
 .brandMark {
+  border-radius: 22%;
   display: block;
   filter: drop-shadow(0 18px 28px rgba(55, 181, 108, 0.15));
-  height: clamp(120px, 34vw, 168px);
-  overflow: visible;
-  width: clamp(120px, 34vw, 168px);
+  height: clamp(190px, 50vw, 240px);
+  width: clamp(190px, 50vw, 240px);
 }
 
 .markArc,

@@ -13,6 +13,24 @@ export const metadata: Metadata = {
     description: DEFAULT_SOCIAL_DESCRIPTION,
     title: `${DEFAULT_SOCIAL_TITLE} | Finanzas entre amigos`,
   }),
+  applicationName: 'Happy Circles',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any', type: 'image/x-icon' },
+      { url: '/icon-96.png', sizes: '96x96', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+    },
+  },
   verification: {
     google: '99G8t0bnL9laiNacR-KCSy6zeDTM5MhxB4nBl4NVLpM',
   },
