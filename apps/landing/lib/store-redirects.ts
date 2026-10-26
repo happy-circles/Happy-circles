@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const INTERNAL_FALLBACK_HASH = '/#beta';
+const DEFAULT_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.happycircles.app';
 
 function readHttpUrl(value: string | undefined): string | null {
   if (!value) {
@@ -29,7 +30,9 @@ export function redirectToConfiguredStore(
   request: NextRequest,
   envKey: 'NEXT_PUBLIC_APP_STORE_URL' | 'NEXT_PUBLIC_PLAY_STORE_URL',
 ): NextResponse {
-  const target = readHttpUrl(process.env[envKey]);
+  const target =
+    readHttpUrl(process.env[envKey]) ??
+    (envKey === 'NEXT_PUBLIC_PLAY_STORE_URL' ? DEFAULT_PLAY_STORE_URL : null);
   return NextResponse.redirect(target ? new URL(target) : fallbackUrl(request), 307);
 }
 

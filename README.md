@@ -172,6 +172,9 @@ Landing and app-link variables:
 - `ANDROID_PACKAGE_NAME`
 - `ANDROID_SHA256_CERT_FINGERPRINTS`
 
+`/android` defaults to the published Google Play listing for `com.happycircles.app`.
+Set `NEXT_PUBLIC_PLAY_STORE_URL` to override that destination with another HTTP(S) URL.
+
 Backend email and worker variables:
 
 - `APP_WEB_ORIGIN`
