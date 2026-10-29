@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-29T01:09:00.451Z",
+  "sourceCommit": "8a6e968e4193244505ce4963019dced18eb5d31e",
+  "correctionCommit": "e5842994956ea3381197a899c4b8888b258d523d",
+  "appVersion": "1.0.3",
+  "runtimeVersion": "hc-sdk54-20260928-1",
+  "channel": "production",
+  "environment": "production",
+  "platform": "android",
+  "nativeDependenciesChanged": false,
+  "nativeRuntimeChanged": false,
+  "ci": {
+    "id": 40797611697,
+    "name": "Security CI",
+    "status": "completed",
+    "conclusion": "success",
+    "sha": "8a6e968e4193244505ce4963019dced18eb5d31e",
+    "url": "https://github.com/happy-circles/Happy-circles/actions/runs/40797611697",
+    "applicationTests": 1439,
+    "applicationTestFiles": 179,
+    "dependencySecurityRegressions": 33,
+    "sqlFiles": 36,
+    "sqlTests": 45
+  },
+  "publication": {
+    "method": "EAS CLI 21.7.1",
+    "platform": "android",
+    "sourceWorkingTreeVerifiedClean": true,
+    "environmentVerified": true,
+    "localDotenvDisabled": true,
+    "sourceCiVerified": true,
+    "startedAt": "2026-10-29T01:04:18.654Z",
+    "finishedAt": "2026-10-29T01:06:55.825Z",
+    "exitCode": 0
+  },
+  "update": {
+    "id": "01a18532-1f09-7915-9235-d25f2170fcdb",
+    "groupId": "0a1e750f-88ec-4ad0-8d29-7c405883d84f",
+    "createdAt": "2026-10-29T01:06:56.905Z",
+    "gitCommitHash": "8a6e968e4193244505ce4963019dced18eb5d31e",
+    "manifestPermalink": "https://u.expo.dev/update/01a18532-1f09-7915-9235-d25f2170fcdb"
+  },
+  "verification": {
+    "checkedAt": "2026-10-29T01:07:20.816Z",
+    "mode": "verify",
+    "remoteMutation": false,
+    "sourceCommit": "8a6e968e4193244505ce4963019dced18eb5d31e",
+    "baselineAndroidId": "01a16b4e-93e8-76d9-9e73-e6d42e486340",
+    "expectedAndroidId": "01a18532-1f09-7915-9235-d25f2170fcdb",
+    "easMetadataMatch": true,
+    "androidUpdated": true,
+    "iosUnchanged": true,
+    "localAndroidBundle": {
+      "file": "_expo/static/js/android/entry-c27d61ecb7e773349a5adb75a07e838e.hbc",
+      "bytes": 4555080,
+      "sha256": "QnssRUFZ7eT_AsggBMAX9jNyahkjtqQUfAcNlA1AY4M"
+    },
+    "results": [
+      {
+        "checkedAt": "2026-10-29T01:07:20.816Z",
+        "platform": "android",
+        "channel": "production",
+        "updateId": "01a18532-1f09-7915-9235-d25f2170fcdb",
+        "createdAt": "2026-10-29T01:06:56.905Z",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "projectId": "9b63f5f3-3c81-4d3d-bc54-1a81b998d20a",
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "manifestHttpStatus": 200,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4555080,
+        "bundleSha256": "QnssRUFZ7eT_AsggBMAX9jNyahkjtqQUfAcNlA1AY4M",
+        "manifestLaunchAssetHash": "QnssRUFZ7eT_AsggBMAX9jNyahkjtqQUfAcNlA1AY4M",
+        "manifestLaunchAssetKey": "6ebd1b7a5b53b384071f8f8c6dd53e3b",
+        "bundleHashMatches": true,
+        "assetCount": 45,
+        "physicalDeviceVerified": false
+      },
+      {
+        "checkedAt": "2026-10-29T01:07:20.721Z",
+        "platform": "ios",
+        "channel": "production",
+        "updateId": "01a16b4d-4022-728c-bbd5-9d4d2ddc48ee",
+        "createdAt": "2026-10-24T00:26:27.234Z",
+        "runtimeVersion": "hc-sdk54-20260928-1",
+        "appVersion": "1.0.3",
+        "projectId": "9b63f5f3-3c81-4d3d-bc54-1a81b998d20a",
+        "projectMatch": true,
+        "backendMatch": true,
+        "webOriginMatch": true,
+        "manifestHttpStatus": 200,
+        "bundleHttpStatus": 200,
+        "bundleBytes": 4559476,
+        "bundleSha256": "Nzy-YXuSdMxiUT7P-guiqryuITZ9j4hsKg65TYfihCM",
+        "manifestLaunchAssetHash": "Nzy-YXuSdMxiUT7P-guiqryuITZ9j4hsKg65TYfihCM",
+        "manifestLaunchAssetKey": "e9104404d55c10561d9da60cf82acaa7",
+        "bundleHashMatches": true,
+        "assetCount": 45,
+        "physicalDeviceVerified": false
+      }
+    ]
+  },
+  "limits": {
+    "physicalDeviceVerified": false,
+    "productionIncidentReproduced": false,
+    "pedroUpdateReceiptObserved": false,
+    "nativeUiQa": "Expo Go SDK 54, native TAB/DPAD input, synthetic session/snapshot/API; see change report.",
+    "productionFinancialRecordsModified": false
+  }
+}

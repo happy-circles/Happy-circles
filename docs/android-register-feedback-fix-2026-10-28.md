@@ -75,7 +75,31 @@ ejecutados; no garantizan el comportamiento de todos los dispositivos.
 
 ## Distribución
 
-El cambio es JavaScript, sin dependencias o configuración nativas nuevas.
-Mantiene el runtime `hc-sdk54-20260928-1` y es candidato a OTA para instalaciones
-compatibles. El export local no publica una actualización. La corrección aún
-no está publicada en producción ni se ha comprobado en el dispositivo afectado.
+El cambio se publicó solo para Android en el canal y entorno `production` el
+28 de octubre de 2026 a las 20:06, hora de Bogotá. Mantiene la versión visible
+1.0.3 y el runtime `hc-sdk54-20260928-1`, sin módulos o configuración nativa
+nuevos.
+
+- Commit publicado: `8a6e968e4193244505ce4963019dced18eb5d31e`.
+- Actualización Android: `01a18532-1f09-7915-9235-d25f2170fcdb`.
+- Grupo: `0a1e750f-88ec-4ad0-8d29-7c405883d84f`.
+- [Security CI](https://github.com/happy-circles/Happy-circles/actions/runs/40797611697)
+  aprobó ese commit: 1.439 pruebas de aplicación, auditoría y 33 regresiones de
+  seguridad de dependencias, configuración OTA, build de landing, y 45 pruebas
+  SQL en 36 archivos. La auditoría exigió un parche acotado de deepmerge usado
+  por las herramientas Expo; el detalle está en
+  [seguridad de dependencias](dependency-security-2026-09.md).
+
+La comprobación independiente de las 20:07 confirmó HTTP 200 para el manifiesto
+y bundle del canal de producción. El SHA256 del bundle servido coincide con
+el manifiesto y con el export Android exacto publicado:
+`QnssRUFZ7eT_AsggBMAX9jNyahkjtqQUfAcNlA1AY4M`. Se verificaron proyecto,
+runtime, versión, backend y origen web de producción. iOS conserva el mismo
+identificador y hash anteriores. El
+[recibo de entrega](verification/android-register-feedback-20261028.json)
+conserva las comprobaciones y sus límites.
+
+Esto acredita disponibilidad en producción, no recepción en el dispositivo
+afectado. Las instalaciones compatibles comprueban la OTA al abrir, descargan
+en segundo plano y utilizan lo descargado en un inicio posterior; no se fuerza
+un reinicio durante un envío.
