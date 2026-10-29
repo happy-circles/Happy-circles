@@ -1182,7 +1182,12 @@ export function RegisterFlowScreen() {
         personLabel={selectedPerson?.displayName ?? null}
         title={actionFeedback.overlayProps.title}
         variant={actionFeedback.overlayProps.variant}
-        visible={actionFeedback.overlayProps.visible}
+        // Android already shows progress in the footer. Avoid dismissing a native
+        // loading dialog at the same time as this transparent register screen.
+        visible={
+          actionFeedback.overlayProps.visible &&
+          (Platform.OS !== 'android' || actionFeedback.overlayProps.variant !== 'loading')
+        }
       />
       <AddPersonContactsSheet
         currentUserAvatarUrl={currentUserProfile?.avatarUrl ?? null}
