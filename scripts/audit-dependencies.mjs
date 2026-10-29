@@ -10,6 +10,14 @@ const imageSizeAdvisories = new Set(['GHSA-5p2g-fcmc-qvqq', 'GHSA-w3rx-r6r6-pgpr
 // this exact package/version, a pinned patch, pnpm configuration and exploit tests.
 const verifiedPatches = new Map([
   [
+    'GHSA-gcqx-w48m-w2h4',
+    {
+      name: 'deepmerge',
+      version: '4.3.1',
+      sha256: '3b16810cf8b4f091373408a2509b8c848e2b88b67ba52dc24ed050e7a5e83519',
+    },
+  ],
+  [
     'GHSA-mrhx-c7xc-m3w5',
     {
       name: 'zod',

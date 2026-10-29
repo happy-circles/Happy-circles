@@ -30,6 +30,104 @@ const braces = micromatch('braces');
 const shared = createRequire(resolve('packages/shared/package.json'));
 const zodRoot = resolve(shared.resolve('zod/package.json'), '..');
 const zodRequire = createRequire(join(zodRoot, 'package.json'));
+const expoConfig = createRequire(expo.resolve('@expo/config/package.json'));
+const deepmergeRoot = resolve(expoConfig.resolve('deepmerge/package.json'), '..');
+const deepmergeRequire = createRequire(join(deepmergeRoot, 'package.json'));
+const deepmergeModules = [
+  ['Expo config CommonJS', expoConfig('deepmerge')],
+  ['UMD CommonJS', deepmergeRequire('./dist/umd.js')],
+];
+
+for (const [name, merge] of deepmergeModules) {
+  test(`Deepmerge ${name} rejects prototype keys from source and target shapes`, () => {
+    const poisoned = () => JSON.parse('{"__proto__":{"qaInjected":true},"safe":1}');
+    const cases = [
+      [Object.create(null), poisoned()],
+      [poisoned(), {}],
+      [poisoned(), poisoned()],
+      [null, poisoned()],
+      [undefined, poisoned()],
+      [false, poisoned()],
+      [7, poisoned()],
+    ];
+    for (const [target, source] of cases) {
+      const result = merge(target, source);
+      assert.equal(Object.getPrototypeOf(result), Object.prototype);
+      assert.equal(Object.hasOwn(result, '__proto__'), false);
+      assert.equal(result.qaInjected, undefined);
+      assert.equal(result.safe, 1);
+    }
+    assert.equal({}.qaInjected, undefined);
+  });
+
+  test(`Deepmerge ${name} protects nested placeholder merges and array clones`, () => {
+    for (const placeholder of [null, undefined, false, 7, 'placeholder', Object.create(null)]) {
+      const source = JSON.parse('{"session":{"__proto__":{"qaInjected":true},"safe":2}}');
+      const result = merge({ session: placeholder }, source);
+      assert.equal(Object.getPrototypeOf(result.session), Object.prototype);
+      assert.equal(result.session.qaInjected, undefined);
+      assert.equal(Object.hasOwn(result.session, '__proto__'), false);
+      assert.equal(result.session.safe, 2);
+    }
+    const input = [JSON.parse('{"__proto__":{"qaInjected":true},"safe":3}')];
+    const result = merge([], input);
+    assert.notEqual(result[0], input[0]);
+    assert.equal(Object.getPrototypeOf(result[0]), Object.prototype);
+    assert.equal(result[0].qaInjected, undefined);
+    assert.equal(result[0].safe, 3);
+  });
+
+  test(`Deepmerge ${name} ignores forbidden getters before copying either input`, () => {
+    const target = { fromTarget: true };
+    const source = { fromSource: true };
+    for (const input of [target, source]) {
+      Object.defineProperty(input, '__proto__', {
+        enumerable: true,
+        get() {
+          throw new Error('Forbidden prototype getter must not be evaluated');
+        },
+      });
+    }
+    assert.deepEqual(merge(target, source), { fromTarget: true, fromSource: true });
+  });
+
+  test(`Deepmerge ${name} preserves Expo config arrays, symbols and custom merges`, () => {
+    const targetSymbol = Symbol('target config');
+    const sourceSymbol = Symbol('source config');
+    const target = {
+      plugins: [['existing-plugin', { enabled: true }]],
+      extra: { environment: 'production', retained: true },
+      [targetSymbol]: { retained: true },
+    };
+    const source = {
+      plugins: ['new-plugin'],
+      extra: { environment: 'preview', added: 2 },
+      [sourceSymbol]: { added: true },
+    };
+    const result = merge(target, source);
+    assert.deepEqual(result.plugins, [['existing-plugin', { enabled: true }], 'new-plugin']);
+    assert.deepEqual(result.extra, { environment: 'preview', retained: true, added: 2 });
+    assert.notEqual(result.plugins[0], target.plugins[0]);
+    assert.equal(target.extra.environment, 'production');
+    assert.deepEqual(result[targetSymbol], { retained: true });
+    assert.deepEqual(result[sourceSymbol], { added: true });
+    const custom = merge(target, source, {
+      customMerge: (key) =>
+        key === 'plugins' ? (_target, incoming) => incoming.slice() : undefined,
+    });
+    assert.deepEqual(custom.plugins, ['new-plugin']);
+    assert.deepEqual(merge.all([{ extra: { first: true } }, { extra: { second: true } }]), {
+      extra: { first: true, second: true },
+    });
+    const plainData = merge(
+      Object.create(null),
+      JSON.parse('{"constructor":{"safe":true},"prototype":{"safe":true}}'),
+    );
+    assert.deepEqual(plainData.constructor, { safe: true });
+    assert.deepEqual(plainData.prototype, { safe: true });
+    assert.equal(Object.getPrototypeOf(plainData), Object.prototype);
+  });
+}
 
 test('Forge accepts native RSA signatures and rejects garbage in nested DigestAlgorithm', () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -191,13 +289,14 @@ const advisory = (id, name, version) => ({
   findings: [{ version }],
 });
 const fixtures = [
+  advisory('GHSA-gcqx-w48m-w2h4', 'deepmerge', '4.3.1'),
   advisory('GHSA-mrhx-c7xc-m3w5', 'zod', '3.25.76'),
   advisory('GHSA-86w9-cpqp-85rv', 'node-forge', '1.4.0'),
   advisory('GHSA-ch52-4w7c-c8xp', 'http-cache-semantics', '4.2.0'),
   advisory('GHSA-vfj7-8cjw-p6xm', 'braces', '3.0.3'),
 ];
 test('Audit exceptions require exact package/version and reject unknown advisories', () => {
-  assert.equal(evaluateAdvisories(fixtures).allowed.length, 4);
+  assert.equal(evaluateAdvisories(fixtures).allowed.length, fixtures.length);
   for (const fixture of fixtures) {
     assert.deepEqual(
       evaluateAdvisories([{ ...fixture, module_name: 'different-package' }])
@@ -212,6 +311,11 @@ test('Audit exceptions require exact package/version and reject unknown advisori
     assert.deepEqual(evaluateAdvisories([{ ...fixture, findings: [] }]).invalidPatchedAdvisories, [
       fixture.github_advisory_id,
     ]);
+    assert.deepEqual(
+      evaluateAdvisories([{ ...fixture, findings: [...fixture.findings, { version: '0.0.0' }] }])
+        .invalidPatchedAdvisories,
+      [fixture.github_advisory_id],
+    );
   }
   assert.deepEqual(
     evaluateAdvisories([advisory('GHSA-new-unreviewed', 'node-forge', '1.4.0')])
@@ -219,31 +323,32 @@ test('Audit exceptions require exact package/version and reject unknown advisori
     ['GHSA-new-unreviewed'],
   );
 });
-test('Audit rejects changed patch bytes or missing pnpm patch configuration', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'happy-circles-patch-policy-'));
-  try {
-    mkdirSync(join(scratch, 'patches'));
-    const fixture = fixtures.find((entry) => entry.module_name === 'node-forge');
-    const filename = 'node-forge@1.4.0.patch';
-    copyFileSync(resolve('patches', filename), join(scratch, 'patches', filename));
-    writeFileSync(
-      join(scratch, 'pnpm-workspace.yaml'),
-      `patchedDependencies:\n  node-forge@1.4.0: patches/${filename}\n`,
-    );
-    assert.equal(evaluateAdvisories([fixture], scratch).allowed.length, 1);
-    appendFileSync(join(scratch, 'patches', filename), '\n# modified after review\n');
-    assert.deepEqual(evaluateAdvisories([fixture], scratch).invalidPatchedAdvisories, [
-      fixture.github_advisory_id,
-    ]);
-    copyFileSync(resolve('patches', filename), join(scratch, 'patches', filename));
-    writeFileSync(join(scratch, 'pnpm-workspace.yaml'), 'patchedDependencies: {}\n');
-    assert.deepEqual(evaluateAdvisories([fixture], scratch).invalidPatchedAdvisories, [
-      fixture.github_advisory_id,
-    ]);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-});
+for (const fixture of fixtures) {
+  test(`Audit rejects changed patch bytes or missing pnpm patch configuration for ${fixture.module_name}`, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'happy-circles-patch-policy-'));
+    try {
+      mkdirSync(join(scratch, 'patches'));
+      const filename = `${fixture.module_name}@${fixture.findings[0].version}.patch`;
+      copyFileSync(resolve('patches', filename), join(scratch, 'patches', filename));
+      writeFileSync(
+        join(scratch, 'pnpm-workspace.yaml'),
+        `patchedDependencies:\n  ${fixture.module_name}@${fixture.findings[0].version}: patches/${filename}\n`,
+      );
+      assert.equal(evaluateAdvisories([fixture], scratch).allowed.length, 1);
+      appendFileSync(join(scratch, 'patches', filename), '\n# modified after review\n');
+      assert.deepEqual(evaluateAdvisories([fixture], scratch).invalidPatchedAdvisories, [
+        fixture.github_advisory_id,
+      ]);
+      copyFileSync(resolve('patches', filename), join(scratch, 'patches', filename));
+      writeFileSync(join(scratch, 'pnpm-workspace.yaml'), 'patchedDependencies: {}\n');
+      assert.deepEqual(evaluateAdvisories([fixture], scratch).invalidPatchedAdvisories, [
+        fixture.github_advisory_id,
+      ]);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+}
 
 const zodModules = [
   ['v3 CommonJS', zodRequire('./index.cjs').z],

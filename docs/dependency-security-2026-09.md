@@ -105,3 +105,38 @@ Fuentes primarias: [Next.js](https://github.com/vercel/next.js/security/advisori
 [undici](https://github.com/nodejs/undici/security/advisories/GHSA-4qv8-2p9j-2685),
 [corrección de Zod](https://github.com/colinhacks/zod/pull/6652) y
 [seguimiento de Zod 3](https://github.com/colinhacks/zod/issues/6653).
+
+## Revalidación de OTA Android: 28 de octubre de 2026
+
+Security CI detectó `GHSA-gcqx-w48m-w2h4` en deepmerge 4.3.1. El aviso,
+actualizado el 27 de octubre, afecta a 4.2.0–4.3.1 y todavía no identifica una
+versión corregida. Esta dependencia llega mediante `@expo/config` 12.0.13 y
+12.0.14, que la usan para combinar configuración y opciones de plugins.
+
+`patches/deepmerge@4.3.1.patch` rechaza la clave `__proto__` antes de leer o
+copiar propiedades de ambos argumentos. El cambio cubre `index.js`, la entrada
+real `dist/cjs.js` y `dist/umd.js`. Conserva los controles existentes para las
+demás claves, los símbolos enumerables, las combinaciones de arrays y los
+callbacks `customMerge`. No cambia Expo SDK 54, React Native 0.81.5, módulos
+nativos, runtime OTA ni versiones de otras dependencias.
+
+La política de auditoría requiere el paquete y versión exactos, configuración
+de pnpm y SHA256
+`3b16810cf8b4f091373408a2509b8c848e2b88b67ba52dc24ed050e7a5e83519`.
+Las regresiones cargan las distribuciones CommonJS y UMD instaladas: detectan
+el prototipo alterado del resultado con argumentos de prototipo nulo,
+propiedades propias y valores anidados nulos o primitivos. También comprueban
+que no se evalúen getters de la clave prohibida y que continúen funcionando
+las combinaciones válidas. Se rechazan hashes modificados, configuraciones
+ausentes y findings de versiones mezcladas.
+
+Antes del parche fallaron seis casos de explotación y pasaron los dos controles
+de compatibilidad. Con el parche pasan los 33 casos de seguridad de dependencias.
+`pnpm audit:dependencies` también pasa contra el registro npm.
+La instalación offline con `--frozen-lockfile --ignore-scripts` confirmó el lock
+sin actualizar versiones ajenas al cambio. El backport es local; retirarlo cuando
+exista una versión upstream corregida y compatible.
+
+Fuentes primarias: [aviso de deepmerge](https://github.com/advisories/GHSA-gcqx-w48m-w2h4),
+[reporte original](https://github.com/TehShrike/deepmerge/issues/273) y
+[propuesta de corrección sin integrar](https://github.com/TehShrike/deepmerge/pull/274).
